@@ -52,7 +52,7 @@ async function sheetChat(db:Db,company:string,card:number,me:string):Promise<She
  if(!row) return {kind:'none'};
  if(row.channel_id) {
   const channel=await channelRecord(db,me,company,row.channel_id);
-  if(channel) return {kind:'channel',record:channel};
+  if(channel) return {kind:'channel',record:channel,person:me};
   return {kind:'channel-locked',name:typeof row.title==='string'?row.title:''};
  }
  if(row.conversation_id) {

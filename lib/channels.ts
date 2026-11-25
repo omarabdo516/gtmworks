@@ -1,6 +1,6 @@
 import type { supabase } from './supabase';
 import type { BoardColumn } from './board-columns.mjs';
-import { agentStatus, type AgentStatus } from './agent-details.mjs';
+import { agentFaceStates, type AgentFaceState } from './agent-face-states';
 import type { SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
 import { replyShown } from './media-tags.mjs';
@@ -50,9 +50,9 @@ export type ChannelSummary=ChannelName&{id:string,unread:number};
 // from the email, and the email only for the Owner and the Managers (decision 0043; `channel_members` leaves it out for
 // everyone else).
 type ChannelMember={person:string|null,name:string,role:MemberRole,invitation:string|null,email:string|null};
-// `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state
-// (#206), with a Run started by a call in this channel counting as working; never whom that work is for or on what.
-export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentStatus};
+// `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state for
+// the reader (#699, agent_face_states), a call in this channel included; never whom that work is for or on what.
+export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentFaceState};
 // The Card a team channel put on the board (#151): its title, the column it stands in now, the line under it, and
 // whether it waits (a review stage or its chat's wait). Read only for a Member who sees its Agent, as the board reads it.
 type ChannelBoard={card:number,title:string,column:BoardColumn,line:string,waiting:boolean};
@@ -88,7 +88,7 @@ export type ChannelRecord={
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string,missed_files?:string[]|null};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
-type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,agent_name:string,outcome:string|null};
+type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,outcome:string|null};
 type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said_before?:string|null};
 type StoredFile={id:number,message_id:number,name:string,content_type?:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
@@ -104,10 +104,10 @@ export type StoredHandover={id:number,message:number,from_agent:string,from_name
 const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{model:{cause,agent:row.model_agent??row.to_name}}:{}; };
 // A handover's words keep no file of their own (#708): a tag in them is named as a file not attached, never shown.
 export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
- {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+ {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_agent},to:{name:row.to_name,face:row.to_agent},goal:row.goal,at:row.created_at,
   ...handoverEnding(row),...handoverModel(row)},
- ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,...replyShown(row.summary),at:row.answered_at,to:row.from_name}]:[]),
- ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,...replyShown(row.reply),at:row.closed_at}]:[]),
+ ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_agent,...replyShown(row.summary),at:row.answered_at,to:row.from_name}]:[]),
+ ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_agent,...replyShown(row.reply),at:row.closed_at}]:[]),
 ]);
 // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
 // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
@@ -136,7 +136,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const name=nameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). A
  // message may have up to three Runs (#152), one per Agent it called, in the order the Agents were named.
- const runs=((await db.from('channel_runs').select('message_id,ordinal,agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3)).data||[]) as StoredRun[];
+ const runs=((await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3)).data||[]) as StoredRun[];
  const runsOf=new Map<number,StoredRun[]>();
  for(const run of runs) runsOf.set(run.message_id,[...(runsOf.get(run.message_id)??[]),run]);
  for(const group of runsOf.values()) group.sort((a,b)=>(a.ordinal??1)-(b.ordinal??1));
@@ -155,9 +155,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // The channel's handovers (#150), newest first: the transcript draws the row, the target's answer and Lead's reply of
  // the ones whose message is shown, and the details draw the count and the last four.
  const {data:handed}=await db.rpc('channel_handovers',{ch:channel});
- // Each Agent's own state (#206): what waits on the reader, and its open Runs. It runs as the reader, so only their own
- // state comes back, and only the state is kept below.
- const {data:states}=await db.rpc('agent_states',{c:company});
+ // Each Agent's own state (#699): the one state read, as the reader, so only their own state comes back, and only the
+ // state is kept below. An Agent's turn behind another's on a message is not working yet (#152), there too.
+ const faces=await agentFaceStates(db,company);
  const {data:canWrite}=await db.rpc('conversation_can_write',{c:company});
  // Nobody writes in an archived channel (#675): the database refuses a message there too.
  const writer=!!canWrite&&!found.archived_at;
@@ -206,14 +206,6 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  }
  const people=(members||[]) as ChannelMember[];
  const seen=(agents||[]) as StoredAgent[];
- // A Run open in this channel counts as its Agent working, in addition to the Runs the Agent's own state sees. Runs go
- // one after another (#152), so only the Run being worked on now works: the lowest open place of each message. A second
- // or third Agent still waiting its turn is idle, never "Working".
- const open=((openRuns||[]) as {message_id:number,ordinal:number|null,agent_id:string|null}[]);
- const firstPlace=new Map<number,number>();
- for(const run of open) { const place=run.ordinal??1; firstPlace.set(run.message_id,Math.min(firstPlace.get(run.message_id)??place,place)); }
- const working=new Set(open.filter(run=>(run.ordinal??1)===firstPlace.get(run.message_id)).flatMap(run=>run.agent_id??[]));
- const stateOfAgent=new Map(((states||[]) as {agent:string,running:boolean,waiting_mine:boolean}[]).map(row=>[row.agent,row]));
  // Only who is in a team channel can change it (set_channel_person, set_channel_agent), so only they are named: the
  // Owner first, then the Managers. An invited person is no Member yet, and changes nothing.
  const managers=name.kind==='team'?(['owner','manager'] as const).flatMap(role=>people.filter(member=>!member.invitation&&member.role===role&&member.name).map(member=>({name:member.name,role}))):[];
@@ -222,7 +214,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // One Agent's turn under a message (#152): its Run's state, the questions that Run asked (#149) and the requests it
  // asked (its own, never a sibling's).
  const mentionOf=(run:StoredRun):ChannelMention=>({agent:run.agent_name,
-  face:seen.find(agent=>agent.id===run.agent_id)?.connection_id||run.agent_id||run.agent_name,state:stateOf(run.outcome),
+  // A call keeps the Agent it called when that Agent is removed (#702), and so its face.
+  face:run.agent_id||run.kept_agent_id||'',state:stateOf(run.outcome),
   questions:questionsOf.get(`${run.message_id}:${run.ordinal??1}`)??[],
   permissions:asked.filter(row=>row.message_id===run.message_id&&(row.ordinal??1)===(run.ordinal??1))
    .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...saidParts(row)}]:[]; }) as ChannelPermission[]});
@@ -230,7 +223,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   ordered.map((message):ChannelMessage=>{
    // An Agent's reply carries the files it handed over and names the ones it could not (#708); no tag is shown.
    if(message.author==='agent') { const files=messageFiles(attached.filter(file=>file.message_id===message.id));
-    return {id:message.id,author:'agent',name:message.author_name,face:seen.find(agent=>agent.id===message.agent_id)?.connection_id||message.agent_id||message.author_name,...replyShown(message.body,message.missed_files),at:message.created_at,
+    return {id:message.id,author:'agent',name:message.author_name,face:message.agent_id||'',...replyShown(message.body,message.missed_files),at:message.created_at,
     ...(files.length?{files}:{}),
     ...(stepsOf.has(message.id)?{steps:stepsOf.get(message.id)}:{}),...(message.reply_to!==null&&cardsOf.has(`${message.reply_to}:${message.reply_ordinal??1}`)?{cards:cardsOf.get(`${message.reply_to}:${message.reply_ordinal??1}`)}:{})}; }
    const mentions=(runsOf.get(message.id)??[]).map(mentionOf);
@@ -256,18 +249,15 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  return {
   channel:{id:found.id,company:found.company_id,...name},
   members:people,
-  agents:seen.map(agent=>{
-   const own=stateOfAgent.get(agent.id);
-   return {id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only,
-    state:agentStatus({waitingMine:own?.waiting_mine??false,running:(own?.running??false)||working.has(agent.id)})};
-  }),
+  agents:seen.map(agent=>({id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only,
+   state:faces.of(agent.id).state})),
   writer,
   manage:!!manager&&name.kind==='team'&&!found.archived_at,
   archive:!!manager&&name.kind==='team',
   ...(found.archived_at?{archived:{at:found.archived_at as string,by:people.find(member=>member.person===found.archived_by)?.name??''}}:{}),
   managers,
   messages,
-  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_agent},to:{name:row.to_name,face:row.to_agent},goal:row.goal,at:row.created_at,
   ...handoverEnding(row)})),
   open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
@@ -279,6 +269,12 @@ export async function channelRecord(db:Database,person:string,company:string,cha
 }
 
 export const firstName=(name:string)=>name.trim().split(/\s+/)[0]||name;
+// Whom a channel's composer calls (#154, #700), on its page and in a Card's sheet alike: the channel's own Agents and its
+// other Members who have joined, never the reader or an Agent of the Company outside the channel.
+export const channelCallable=(record:Pick<ChannelRecord,'members'|'agents'>,reader:string)=>({
+ people:record.members.flatMap(member=>member.person&&member.person!==reader?[{id:member.person,name:member.name,role:member.role}]:[]),
+ agents:record.agents,
+});
 
 // Marks every Agent name the message called (#152), the longest name first so "@Lead Writer" is one mark and not "@Lead"
 // followed by " Writer": the same rule the database's mention_at reads. A name between spaces, punctuation or the ends is

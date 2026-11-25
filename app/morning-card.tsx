@@ -2,7 +2,7 @@
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { useZone } from './agent-made';
 import { chatPlace } from '@/lib/board-columns.mjs';
@@ -25,7 +25,7 @@ function ItemRow({slug,item,on}:{slug:string,item:MorningItem,on:'forward'|'back
  const title=mention?item.asked_by:item.title;
  const line=mention?item.body:[item.asked_by,item.body].filter(Boolean).join(' · ');
  return <Link className="panel-row" href={placeOf(slug,item)} data-kind={item.kind}>
-  {item.agent?<span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={24}/></span>:<span className="avatar ck-av" aria-hidden="true">{initialOf(item.asked_by||item.title)}</span>}
+  {item.agent?<span aria-hidden="true"><AgentFace agent={item.agent.id} size={24}/></span>:<span className="avatar ck-av" aria-hidden="true">{initialOf(item.asked_by||item.title)}</span>}
   <span className="panel-row__text"><span className="panel-row__t" dir="auto">{title}</span>
    {line&&<span className="panel-row__d"><bdi dir="auto">{line}</bdi></span>}</span>
   <span className="panel-row__meta"><ShellIcon name={on}/></span></Link>;
@@ -53,7 +53,7 @@ export function MorningCard({slug,card}:{slug:string,card:Card}) {
     :<p className="ck-empty"><ShellIcon name="check"/><span>{t('goodMorningEmpty')}</span></p>}</section>
   {night>0&&<section className="ck-sec" aria-labelledby="ck-h-night"><h3 className="ck-label" id="ck-h-night">{t('goodMorningRan')} <span className="num">{night}</span></h3>
    <div className="ck-list">{card.overnight.map(row=><Link key={row.id} className="panel-row" href={`/c/${slug}/chat/${row.agent.id}`} data-kind="overnight">
-    <span aria-hidden="true"><CompanyAgentFace agent={row.agent} size={24}/></span>
+    <span aria-hidden="true"><AgentFace agent={row.agent.id} size={24}/></span>
     <span className="panel-row__text"><span className="panel-row__t" dir="auto">{row.line}</span><span className="panel-row__d"><bdi>{row.agent.name}</bdi> · <span className="num">{time(row.at)}</span> · <bdi dir="auto">{row.routine}</bdi></span></span>
     <span className="panel-row__meta"><ShellIcon name={on}/></span></Link>)}</div></section>}
   {handed>0&&<section className="ck-sec" aria-labelledby="ck-h-hand"><h3 className="ck-label" id="ck-h-hand"><span className="badge ck-badge"><ShellIcon name="hand"/>{t('goodMorningHanded')}</span></h3>

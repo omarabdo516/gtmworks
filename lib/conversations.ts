@@ -134,7 +134,7 @@ export type MessageFile={id:number,name:string,image?:true};
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
-export const conversationColumns='id,agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
+export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
 // name (lib/conversation-record.ts), and any other Agent's as the lettered card (#143).
@@ -224,8 +224,10 @@ export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[],handed:ReadonlyS
 export const latestEnd=(messages:StoredMessage[],ends:RunEnd[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return (latest&&ends.find(run=>run.run_id===latest.run_id&&run.outcome!=='completed')?.outcome)||null; };
 // A chat is named by its first message: its first line, or, for a message that carries images alone, its first file
 // (design-reference: send's title). A chat with no message yet keeps the Agent's name.
-// The agent's face is drawn from its Connection, as on the Agents page; a detached agent keeps a stable face from the conversation.
-export const faceOf=(conversation:{id:string,hermes_agents:unknown})=>(conversation.hermes_agents as {connection_id:string}|null)?.connection_id||conversation.id;
+// The Agent's face is asked for by the Agent's id (components/agent-face). A Conversation keeps its Agent's id when
+// that Agent is removed (#702), so it keeps the look it had; one detached before that names none, and shows the first
+// letter of the name it keeps.
+export const faceOf=(conversation:{agent_id:string|null,kept_agent_id?:string|null})=>conversation.agent_id||conversation.kept_agent_id||'';
 export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Notes to a person and turns still waiting join the record: notes in the order they were written, waiting turns after

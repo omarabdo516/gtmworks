@@ -61,7 +61,7 @@ for (const [path, components] of [
 // Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them,
 // and so does the stylesheet build the motion test reads (#127).
 for (const path of [
-  'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
+  'app/conversation-composer.tsx', 'components/agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
   'postcss.config.mjs', 'tests/offline.mjs',
 ]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));

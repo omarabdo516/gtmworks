@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { Browser } from '@playwright/test';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { faceAnimations } from './navigation-measure';
 
 // #132: the chat moves as the approved reference does, on the lane's fake Hermes holding a Run open. What arrives during
 // the visit (the person's own message once sent, the Agent's reply, the card for an Agent Lead made) rises once, and
@@ -52,11 +53,13 @@ const motion=(page:Page,selector:string)=>motionOf(page.locator(selector).first(
 const rises=['gw-rise','0.2s','cubic-bezier(0.2, 0, 0, 1)','1'];
 const breathes=['gw-breathe','1.4s','ease-in-out','infinite'];
 // What still runs on the page: every animation in play, by its name. The page's own entrance is left out: a page fades
-// in as it opens, a reload too (#135, design-reference setView), and that is the page, not a message moving.
-const running=(page:Page)=>page.evaluate(()=>document.getAnimations().filter(animation=>animation.playState==='running')
+// in as it opens, a reload too (#135, design-reference setView), and that is the page, not a message moving. So is an
+// Agent face's own life, its breath and a state's loop, by name, as the measured navigation leaves it out (#697).
+const running=(page:Page)=>page.evaluate(names=>document.getAnimations().filter(animation=>animation.playState==='running')
  .filter(animation=>!(animation instanceof CSSAnimation&&animation.animationName==='gw-fade-in'&&((animation.effect as KeyframeEffect|null)?.target as Element|null)
   ?.matches('.app-content > :not(.convo-page), .app-content > .convo-page .convo > :not(.details, .dp-scrim)')))
- .map(animation=>(animation as CSSAnimation).animationName??'transition'));
+ .filter(animation=>!(animation instanceof CSSAnimation&&names.includes(animation.animationName)))
+ .map(animation=>(animation as CSSAnimation).animationName??'transition'),faceAnimations);
 
 test('in a Conversation the sent message, the reply and the card for the Agent Lead made rise once, the working line breathes, and a reload moves nothing',async({page})=>{
  test.setTimeout(120000);

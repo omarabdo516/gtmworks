@@ -1,6 +1,5 @@
 import Link from '@/lib/link';
 import { AgentFace } from '@/components/agent-face';
-import { CompanyAgentFace } from '@/components/company-agent-face';
 import { NoteText } from '@/app/note-edit';
 import { agentIdentities } from '@/lib/agent-identities';
 import { describeEntry, type LogRow, type LogValue } from '@/lib/activity-log.mjs';
@@ -11,7 +10,8 @@ import { PageIcon, SystemMark } from './icons';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export const logColumns='id,created_at,actor_kind,actor_id,actor_name,subject,card_id,person_id,agent_id,action,details,body,source,source_id';
-// face: the Connection a company Agent's face is drawn from (components/company-agent-face).
+// face: the id a Company Agent's face is asked for by (components/agent-face); its look outlives the Agent, so a removed
+// Agent's line keeps its face. A legacy role agent and a person show their name's first letter.
 export type Who={kind:'person'|'agent'|'system',id:string|null,name:string,role?:string,face?:string};
 export type LogPeople=Awaited<ReturnType<typeof logPeople>>;
 
@@ -41,14 +41,13 @@ export function whoOf(row:LogRow,people:LogPeople,t:I18n['t']):Who {
  const identity=people.identities.find(agent=>agent.id===row.actor_id);
  const agent=people.agents.find(agent=>agent.id===row.actor_id);
  const name=identity?.name||member?.people?.name||agent?.name||row.actor_name||t('logSomeone');
- if(row.actor_kind==='agent') return {kind:'agent',id:row.actor_id,name,role:identity?.role||member?.agent_role||undefined,face:agent?.connection_id};
+ if(row.actor_kind==='agent') return {kind:'agent',id:row.actor_id,name,role:identity?.role||member?.agent_role||undefined,face:identity||member?.agent_role?undefined:agent?.id??row.actor_id};
  return {kind:'person',id:row.actor_id,name};
 }
 
 export function WhoFace({who,size=28}:{who:Who,size?:number}) {
  if(who.kind==='system') return <SystemMark size={size}/>;
- if(who.face) return <span className="lg-face" aria-hidden="true"><CompanyAgentFace agent={{connection_id:who.face,name:who.name}} size={size}/></span>;
- if(who.kind==='agent'&&who.role&&who.id) return <span className="lg-face" aria-hidden="true"><AgentFace id={who.id} role={who.role} name={who.name} size={size}/></span>;
+ if(who.face) return <span className="lg-face" aria-hidden="true"><AgentFace agent={who.face} name={who.name} size={size}/></span>;
  return <span className="lg-av" style={{'--av':`${size}px`} as React.CSSProperties} aria-hidden="true">{Array.from(who.name.trim())[0]||'?'}</span>;
 }
 

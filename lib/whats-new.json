@@ -1,5 +1,11 @@
 [
  {
+  "issue": 694,
+  "date": "2026-11-25",
+  "en": { "title": "Every Agent has a face of its own", "body": "Each Agent is now a living orb in its own colour, shape and temperament that breathes, blinks, looks toward your pointer and shows when it is thinking, working, done, waiting on you, stuck or asleep, the sidebar following within seconds; it listens while you write to it, perks up when you name it, greets you and is born once for whoever asked for it; the same face shows everywhere, kept in old conversations, channels, cards and the log after the Agent is removed, and it stays still with reduced motion; the Owner changes any Agent's shape, colour and temperament in a small window opened from its face, its card or its settings." },
+  "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك أو وقف أو نايم، والقايمة الجانبية بتتابعه في ثواني؛ وبيسمعك وإنت بتكتبله، وبينتبه لما تنادي اسمه، وبيسلّم عليك، وبيتولد مرة واحدة قدام اللي طلبه؛ ونفس الوش في كل حتة، وبيفضل في المحادثات والقنوات والبطاقات والسجل القديمة حتى لو الوكيل اتشال، ومبتتحركش لو مختار حركة أقل؛ والمالك يقدر يغيّر شكل أي وكيل ولونه وطبعه من شباك صغير بيتفتح من وشه أو بطاقته أو إعداداته." }
+ },
+ {
   "issue": 708,
   "date": "2026-11-24",
   "en": { "title": "Agents send you files in the chat", "body": "When an Agent makes a PDF, a spreadsheet, an image or any other file in its work folder, it sends it in its reply as a file you open and download, with images shown as thumbnails, and a file it cannot send says so instead of showing a path." },

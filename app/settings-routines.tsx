@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { cronOf, formOf, scheduleLabel, whenOf, type ScheduleForm } from '@/lib/routine-schedule.mjs';
 import type { ScheduleDraft } from '@/lib/routine-sentence.mjs';
 import type { AgentRoutines, RoutineAction } from '@/lib/agent-routines.mjs';
@@ -36,12 +36,12 @@ export function RoutinesSection({company,state,agents,canManage,now}:{company:st
   {state!=='found'?<div className="panel-card"><p className="panel-empty" role="status">{t('routineNoEngine')}</p></div>:<>
    {adding!==null&&<NewRoutine t={t} company={company} agents={addable} agent={adding} onClose={()=>setAdding(null)}/>}
    {withAny.map(agent=><section key={agent.agent} className="dp-sec" aria-labelledby={`rt-h-${agent.agent}`}>
-    <h4 className="dp-label" id={`rt-h-${agent.agent}`}><span className="sov-ag-l"><CompanyAgentFace agent={{connection_id:agent.connection,name:agent.name}} size={20}/><bdi>{agent.name}</bdi> <span className="muted num">{agent.routines!.length}</span></span>
+    <h4 className="dp-label" id={`rt-h-${agent.agent}`}><span className="sov-ag-l"><AgentFace agent={agent.agent} size={20}/><bdi>{agent.name}</bdi> <span className="muted num">{agent.routines!.length}</span></span>
      {canManage&&adding===null&&<button type="button" className="link-btn" onClick={()=>setAdding(agent.agent)}>{t('routineAdd')}</button>}</h4>
     <ul className="panel-card">{agent.routines!.map(routine=><RoutineRow key={routine.id} t={t} company={company} agent={agent.agent} routine={routine} canManage={canManage} now={now}/>)}</ul>
    </section>)}
    {unread.map(agent=><section key={agent.agent} className="dp-sec" aria-labelledby={`rt-h-${agent.agent}`}>
-    <h4 className="dp-label" id={`rt-h-${agent.agent}`}><span className="sov-ag-l"><CompanyAgentFace agent={{connection_id:agent.connection,name:agent.name}} size={20}/><bdi>{agent.name}</bdi></span></h4>
+    <h4 className="dp-label" id={`rt-h-${agent.agent}`}><span className="sov-ag-l"><AgentFace agent={agent.agent} size={20}/><bdi>{agent.name}</bdi></span></h4>
     <div className="panel-card"><p className="panel-empty">{t('routineUnread')}</p></div></section>)}
    {!withAny.length&&!unread.length&&adding===null&&<div className="panel-card"><p className="panel-empty">{t('settingsRoutinesEmpty')}</p></div>}
   </>}</>;

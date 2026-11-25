@@ -28,23 +28,27 @@ export const clickPath: Step[] = [
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensBoard },
   { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page', motion: opensPage },
 ];
-// An Agent face's own life is not part of opening a page (#133): its look toward the pointer, its blink, its hop, the
-// tile's hover lift and a working Agent's loop (design-reference: faceSVG, applyLive). These animations, by name, and
-// these transitions, by the face part they move, are left out of "settled" and of idle().
-export const faceAnimations = ['gw-face-scan', 'gw-face-hop', 'gw-think-dot', 'gw-think-in', 'gw-dot-ping', 'gw-ck-pop', 'gw-draw-check'];
-export const faceTransitions = '.face, .face__f, .face__eye';
+// An Agent face's own life is not part of opening a page (#133, #697): its breath, a state's loop and its dot's ring,
+// the CSS animations below by name, all of them infinite; the eyes' and the highlight's lean toward the pointer and the
+// tile's hover lift, the CSS transitions of these face parts (app/face.css); and its blinks, glances and moments, the
+// script animations components/face-life plays on a face's parts. Every other transition inside a face, its expression
+// easing to a new state among them, is part of the page and is measured.
+export const faceAnimations = ['gw-face-breath', 'gw-face-bounce', 'gw-face-sway', 'gw-face-drift', 'gw-face-tick', 'gw-face-settle', 'gw-face-glow', 'gw-face-gaze', 'gw-face-swirl', 'gw-face-nudge', 'gw-dot-ping'];
+export const faceTransitions = '.face, .face .f-eyes, .face .f-specs';
+export const faceParts = '.face, .face *';
 export type Timing = { shown: number; settled: number; progress: boolean; longest: number };
 export const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
 export async function idle(page: Page) {
   await page.waitForLoadState('networkidle');
-  await page.evaluate(async ({ names, parts }) => {
+  await page.evaluate(async ({ names, parts, life }) => {
     await document.fonts.ready;
-    const face = (animation: Animation) => animation instanceof CSSAnimation ? names.includes(animation.animationName)
-      : animation instanceof CSSTransition && !!((animation.effect as KeyframeEffect | null)?.target as Element | null)?.matches(parts);
+    const face = (animation: Animation) => { const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
+      return animation instanceof CSSAnimation ? names.includes(animation.animationName)
+        : animation instanceof CSSTransition ? !!target?.matches(parts) : !!target?.matches(life); };
     await Promise.all(document.getAnimations().filter(animation => !face(animation)).map(animation => animation.finished.catch(() => {})));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  }, { names: faceAnimations, parts: faceTransitions });
+  }, { names: faceAnimations, parts: faceTransitions, life: faceParts });
 }
 
 // Measure in the browser from the actual click event, excluding Playwright's actionability waits.
@@ -52,9 +56,10 @@ export async function idle(page: Page) {
 export async function measureClick(page: Page, step: Step): Promise<Timing> {
   await page.locator(step.link).hover();
   await idle(page);
-  await page.evaluate(({ step, names, parts }) => {
-    const face = (animation: Animation) => animation instanceof CSSAnimation ? names.includes(animation.animationName)
-      : animation instanceof CSSTransition && !!((animation.effect as KeyframeEffect | null)?.target as Element | null)?.matches(parts);
+  await page.evaluate(({ step, names, parts, life }) => {
+    const face = (animation: Animation) => { const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
+      return animation instanceof CSSAnimation ? names.includes(animation.animationName)
+        : animation instanceof CSSTransition ? !!target?.matches(parts) : !!target?.matches(life); };
     const state = window as typeof window & { clickTiming?: Timing };
     delete state.clickTiming;
     document.addEventListener('click', () => {
@@ -90,7 +95,7 @@ export async function measureClick(page: Page, step: Step): Promise<Timing> {
       };
       frame = requestAnimationFrame(sample);
     }, { once: true, capture: true });
-  }, { step, names: faceAnimations, parts: faceTransitions });
+  }, { step, names: faceAnimations, parts: faceTransitions, life: faceParts });
   await page.locator(step.link).click();
   await page.waitForFunction(() => !!(window as typeof window & { clickTiming?: Timing }).clickTiming);
   const timing = await page.evaluate(() => (window as typeof window & { clickTiming: Timing }).clickTiming);

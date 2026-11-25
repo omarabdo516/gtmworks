@@ -9,7 +9,7 @@ import { Fragment, Suspense, lazy, useEffect, useRef, useState, type ReactNode, 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
@@ -91,9 +91,6 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {messages,pending}=record;
- // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184). A Run waiting
- // on its person's answer (#138) is not working, as the reference's Run has ended when its question card is drawn.
- useReportRun(record.conversation.agent_id??undefined,pending&&!record.asking);
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
  // reload.
@@ -246,7 +243,13 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const working=pending&&!record.asking;
  // An Agent's reply, not a decision drawn as its message.
  const newest=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided')?.id??null;
- const landing=useLanding({working,live:useLiveSteps({company,conversation:conversation.id},working),newest});
+ const steps=useLiveSteps({company,conversation:conversation.id},working);
+ const landing=useLanding({working,live:steps,newest});
+ // The open Run's face, on the page and in a Card's sheet alike (#184, #700): thinking until its first step, working
+ // after it, done once it ended well in front of the reader. A Run waiting on its person's answer (#138) has ended for
+ // the face, as the reference's has when its question card is drawn, and waits on them; one that failed or was stopped
+ // shows the state the sidebar reads for it.
+ useReportRun(conversation.agent_id,working?(steps&&(steps.steps.length||steps.now)?'working':'thinking'):failed||record.asking?'ended':'well');
  const live=landing.view;
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // A message's time: in UTC on the server and the first browser render, hidden (globals.css), then in the reader's own
@@ -255,10 +258,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const when=(at:string,className:string)=><time className={className} dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
- const face=(size:number,connection?:string,name=conversation.agent_name)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:connection||conversation.face,name}} size={size}/></span>;
+ const face=(size:number,agent?:string,name=conversation.agent_name)=><span aria-hidden="true"><AgentFace agent={agent||conversation.face} name={name} size={size}/></span>;
  // A job one Agent handed another (#317, #475): inside the asking Agent's turn (`p`), or, for one an asked Agent handed on
  // (#477), its own row between the turns (`li`), as a channel draws every handover.
- const handed=(card:Extract<LeadCard,{kind:'handed'}>,key:string,as:'li'|'p',className?:string)=><HandedRow key={key} as={as} className={className} from={{connection_id:card.from.face,name:card.from.name}} to={{connection_id:card.face,name:card.name}}
+ const handed=(card:Extract<LeadCard,{kind:'handed'}>,key:string,as:'li'|'p',className?:string)=><HandedRow key={key} as={as} className={className} from={{id:card.from.face,name:card.from.name}} to={{id:card.face,name:card.name}}
   title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} ending={card} said={{stopped:c('handedStopped'),failed:c('handedFailed')}}/>;
  return <>
   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
@@ -288,7 +291,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
-   {working&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
+   {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
   {working&&(live?<ActivityLine view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>
    :<p className="thinking convo-status" role="status"><span className="shimmer">{runner?c('conversationWorkingFor',conversation.agent_name,runner):t('conversationWorking',conversation.agent_name)}</span></p>)}
   {failed&&(modelCause
@@ -311,7 +314,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
  // A waiting message the Engine refused for the Conversation's model (#158) is told as a sent one is, while it is the latest.
  const last=record?.messages.at(-1); const refused=last?.kind==='queued'&&last.failed&&last.model_refused?{key:`${last.created_at}:${last.body}`,text:last.body}:undefined;
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} to={conversation.agent_id} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

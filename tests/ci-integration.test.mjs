@@ -130,7 +130,7 @@ test('the chat-open job runs the chat test with a machine to itself, and no shar
   assert.equal(chatOpen.steps.find(step => step.name === 'chat open').run, './ci.sh chat-open');
   // The `alone` project is empty where the shards run, as the measured budgets already are.
   const config = readFileSync('playwright.config.ts', 'utf8');
-  assert.match(config, /\{ name: 'alone', testMatch: hostedElsewhere \? \/\^\$\/ : 'chat-steps\.spec\.ts', workers: 1 \}/);
+  assert.match(config, /\{ name: 'alone', testMatch: hostedElsewhere \? \/\^\$\/ : \['chat-steps\.spec\.ts', 'face-frames\.spec\.ts'\], workers: 1 \}/);
   const ci = readFileSync('ci.sh', 'utf8');
   assert.match(ci, /GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=\$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e/);
   const start = ci.indexOf('\n chat-open)');

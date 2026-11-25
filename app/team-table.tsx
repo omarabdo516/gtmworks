@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { inviteeName } from '@/lib/invite.mjs';
 import { inviteRoles } from '@/lib/member-roles.mjs';
 import { SettingsIcon } from './settings-icons';
@@ -48,7 +48,7 @@ export function TeamTable({company,members,invitations,agents,allowed,invitedAll
  const who=(member:TeamMember)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{t(member.role)}</span></span></span>;};
  const others=agents.filter(agent=>!agent.is_default);
  return <><div className="table-wrap"><table className="table ta-table">
-  <thead><tr><th scope="col">{t('settingsMember')}</th>{agents.map(agent=><th scope="col" key={agent.id}><span className="ta-ag"><CompanyAgentFace agent={agent} size={24}/><bdi>{agent.name}</bdi></span></th>)}</tr></thead>
+  <thead><tr><th scope="col">{t('settingsMember')}</th>{agents.map(agent=><th scope="col" key={agent.id}><span className="ta-ag"><AgentFace agent={agent.id} size={24}/><bdi>{agent.name}</bdi></span></th>)}</tr></thead>
   <tbody>{members.map(member=>{const name=(member.people?.name||t('member')).split(' ')[0]; return <tr key={member.person_id}><th scope="row">{who(member)}</th>
    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
    {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)

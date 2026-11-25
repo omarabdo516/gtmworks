@@ -53,7 +53,7 @@ test('an Agent the Member writes to offers one chip for every Agent they see, th
  await signIn(page,'reviewer@example.com',`/c/rs-learning/chat/${ads}`);
  await expect(page.locator('.empty-chat h2')).toHaveText('What should we work on today?');
  await expect(page.locator('.empty-chat p')).toHaveText('Pick the agent you want to talk to, or type @ in your message to call any of them.');
- await expect(page.locator('.empty-chat__faces svg')).toHaveCount(4);
+ await expect(page.locator('.empty-chat__faces .face')).toHaveCount(4);
  await expect(page.getByRole('group',{name:'Pick an agent'})).toBeVisible();
  await expect(chips(page)).toHaveText(['Lead','Analyst','Copy','Meta Ads']);
  await expect(chips(page).filter({hasText:'Meta Ads'})).toHaveAttribute('aria-pressed','true');

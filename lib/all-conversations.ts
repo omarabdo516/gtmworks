@@ -7,13 +7,13 @@ type Translate=(key:string,...values:unknown[])=>string;
 // All conversations (#673): the reader's own Conversations and the channels they are in, newest message first. `tab`
 // is which list: `current`, or `archived` (#674).
 export type ConversationTab='current'|'archived';
-export type ListedChat={kind:'conversation'|'channel',id:string,title:string,line:string,at:string,face:{connection_id:string,name:string}|null};
+export type ListedChat={kind:'conversation'|'channel',id:string,title:string,line:string,at:string,face:{id:string,name:string}|null};
 export type ConversationCursor={at:string,id:string};
 export type ConversationPage={items:ListedChat[],next:ConversationCursor|null};
 export type ConversationCounts={current:number,archived:number};
 const conversationPageSize=50;
 
-type Row={kind:'conversation'|'channel',id:string,agent_name:string|null,connection_id:string|null,title:string|null,good_morning_day:string|null,channel_kind:string|null,last_at:string,last_body:string|null};
+type Row={kind:'conversation'|'channel',id:string,agent_id:string|null,agent_name:string|null,title:string|null,good_morning_day:string|null,channel_kind:string|null,last_at:string,last_body:string|null};
 
 // One page, read by conversation_list as the signed-in person: the database decides what is theirs and does the title
 // search (search_fold, as lib/arabic-search.mjs reads it), so a search reads every title, not only the rows shown. A
@@ -28,7 +28,7 @@ export async function conversationPage(db:Database,company:string,{tab='current'
  const shown=rows.slice(0,conversationPageSize);
  const items=shown.map((row):ListedChat=>({kind:row.kind,id:row.id,at:row.last_at,line:(row.last_body||'').replace(/\s+/g,' ').trim(),
   title:row.kind==='channel'?(row.channel_kind==='team'&&row.title?row.title:general):conversationTitle({morningDay:row.good_morning_day,body:row.title,agent:row.agent_name||''},t,language),
-  face:row.kind==='conversation'?{connection_id:row.connection_id||row.id,name:row.agent_name||''}:null}));
+  face:row.kind==='conversation'?{id:row.agent_id||'',name:row.agent_name||''}:null}));
  const last=shown.at(-1);
  return {items,next:rows.length>conversationPageSize&&last?{at:last.last_at,id:last.id}:null};
 }

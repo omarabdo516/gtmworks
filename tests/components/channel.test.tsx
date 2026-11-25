@@ -214,9 +214,10 @@ test('each Agent in the channel\'s details shows its state on its face and under
  const head = details.element().querySelector('.dp-id__role');
  expect(head?.textContent).toBe('3 members · 3 agents · 1 working');
  expect(head?.querySelector('.dot--working')).not.toBeNull();
- const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
+ const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.fw'));
  expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent)).toEqual(['Runs the ads. · Working', 'Waiting on you', 'Reads the copy. · Idle']);
- expect(rows.map(row => row.querySelector('.face-wrap .dot')?.className)).toEqual(['dot dot--working', 'dot dot--waiting', 'dot dot--idle']);
+ expect(rows.map(row => row.querySelector('.fw .dot')?.className)).toEqual(['dot dot--working', 'dot dot--waiting', 'dot dot--idle']);
+ expect(rows.map(row => row.querySelector<HTMLElement>('.fw .face')?.dataset.state)).toEqual(['working', 'waiting', 'idle']);
 });
 
 test('in Arabic the details name each Agent\'s state and count the working ones', async () => {
@@ -224,7 +225,7 @@ test('in Arabic the details name each Agent\'s state and count the working ones'
  const screen = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-3" initial={team({ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'بيظبط الإعلانات.', main: false, only: false, state: 'working' }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: '', main: false, only: false, state: 'waiting' }] })}/></LanguageProvider>);
  const details = screen.getByRole('complementary', { name: 'تفاصيل القناة' });
  expect(details.element().querySelector('.dp-id__role')?.textContent).toBe('3 أعضاء · 2 وكلاء · 1 شغال');
- const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
+ const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.fw'));
  expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent)).toEqual(['بيظبط الإعلانات. · شغال', 'مستنيك']);
 });
 

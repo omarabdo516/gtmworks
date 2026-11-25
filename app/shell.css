@@ -143,6 +143,10 @@
 .gw .sb-sec { margin-top: 24px; }
 .gw .sb-label { margin: 0; padding: 0 12px 8px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.6; color: var(--gw-text-3); letter-spacing: normal; text-transform: none; font-family: var(--gw-font); }
 .gw .agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+/* The faces' glow reaches past the grid's sides, and as they breathe it would change how far the sidebar's scroller
+   reaches across, so the scroller repainted on every frame (tests/face-frames.spec.ts, #697): the grid clips across at
+   the scroller's own edge (its 12px start padding), where nothing it draws is seen past anyway. */
+.gw .agent-grid { overflow-x: clip; overflow-clip-margin: 12px; }
 .gw .agent-tile {
   display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; color: var(--gw-text-1); text-decoration: none;
   padding: 8px 4px 6px; border-radius: var(--gw-r-md);
@@ -158,58 +162,14 @@
    design-reference: .agent-tile.is-flash, tileFlash); app/agent-grid.tsx marks it and takes the mark away after 1500ms. */
 .gw .agent-tile.is-flash { --text-1: var(--gw-text-1); animation: gw-ring-flash 1.4s var(--gw-ease-out); }
 .gw .agent-tile--new .agent-tile__name { color: var(--gw-text-2); }
-/* The state dot on a tile's face, its ring the sidebar's colour (design-reference: .dot, .face-wrap .dot, .agent-tile) */
-.gw .agent-tile .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--gw-idle-dot); box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }
-.gw .agent-tile .dot--working { background: var(--gw-accent); }
-.gw .agent-tile .dot--waiting { background: var(--gw-wait); }
-.gw .agent-tile[aria-current="true"] .face-wrap .dot { box-shadow: 0 0 0 2.5px var(--gw-bg-active-solid); }
-/* An Agent at work: eyes scan, three dots think, the dot pulses; when it ends, a check (design-reference: applyLive) */
-/* Faces of 24px or more are alive (design-reference: .face__f, .face__eye, .face.is-blink, .face.is-happy, faceHop and the
-   hover lift; components/face-motion sets --fx and --fy and the marks). The head never moves, only its features. */
-.gw .face--look .face__f { transform: translate(var(--fx, 0px), var(--fy, 0px)); transition: transform 240ms var(--gw-ease-out); }
-.gw .face--look .face__eye { transform-box: fill-box; transform-origin: center; transition: transform 90ms var(--gw-ease-in); }
-.gw .face.is-blink .face__eye { transform: scaleY(0.12); }
-.gw .face.is-happy { animation: gw-face-hop 460ms var(--gw-ease-spring); }
-.gw .face.is-happy .face__eye { transform: scaleY(0.45); transition-duration: 120ms; }
-@keyframes gw-face-hop { 0% { transform: none; } 35% { transform: translateY(-4px) scale(1.07); } 100% { transform: none; } }
-.gw .agent-tile .face--look, .gw .head-pill .face--look { transition: transform var(--gw-dur) var(--gw-ease-out); }
-@media (hover: hover) {
-  .gw .agent-tile:hover .face--look { transform: translateY(-2px); }
-  .gw .head-pill:hover .face--look { transform: translateY(-1px); }
-}
-.gw .face.is-thinking .face__f { animation: gw-face-scan 2.4s ease-in-out infinite; }
-@keyframes gw-face-scan { 0%, 100% { transform: translate(-1.4px, 0); } 45%, 55% { transform: translate(1.4px, -0.4px); } }
-.gw .face-wrap .think {
-  position: absolute; top: -6px; inset-inline-start: -6px; display: inline-flex; align-items: center; gap: 2px;
-  height: 14px; padding: 0 4px; border-radius: var(--gw-r-full); background: var(--gw-bg-pane);
-  box-shadow: var(--gw-border-2) 0 0 0 0.5px inset, var(--gw-shadow-pill); animation: gw-think-in var(--gw-dur) var(--gw-ease-out);
-}
-.gw .face-wrap .think i { width: 3px; height: 3px; border-radius: 50%; background: var(--gw-text-2); animation: gw-think-dot 1.2s ease-in-out infinite; }
-.gw .face-wrap .think i:nth-child(2) { animation-delay: 150ms; }
-.gw .face-wrap .think i:nth-child(3) { animation-delay: 300ms; }
-@keyframes gw-think-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-2px); opacity: 1; } }
-@keyframes gw-think-in { from { opacity: 0; transform: translateY(3px) scale(.8); } }
-.gw .face-wrap.is-thinking > .dot { background: var(--gw-accent); }
-.gw .face-wrap.is-thinking > .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
-@keyframes gw-dot-ping { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
-.gw .face-wrap .done-ck {
-  position: absolute; bottom: -2px; inset-inline-end: -2px; width: 16px; height: 16px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center; background: var(--gw-primary); color: var(--gw-on-primary);
-  box-shadow: 0 0 0 2px var(--gw-bg-sidebar); animation: gw-ck-pop 320ms var(--gw-ease-spring);
-}
-.gw .face-wrap .done-ck .gw-icon { width: 11px; height: 11px; }
-.gw .face-wrap--lg .done-ck { width: 20px; height: 20px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
-.gw .face-wrap--lg .done-ck .gw-icon { width: 13px; height: 13px; }
-.gw .face-wrap .done-ck .gw-icon path { stroke-width: 2.6; stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 360ms var(--gw-ease-out) 140ms forwards; }
-@keyframes gw-ck-pop { from { transform: scale(.4); opacity: 0; } }
-@keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
+/* The state dot on a tile's face rings in the sidebar's colour (app/face.css: .fw > .dot, --ring). */
+.gw .agent-tile { --ring: var(--gw-bg-sidebar); }
+.gw .agent-tile[aria-current="true"] { --ring: var(--gw-bg-active-solid); }
 @media (prefers-reduced-motion: reduce) {
-  .gw .face .face__f, .gw .face .face__eye, .gw .agent-tile .face--look, .gw .head-pill .face--look { transform: none !important; }
-  .gw .face.is-happy, .gw .face.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
   .gw .app-content.view-enter > :not(.convo-page), .gw .app-content.view-enter > .convo-page .convo > :not(.details, .dp-scrim) { animation: none; }
 }
 .gw .agent-tile__plus {
-  width: 52px; height: 52px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
   background: var(--gw-bg-pane); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; color: var(--gw-text-2);
 }
 .gw .thread-group + .thread-group, .gw .thread-group + .sb-empty { margin-top: 16px; }
@@ -294,7 +254,7 @@
 @media (hover: hover) {
   .gw .circle-btn:hover { background: var(--gw-bg-elevated-hover); }
   .gw .sb-item:hover, .gw .agent-tile:hover, .gw .me:hover, .gw .menu__item:hover { background: var(--gw-bg-hover); }
-  .gw .agent-tile:hover .face-wrap .dot { box-shadow: 0 0 0 2.5px var(--gw-bg-active-solid); }
+  .gw .agent-tile:hover { --ring: var(--gw-bg-active-solid); }
   .gw .sb-add:not([aria-disabled="true"]):hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
 }
 
@@ -546,13 +506,17 @@
 .gw .dp-top { display: flex; align-items: center; justify-content: space-between; height: var(--gw-head-h); padding: 12px; }
 .gw .dp-top .circle-btn:last-child { margin-inline-start: auto; }
 .gw .dp-scroll { overflow-y: auto; min-height: 0; padding-bottom: 32px; }
+/* The Agent's face at the top of the details glows past its box (app/face.css): the scrolling part starts under the
+   head's buttons, which stay above it, so the glow is never cut off in a straight line (#697). */
+.gw .details .dp-top { position: relative; z-index: 1; pointer-events: none; }
+.gw .details .dp-top > * { pointer-events: auto; }
+.gw .details .dp-scroll { margin-top: -28px; padding-top: 28px; }
 .gw .dp-id { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 16px 12px; text-align: center; }
 .gw .dp-id > div { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .gw .dp-id__name { display: inline-flex; align-items: center; gap: 8px; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.4; }
 .gw .dp-id__role { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0 4px; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
 .gw .details .dp-id__role { display: block; text-align: center; }
 .gw .dp-id__state { white-space: nowrap; }
-.gw .face-wrap { position: relative; display: inline-flex; flex: none; }
 .gw .segmented { display: flex; justify-content: center; gap: 2px; padding: 4px 16px 10px; }
 .gw .segmented button { padding: 4px 10px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); line-height: 18px; color: var(--gw-text-2); }
 .gw .dp-tabs { justify-content: stretch; gap: 0; margin: 4px 16px 8px; padding: 2px; border-radius: var(--gw-r-full); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; }
@@ -757,11 +721,9 @@
 @media (hover: hover) { .gw .details .dp-tools .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); color: var(--gw-on-primary); } }
 .gw .details .num { font-variant-numeric: tabular-nums; }
 .gw .details .muted { color: var(--gw-text-3); }
-.gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
-.gw .details .dot--working { background: var(--gw-accent); }
-.gw .details .dot--waiting { background: var(--gw-wait); }
-.gw .details .face-wrap .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }
-.gw .details .face-wrap--lg .dot { bottom: 2px; inset-inline-end: 2px; width: 12px; height: 12px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
+.gw .details :not(.fw) > .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
+.gw .details :not(.fw) > .dot--working { background: var(--gw-accent); }
+.gw .details :not(.fw) > .dot--waiting { background: var(--gw-wait); }
 .gw .dp-scrim { display: none; }
 
 /* "New agent": one hint line above Lead's composer (design-reference: .new-hint) */
@@ -1204,8 +1166,7 @@
 }
 /* A row of overlapping Agent faces: a Card's crew on the board, a page's Agents in the settings overlay (both on the pane). */
 .gw .fstack { display: inline-flex; align-items: center; flex: none; }
-.gw .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
-.gw .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
+.gw .fstack .fw + .fw { margin-inline-start: -5px; }
 @media (prefers-reduced-motion: reduce) { .gw .sidebar, .gw .details { transition: none; } .gw.modal { animation: none; } }
 
 /* Update now (#443): the state of an update an Owner asked for, above the account, in the conversation's note style. */

@@ -66,7 +66,8 @@ test.each([
  fake.send({ run: 'run_1', steps: [], now: { tool: 'meta_ads', preview: 'campaign results August to October' } });
  await expect.poll(() => step()?.textContent).toBe(now);
  expect(step()?.classList.contains('is-swap'), 'each new step rises in').toBe(true);
- expect(live(), 'no list before a step ended').toBeNull();
+ expect(live()?.querySelector('.sender')?.textContent, 'the reply being worked on shows before any step').toBe('Ads');
+ expect(live()?.querySelector('.steps'), 'no list before a step ended').toBeNull();
  fake.send({ run: 'run_1', steps: [found], now: null });
  await expect.poll(() => step()?.textContent).toBe(writing);
  await expect.element(screen.getByRole('button', { name: one, exact: true })).toBeVisible();
@@ -158,7 +159,7 @@ test('a queued turn: once the first Run\'s reply lands its live steps go at once
  const next = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at };
  await screen.rerender(chat('en', { ...landed, pending: true, messages: [...landed.messages, next] }));
  await expect.element(screen.getByText('I read the last three campaigns.')).toBeVisible();
- expect(live(), 'no second list beside the reply').toBeNull();
+ expect(live()?.querySelector('.steps'), 'no second list beside the reply: the next reply being worked on has none yet').toBeFalsy();
  expect(document.querySelectorAll('.steps').length).toBe(1);
  expect(document.querySelector('[data-author="agent"]')?.classList.contains('msg-in')).toBe(false);
  await expect.element(screen.getByRole('status')).toHaveTextContent('Ads is working on a reply…');

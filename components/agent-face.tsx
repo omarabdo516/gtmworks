@@ -1,25 +1,60 @@
-import { agentFace } from '@/lib/agent-face.mjs';
-import { roleAgents } from '@/lib/role-agents';
+'use client';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
+import '@/app/face.css';
+import { lookStyle } from '@/lib/agent-look';
+import { useAgentLook } from '@/lib/agent-looks-client';
+import { shownState, useChatKnows } from '@/lib/live-runs';
+import { faceStateChanged, watchFace, type FaceState } from './face-life';
 
-export function AgentFace({id,role,name,size=24}:{id:string,role:string,name:string,size?:number}) {
- const face=agentFace(id);
- const eyes=[face.eyeX,64-face.eyeX];
- return <svg className="agent-face" role="img" aria-label={name} viewBox="0 0 64 64" style={{width:size,height:size}}>
-  <g fill={roleAgents.find(agent=>agent.key===role)?.color}>
-   {face.shape===0?<circle cx="32" cy="36" r="27"/>:face.shape===1?<rect x="5" y="9" width="54" height="54" rx="19"/>:<rect x="3" y="13" width="58" height="50" rx="25"/>}
-  </g>
-  <g fill="#1f1f1f" stroke="#1f1f1f" strokeWidth="2.4" strokeLinecap="round">
-   {face.accessory===1&&<><path d="M32 9V3" fill="none"/><circle cx="32" cy="3" r="2.6" stroke="none"/></>}
-   {face.accessory===2&&<g opacity=".7" stroke="none"><rect x="0" y="31" width="4" height="12" rx="2"/><rect x="60" y="31" width="4" height="12" rx="2"/></g>}
-   {face.accessory===3&&<path d="M25 10c2-7 12-7 14 0" fill="none"/>}
-  </g>
-  {eyes.map(center=><g key={center}>
-   <circle cx={center} cy="35" r={face.eyeRadius} fill="#fff"/>
-   <circle cx={center} cy="35" r={face.pupilRadius} fill="#1f1f1f"/>
-   <circle cx={center+1.3} cy="33.4" r="1.2" fill="#fff"/>
-  </g>)}
-  <g stroke="#1f1f1f" strokeWidth="2.4" strokeLinecap="round" fill="#1f1f1f">
-   {face.mouth===2?<ellipse cx="32" cy="52" rx="2.6" ry="2.2"/>:<path d={['M25 52q7 5 14 0','M26 52h12','','M25 51q8 6 15-1'][face.mouth]} fill="none"/>}
-  </g>
- </svg>;
+// An Agent's face: the approved orb in the Agent's own look (decision 0067, ADR 0027; design-reference-orb faceHTML),
+// asked for by the Agent's id from the Company's looks (lib/agent-looks-client), at the size its place takes. From 24px
+// it is alive (components/face-life); under 24px it is a still orb with eyes. Its expression is `state`, the state the
+// server last told; `live` adds what the chat this person has open knows (lib/live-runs: listening, thinking, working,
+// done), so every live face of one Agent shows the same. `dot` adds the state dot. The face is silent for assistive technology: the name and the state in words beside
+// it say who and how. A record that names no Agent, only the name it keeps (#702: one detached before its Agent's id
+// was kept), shows that name's first letter, as a person does.
+export function AgentFace({agent,name,...face}:{agent:string|null|undefined,name?:string,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
+ if(!agent&&name!==undefined) return <span dir="auto" className="avatar avatar--agent" aria-hidden="true" style={{width:face.size,height:face.size,fontSize:Math.max(9,Math.round(face.size/2))}}>{Array.from(name.trim())[0]||'؟'}</span>;
+ return <Orb agent={agent} {...face}/>;
+}
+
+function Orb({agent,size,state='idle',dot=false,live=false}:{agent:string|null|undefined,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
+ const look=useAgentLook(agent);
+ const chat=useChatKnows(live?agent:undefined);
+ const shown=shownState(state,chat);
+ const still=size<24, big=size>=48;
+ const face=useRef<HTMLSpanElement>(null);
+ useEffect(()=>still?undefined:watchFace(face.current!),[still]);
+ const was=useRef<FaceState|undefined>(undefined);
+ useLayoutEffect(()=>{ if(!still&&face.current) faceStateChanged(face.current,shown,was.current); was.current=shown; },[shown,still]);
+ const style={'--s':`${size}px`,'--d':`${delay(agent)}s`,...lookStyle(look)} as CSSProperties;
+ const eye=(side:'l'|'r')=><span className={`f-eye f-eye--${side}`}><i className="e-open"/><svg className="e-arc" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path className="e-happy" d="M3.5 13.5Q10 3 16.5 13.5"/><path className="e-sleep" d="M3.5 8.5Q10 16 16.5 8.5"/></svg></span>;
+ return <span className={`fw${size>=72?' fw--lg':''}`} aria-hidden="true">
+  <span ref={face} className={`face ${still?'face--still':'face--live'}${big?' face--big':''}`} data-agent={agent||undefined} data-shape={look.shape} data-colour={look.colour} data-temperament={look.temperament} data-state={shown} style={style}>
+   {big&&<><i className="f-shadow"/><i className="f-gather"/></>}
+   <span className="f-act"><span className="f-pose"><span className="f-breath">
+    {!still&&<i className="f-glow"/>}
+    <span className="f-body">
+     <i className="l f-base"/>
+     {!still&&<><i className="l f-flows"/><i className="l f-core"/></>}
+     <i className="l f-shade"/>
+     {!still&&<i className="l f-swirl"/>}
+     <i className="l f-veil"/>
+     <span className="f-specs"><i className="f-spec"/><i className="f-spec2"/></span>
+     <svg className="f-rim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href={`#gw-shape-${look.shape}`}/></svg>
+    </span>
+    <span className="f-eyes"><span className="f-gaze"><span className="f-look">{eye('l')}{eye('r')}</span></span></span>
+   </span></span></span>
+   {big&&<span className="f-spark"><i/><i/><i/></span>}
+  </span>
+  {dot&&<span className={`dot dot--${shown}`}/>}
+ </span>;
+}
+
+// Where in its breath a face starts, so faces side by side do not breathe together. It reads the Agent's id only to
+// spread the faces, never for its look, and is the same on the server and in the browser.
+function delay(agent:string|null|undefined) {
+ let hash=2166136261;
+ for(const char of agent||'') { hash^=char.charCodeAt(0); hash=Math.imul(hash,16777619); }
+ return -((hash>>>0)%1200)/100;
 }
