@@ -64,7 +64,8 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
       here.opened();
     };
     const connect = () => {
-      const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/display/ws?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`;
+      // A page that held control as its last socket dropped asks for it back (#752).
+      const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/display/ws?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}${regaining.current ? '&resume=1' : ''}`;
       const open = new WebSocket(url); open.binaryType = 'arraybuffer'; socket.current = open;
       open.addEventListener('open', () => { for (const message of pending.current.splice(0)) open.send(message); });
       open.addEventListener('message', event => {
@@ -89,10 +90,12 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
         stopStream();
         if (ended) return;
         const held = mine.current || regaining.current; mine.current = false; regaining.current = false;
+        // A socket that dropped on its own while in control: the view still reads as theirs until the next socket says
+        // whether it is (#752).
+        if (held && event.code !== 4001 && event.code !== 4404 && event.code !== 4401) { regaining.current = true; retry = setTimeout(connect, retryMs); return; }
         setControl('agent'); setBy('');
-        if (event.code === 4001 || event.code === 4404) { if (held) handlers.current.lost(); onStale(); return; }
-        // A socket that dropped on its own: the next one says whether control is still this person's.
-        if (held && event.code !== 4401) regaining.current = true; else if (held) handlers.current.lost();
+        if (held) handlers.current.lost();
+        if (event.code === 4001 || event.code === 4404) { onStale(); return; }
         if (event.code === 4401) onStale();
         retry = setTimeout(connect, retryMs);
       });

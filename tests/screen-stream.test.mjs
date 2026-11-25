@@ -31,8 +31,8 @@ async function streams({engine=engineFor,recheck=60000}={}) {
  server.on('upgrade',(request,socket,head)=>{ void handle(request,socket,head,new URL(request.url??'/','http://gtmworks').searchParams); });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(undefined)));
  const sockets=[];
- const open=(as='mona')=>{
-  const ws=new WebSocket(`ws://127.0.0.1:${/** @type {any} */(server.address()).port}${screenStreamPath}?company=${company}&agent=${agent}&as=${as}`);
+ const open=(as='mona',{resume=false}={})=>{
+  const ws=new WebSocket(`ws://127.0.0.1:${/** @type {any} */(server.address()).port}${screenStreamPath}?company=${company}&agent=${agent}&as=${as}${resume?'&resume=1':''}`);
   sockets.push(ws);
   const said=[]; let code=null;
   ws.on('message',(data,binary)=>{ if(!binary) said.push(JSON.parse(String(data))); });
@@ -104,7 +104,7 @@ test('a person who reconnects while their old socket still holds control has it 
   old.send({take:true});
   await old.heard('control taken',{control:'mine'});
   const before=old.said.length;
-  const back=at.open();
+  const back=at.open('mona',{resume:true});
   await back.heard('control on the new socket',{control:'mine'});
   await back.heard('the stream',{stream:'open'});
   await old.heard('the old socket watching',{control:'other',by:'Mona'},before);
@@ -122,7 +122,7 @@ test('a person who reconnects while their old socket still holds control has it 
  } finally { await at.close(); }
 });
 
-test('control moves between one person\'s sockets, never to another person\'s',async()=>{
+test('control moves between one person\'s sockets on their take, never to another person\'s, and a new view takes nothing on arrival',async()=>{
  const at=await streams();
  try {
   const first=at.open();
@@ -134,6 +134,8 @@ test('control moves between one person\'s sockets, never to another person\'s',a
   someone.send({take:true});
   await someone.heard('the take refused',{refused:'held',by:'Mona'});
   const second=at.open();
+  await second.heard('a new view watching',{control:'other',by:'Mona'});
+  second.send({take:true});
   await second.heard('control on the second socket',{control:'mine'});
   const before=second.said.length;
   first.send({take:true});
@@ -141,6 +143,25 @@ test('control moves between one person\'s sockets, never to another person\'s',a
   await second.heard('the second watching',{control:'other',by:'Mona'},before);
   assert.equal(at.lease(),'human');
   assert.deepEqual(at.rows,['taken']);
+ } finally { await at.close(); }
+});
+
+test('the old socket ending while control moves to the new one leaves it with the new one',async()=>{
+ const at=await streams();
+ try {
+  const old=at.open();
+  await old.heard('the stream',{stream:'open'});
+  old.send({take:true});
+  await old.heard('control taken',{control:'mine'});
+  // Both at once: the heartbeat ends the old socket as the page's new one arrives asking for control back.
+  const back=at.open('mona',{resume:true});
+  old.ws.terminate();
+  await old.closed();
+  await back.heard('the stream',{stream:'open'});
+  await new Promise(resolve=>setTimeout(resolve,200));
+  const last=back.said.filter(message=>message.control).at(-1);
+  if(last?.control==='mine') { assert.equal(at.lease(),'human'); assert.deepEqual(at.rows,['taken']); }
+  else { assert.equal(last?.control,'agent'); assert.equal(at.lease(),'agent'); assert.deepEqual(at.rows,['taken','givenBack']); }
  } finally { await at.close(); }
 });
 

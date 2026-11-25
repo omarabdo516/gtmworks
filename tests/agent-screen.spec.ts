@@ -325,7 +325,9 @@ test('a page that loses its connection while in control has it again on reconnec
  const count=sockets.length;
  await sockets.at(-1)?.page.close({code:1011,reason:'lost'});
  await expect.poll(()=>sockets.length).toBe(count+1);
+ // The view reads as theirs throughout, and the stream comes back on the new socket.
  await expect(done).toBeVisible();
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
  await expect(view.getByText('You have control').first()).toBeVisible();
  // The heartbeat ends the old socket: control stays on the new one.
  await sockets.at(-2)?.server.close();
