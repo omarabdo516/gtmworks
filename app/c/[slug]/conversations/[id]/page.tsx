@@ -4,7 +4,7 @@ import { after } from 'next/server';
 import { headers } from 'next/headers';
 import { renderKind } from '@/lib/diagnostics.mjs';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import Shell, { sidebarReads } from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import ConversationView, { ConversationLoaded, ConversationNotRead } from './conversation';
@@ -29,7 +29,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const db=await supabase();
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
- const [{t,language},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
+ const [{t,language},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),signedInUser(),
   db.from('companies').select('id,slug,name,work_mode').order('name'),
   uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at`).eq('id',id).maybeSingle():{data:null}]);
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);

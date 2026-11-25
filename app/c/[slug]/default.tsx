@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import { sections } from '@/lib/navigation';
 import Shell from '@/app/shell';
 
@@ -10,7 +10,7 @@ import Shell from '@/app/shell';
 // draws nothing; the slot sends the person to sign in.
 export default async function SettingsFrame({params}:{params:Promise<{slug:string}>}) {
  const {t}=await getI18n(); const {slug}=await params;
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const db=await supabase(); const {data:{user}}=await signedInUser();
  if(!user) return null;
  const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug);
  if(!company) notFound();

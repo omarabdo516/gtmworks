@@ -1,7 +1,7 @@
 import '../../../../channel.css';
 import { notFound, redirect } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { channelSessionTurns } from '@/lib/company-app-items';
@@ -11,7 +11,7 @@ import ChannelView from './channel';
 
 export default async function ChannelPage({params}:{params:Promise<{slug:string,id:string}>}) {
  const {t}=await getI18n(); const {slug,id}=await params;
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const db=await supabase(); const {data:{user}}=await signedInUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/channels/${id}`)}`);
  const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug);
  if(!company||!uuid.test(id)) notFound();

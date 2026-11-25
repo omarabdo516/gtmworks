@@ -46,6 +46,14 @@ test('no app, worker or library module reads an install-wide Engine address or k
   assert.equal(await engineOf(other,db),null);
   assert.deepEqual(db.asked,[{table:'companies',column:'id',value:company},{table:'company_engines',column:'id',value:`engine-${company}`},{table:'companies',column:'id',value:other}]);
   assert.equal(await engineOf(null,db),null);
+  // #771: one request's helpers share one read of the record: asked again at once, the module answers what it read.
+  const before=db.asked.length;
+  assert.deepEqual(await engineOf(company,db),{address:'http://hermes:8642',key:'k'.repeat(64)});
+  assert.deepEqual(await Promise.all([engineOf(company,db),engineOf(company,db)]),[{address:'http://hermes:8642',key:'k'.repeat(64)},{address:'http://hermes:8642',key:'k'.repeat(64)}]);
+  assert.equal(db.asked.length,before,'the record is read once, not once per helper');
+  // A Company with no Engine is asked again each time, so one made a moment ago is found at once.
+  await engineOf(other,db);
+  assert.equal(db.asked.length,before+1);
   // A module with no database at all (a unit test) has no Engine to answer: no install-wide address or key is read.
   assert.equal(await engineOf(company,null),null);
   const api=await import('../lib/company-engine.mjs');
