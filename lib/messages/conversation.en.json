@@ -1,5 +1,5 @@
 {
-  "conversationWorkingFor": "{0} is working on a reply for {1}…",
+  "conversationWorkingForPerson": "Working for {0}",
   "conversationQueued": "It’ll read this after the current reply",
   "conversationQueuedFailed": "Not sent: the agent engine wouldn’t start it. Send it again.",
   "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.",

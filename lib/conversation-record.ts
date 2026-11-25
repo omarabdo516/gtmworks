@@ -176,6 +176,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
   ...(reason?{modelRefused:{reason,owner:ownsIt===true,...(commanded?{agent:commanded.to_name}:{}),...(resetsAt?{resetsAt}:{})}}:{}),
   working:runner?.name??null,
+  // A turn waiting behind another person's Run says whom the Agent works for (#763).
+  ...(runner&&runner.person!==person?{workingFor:runner.name}:{}),
   canStop:!!runner&&(runner.person===person||manages===true),
   ...(board?{board}:{}),
  };

@@ -84,6 +84,8 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); }
   } catch {}
  },[channel.company,channel.id,reading]);
+ // A Run's events ended: its reply is read now, not at the next tick (#763).
+ const ended=()=>{ void refresh(); };
  // Opening the channel reads it, and asks for it fresh: the page may be a prefetch drawn before the newest messages. The
  // answer replaces only that first drawing, never a newer one from a poll or a send. Opened from a mention (#200), the
  // read names the message the Member opened, so their own waiting item is done; the address is then the channel's again.
@@ -186,7 +188,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
- const {view:steps,unread}=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
+ const {view:steps}=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow,ended);
  const landing=useLanding({working:!!workingNow,live:steps,newest:messages.findLast(message=>message.author==='agent')?.id??null});
  // Each called Agent's face while the channel is open (#700, lib/live-runs channelRuns).
  useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
@@ -219,7 +221,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     </li>)}
    </Fragment>)}
     {workingNow&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
-   {workingNow&&<WorkingLine view={live} unread={unread} fallback={t('conversationWorking',workingNow.agent)} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>}
+   {workingNow&&<WorkingLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>}
   </div></div>
   <div className="composer-area">
    {/* An archived channel (#675; design-reference-card: arc-line) is read by its Members, and nobody writes in it. */}

@@ -184,7 +184,9 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
- const {conversation,messages,pending,failed,working:runner}=record;
+ const {conversation,messages,pending,failed}=record;
+ // A Run's events ended: the record is read now, so its reply is drawn without waiting for the next tick (#763).
+ const ended=()=>{ void reread?.(); };
  const modelCause=record.noModel?'noModel' as const:record.modelRefused?refusalCause[record.modelRefused.reason]:null;
  const answer=async(card:number,choice:number|number[],answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
@@ -266,7 +268,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const working=(pending&&!record.asking)||messages.some(message=>message.kind==='sending');
  // An Agent's reply, not a decision drawn as its message.
  const newest=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided')?.id??null;
- const {view:steps,unread}=useLiveSteps({company,conversation:conversation.id},working);
+ const {view:steps}=useLiveSteps({company,conversation:conversation.id},working,ended);
  const landing=useLanding({working,live:steps,newest});
  // The open Run's face, on the page and in a Card's sheet alike (#184, #700): thinking until its first step, working
  // after it, done once it ended well in front of the reader. A Run waiting on its person's answer (#138) has ended for
@@ -317,7 +319,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
    {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
-  {working&&<WorkingLine view={live} unread={unread} fallback={runner?c('conversationWorkingFor',conversation.agent_name,runner):t('conversationWorking',conversation.agent_name)} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
+  {working&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
   {failed&&(modelCause
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.

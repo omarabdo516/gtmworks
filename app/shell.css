@@ -347,11 +347,6 @@
 .gw .priv-line { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 auto; padding: 0 12px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-align: center; }
 .gw .priv-line .gw-icon { width: 13px; height: 13px; flex: none; }
 [dir="ltr"] .gw .priv-line span { unicode-bidi: plaintext; }
-.gw .thinking { padding: 2px 4px; font-size: var(--gw-fs-base); color: var(--gw-text-2); }
-/* While the Agent works, the line's words breathe; with reduced motion they are still and fully drawn
-   (design-reference: .shimmer, .thinking .shimmer; #132). */
-.gw .thinking .shimmer { display: inline-block; color: var(--gw-text-2); animation: gw-breathe 1.4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .gw .thinking .shimmer { animation: none; } }
 /* While the Agent works, the live line names it and the step it is on now (#646; design-reference: .activity,
    syncActivityKey): the working dot, its face and name, then the step, which breathes and rises in each time it moves on
    (`is-swap`). With reduced motion it is text only. */
@@ -359,6 +354,8 @@
 .gw .activity .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--gw-accent); }
 .gw .activity__who { flex: none; font-weight: 600; color: var(--gw-text-1); }
 .gw .activity__t { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .activity__for { flex: none; color: var(--gw-text-3); white-space: nowrap; }
+.gw .activity__for::before { content: "·"; margin-inline-end: 6px; }
 .gw .activity .shimmer { animation: gw-breathe 1.4s ease-in-out infinite; }
 .gw .activity .is-swap { animation: gw-rise 240ms var(--gw-ease-out), gw-breathe 1.4s ease-in-out 240ms infinite; }
 @media (prefers-reduced-motion: reduce) { .gw .activity .shimmer, .gw .activity .is-swap { animation: none; } }

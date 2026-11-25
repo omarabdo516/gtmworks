@@ -1,5 +1,11 @@
 [
  {
+  "issue": 763,
+  "date": "2026-11-25",
+  "en": { "title": "The working line always says what the Agent is doing", "body": "While an Agent works on your message, the line under the conversation reads Thinking or the step it is on now, in a Conversation, a channel and a card's chat alike, and it holds until the reply is drawn, which now comes as soon as the Agent finishes." },
+  "ar": { "title": "سطر الشغل بيقولك الوكيل بيعمل إيه على طول", "body": "وانت مستني الوكيل يرد على رسالتك، السطر اللي تحت المحادثة بيقول «بيفكر» أو الخطوة اللي هو فيها دلوقتي، في المحادثة والقناة وشات البطاقة، وبيفضل لحد ما الرد يظهر، والرد بقى بيظهر أول ما الوكيل يخلّص." }
+ },
+ {
   "issue": 756,
   "date": "2026-11-25",
   "en": { "title": "Your message shows the moment you send it", "body": "A message you send in a Conversation or a channel is on screen as soon as you press Send, with its files, and the Agent's line reads Thinking from then, even while the server is busy; if it can't be sent, its words go back in the box." },
