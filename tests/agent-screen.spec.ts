@@ -1,4 +1,5 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
+import WebSocket from 'ws';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -77,19 +78,21 @@ test('the Owner wakes an Agent\'s Screen from its card, watches it refresh in th
  const woke=rows(`select actor_id,details->>'agent_name' as agent from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`);
  expect(woke).toEqual([{actor_id:'20000000-0000-0000-0000-000000000001',agent:'Ads'}]);
 
- // Watch opens the large view with the keyboard on its first action (here its close button), and its picture refreshes
- // without a reload: a later grab replaces the first.
+ // The card's picture refreshes without a reload: a later grab replaces the first.
+ const first=await shown(page,'.scr-card');
+ await expect.poll(async()=>(await shown(page,'.scr-card')).grab,{timeout:5000}).not.toBe(first.grab);
+ expect(first.src).toMatch(/^blob:/);
+ // Watch opens the large view with the keyboard on its first action (here Take control, #713), and the live stream
+ // replaces the refreshing picture there.
  const watch=card.getByRole('button',{name:'Watch',exact:true});
  await watch.click();
  const view=page.getByRole('dialog',{name:'Ads’s screen'});
  await expect(view).toBeVisible();
- await expect(view.getByRole('button',{name:'Close the screen'})).toBeFocused();
+ await expect(view.getByRole('button',{name:'Take control'})).toBeFocused();
  await expect(view.locator('.vw-chip')).toHaveText('Watching');
  await expect(view.locator('.vw-mode')).toHaveText('Watching onlyYour mouse and keyboard are locked, and Ads is working on its own.');
- await expect(view.locator('img.scr__shot')).toBeVisible();
- const first=await shown(page,'dialog.viewer');
- await expect.poll(async()=>(await shown(page,'dialog.viewer')).grab,{timeout:5000}).not.toBe(first.grab);
- expect(first.src).toMatch(/^blob:/);
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
+ await expect(view.locator('img.scr__shot')).toHaveCount(0);
 
  // The close button, Escape and a press on the backdrop each close it, and the keyboard goes back to the card.
  await view.getByRole('button',{name:'Close the screen'}).click();
@@ -124,15 +127,15 @@ test('a Screen that falls asleep while watched is woken from the view\'s asleep 
  const {card}=await openScreen(page,'omar@example.com');
  await card.getByRole('button',{name:'Watch',exact:true}).click();
  const view=page.getByRole('dialog',{name:'Ads’s screen'});
- await expect(view.locator('img.scr__shot')).toBeVisible();
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
  // The Engine put it to sleep: the next picture says so, and the view shows the asleep block with the real idle time.
  fake.settings.screens.set(adsProfile,{running:false});
  await expect(view.locator('.vw-off p')).toHaveText('The screen goes to sleep after 30 idle minutes, and wakes up on its own when Ads has work.');
  await expect(view.locator('.vw-mode')).toHaveText('Watching onlyNothing is running on the screen right now.');
  await view.getByRole('button',{name:'Wake it',exact:true}).click();
  await expect(view.locator('.vw-mode')).toHaveText('Watching onlyThe screen is waking up and opening the browser.');
- await expect(view.locator('img.scr__shot')).toBeVisible();
- await expect(view.getByRole('button',{name:'Close the screen'})).toBeFocused();
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
+ await expect(view.getByRole('button',{name:'Take control'})).toBeFocused();
  await expect(card.locator('.scr-st')).toHaveText('Awake');
  await expect(page.locator('.toast')).toContainText('Ads’s screen is awake');
  expect(rows(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)[0].n).toBe(2);
@@ -196,4 +199,175 @@ test('the server answers the Screen per Role, and finds nothing of an Agent hidd
  expect(await (await page.request.get(`/api/agent-screen?company=${company}&agent=${ads}`)).json()).toEqual({screen:{state:'awake',control:'person',refusal:null}});
  const withheld=await page.request.get(`/api/agent-screen/picture?company=${company}&agent=${ads}`);
  expect([withheld.status(),await withheld.json()]).toEqual([409,{picture:'withheld'}]);
+});
+
+// #713: Take control for one session, then Done. The view's live stream comes through gtmworks's own /api/display/ws;
+// a person in control works the Screen with their own mouse and keyboard, and every way the view ends gives it back.
+// `stream` opens that socket as the signed-in person of a page, as the browser does, for what a page cannot do itself:
+// lose its connection without a word, or send what the page never offers.
+async function stream(page:Page,{agent=ads,origin}:{agent?:string,origin?:string}={}) {
+ const app=new URL(page.url()).origin;
+ const cookie=(await page.context().cookies(app)).map(({name,value})=>`${name}=${value}`).join('; ');
+ const socket=new WebSocket(`${app.replace('http','ws')}/api/display/ws?company=${company}&agent=${agent}`,{headers:{cookie,...(origin?{origin}:{})}});
+ const said:Record<string,unknown>[]=[];
+ socket.on('message',(data,binary)=>{ if(!binary) said.push(JSON.parse(String(data))); });
+ const closed=new Promise<number>(resolve=>socket.on('close',code=>resolve(code)));
+ const refused=new Promise<number>(resolve=>socket.on('unexpected-response',(_request,response)=>resolve(response.statusCode??0)));
+ socket.on('error',()=>{});
+ return {socket,said,closed,refused,heard:(match:Record<string,unknown>)=>expect.poll(()=>said.some(message=>Object.entries(match).every(([key,value])=>message[key]===value)),{timeout:10000}).toBe(true)};
+}
+const released=()=>fake.settings.screenCalls.filter(call=>call.method==='display.lease.release'&&call.params.profile===adsProfile).length;
+const controlRows=(action:string)=>rows(`select actor_id from public.company_log where agent_id='${ads}' and action='${action}' order by created_at,source_id`).map(row=>row.actor_id);
+const owner='20000000-0000-0000-0000-000000000001';
+
+test('a Member takes control of the Screen for this session, works it with their own mouse and keyboard, and every way out gives it back',async({page})=>{
+ fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
+ const {card}=await openScreen(page,'omar@example.com');
+ await card.getByRole('button',{name:'Watch',exact:true}).click();
+ const view=page.getByRole('dialog',{name:'Ads’s screen'});
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
+ const take=view.getByRole('button',{name:'Take control'});
+ await expect(take).toBeFocused();
+ await expect(view.locator('.vw-take__d')).toHaveText('Needs your permission · this session only');
+
+ // Take control asks first, with the keyboard on "Allow for this session"; Cancel goes back to watching.
+ await take.click();
+ await expect(view.locator('.vw-mode')).toHaveText('Take control from Ads?It holds still while you use the mouse and keyboard. This permission is for this session only: when you close the screen, control goes back to it, and next time it’ll ask you again.');
+ const allow=view.getByRole('button',{name:'Allow for this session'});
+ await expect(allow).toBeFocused();
+ await view.getByRole('button',{name:'Cancel'}).click();
+ await expect(view.locator('.vw-mode')).toHaveText('Watching onlyYour mouse and keyboard are locked, and Ads is working on its own.');
+ await expect(take).toBeFocused();
+ expect(fake.settings.screenCalls.filter(call=>call.method==='display.lease.acquire')).toEqual([]);
+ // Nothing typed while watching reaches the Screen.
+ await view.locator('.scr__live canvas').click({position:{x:20,y:20}});
+ await page.keyboard.press('a');
+ expect(fake.settings.screenInputs).toEqual([]);
+
+ await take.click();
+ await allow.click();
+ await expect(view.locator('.vw-chip--ctrl')).toHaveText('You have control');
+ await expect(view.locator('.vw-mode')).toHaveText('You have controlAds is holding still until you’re done. What you do on the screen is done in your name.');
+ await expect(page.locator('.toast')).toContainText('You have control for this session only');
+ await expect(view.locator('.scr.is-control')).toBeVisible();
+ const done=view.getByRole('button',{name:'Done',exact:true});
+ await expect(done).toBeFocused();
+ await expect(card.locator('.scr-ov__line')).toHaveText('You have control · Ads is holding still');
+ expect(fake.settings.screens.get(adsProfile)?.holder).toBe('human');
+ // The person's own mouse and keyboard reach the Screen.
+ await view.locator('.scr__live canvas').click({position:{x:30,y:30}});
+ await page.keyboard.press('b');
+ await expect.poll(()=>fake.settings.screenInputs.map(input=>input.kind)).toEqual(expect.arrayContaining(['pointer','key']));
+ expect(fake.settings.screenInputs.every(input=>input.profile===adsProfile)).toBe(true);
+ expect(controlRows('agent_screen_taken')).toEqual([owner]);
+
+ // Done gives it back: Watching only, the reference's toast, and the Engine's lease back with the Agent.
+ await done.click();
+ await expect(page.locator('.toast')).toContainText('Gave control back to Ads, and it carried on from where it was');
+ await expect(view.locator('.vw-mode')).toHaveText('Watching onlyYour mouse and keyboard are locked, and Ads is working on its own.');
+ await expect(view.locator('.vw-chip')).toHaveText('Watching');
+ await expect(take).toBeFocused();
+ expect(fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ expect(released()).toBe(1);
+ expect(controlRows('agent_screen_given_back')).toEqual([owner]);
+
+ // Closing the view in control gives it back, with the reference's toast.
+ await take.click(); await allow.click();
+ await expect(done).toBeVisible();
+ await view.getByRole('button',{name:'Close the screen'}).click();
+ await expect(view).toBeHidden();
+ await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
+ await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ await expect.poll(released).toBe(2);
+
+ // Leaving the page in control gives it back.
+ await card.getByRole('button',{name:'Watch',exact:true}).click();
+ await view.getByRole('button',{name:'Take control'}).click(); await allow.click();
+ await expect(done).toBeVisible();
+ await page.goto('/c/rs-learning/home');
+ await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ await expect.poll(released).toBe(3);
+
+ // Losing the connection gives it back: a socket that ends with no closing word.
+ const lost=await stream(page);
+ await lost.heard({control:'agent'});
+ lost.socket.send(JSON.stringify({take:true}));
+ await lost.heard({control:'mine'});
+ expect(fake.settings.screens.get(adsProfile)?.holder).toBe('human');
+ lost.socket.terminate();
+ await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ await expect.poll(released).toBe(4);
+ await expect.poll(()=>controlRows('agent_screen_given_back').length).toBe(4);
+ expect(controlRows('agent_screen_taken')).toEqual([owner,owner,owner,owner]);
+ // Nothing of it went to the Engine from the browser, and the stream is gtmworks's own.
+ expect(fake.settings.screenStreams).toBe(0);
+});
+
+test('while one person holds the Screen, another sees Watching only with who has control and no picture of what is typed',async({page,browser})=>{
+ fake.settings.screens.set(adsProfile,{running:true});
+ const {card}=await openScreen(page,'omar@example.com');
+ await card.getByRole('button',{name:'Watch',exact:true}).click();
+ const view=page.getByRole('dialog',{name:'Ads’s screen'});
+ await view.getByRole('button',{name:'Take control'}).click();
+ await view.getByRole('button',{name:'Allow for this session'}).click();
+ await expect(view.getByRole('button',{name:'Done',exact:true})).toBeVisible();
+
+ const second=await browser.newContext({baseURL:new URL(page.url()).origin});
+ try {
+  const other=await second.newPage();
+  const {card:otherCard}=await openScreen(other,'reviewer@example.com');
+  await otherCard.getByRole('button',{name:'Watch',exact:true}).click();
+  const otherView=other.getByRole('dialog',{name:'Ads’s screen'});
+  await expect(otherView.locator('.vw-mode')).toHaveText('Watching onlyعمر has control of the screen now, so you can only watch.');
+  await expect(otherView.getByRole('button',{name:'Take control'})).toHaveCount(0);
+  await expect(otherView.locator('.scr__off')).toHaveText('Someone has control of the screen, so its picture is hidden.');
+  await expect(otherView.locator('.scr__live')).toHaveCount(0);
+  await expect(otherView.locator('img.scr__shot')).toHaveCount(0);
+  // Only the person in control is streamed the Screen.
+  await expect.poll(()=>fake.settings.screenStreams).toBe(1);
+  // A take while another holds is refused, and never reaches the Engine.
+  const acquired=fake.settings.screenCalls.filter(call=>call.method==='display.lease.acquire').length;
+  const asked=await stream(other);
+  await asked.heard({control:'other'});
+  asked.socket.send(JSON.stringify({take:true}));
+  await asked.heard({refused:'held'});
+  asked.socket.close();
+  expect(fake.settings.screenCalls.filter(call=>call.method==='display.lease.acquire').length).toBe(acquired);
+
+  // Once it is given back the second person watches it live again, and may take it.
+  await view.getByRole('button',{name:'Done',exact:true}).click();
+  await expect(otherView.locator('.vw-mode')).toHaveText('Watching onlyYour mouse and keyboard are locked, and Ads is working on its own.');
+  await expect(otherView.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
+  await expect(otherView.getByRole('button',{name:'Take control'})).toBeVisible();
+  expect(controlRows('agent_screen_taken').at(-1)).toBe(owner);
+ } finally { await second.close(); }
+});
+
+test('the server takes control only for a Member who is not a Viewer and sees the Agent, and opens the stream only for one it is shown to',async({page})=>{
+ fake.settings.screens.set(adsProfile,{running:true});
+ const acquires=()=>fake.settings.screenCalls.filter(call=>call.method==='display.lease.acquire').length;
+ const before=acquires();
+ // A Viewer watches live, has no Take control, and the server refuses their take.
+ const {card}=await openScreen(page,'viewer@example.com');
+ await card.getByRole('button',{name:'Watch',exact:true}).click();
+ const view=page.getByRole('dialog',{name:'Ads’s screen'});
+ await expect(view.locator('.vw-mode')).toHaveText('Watching onlyAds is working on its own, and your account is view-only.');
+ await expect(view.getByRole('button',{name:'Take control'})).toHaveCount(0);
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
+ const watching=await stream(page);
+ await watching.heard({control:'agent'});
+ watching.socket.send(JSON.stringify({take:true}));
+ await watching.heard({refused:'notAllowed'});
+ watching.socket.close();
+ expect(acquires()).toBe(before);
+ // A page on another site may not open it at all.
+ expect(await (await stream(page,{origin:'https://elsewhere.example'})).refused).toBe(403);
+ // A Manager the Agent is hidden from is not shown its Screen; with no session at all it is refused for signing in.
+ await page.context().clearCookies();
+ await signIn(page,'manager@example.com','/c/rs-learning/home');
+ expect(await (await stream(page)).closed).toBe(4404);
+ await page.context().clearCookies();
+ expect(await (await stream(page)).closed).toBe(4401);
+ expect(acquires()).toBe(before);
+ expect(fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
 });

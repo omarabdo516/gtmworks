@@ -10,7 +10,7 @@
     "cloud:down": "bash scripts/cloud-up.sh --down",
     "cloud:verify": "node scripts/cloud-verify.mjs",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/web-server.mjs",
     "lint": "eslint components app lib scripts tests middleware.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./tests/offline.mjs --test 'tests/**/*.test.mjs'",

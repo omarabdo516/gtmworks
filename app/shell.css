@@ -783,6 +783,29 @@
 .gw .vw__foot { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--s5); border-top: 0.5px solid var(--gw-border-3); background: var(--gw-bg-chrome); flex-wrap: wrap; }
 .gw .vw-mode { flex: 1 1 320px; min-width: 0; display: grid; gap: 2px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
 .gw .vw-mode b { color: var(--gw-text-1); font-size: var(--gw-fs-base); font-weight: 600; }
+/* Take control (#713; design-reference: .vw-chip--ctrl, .vw-foot__acts, .vw-take__d, .btn, .scr.is-control): the chip
+   while in control, the foot's actions, and the live stream drawn by noVNC over the last picture until it shows. */
+.gw .vw-chip--ctrl { background: var(--gw-primary); color: var(--gw-on-primary); font-weight: 600; }
+.gw .vw-foot__acts { display: inline-flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.gw .vw-foot__acts .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
+  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .vw-foot__acts .btn .gw-icon { width: 16px; height: 16px; }
+.gw .vw-foot__acts .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .vw-foot__acts .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+@media (hover: hover) {
+  .gw .vw-foot__acts .btn--primary:hover { background: var(--gw-primary-hover); }
+  .gw .vw-foot__acts .btn--secondary:hover { background: var(--gw-btn2-hover); }
+}
+.gw .vw-take__d { display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-2); white-space: nowrap; }
+.gw .vw-take__d .gw-icon { width: 14px; height: 14px; }
+.gw .details .scr.is-control { box-shadow: var(--gw-text-1) 0 0 0 2px inset; }
+.gw .details .scr__body:has(> .scr__live) { position: relative; }
+.gw .details .scr__live { position: absolute; inset: 0; z-index: 1; display: grid; background: var(--gw-bg-subtle); }
+.gw .details .scr__live.is-waiting { opacity: 0; pointer-events: none; }
+.gw .details .scr.is-control .scr__live { inset: 2px; }
+@media (prefers-reduced-motion: reduce) { .gw .vw-foot__acts .btn { transition: none; } }
 @media (max-width: 599px) {
   .gw dialog.viewer { width: 100vw; height: 100dvh; border-radius: 0; }
   .gw :is(.vw__head, .vw__foot) { padding-inline: var(--s4); }

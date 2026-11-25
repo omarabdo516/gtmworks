@@ -1126,14 +1126,18 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  function displayStream(ws,ticket) {
   const held=settings.screenTickets.get(ticket); settings.screenTickets.delete(ticket);
   if(!held||held.expires<Date.now()) { ws.close(4401,'display ticket missing, expired or used'); return; }
-  const screen=settings.screens.get(held.profile)??{};
-  if(!screen.running) { ws.close(4001,'Bot Desktop is not running'); return; }
-  settings.screenStreams++; ws.on('close',()=>{ settings.screenStreams--; });
+  // Read afresh each time: a test may put a new state in place for the profile.
+  const screen=()=>settings.screens.get(held.profile)??{};
+  if(!screen().running) { ws.close(4001,'Bot Desktop is not running'); return; }
+  settings.screenStreams++;
+  // The stream ends with its Screen: the Engine's bridge reads the end of Xvnc's socket and closes the viewer's.
+  const watch=setInterval(()=>{ if(!screen().running) ws.close(4001,'Bot Desktop is not running'); },200);
+  ws.on('close',()=>{ settings.screenStreams--; clearInterval(watch); });
   const width=64, height=40;
   let stage='version', buffer=Buffer.alloc(0);
   const u16=n=>{ const b=Buffer.alloc(2); b.writeUInt16BE(n); return b; }; const u32=n=>{ const b=Buffer.alloc(4); b.writeUInt32BE(n); return b; };
   ws.send(Buffer.from('RFB 003.008\n'));
-  const allowed=()=>screen.holder==='human'&&screen.viewer===held.viewer;
+  const allowed=()=>screen().holder==='human'&&screen().viewer===held.viewer;
   const lengths={0:20,3:10,4:8,5:6};
   ws.on('message',(data,binary)=>{
    if(!binary) { ws.close(1003,'RFB is binary'); return; }
