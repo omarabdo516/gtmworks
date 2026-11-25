@@ -15,7 +15,7 @@ const lead=randomUUID();
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  // The Engine's own defaults for the voice settings, merged over what the profile saves, as get_config answers.
  fake.settings.configDefaults={stt:{language:'en'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}};

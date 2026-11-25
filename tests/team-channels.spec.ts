@@ -16,7 +16,7 @@ let channel='';
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  query(`do $$ begin
   update public.people set language='en' where id::text like '20000000-%';
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values

@@ -32,7 +32,7 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  // The fake Engine holds the Agent's profile and the work folder the Engine makes in every profile, with two folders —
  // one of them empty — a folder inside the first, and a file beside them.
  fake=await laneHermes();

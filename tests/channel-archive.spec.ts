@@ -16,7 +16,7 @@ const path=`/c/rs-learning/channels/${channel}`;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  query(`do $$ declare m bigint; begin
   update public.people set language='en' where id::text like '20000000-%';
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -59,7 +59,8 @@ test('the Manager archives a team channel after one confirmation naming what wai
  await expect(sidebar).toHaveText(['general']);
  await expect(page.locator('.arc-line')).toHaveText('This channel is archived. Nobody writes in it until it is restored.');
  await expect(page.getByRole('textbox',{name:'Write your message in the channel'})).toHaveCount(0);
- expect(rows(`select archived_by::text by from public.channels where id='${channel}'`)).toEqual([{by:'20000000-0000-0000-0000-000000000002'}]);
+ // Undo lasts as long as its toast (app/toast.tsx): pressed before any slower read, as a person does. The next test
+ // reads who archived it.
  await page.locator('.toast').getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast')).toContainText('Restored');
  await expect(sidebar).toHaveText(['general','Spring launch']);
@@ -71,12 +72,15 @@ test('with nothing waiting it archives without asking; its Members read it and c
  await signIn(page,'manager@example.com',path);
  const details=page.getByRole('complementary',{name:'Channel details'});
  // The first archive closed the handed step and nothing works there now, so archiving asks nothing.
+ // A click before hydration does nothing and is made again; a click that reached the server is waited for, so a second
+ // one never restores what the first archived (#746).
  await expect(async()=>{
   if(!await details.getByRole('button',{name:'Restore the channel'}).count()) await details.getByRole('button',{name:'Archive the channel'}).click();
-  await expect(details.getByRole('button',{name:'Restore the channel'})).toBeVisible({timeout:2000});
+  await expect(details.getByRole('button',{name:'Restore the channel'})).toBeVisible({timeout:10000});
  }).toPass({timeout:30000});
  await expect(page.getByRole('dialog',{name:'Archive the channel?'})).toHaveCount(0);
  await expect(page.locator('.toast')).toContainText('Archived');
+ expect(rows(`select archived_by::text by from public.channels where id='${channel}'`)).toEqual([{by:'20000000-0000-0000-0000-000000000002'}]);
 
  const contributor=await as(browser,'reviewer@example.com',path);
  try {

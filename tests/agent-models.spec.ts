@@ -17,7 +17,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  const profile=(provider:string,model:string)=>({soul:'',provider,model,key:fake.settings.key,config:{},credentials:{},env:{OPENROUTER_API_KEY:key}});
  fake.settings.profiles.set(space,profile('openrouter','openai/gpt-5.5'));

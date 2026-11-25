@@ -17,7 +17,7 @@ const [seen, hidden] = [id(701), id(702)];
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(({}, testInfo) => {
  // A retry starts from the seed again: this file's two Agents are inserted once per run of it.
- freshSeed(testInfo.file, testInfo.retry > 0);
+ freshSeed(testInfo);
  // The general channel holds every Member, and every Agent the reader sees. Two Agents exist: the Contributor may call
  // the first, and the second stays hidden from them everywhere but a channel that holds it (#15). Each Agent names its
  // own profile on the bundled Hermes, as every Agent does (#342).
