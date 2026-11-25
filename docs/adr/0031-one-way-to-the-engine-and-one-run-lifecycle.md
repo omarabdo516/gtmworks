@@ -5,6 +5,8 @@ date: 2026-11-25
 
 # One way to the Engine, and one Run lifecycle that the worker follows
 
+Partly superseded by [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): the one transport and the handle stay; the Run lifecycle for Conversations, Channels, Handovers and Good morning is not built.
+
 A technical decision of the audit of 2026-11-25 (vault decision 0071, where Omar set its order: after specs #668 and #710). It says what the contract of [ADR 0009](0009-conversations-run-on-engines-behind-one-engine-contract.md) covers.
 
 ## Context

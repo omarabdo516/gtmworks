@@ -4,6 +4,8 @@ status: accepted
 
 # Conversations run on engines behind one engine contract; Hermes is one driver
 
+Superseded by [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26) where it sets an engine contract and offers tools through a Run's instructions: gtmworks talks to Hermes directly, and its tools are registered by an Engine plugin. The known limits below still describe the pinned Engine.
+
 Partly superseded by [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md) (#282): Hermes ships inside the install and is the engine; the Codex and Claude Code drivers below are no longer planned. The engine contract still holds.
 
 Omar's decision of 2026-11-11 (vault `decisions/general/2026-11-11-gtmworks-engine-layer-trial.md`), after spike #271 ran a gtmworks conversation on the Codex CLI with no Hermes. Ticket #274. This partly supersedes [ADR 0008](0008-gtmworks-connects-to-hermes-with-encrypted-profile-keys.md): Hermes is no longer the only engine, and once a second driver lands it is no longer required for anyone.
