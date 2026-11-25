@@ -26,6 +26,7 @@ import Usage from './usage';
 import { managedUsage } from '@/lib/company-app-items';
 import { Approvals, ApprovalSettings } from './approvals';
 import { type WorkActivity, type WorkMember } from '@/lib/work-activity';
+import { mustRead } from '@/lib/read-failed';
 
 export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,show?:string,idea?:string,decided?:string,item?:string,invited?:string}>}) { const {t,language}=await getI18n();
  const {slug,section:parts}=await params; const cardId=parts?.[0]==='work' && parts?.[1]==='board' && parts?.[2] ? Number(parts[2]) : undefined; const section=cardId?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -34,11 +35,11 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // and models or to a Card opens there; other query values (one-time notices) are not carried.
  if(!user) { const asked=await searchParams; const kept=new URLSearchParams(Object.entries({section:asked.section,agent:asked.agent,period:asked.period,card:asked.card,show:asked.show}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();
   redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}${kept?`?${kept}`:''}`)}`); }
- const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug); if(!company || !sections[section]) notFound(); const title=t(sections[section]);
+ const companies=mustRead(await db.from('companies').select('id,slug,name,work_mode').order('name'),'companies'); const company=companies?.find(c=>c.slug===slug); if(!company || !sections[section]) notFound(); const title=t(sections[section]);
  // A Company worked alone has no Member permissions to set (#10); its invitation form is in the settings overlay.
  if(section==='settings/members'&&company.work_mode==='alone') redirect(`/c/${slug}/settings?section=members`);
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
- const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
+ const membership=mustRead(await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),'membership');
  const canCreate=canCreateCard({role:membership?.role});
  const manage=['owner','manager'].includes(membership?.role || ''); const canOwner=membership?.role==='owner';
  // Usage is the Owner's and the Managers' (#32), checked here for the page as the database checks each read.

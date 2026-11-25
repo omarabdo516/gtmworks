@@ -53,7 +53,7 @@ test('the alert shows only the product\'s own messages, in the reader\'s languag
  assert.equal(pageAlert('changeSaved', en), 'Change saved.');
  assert.notEqual(pageAlert('changeSaved', ar), pageAlert('changeSaved', en));
  for (const key of pageAlerts) { assert.ok(pageAlert(key, en) && pageAlert(key, en) !== key, key); assert.ok(pageAlert(key, ar) && pageAlert(key, ar) !== key, key); }
- assert.equal(pageAlert('Your account is locked. Call +20 100 000 0000', en), undefined, 'a crafted text shows nothing');
+ assert.equal(pageAlert('Your account is locked. Send your password to the address below', en), undefined, 'a crafted text shows nothing');
  assert.equal(pageAlert('settingsInviteSent', en), undefined, 'nor does another catalogue key');
  assert.equal(pageAlert(undefined, en), undefined);
  assert.equal(pageAlert(['changeSaved'], en), undefined);
@@ -109,4 +109,25 @@ test('a Routine with a time zone the server does not know is refused when saved,
  const t = i18n('en').t;
  assert.doesNotThrow(() => whenOf(t, 'en', '2030-01-15T09:00:00Z', 'Mars/Phobos', new Date('2030-01-15T08:00:00Z')));
  for (const language of ['en', 'ar']) assert.notEqual(i18n(language).t('routineZoneUnknown'), 'routineZoneUnknown');
+});
+
+// #777: a file route answers an error status on a failed read, and 404 only for a file that is not there or not theirs.
+test('a Company file route tells a failed read from a file that is not there', async () => {
+ const { companyFileResponse } = await import('../lib/attachment-file.ts');
+ const failure = { code: 'XX000', message: 'boom' };
+ const db = ({ company = { data: { id: 'c1' }, error: null }, row = { data: { name: 'a.png', content_type: 'image/png', path: 'c1/a.png' }, error: null }, file = { data: new Blob(['png']), error: null } } = {}) => ({
+  from: table => { const query = { select: () => query, eq: () => query, maybeSingle: async () => table === 'companies' ? company : row }; return query; },
+  storage: { from: () => ({ download: async () => file }) },
+ });
+ const answer = async (options, permission = 'allowed', id = '7') => (await companyFileResponse(db(options), 'rs-learning', id, async () => permission, { from: 'card' })).status;
+ assert.equal(await answer({}), 200);
+ assert.equal(await answer({ company: { data: null, error: failure } }), 503, 'the Company read failed');
+ assert.equal(await answer({}, 'failed'), 503, 'the membership read failed');
+ assert.equal(await answer({ row: { data: null, error: failure } }), 503, 'the file row read failed');
+ assert.equal(await answer({ file: { data: null, error: { status: 500, message: 'storage down' } } }), 503, 'the stored file could not be read');
+ assert.equal(await answer({ company: { data: null, error: null } }), 404, 'no such Company for this person');
+ assert.equal(await answer({}, 'refused'), 404, 'not a Member: the same answer, nothing tells them the Company exists');
+ assert.equal(await answer({ row: { data: null, error: null } }), 404, 'no such file');
+ assert.equal(await answer({ file: { data: null, error: { statusCode: '404', message: 'Object not found' } } }), 404, 'the stored file is gone');
+ assert.equal(await answer({}, 'allowed', 'x'), 404);
 });

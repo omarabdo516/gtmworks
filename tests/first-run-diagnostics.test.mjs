@@ -61,6 +61,7 @@ test('first-run refusals log distinct causes and retain their responses and acco
    '@/lib/app-origin.mjs':{appUrl},
    '@/lib/setup-code.mjs':{setupCodeMatches},
    '@/lib/i18n.mjs':i18n,
+   '@/lib/request-body.mjs':await import('../lib/request-body.mjs'),
   });
   const {NextRequest}=require('next/server');
   const body=Object.fromEntries(Object.entries(scenario.input ?? input).filter(([,value])=>value!==undefined));
