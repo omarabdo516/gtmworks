@@ -34,7 +34,7 @@ const suites = {
     // and the root files the build and server read.
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
-      /^server\.js$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
+      /^server\.js$/, /^scripts\/web-server\.mjs$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
       // tests/frame.spec.ts reads the motion table to tell a moving button from one that swaps at once (#271).
       /^tests\/(lane|fake-hermes|fake-engine|offline|motion-table)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
@@ -50,7 +50,7 @@ const suites = {
   // their catalogues alone run it on main.
   install: {
     true: [
-      /^lib\/(?!messages\/)/, /^worker\//, /^next\.config\.mjs$/, /^server\.js$/,
+      /^lib\/(?!messages\/)/, /^worker\//, /^next\.config\.mjs$/, /^server\.js$/, /^scripts\/web-server\.mjs$/,
       /^Dockerfile$/, /^\.dockerignore$/, /^docker-compose[^/]*\.ya?ml$/, /^\.env[^/]*\.example$/,
       /^scripts\/(install|check-install|get\.sh$|release-assets\.mjs$|latest-release\.mjs$|check-hermes-keys\.py$|check-rls\.sql$|verify-db\.mjs$|forged-identity\.mjs$|local-default-privileges\.sql$|ci-install-(check|lib|machine)\.sh$|engine-(template|managed)\.yml$|engine-(listener-address\.(py|sh)|ssh-sync-files\.sh|codex-accounts\.sh|pool-order\.sh)$|check-engine-pool-order\.py$|company-[a-z]+\.mjs$|install-engine\.mjs$)/,
       // The work sandbox image every Company's sandbox runs (#392, ADR 0020): its one build file and the files it adds,

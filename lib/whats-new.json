@@ -1,5 +1,11 @@
 [
  {
+  "issue": 713,
+  "date": "2026-11-25",
+  "en": { "title": "Take control of an Agent's Screen", "body": "In an Agent's large Screen view, any member who is not a viewer can take control for one session to sign in or finish a step with their own mouse and keyboard while the Agent holds still, watching it live; Done, closing the view, leaving the page or losing the connection gives it back, and anyone else watching sees who has control." },
+  "ar": { "title": "خد الدفة من شاشة الوكيل", "body": "في شاشة الوكيل الكبيرة، أي عضو مش مشاهد يقدر ياخد الدفة للجلسة دي بس عشان يسجّل دخول أو يخلّص خطوة بالماوس والكيبورد بتوعه والوكيل واقف مكانه، وبيتفرج عليها لايف؛ و«خلصت» أو قفل الشاشة أو الخروج من الصفحة أو انقطاع الاتصال بيرجّع الدفة، وأي حد تاني بيتفرج بيشوف الدفة مع مين." }
+ },
+ {
   "issue": 712,
   "date": "2026-11-25",
   "en": { "title": "Watch an Agent's Screen and wake it", "body": "An Agent's details now show whether its Screen is awake, asleep or waking up with a small live picture, Watch opens a large view that keeps refreshing, and any member who is not a viewer can wake it, with the reason in one line when it cannot wake, such as another Agent of the company using the screen." },

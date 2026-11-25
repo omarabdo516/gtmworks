@@ -186,8 +186,8 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
   (first.current??closeButton.current)?.focus();
   return ()=>stopLeaving.current();
  },[]);
- // Wake it leaves the view once the Screen wakes: the keyboard moves to its first action rather than out of the view.
- useEffect(()=>{ if(state!=='asleep'&&box.current&&!box.current.contains(document.activeElement)) (first.current??closeButton.current)?.focus(); },[state]);
+ // Wake it leaves the view once the Screen wakes: the keyboard moves to the close button rather than out of the view.
+ useEffect(()=>{ if(state!=='asleep'&&box.current&&!box.current.contains(document.activeElement)) closeButton.current?.focus(); },[state]);
  // Closing while in control gives it back (the socket closes with the view) and says so (the viewer's close handler).
  const heldAtClose=useRef(false);
  const close=()=>{
@@ -210,8 +210,9 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
   <span className="vw-foot__acts"><span className="vw-take__d" id="vw-take-d"><ShellIcon name="shield"/>{t('screenTakeNeeds')}</span>
    <button ref={node=>{ takeButton.current=node; first.current=node; }} type="button" className="btn btn--secondary" aria-describedby="vw-take-d"
     onClick={()=>{ setAsking(true); focusLater(allowButton); }}><ShellIcon name="hand"/><span>{t('screenTake')}</span></button></span></>;
- // The live stream's element, while it may show: never while another person holds control.
- const live=awake&&!other?<div ref={target} className={`scr__live${screen.live?'':' is-waiting'}`} dir="ltr"/>:undefined;
+ // The live stream's element, drawn over the picture once a stream shows; gtmworks streams nothing while another person
+ // holds control, so it stays empty then, over the withheld frame.
+ const live=awake?<div ref={target} className={`scr__live${screen.live?'':' is-waiting'}`} dir="ltr"/>:undefined;
  return <dialog ref={box} className={`viewer${leaving?' is-closing':''}`} aria-labelledby="viewer-title"
   // Escape closes the view and must not reach the details panel's own Escape listener, which would close it too.
   onKeyDown={event=>{ if(event.key==='Escape') event.stopPropagation(); }}

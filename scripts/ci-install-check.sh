@@ -2317,7 +2317,7 @@ gtmworks update-button on || fail 'gtmworks update-button on'
 docker build -q -t localhost:5000/gtmworks:0.0.2-ci - > /dev/null <<'DOCKERFILE' || fail 'build the broken release image'
 FROM localhost:5000/gtmworks:0.0.1-ci
 RUN echo 'create table gtmworks_install.broken_release_probe(id integer);' > /app/install/supabase/migrations/99999999999999_broken_release_probe.sql \
- && echo 'process.exit(1);' > /app/server.js
+ && echo 'process.exit(1);' > /app/scripts/web-server.mjs
 DOCKERFILE
 broken=$(publish 0.0.2-ci) || fail 'push the broken release image'
 (cd "$workspace" && node scripts/release-assets.mjs "$broken" "$releases/v0.0.2" "$sandbox") || fail 'the broken release files'

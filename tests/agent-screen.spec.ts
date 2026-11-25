@@ -135,7 +135,7 @@ test('a Screen that falls asleep while watched is woken from the view\'s asleep 
  await view.getByRole('button',{name:'Wake it',exact:true}).click();
  await expect(view.locator('.vw-mode')).toHaveText('Watching onlyThe screen is waking up and opening the browser.');
  await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
- await expect(view.getByRole('button',{name:'Take control'})).toBeFocused();
+ await expect(view.getByRole('button',{name:'Close the screen'})).toBeFocused();
  await expect(card.locator('.scr-st')).toHaveText('Awake');
  await expect(page.locator('.toast')).toContainText('Ads’s screen is awake');
  expect(rows(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)[0].n).toBe(2);
@@ -300,7 +300,7 @@ test('a Member takes control of the Screen for this session, works it with their
  await expect.poll(()=>controlRows('agent_screen_given_back').length).toBe(4);
  expect(controlRows('agent_screen_taken')).toEqual([owner,owner,owner,owner]);
  // Nothing of it went to the Engine from the browser, and the stream is gtmworks's own.
- expect(fake.settings.screenStreams).toBe(0);
+ await expect.poll(()=>fake.settings.screenStreams).toBe(0);
 });
 
 test('while one person holds the Screen, another sees Watching only with who has control and no picture of what is typed',async({page,browser})=>{
@@ -321,7 +321,8 @@ test('while one person holds the Screen, another sees Watching only with who has
   await expect(otherView.locator('.vw-mode')).toHaveText('Watching onlyعمر has control of the screen now, so you can only watch.');
   await expect(otherView.getByRole('button',{name:'Take control'})).toHaveCount(0);
   await expect(otherView.locator('.scr__off')).toHaveText('Someone has control of the screen, so its picture is hidden.');
-  await expect(otherView.locator('.scr__live')).toHaveCount(0);
+  await expect(otherView.locator('.scr__live:not(.is-waiting)')).toHaveCount(0);
+  await expect(otherView.locator('.scr__live canvas')).toHaveCount(0);
   await expect(otherView.locator('img.scr__shot')).toHaveCount(0);
   // Only the person in control is streamed the Screen.
   await expect.poll(()=>fake.settings.screenStreams).toBe(1);

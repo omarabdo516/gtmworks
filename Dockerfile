@@ -32,6 +32,8 @@ COPY --from=build --chown=node:node /app/worker ./worker
 COPY --from=build --chown=node:node /app/lib ./lib
 # The installer registers the install's Engine record through this script (#380); a release image needs it too.
 COPY --from=build --chown=node:node /app/scripts/install-engine.mjs /app/scripts/company-add.mjs /app/scripts/company-list.mjs ./scripts/
+# gtmworks's own web server (ADR 0029): Next's standalone build, and the Screen's live stream on the same address.
+COPY --from=build --chown=node:node /app/scripts/web-server.mjs ./scripts/
 COPY --from=build --chown=node:node /app/package.json ./package.json
 # Settings › About opens both as plain text (/licenses/<name>, #616).
 COPY --from=build --chown=node:node /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
@@ -53,4 +55,4 @@ ARG GTMWORKS_SANDBOX_IMAGE=
 RUN if [ -n "$GTMWORKS_SANDBOX_IMAGE" ]; then printf '%s\n' "$GTMWORKS_SANDBOX_IMAGE" > ./release-source/sandbox-image; fi
 USER node
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "scripts/web-server.mjs"]

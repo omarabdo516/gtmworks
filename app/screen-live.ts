@@ -21,8 +21,10 @@ class StreamChannel {
   constructor(private socket: WebSocket) {}
   send(data: ArrayBuffer | Uint8Array) { if (this.readyState === 'open' && this.socket.readyState === WebSocket.OPEN) this.socket.send(data); }
   close() { if (this.readyState === 'closed') return; this.readyState = 'closed'; this.onclose?.({ code: 1000, reason: '', wasClean: true }); }
-  opened() { this.readyState = 'open'; this.onopen?.(); }
-  deliver(data: ArrayBuffer) { if (this.readyState === 'open') this.onmessage?.({ data }); }
+  // Frames that arrive while noVNC is still loading wait for it: the first is the server's RFB version.
+  private early: ArrayBuffer[] = [];
+  opened() { this.readyState = 'open'; this.onopen?.(); for (const data of this.early.splice(0)) this.onmessage?.({ data }); }
+  deliver(data: ArrayBuffer) { if (this.readyState === 'open') this.onmessage?.({ data }); else if (this.readyState === 'connecting') this.early.push(data); }
 }
 
 const retryMs = 2000;
@@ -40,7 +42,8 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
   useEffect(() => {
     if (!on) return;
     let ended = false; let retry: ReturnType<typeof setTimeout> | undefined; let channel: StreamChannel | null = null;
-    const stopStream = () => { channel?.close(); channel = null; try { rfb.current?.disconnect(); } catch { /* already disconnected */ } rfb.current = null; setLive(false); };
+    // noVNC is told first, while it is still connected; it then closes its channel itself.
+    const stopStream = () => { const client = rfb.current; rfb.current = null; try { client?.disconnect(); } catch { /* already disconnected */ } channel?.close(); channel = null; setLive(false); };
     const startStream = async (open: WebSocket) => {
       stopStream();
       const here = new StreamChannel(open); channel = here;
@@ -49,7 +52,7 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
       const client = new RFB(target.current, here, { shared: true });
       client.scaleViewport = true; client.resizeSession = false; client.focusOnClick = true; client.viewOnly = !mine.current;
       client.addEventListener('connect', () => { if (channel === here) setLive(true); });
-      client.addEventListener('disconnect', () => { if (channel === here) setLive(false); });
+      client.addEventListener('disconnect', () => { if (rfb.current === client) rfb.current = null; if (channel === here) setLive(false); });
       rfb.current = client;
       here.opened();
     };

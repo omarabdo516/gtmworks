@@ -514,7 +514,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - 🟡 Good morning message from the main Agent (merged, waiting for the release, #572)
 - ✅ English and Egyptian Arabic, dictation in Egyptian Arabic
 - 🟡 Open Design: Agents make designs
-- 🟡 Watch the Agent's screen, and take control for one session
+- ✅ Watch the Agent's screen, and take control for one session
 - 🟡 Stop ends a whole Handover chain
 - 🟡 Numbers from connected apps (page built, no live source yet)
 - ⚪ RS Academy on gtmworks: first Agents, deep knowledge
