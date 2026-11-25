@@ -6,6 +6,12 @@
   "ar": { "title": "ملاحظة الكارت بتستنى الكارت", "body": "لما البورد ما يقدرش ينقل كارت ويفتحه بدل كده، الملاحظة بتاعته بقت بتفضل وقتها كله على صفحة الكارت، مهما الصفحة اتأخرت في الفتح." }
  },
  {
+  "issue": 715,
+  "date": "2026-11-25",
+  "en": { "title": "An Agent's channel files in its Files tab", "body": "The Files tab in an Agent's details now also lists the files it sent in the channels you are in, named for their channel, beside the files of its cards and your chats with it." },
+  "ar": { "title": "ملفات الوكيل في القنوات في تبويب الملفات", "body": "تبويب «الملفات» في تفاصيل الوكيل بقى كمان بيعرض الملفات اللي بعتها في القنوات اللي إنت فيها، وجنب كل ملف اسم قناته، مع ملفات بطاقاته ومحادثاته." }
+ },
+ {
   "issue": 580,
   "date": "2026-11-25",
   "en": { "title": "DeepWiki shows its own logo", "body": "In Connect apps and Settings, Apps, DeepWiki now shows its official logo instead of the letter D, so every app there carries its company's logo." },

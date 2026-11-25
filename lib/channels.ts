@@ -119,12 +119,13 @@ const shownMessages=200;
 
 // A Run its person stopped (#478) is no Run that could not reply: the message says nothing more of it, as a Conversation's.
 const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':outcome==='stopped'?'stopped':modelCauseOf(outcome)??'unanswered';
-const nameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
+// A channel row as its name: a team channel's own name, and the general channel (or a team one with no name) its word.
+export const channelNameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
 export const channelTitle=(t:(key:string)=>string,channel:ChannelName)=>channel.kind==='team'?channel.name:t('shellGeneralChannel');
 
 export async function channelSidebar(db:Database,company:string):Promise<ChannelSummary[]> {
  const {data}=await db.rpc('channel_sidebar',{c:company});
- return ((data||[]) as {id:string,kind:string,name:string|null,unread:number}[]).map(row=>({...nameOf(row),id:row.id,unread:row.unread}));
+ return ((data||[]) as {id:string,kind:string,name:string|null,unread:number}[]).map(row=>({...channelNameOf(row),id:row.id,unread:row.unread}));
 }
 
 // With `read`, the reader has read every message it returns. Only the open channel asks for that: a page render can be
@@ -133,7 +134,7 @@ export async function channelSidebar(db:Database,company:string):Promise<Channel
 export async function channelRecord(db:Database,person:string,company:string,channel:string,read=false,session?:ReadSession):Promise<ChannelRecord|null> {
  const {data:found}=await db.from('channels').select('id,company_id,kind,name,archived_at,archived_by').eq('id',channel).eq('company_id',company).maybeSingle();
  if(!found) return null;
- const name=nameOf(found);
+ const name=channelNameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). A
  // message may have up to three Runs (#152), one per Agent it called, in the order the Agents were named.
  const runs=((await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3)).data||[]) as StoredRun[];
