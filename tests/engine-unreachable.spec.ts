@@ -5,8 +5,8 @@ import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
 // #387: a Company whose Engine is not running says so once in Settings, without a sign-in action that would fail, and a
-// message in a Conversation is refused with the one plain error while staying in the box. When the Engine answers again
-// the next message goes with no reload.
+// message in a Conversation is stored and stays "Not sent" with Try again (#764). When the Engine answers again, Try
+// again sends the same message with no reload.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=<T>(sql:string):T[]=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as T[]; };
 const company='10000000-0000-0000-0000-000000000001';
@@ -15,7 +15,7 @@ const omar='20000000-0000-0000-0000-000000000001';
 // The person's messages: the Agent's reply to the send that goes may or may not be in yet, and is not what is counted.
 const messages=()=>rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where company_id='${company}' and author='person'`)[0].n;
 
-test('an Engine that is not running says so once in Settings, refuses a message without losing it or recording a Run, and takes the next one when it answers',async({page})=>{
+test('an Engine that is not running says so once in Settings, keeps a message not sent without recording a Run, and Try again sends it when it answers',async({page})=>{
  const fake=await laneHermes();
  const agent=randomUUID();
  const hadProfile=rows<{profile:string}>(`select profile from public.company_profiles where company_id='${company}'`).length>0;
@@ -43,18 +43,22 @@ test('an Engine that is not running says so once in Settings, refuses a message 
   const send=page.getByRole('button',{name:'Send',exact:true});
   await field.fill('Are you there?');
   await send.click();
-  await expect(composer.getByRole('alert')).toHaveText('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it.');
-  await expect(field).toHaveValue('Are you there?');
+  // #764: the message is stored first, so it stays in its Conversation, "Not sent", with Try again; the box is empty and
+  // no Run is recorded.
+  await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
+  const notSent=page.locator('.msg[data-author=person]').filter({hasText:'Are you there?'}).locator('[data-outcome="not-sent"]');
+  await expect(notSent).toHaveText('Not sent Try again',{timeout:20000});
+  await expect(composer.getByLabel('Message',{exact:true})).toHaveValue('');
   expect(fake.settings.runs.length).toBe(0);
   expect(messages()).toBe(before);
 
-  // The same box, with no reload: the Engine answers, and the next send goes.
+  // The Engine answers again: Try again sends the same message, with no reload and no second message.
   fake.settings.status=200;
-  await send.click();
-  await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
-  await expect(page.locator('.msg[data-author=person]').last()).toContainText('Are you there?');
-  expect(fake.settings.runs.length).toBe(1);
-  expect(messages()).toBe(before+1);
+  await notSent.getByRole('button',{name:'Try again'}).click();
+  await expect.poll(()=>fake.settings.runs.length,{timeout:20000}).toBe(1);
+  await expect.poll(()=>messages(),{timeout:20000}).toBe(before+1);
+  await expect(page.locator('[data-outcome="not-sent"]')).toHaveCount(0,{timeout:20000});
+  await expect(page.locator('.msg[data-author=person]').filter({hasText:'Are you there?'})).toHaveCount(1);
  } finally {
   query(`delete from public.hermes_agents where id='${agent}'`);
   if(!hadProfile) query(`delete from public.company_profiles where company_id='${company}'`);

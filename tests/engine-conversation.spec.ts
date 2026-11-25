@@ -798,7 +798,8 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
   expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
   expect(fake.runs).toHaveLength(2);
   expect(fake.answers.map(answer=>answer.text)).toEqual([angles[1],'الاتنين مع بعض']);
-  expect(JSON.parse(query(`select count(*)::int as n from public.conversation_queued_turns where conversation_id='${conversation}'`))[0].n).toBe(0);
+  // Every message is stored as its turn first (#764): none is left waiting.
+  expect(JSON.parse(query(`select count(*)::int as n from public.conversation_queued_turns where conversation_id='${conversation}' and started_at is null`))[0].n).toBe(0);
   expect(cards().map((row:{state:string,content:{answer?:string}})=>[row.state,row.content.answer])).toEqual([['answered',angles[1]],['answered','الاتنين مع بعض']]);
   expect(agentRows(conversation).at(-1)).toEqual({body:'Reply to: Plan the Google campaign (الاتنين مع بعض)'});
 
