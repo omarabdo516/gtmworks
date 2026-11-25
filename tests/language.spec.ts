@@ -7,6 +7,7 @@ import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 import { appOrigin } from './lane.mjs';
+import { makeCard } from './make-card';
 
 async function chooseLanguage(page:Page,language:Language) {
  await chooseLanguageInSettings(page,language);
@@ -81,11 +82,7 @@ test('English default, account language across sessions/devices, automatic conte
  const goLive=new Date().toISOString().slice(0,10);
  const paths:string[]=[];
  for(const title of [...titles,...calendarTitles]) {
-  await page.goto('/c/rs-learning/work/new');
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button',{name:'Create card',exact:true}).click();
-  await expect(page.locator('.cw[open] .cw-title')).toHaveText(title);
-  paths.push(new URL(page.url()).pathname);
+  paths.push((await makeCard(page,title)).path);
   // The Card window saves its publishing date as it changes (#678).
   await Promise.all([
    page.waitForResponse(response=>response.request().method()==='POST' && new URL(response.url()).pathname===paths.at(-1)),

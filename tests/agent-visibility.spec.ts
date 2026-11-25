@@ -124,31 +124,29 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
   insert into public.work_cards(company_id,stage_id,title,channel,agent_id,approval_step_id,review_entered_at) values ('${company}',review,'SEO waits for the Manager','Blog','${seo}',step,now());
   perform set_config('approval.internal','',true);
  end $$;`);
- const chips=(on:typeof page)=>on.getByRole('group',{name:'Filter by agent'}).getByRole('button');
+ // The board's assignee menu (#683) names the Agents the reader sees, after Everyone, Me and No one.
+ const agentsIn=async(on:typeof page)=>{ await on.getByRole('button',{name:/^Assignee:/}).click(); const names=await on.getByRole('menuitemradio').locator('.menu__t').allTextContents(); await on.keyboard.press('Escape'); return names.filter(name=>['Lead','Meta Ads','SEO'].includes(name)); };
  const card=(on:typeof page,title:string)=>on.locator('#board-cols .kcard').filter({hasText:title});
 
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- await expect(chips(page)).toHaveText(['All','Lead','Meta Ads','SEO']);
- await expect(card(page,'Ads runs the launch').locator('.kcard__crew-t')).toHaveText('Worked on it: SEO, Meta Ads');
- await expect(page.getByRole('link',{name:'Ads runs the launch · Worked on it: SEO, Meta Ads',exact:true})).toBeVisible();
- await expect(card(page,'Lead plans the month').locator('.kcard__crew')).toHaveCount(0);
+ expect(await agentsIn(page)).toEqual(['Lead','Meta Ads','SEO']);
+ await expect(page.getByRole('link',{name:/^Ads runs the launch · .* · Assignee: Meta Ads/})).toBeVisible();
  await expect(card(page,'SEO waits for the Manager')).toHaveCount(1);
 
- for(const [email,seen] of [['reviewer@example.com',['All','Lead','Meta Ads']],['viewer@example.com',['All','Lead']]] as [string,string[]][]) {
+ for(const [email,seen] of [['reviewer@example.com',['Lead','Meta Ads']],['viewer@example.com',['Lead']]] as [string,string[]][]) {
   const context=await browser.newContext(); const member=await context.newPage();
   try {
    await signIn(member,email,'/c/rs-learning/work/board');
-   await expect(chips(member)).toHaveText(seen);
+   expect(await agentsIn(member)).toEqual(seen);
    await expect(card(member,'Lead plans the month')).toHaveCount(1);
    await expect(card(member,'SEO drafts the blog')).toHaveCount(0);
    await expect(card(member,'Ads runs the launch')).toHaveCount(seen.includes('Meta Ads')?1:0);
-   await expect(card(member,'Ads runs the launch').locator('.kcard__crew')).toHaveCount(0);
-   const leadChip=chips(member).filter({hasText:'Lead'});
-   await leadChip.click();
-   await expect(leadChip).toHaveAttribute('aria-pressed','true');
-   await expect(leadChip).toBeFocused();
+   await member.getByRole('button',{name:/^Assignee:/}).click();
+   await member.getByRole('menuitemradio',{name:'Lead'}).click();
+   await expect(member.getByRole('button',{name:'Assignee: Lead'})).toBeFocused();
    await expect(member.locator('#board-cols .kcard')).toHaveText([/Lead plans the month/]);
-   await chips(member).filter({hasText:'All'}).click();
+   await member.getByRole('button',{name:'Assignee: Lead'}).click();
+   await member.getByRole('menuitemradio',{name:'Everyone'}).click();
    await expect(card(member,'Lead plans the month')).toHaveCount(1);
   } finally { await context.close(); }
  }
@@ -156,9 +154,9 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
  const context=await browser.newContext(); const manager=await context.newPage();
  try {
   await signIn(manager,'manager@example.com','/c/rs-learning/work/board');
-  await expect(chips(manager)).toHaveText(['All','Lead']);
+  expect(await agentsIn(manager)).toEqual(['Lead']);
   await expect(card(manager,'SEO waits for the Manager')).toHaveCount(0);
-  await expect(manager.locator('.board-tools__summary')).toHaveText('Nothing waiting on you');
+  await expect(manager.getByRole('button',{name:'Waiting on you: 0'})).toBeVisible();
   await expect(manager.locator('.sb-count')).toHaveAccessibleName('Nothing waiting on you');
  } finally { await context.close(); }
 });

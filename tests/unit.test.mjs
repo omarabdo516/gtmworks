@@ -57,18 +57,19 @@ test('work dates use Arabic month names and day-first western digits', async () 
 });
 
 
-// #677: the list's assignee column sorts by the assignee's name, a Member's or an Agent's, and a Card nobody has last.
-test('work list sorts stages by position and assignees by name', async () => {
+// #683: the List sorts by status in the board's order, by assignee and by Project name, a Card with none last.
+test('work list sorts by status in the board\'s order, and by assignee and Project name', async () => {
  const {sortWorkCards}=await import('../lib/work-sort.mjs');
- const cards=[{title:'أ',stage_id:2,assignee_person:'a',assignee_agent:null,channel:'',go_live:null},{title:'ب',stage_id:12,assignee_person:'z',assignee_agent:null,channel:'',go_live:null},
-  {title:'ج',stage_id:12,assignee_person:null,assignee_agent:'ads',channel:'',go_live:null},{title:'د',stage_id:12,assignee_person:null,assignee_agent:null,channel:'',go_live:null}];
- const stages=[{id:2,position:8},{id:12,position:1}];
+ const cards=[{title:'أ',status:'live',assignee_person:'a',assignee_agent:null,project_id:7,go_live:null},{title:'ب',status:'ideas',assignee_person:'z',assignee_agent:null,project_id:null,go_live:null},
+  {title:'ج',status:'waiting',assignee_person:null,assignee_agent:'ads',project_id:8,go_live:null},{title:'د',status:'ideas',assignee_person:null,assignee_agent:null,project_id:7,go_live:null}];
  const members=[{person_id:'a',people:{name:'يوسف'}},{person_id:'z',people:{name:'أحمد'}}];
  const agents=[{id:'ads',name:'بلال'}];
- assert.deepEqual(sortWorkCards(cards.slice(0,2),'stage_id','ascending',stages,members).map(c=>c.stage_id),[12,2]);
- assert.deepEqual(sortWorkCards(cards.slice(0,2),'stage_id','descending',stages,members).map(c=>c.stage_id),[2,12]);
- assert.deepEqual(sortWorkCards(cards,'assignee','ascending',stages,members,agents).map(c=>c.title),['ب','ج','أ','د']);
- assert.deepEqual(cards.map(c=>c.stage_id),[2,12,12,12]);
+ const projects=[{id:7,name:'ربيع'},{id:8,name:'إطلاق'}];
+ assert.deepEqual(sortWorkCards(cards,'status','ascending',members).map(c=>c.title),['ج','ب','د','أ']);
+ assert.deepEqual(sortWorkCards(cards,'status','descending',members).map(c=>c.title),['أ','ب','د','ج']);
+ assert.deepEqual(sortWorkCards(cards,'assignee','ascending',members,agents).map(c=>c.title),['ب','ج','أ','د']);
+ assert.deepEqual(sortWorkCards(cards,'project','ascending',members,agents,projects).map(c=>c.title),['ج','أ','د','ب']);
+ assert.deepEqual(cards.map(c=>c.title),['أ','ب','ج','د']);
 });
 
 test('authenticated secret encryption', async () => {

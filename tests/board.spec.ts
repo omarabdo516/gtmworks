@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
 import { laneHermes } from './lane-hermes';
 import { inbox } from './lane.mjs';
+import { makeCard } from './make-card';
 // The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
 // A Card's log rows, read under its window's Activity tab (#678).
 const activityOf=async(page:Page)=>{ const card=page.getByRole('dialog'); await card.getByRole('tab',{name:/^Activity \d+$/}).click(); return card.locator('#cw-list .lg-row'); };
@@ -14,14 +15,7 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const rs='10000000-0000-0000-0000-000000000001';
 
-async function newCard(page:Page,label:string) {
- await page.goto('/c/rs-learning/work/new');
- const title=`${label} ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:'Create card'}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- return {title,path:new URL(page.url()).pathname,id:Number(new URL(page.url()).pathname.split('/').pop())};
-}
+const newCard=(page:Page,label:string)=>makeCard(page,`${label} ${Date.now()}`);
 // A card that is being drawn again after a move can be read between columns (null); the loop below waits for it to land.
 const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
@@ -92,6 +86,7 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
 });
 
 test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, raises the count and writes the log row',async({page})=>{
+ // #683: the Ideas "+" opens the one New card form; the Card lands at the top of Ideas.
  const stamp=Date.now();
  const lead=randomUUID(), ads=randomUUID();
  try {
@@ -100,19 +95,18 @@ test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, rais
   const ideas=page.locator('.col[data-column="ideas"]');
   const before=Number(await ideas.locator('.col__count').textContent());
   await ideas.getByRole('button',{name:'Add an idea'}).click();
-  await expect(ideas.getByLabel('Idea',{exact:true})).toBeFocused();
+  const form=page.getByRole('dialog');
+  await expect(form.getByRole('textbox',{name:'Title'})).toBeFocused();
   const title=`Idea ${stamp}`;
-  await ideas.getByLabel('Idea',{exact:true}).fill(title);
-  await ideas.getByLabel('Agent',{exact:true}).selectOption({label:'Ads'});
-  await ideas.getByRole('button',{name:'Add',exact:true}).click();
+  await form.getByRole('textbox',{name:'Title'}).fill(title);
+  await form.getByRole('button',{name:/^Assignee:/}).click();
+  await page.getByRole('menuitemradio',{name:'Ads'}).click();
+  await form.getByRole('button',{name:'Add card'}).click();
   await expect(page.locator('.toast')).toHaveText('Idea added');
-  // The idea the server made closes its form with no failure line (#452): no form is left to press Add in again.
-  await expect(page.locator('#add-idea')).toHaveCount(0);
-  await expect(ideas.getByRole('alert')).toHaveCount(0);
+  await expect(form).toHaveCount(0);
   const card=ideas.locator('.kcard').filter({hasText:title});
   await expect(card).toBeVisible();
-  await expect(card.locator('.kcard__foot')).toContainText('Ads');
-  await expect(card.locator('.kcard__t')).toHaveText('New idea from عمر');
+  await expect(card.locator('a.kcard__title')).toHaveAccessibleName(new RegExp(`^${title} · Ideas · Assignee: Ads`));
   await expect(card.locator('a')).toBeFocused();
   await expect(ideas.locator('.col__count')).toHaveText(String(before+1));
   // The new idea is the first Card in the column.
@@ -180,7 +174,7 @@ test('a card waiting for my approval is in Waiting on you and leaves it when I a
  const waiting=page.locator('.col[data-column="waiting"]');
  const queued=waiting.locator(`.kcard[data-card-id="${card.id}"]`);
  await expect(queued).toBeVisible();
- await expect(queued.locator('.badge--wait')).toHaveText('Waiting on you');
+ await expect(queued.locator('.kt-syms .sym[data-sym="review"]')).toBeVisible();
  const count=Number(await waiting.locator('.col__count').textContent());
  await queued.getByRole('link',{name:card.title}).click();
  await expect(page).toHaveURL(new RegExp(`${card.path}$`));

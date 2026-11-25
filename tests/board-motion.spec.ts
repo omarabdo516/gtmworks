@@ -1,6 +1,7 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
+import { makeCard } from './make-card';
 // The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
 const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await card.getByRole('button',{name:/^Status:/}).click(); await card.getByRole('menuitemradio',{name:'Send for review'}).click(); };
 
@@ -240,11 +241,7 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
  const tab=await context.newPage();
- await tab.goto('/c/rs-learning/work/new');
- await tab.getByLabel('Message',{exact:true}).fill(`Nudge ${Date.now()}`);
- await tab.getByRole('button',{name:'Create card'}).click();
- await expect(tab).toHaveURL(/\/work\/board\/\d+$/);
- const id=Number(new URL(tab.url()).pathname.split('/').pop());
+ const {id}=await makeCard(tab,`Nudge ${Date.now()}`);
  await tab.getByLabel('Upload a version').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
  await expect(tab.getByRole('dialog').getByRole('list',{name:'Versions'}).getByRole('link',{name:/^Open version 1/})).toBeVisible();
  await page.reload();
@@ -253,9 +250,10 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await sendForReview(tab);
  await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
  await redraw('ArrowRight');
- const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .badge--wait`);
+ // The Card's state symbol nudges once (#683: the symbol in place of the waiting badge).
+ const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .kt-syms`);
  await expect(badge).toHaveClass(/is-new/);
- expect(await badge.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-nudge',duration:'0.52s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
+ expect(await badge.locator('.sym').evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-nudge',duration:'0.52s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
  await expect(count).toHaveText(String(before+1));
  await expect(count).toHaveClass(/is-pop/);
  expect(await count.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-count-pop',duration:'0.36s',easing:'cubic-bezier(0.34, 1.45, 0.64, 1)'});
@@ -272,5 +270,5 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await redraw('ArrowLeft');
  await expect(count).toHaveText(String(before));
  await expect(count).not.toHaveClass(/is-pop/);
- await expect(page.locator('#board-cols .badge--wait.is-new')).toHaveCount(0);
+ await expect(page.locator('#board-cols .kt-syms.is-new')).toHaveCount(0);
 });

@@ -4,12 +4,12 @@ import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { appOrigin } from './lane.mjs';
+import { makeCard } from './make-card';
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // A real 1 x 1 PNG: the page must show it.
 const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64');
 const picture=(name:string)=>({name,mimeType:'image/png',buffer:bytes});
-const attach=(page:Page)=>page.locator('input[type=file][name=files]');
 async function chooseLanguage(page:Page,language:'en'|'ar') {
  await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
@@ -35,24 +35,18 @@ test('a file attached in the composer and in a reply shows as a thumbnail, in bo
  const stamp=Date.now();
  await signIn(page,'omar@example.com','/c/rs-learning/work/new');
  try {
-  // The composer in both languages and at phone and desktop width, kept as screenshots of the run.
+  // The New card form in both languages and at phone and desktop width, kept as screenshots of the run (#683: the old
+  // request form and its first message are gone; a file comes with a comment).
   for(const language of ['en','ar'] as const) {
    await chooseLanguage(page,language);
    await page.goto('/c/rs-learning/work/new');
-   await page.getByLabel(language==='en'?'Message':'الرسالة',{exact:true}).fill(`Reference image ${stamp}`);
-   await attach(page).setInputFiles(picture('reference.png'));
+   await page.getByRole('dialog').getByRole('textbox',{name:language==='en'?'Title':'العنوان'}).fill(`Reference image ${stamp}`);
    for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.screenshot({path:`test-results/screenshots/attachments-composer-${language}-${width}.png`}); }
   }
   await page.setViewportSize({width:1280,height:720});
   await chooseLanguage(page,'en');
-  await page.goto('/c/rs-learning/work/new');
-  await page.getByLabel('Message',{exact:true}).fill(`Reference image ${stamp}`);
-  await attach(page).setInputFiles(picture('reference.png'));
-  await page.getByRole('button',{name:'Create card',exact:true}).click();
-  await expect(page).toHaveURL(/\/work\/board\/\d+$/);
-  const cardPath=new URL(page.url()).pathname;
-  const first=await thumbnail(page,`Reference image ${stamp}`);
-  // The reply comes below it, with its own file.
+  const {path:cardPath}=await makeCard(page,`Reference card ${stamp}`);
+  const first=await reply(page,`Reference image ${stamp}`);
   const second=await reply(page,`Here is another one ${stamp}`);
   expect(second).not.toBe(first);
   await expect(page.locator('.cw[open] #cw-list .lg-row')).toHaveCount(2);

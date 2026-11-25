@@ -7,6 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
 import { appOrigin } from './lane.mjs';
+import { makeCard } from './make-card';
 // The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
 const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await card.getByRole('button',{name:/^Status:/}).click(); await card.getByRole('menuitemradio',{name:'Send for review'}).click(); };
 
@@ -25,11 +26,7 @@ test.beforeAll(async ({ browser }, testInfo) => {
     const page = await context.newPage();
     await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
     const title = `بطاقة قياس الوارد ${randomUUID()}`;
-    await page.getByRole('button', { name: "+ New card" }).click();
-    await page.getByLabel('Message', { exact: true }).fill(title);
-    await page.getByRole('button', { name: "Create card" }).click();
-    await expect(page.locator('.cw[open] .cw-title')).toHaveText(title);
-    const path = new URL(page.url()).pathname;
+    const { path } = await makeCard(page, title);
     expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
     inboxFixture = { title, path };
     await sendForReview(page);
@@ -221,12 +218,8 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
 test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
   await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
   await idle(page); // Home, board and the inbox are prepared before any write.
-  await page.getByRole('button', { name: "+ New card" }).click();
   const title = `بطاقة تحديث فوري ${Date.now()}`;
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button', { name: "Create card" }).click();
-  await expect(page.locator('.cw[open] .cw-title')).toHaveText(title);
-  const cardPath = new URL(page.url()).pathname;
+  const { path: cardPath } = await makeCard(page, title);
   const comment = `تعليق فوري ${Date.now()}`;
   await page.getByRole('textbox',{name:'Write a comment'}).fill(comment);
   await page.getByRole('button',{name:'Post the comment'}).click();

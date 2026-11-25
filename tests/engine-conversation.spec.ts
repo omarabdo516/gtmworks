@@ -684,17 +684,16 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   query(`select public.agent_show_card('${conversation}','${run}','call-1','draft','خطة المقال','{"line":"مسودة","rows":[]}'::jsonb)`);
   show();
   const reviewer=await member('reviewer@example.com'), viewer=await member('viewer@example.com');
-  const badges={en:{omar:'Waiting on you',reviewer:'Waiting on عمر',viewer:'Waiting on the team',tag:'Handed to you'},ar:{omar:'مستنيك',reviewer:'مستني عمر',viewer:'مستني الفريق',tag:'اتسلّمتلك'}};
   for(const value of ['en','ar'] as const) {
    language(value);
    for(const [who,on] of [['omar',page],['reviewer',reviewer],['viewer',viewer]] as const) {
     await on.reload();
     await expect(on.locator(`.col[data-column="waiting"] .kcard[data-card-id="${card}"]`),`${who} in ${value}`).toHaveCount(1);
     await expect(kcard(on)).toHaveCount(1);
-    await expect(kcard(on).locator('.wtag--hand')).toHaveText(badges[value].tag);
-    await expect(kcard(on).locator('.badge')).toHaveText(badges[value][who]);
-    await expect(kcard(on).locator('.badge')).toHaveClass(who==='omar'?'badge badge--wait':'badge');
-    await expect(kcard(on).locator('.kcard__t')).toHaveText(handTitle);
+    // One question symbol says it, named in the tile's name (#683); no badge or line says it again.
+    await expect(kcard(on).locator('.kt-syms .sym[data-sym="question"]')).toHaveCount(1);
+    await expect(kcard(on).locator('a.kcard__title')).toHaveAccessibleName(new RegExp(value==='ar'?'عنده سؤال':'Has a question'));
+    await expect(kcard(on).locator('.badge, .wtag, .kcard__t')).toHaveCount(0);
    }
    await expect(page.locator('a.mcard[data-kind="hand"]')).toHaveCount(0);
    await expect(sidebar).toHaveText(String(before.sidebar+1));
@@ -1125,8 +1124,8 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   const shown=page.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
   await expect(shown.locator('a')).toBeFocused();
-  await expect(page.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect(shown.locator('.kcard__foot')).toHaveText('Faye· Marketing');
+  await expect(page.getByRole('button',{name:'Assignee: Everyone'})).toBeVisible();
+  await expect(shown.locator('.kt-face .face')).toHaveCount(1);
  } finally { language('en'); detach(); }
 });
 

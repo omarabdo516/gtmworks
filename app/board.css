@@ -439,3 +439,5 @@
   .gw .board-view .board-tools .bt-search.is-open { flex: 1 1 100%; }
   .gw .board-view .bt-new__t { display: none; }
 }
+/* A Card on the calendar names its assignee by face (#683). */
+.gw .calendar .cal-card { display: flex; align-items: center; gap: 4px; min-width: 0; }

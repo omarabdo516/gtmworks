@@ -3,6 +3,7 @@ import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
 import { execFileSync } from 'node:child_process';
+import { makeCard } from './make-card';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the visual
 // lane checks the Arabic faces on its screens; the English ones are read by the next case (#257).
@@ -153,12 +154,7 @@ test('a review: an Owner approves it into Planned with its date ahead and into D
  const card=page.getByRole('dialog');
  const waiting=page.locator('.col[data-column="waiting"]');
  const make=async(name:string)=>{
-  await page.goto('/c/rs-learning/work/board');
-  await page.getByRole('button',{name:"+ New card"}).click();
-  await page.getByLabel('Message',{exact:true}).fill(name);
-  await page.getByRole('button',{name:"Create card"}).click();
-  await expect(page).toHaveURL(/\/work\/board\/\d+$/);
-  return Number(page.url().split('/').pop());
+  return (await makeCard(page,name)).id;
  };
  const sendForReview=async()=>{
   await card.getByRole('button',{name:/^Status:/}).click();

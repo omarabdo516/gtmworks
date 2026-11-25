@@ -26,7 +26,7 @@
   "app.spec.ts": 152,
   "board-motion.spec.ts": 106,
   "board.spec.ts": 253,
-  "card-request.spec.ts": 27,
+  "new-card.spec.ts": 27,
   "card-window.spec.ts": 32,
   "channel-files.spec.ts": 38,
   "channel-invitees.spec.ts": 41,

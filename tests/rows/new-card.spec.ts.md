@@ -1,0 +1,7 @@
+| `new-card.spec.ts` | The one New card form (#683): New card makes one Card in Planned with its description, assignee and files, also on a double press, and the Ideas "+" one at the top of Ideas, in both languages; the form is its own script, loaded on open; on a phone the board's filters fold into one, the search comes first and the first Card shows near the top. Replaces card-request.spec.ts (the request form, its mode and templates are gone). | 9 s | components/new-card.test.tsx (the form drawn), supabase/tests/new_card.sql (the Card made once per key) | changed (#683, was card-request.spec.ts) |
+
+## Cases
+
+| `new-card.spec.ts` "New card makes one Card in Planned with its description, assignee and files, also on a double press; the Ideas "+" makes one at the top of Ideas; in both languages" | stays | New in #683, in place of "a message to an agent makes one card in Ideas with its message, assignment and mode, in both languages": a real save through the server, one Card per key, its fields and files stored, the toast, and the Ideas column's top. |
+| `new-card.spec.ts` "the form loads when it is opened and shows the page-opening bar while it arrives" | stays | Was "the composer loads when it is opened and shows the page-opening bar while it arrives": only the built app shows it, the form is its own script fetched when New card opens. |
+| `new-card.spec.ts` "on a phone the board's filters fold into one, the search comes first, and the first Card shows near the top" | stays | New in #683: the layout drawn by the app at 390px. |
