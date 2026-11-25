@@ -13,11 +13,12 @@ import { useLiveSteps } from '@/app/run-activity';
 import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
-import { channelCallable, firstName, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, firstName, sentMessage, type ChannelRecord } from '@/lib/channels';
 import { named } from '@/lib/bidi';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import '@/app/channel.css';
 import { sentIntoNewChat } from '@/lib/arrivals';
+import { useSending } from '@/lib/sending';
 
 type Say=(key:string,...values:unknown[])=>string;
 type SheetAgent={id:string,name:string,connection_id:string};
@@ -94,14 +95,14 @@ function Between({person,agent}:{person:string,agent:string}) {
 }
 
 // The reader's own chat on the Card, kept on its newest message while they are there.
-function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:string,initial:ConversationRecord,writer:boolean,shown:boolean}) { const {record,asked,reread}=useConversationRecord({company,initial});
+function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:string,initial:ConversationRecord,writer:boolean,shown:boolean}) { const {record,asked,reread,sending}=useConversationRecord({company,initial});
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,record.pending,shown]);
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
    <div className="transcript__col"><ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread}/></div>
   </div>
-  <div className="composer-area"><ConversationComposer company={company} conversation={record.conversation} record={record} writer={writer} asked={asked} usage={false}/></div>
+  <div className="composer-area"><ConversationComposer company={company} conversation={record.conversation} record={record} writer={writer} asked={asked} sending={sending} usage={false}/></div>
  </>;
 }
 
@@ -114,7 +115,9 @@ function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:C
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const [record,setRecord]=useState(channel); const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  const id=channel.channel.id; const name=channel.channel.kind==='team'?channel.channel.name:t('shellGeneralChannel');
- const read=async()=>{ try { const response=await fetch(`/api/channels?company=${company}&channel=${id}`,{cache:'no-store'}); if(response.ok) setRecord(await response.json() as ChannelRecord); } catch {} };
+ // A message the reader sends is drawn at once (#756), until the first read begun after its send was answered.
+ const {list:sendingList,start:sending,reading}=useSending();
+ const read=async()=>{ try { const landed=reading(); const response=await fetch(`/api/channels?company=${company}&channel=${id}`,{cache:'no-store'}); if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); } } catch {} };
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{ if(document.visibilityState==='visible') await read(); if(!stopped) timer=setTimeout(poll,2000); };
@@ -122,10 +125,12 @@ function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:C
   return ()=>{stopped=true;clearTimeout(timer);};
  },[id,company,shown]); // eslint-disable-line react-hooks/exhaustive-deps
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,shown]);
- const {writer,messages}=record;
+ const {writer}=record;
+ const me=record.members.find(member=>member.person===person)?.name??'';
+ const messages=[...record.messages,...sendingList.map(sent=>sentMessage(sent,record.agents,me))];
  // Its called Agents' faces follow their Runs here as on the channel's page (#700): thinking until the first step the
  // Run's live read gives, working after it, done once a reply lands.
- const steps=useLiveSteps({company,channel:id},record.open);
+ const {view:steps}=useLiveSteps({company,channel:id},record.open);
  useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
@@ -136,15 +141,17 @@ function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:C
      ? <HandedRow key={message.id} from={{id:message.from.face,name:message.from.name}} to={{id:message.to.face,name:message.to.name}} title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>
      : message.author==='agent'
      ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div>{!!message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}<ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/channel/${id}`}/></li>
-     : <li key={message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg`} data-author="person">
+     : <li key={message.sending?`sending:${message.sending.key}`:message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg${message.sending?.posting?' is-sending':''}`} data-author="person" aria-busy={message.sending?.posting?true:undefined}>
       {!message.mine&&<div className="sender"><span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(message.name.trim())[0]||'?'}</span><bdi>{firstName(message.name)}</bdi></div>}
       {!!message.body.trim()&&<div className={`bubble ${message.mine?'bubble--user':'bubble--peer'}`} dir="auto">{message.body}</div>}
-      {!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}</li>)}
+      {!!message.files.length&&<div className="msg-files">{message.files.map(file=>message.sending?<span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>:<a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}</li>)}
    </ol></div>
   </div>
-  <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={channelCallable(record,person)} send={async(message,sendKey,files)=>{
+  <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={channelCallable(record,person)} drawn send={async(message,sendKey,files)=>{
     const fields={company,channel:id,message,sendKey};
+    const settled=sending(sendKey,message,files);
     const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
+    settled(failure);
     if(!failure) await read();
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}</div>

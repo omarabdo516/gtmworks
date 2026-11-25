@@ -18,16 +18,17 @@ import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/ap
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
-import { channelCallable, channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, channelTitle, firstName, sentMessage, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
 import { ReplyCard } from '@/app/reply-card';
 import type { AnswerQuestion } from '@/app/question-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
-import { ActivityLine, LiveTurn, useLanding, useLiveSteps } from '@/app/run-activity';
+import { LiveTurn, WorkingLine, useLanding, useLiveSteps } from '@/app/run-activity';
 import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
+import { useSending } from '@/lib/sending';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { ModelLine } from '@/app/model-line';
 import { ChannelArchive } from '@/app/channel-archive';
@@ -42,31 +43,47 @@ const mentionsOf=(message:ChannelMessage):ChannelMention[]=>message.author==='pe
 
 // What each drawn message, and the cards turn under a person's message, is known by for its rise (lib/arrivals).
 // A card turn is known only once it is drawn: a called Agent with no question or request yet has none, so the first one
-// to arrive rises.
-const arrivals=(messages:ChannelMessage[]):Arrival[]=>messages.flatMap(message=>[`${message.author}:${message.id}`,...mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=>`${message.author}:${message.id}:${mention.agent}`)]).map(key=>({key,element:key}));
+// to arrive rises. The reader's own message is drawn as it was sent (#756) and again once the record holds it, as another
+// element: it is known by its words and how many times the reader said them before, so the stored one does not rise again.
+const elementOf=(message:ChannelMessage)=>message.author==='person'&&message.sending?`sending:${message.sending.key}`:`${message.author}:${message.id}`;
+const arrivals=(messages:ChannelMessage[]):Arrival[]=>{
+ const said=new Map<string,number>();
+ return messages.flatMap(message=>{
+  const element=elementOf(message);
+  const own=message.author==='person'&&message.mine?(()=>{ const times=said.get(message.body)??0; said.set(message.body,times+1); return `mine:${times}:${message.body}`; })():element;
+  return [{key:own,element},...mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=>`${message.author}:${message.id}:${mention.agent}`).map(key=>({key,element:key}))];
+ });
+};
 
 // Agent names inside a sentence, each isolated so a name in the other script never flips the text around it.
 const Names=({agents,c}:{agents:ChannelAgent[],c:Say})=><>{agents.map((agent,index)=><Fragment key={agent.id}>{index>0&&c('channelNamesJoin')}<bdi>{agent.name}</bdi></Fragment>)}</>;
 
 // What an Agent wrote before its question or request, in the same message (#647): its words, drawn above the card.
 const Said=({words}:{words?:string})=>words?<div className="bubble bubble--agent" dir="auto">{words}</div>:null;
+// A message the reader sends is drawn at once, before the send is answered (#756), and the first read begun after the
+// answer takes its place.
 export default function ChannelView({person,slug,initial}:{person:string,slug:string,initial:ChannelRecord}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  // The same, for the steps' tool lines: each value isolated in its own direction, as a Conversation draws them.
  const cb:StepsBidiText=(key,...values)=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
- const {channel,members,agents,writer,messages,open,handover,may,board}=record;
+ const {list:sendingList,start:sending,reading}=useSending();
+ const {channel,members,agents,writer,open,handover,may,board}=record;
+ const me=members.find(member=>member.person===person)?.name??'';
+ const messages=sendingList.length?[...record.messages,...sendingList.map(sent=>sentMessage(sent,agents,me))]:record.messages;
  // A message that arrives while the channel is open rises in once (design-reference: msg-in); what it held when opened,
  // its own first read included (only when that read is the one drawn), stays still.
- const {rises,settled}=useArrivals(arrivals(messages));
- const rise=(key:string)=>rises({key,element:key})?' msg-in':'';
+ const drawnArrivals=arrivals(messages);
+ const {rises,settled}=useArrivals(drawnArrivals);
+ const rise=(element:string)=>{ const arrival=drawnArrivals.find(item=>item.element===element); return arrival&&rises(arrival)?' msg-in':''; };
  const refresh=useCallback(async()=>{
   try {
+   const landed=reading();
    const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
-   if(response.ok) setRecord(await response.json() as ChannelRecord);
+   if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); }
   } catch {}
- },[channel.company,channel.id]);
+ },[channel.company,channel.id,reading]);
  // Opening the channel reads it, and asks for it fresh: the page may be a prefetch drawn before the newest messages. The
  // answer replaces only that first drawing, never a newer one from a poll or a send. Opened from a mention (#200), the
  // read names the message the Member opened, so their own waiting item is done; the address is then the channel's again.
@@ -82,15 +99,16 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
   const poll=async()=>{
    if(document.visibilityState==='visible') {
     try {
+     const landed=reading();
      const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
-     if(response.ok&&!stopped) setRecord(await response.json() as ChannelRecord);
+     if(response.ok&&!stopped) { setRecord(await response.json() as ChannelRecord); landed(); }
     } catch {}
    }
    if(!stopped) timer=setTimeout(poll,(open||handover)?1500:6000);
   };
   timer=setTimeout(poll,sent?300:(open||handover)?1500:6000);
   return ()=>{stopped=true;clearTimeout(timer);};
- },[open,handover,sent,channel.company,channel.id]);
+ },[open,handover,sent,channel.company,channel.id,reading]);
  // The Member who called the Agent decides its Run's request (#165), as a Conversation's person does (#163); the choice
  // then goes to the waiting Run after the answer, and the next read shows the reply.
  const permit:DecidePermission=async(request,choice)=>{
@@ -168,7 +186,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
- const steps=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
+ const {view:steps,unread}=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
  const landing=useLanding({working:!!workingNow,live:steps,newest:messages.findLast(message=>message.author==='agent')?.id??null});
  // Each called Agent's face while the channel is open (#700, lib/live-runs channelRuns).
  useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
@@ -187,9 +205,9 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     <p><ShellIcon name="at"/><span>{tip}</span></p>
     {only.length>0&&<p className="ch-intro__only"><ShellIcon name="eye"/><span>{onlyBefore}<Names agents={only} c={c}/>{onlyAfter}</span></p>}
    </div>
-   <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
+   <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={elementOf(message)}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} rise={landedHere(message)?'':rise(`${message.author}:${message.id}`)} opened={message.author==='agent'&&landing.opened(message.id)} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
+    <Turn message={message} rise={landedHere(message)?'':rise(elementOf(message))} opened={message.author==='agent'&&landing.opened(message.id)} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
      <div className="sender"><span aria-hidden="true"><AgentFace agent={mention.face} name={mention.agent} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {/* What the Agent wrote before it asked, in the same message (#647), is its words above the card. */}
@@ -201,8 +219,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     </li>)}
    </Fragment>)}
     {workingNow&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
-   {workingNow&&(live?<ActivityLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>
-    :<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>)}
+   {workingNow&&<WorkingLine view={live} unread={unread} fallback={t('conversationWorking',workingNow.agent)} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>}
   </div></div>
   <div className="composer-area">
    {/* An archived channel (#675; design-reference-card: arc-line) is read by its Members, and nobody writes in it. */}
@@ -213,9 +230,11 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     const failure=await postMessage({company:channel.company,channel:channel.id,intent:'stop',message:record.stop?.message},'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;
-   }}:undefined} send={async(message,sendKey,files)=>{
+   }}:undefined} drawn send={async(message,sendKey,files)=>{
     const fields={company:channel.company,channel:channel.id,message,sendKey};
+    const settled=sending(sendKey,message,files);
     const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
+    settled(failure);
     if(!failure) setSent(value=>value+1);
     return failure;
    }}/>:!record.archived&&<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
@@ -267,8 +286,9 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
   ...(called.some(mention=>mention.state==='noModel')?[<p key="no-model" className="note" role="alert" data-outcome="no-model"><ModelLine cause="noModel" agent="" slug={slug} owner={owner}/></p>]:[])];
  // The images the message carries (#156), under its bubble on the writer's side for the writer and on the start side for
  // every other Member (design-reference: filesHTML; `.turn--user` and `.turn--peer` put them on their own side).
- const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
- if(message.mine) return <li className={`turn turn--user msg${rise}`} data-author="person" data-msg={message.id}>
+ // A message being sent has no stored files to open yet: their names alone (#756).
+ const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=>message.sending?<span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>:<a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
+ if(message.mine) return <li className={`turn turn--user msg${message.sending?.posting?' is-sending':''}${rise}`} data-author="person" data-msg={message.sending?undefined:message.id} aria-busy={message.sending?.posting?true:undefined}>
   {!!message.body.trim()&&<div className="bubble-row"><When at={message.at} className="bubble__time"/><div className="bubble bubble--user" dir="auto">{body}</div></div>}
   {files}
   {failed}

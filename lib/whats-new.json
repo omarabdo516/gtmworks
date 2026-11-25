@@ -6,6 +6,12 @@
   "ar": { "title": "الموديل اللي بتقفله بيفضل مقفول", "body": "لما تقفل موديل في مزوّد، بقى بيختفي من قايمة الموديلات في المحادثة ومن اختيار موديل أي وكيل ومن الموديل البديل، إلا لو فيه مزوّد تاني بيعرض نفس الموديل ولسه مشغّله." }
  },
  {
+  "issue": 756,
+  "date": "2026-11-25",
+  "en": { "title": "Your message shows the moment you send it", "body": "A message you send in a Conversation or a channel is on screen as soon as you press Send, with its files, and the Agent's line reads Thinking from then, even while the server is busy; if it can't be sent, its words go back in the box." },
+  "ar": { "title": "رسالتك بتظهر أول ما تبعتها", "body": "الرسالة اللي بتبعتها في محادثة أو قناة بقت بتظهر أول ما تدوس «ابعت»، بملفاتها، وسطر الوكيل بيقول «بيفكر» من ساعتها، حتى لو السيرفر مشغول؛ ولو ما اتبعتتش، كلامها بيرجع في الخانة." }
+ },
+ {
   "issue": 714,
   "date": "2026-11-25",
   "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },

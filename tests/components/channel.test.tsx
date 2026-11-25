@@ -56,9 +56,10 @@ test('in Arabic the composer gives the same hint, with the general channel named
 
 test('while the called Agent replies the page says so and asks again, and a reply that never came says it could not', async () => {
  const asked = vi.fn<(url: string) => void>();
- vi.stubGlobal('fetch', async (url: string) => { asked(url); return new Response(JSON.stringify(record([called('answered'), reply]))); });
+ // The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever.
+ vi.stubGlobal('fetch', async (url: string) => { if (url.startsWith('/api/run-steps?')) return new Promise<Response>(() => {}); asked(url); return new Response(JSON.stringify(record([called('answered'), reply]))); });
  const screen = await channel(record([called('open')]));
- await expect.element(screen.getByRole('status')).toHaveTextContent('Lead is working on a reply…');
+ await expect.element(screen.getByRole('status')).toHaveTextContent('LeadThinking…');
  await expect.poll(() => asked.mock.calls.length, { timeout: 5000 }).toBeGreaterThan(0);
  expect(asked.mock.calls[0][0]).toBe('/api/channels?company=co-1&channel=ch-1');
  await expect.element(screen.getByText('Two things are due.')).toBeVisible();
@@ -378,8 +379,8 @@ const two = (second: 'open' | 'unanswered'): ChannelMessage => ({ id: 5, author:
 const adsReply: ChannelMessage = { id: 6, author: 'agent', name: 'Ads', face: 'c-1', body: 'Two scripts are in.', at };
 
 test.each([
- ['en', 'SEO is working on a reply…', 'SEO couldn’t reply to this message.'],
- ['ar', 'SEO يكتب الرد…', 'SEO مقدرش يرد على الرسالة دي.'],
+ ['en', 'SEOThinking…', 'SEO couldn’t reply to this message.'],
+ ['ar', 'SEOبيفكر…', 'SEO مقدرش يرد على الرسالة دي.'],
 ] as const)('in the %s interface a message that called two Agents marks both names, names the one working, and gives the one that failed its own line', async (language, working, failed) => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([two('open'), adsReply])}/></LanguageProvider>);
@@ -500,17 +501,17 @@ test.each([['en', 'This card was added to the board under “In progress”'], [
 test('a Viewer sees the working line breathe and the reply rise once when it arrives; the opened messages stay still', async () => {
  const later: ChannelMessage = { id: 4, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Read before the page drew', at, files: [], mention: null };
  const reads = [record([peer, later, called('open')], { writer: false })];
- vi.stubGlobal('fetch', async () => new Response(JSON.stringify(reads.shift() ?? record([peer, later, called('answered'), reply], { writer: false }))));
+ vi.stubGlobal('fetch', async (url: string) => url.startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : new Response(JSON.stringify(reads.shift() ?? record([peer, later, called('answered'), reply], { writer: false }))));
  const flew: string[] = [];
  const watch = new MutationObserver(records => records.forEach(each => each.addedNodes.forEach(node => { if (node instanceof Element && node.matches('.send-fly, :has(.send-fly)')) flew.push(node.outerHTML); })));
  watch.observe(document.body, { subtree: true, childList: true });
  onTestFinished(() => watch.disconnect());
  const screen = await render(<div className="gw"><LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={record([peer, called('open')], { writer: false })}/></LanguageProvider></div>);
  await expect.element(screen.getByText('Read before the page drew')).toBeVisible();
- const words = screen.container.querySelector('.thinking .shimmer')!;
+ const words = screen.container.querySelector('.activity .shimmer')!;
  const style = getComputedStyle(words);
  expect([style.animationName, style.animationDuration, style.animationTimingFunction, style.animationIterationCount]).toEqual(['gw-breathe', '1.4s', 'ease-in-out', 'infinite']);
- expect(words.textContent).toBe('Lead is working on a reply…');
+ expect(words.textContent).toBe('Thinking…');
  await expect.element(screen.getByText('Two things are due.'), { timeout: 5000 }).toBeVisible();
  const turn = screen.container.querySelector('.turn--agent')!;
  expect([getComputedStyle(turn).animationName, getComputedStyle(turn).animationDuration, getComputedStyle(turn).animationTimingFunction]).toEqual(['gw-rise', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
