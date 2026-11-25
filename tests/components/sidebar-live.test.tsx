@@ -19,7 +19,7 @@ afterEach(() => visibility('visible'));
 
 // The sidebar of a Company worked alone: no channels, one Agent the reader sees, idle when the page was drawn.
 const sidebar = (language: 'en' | 'ar' = 'en', channels: ChannelSummary[] = []) => render(<LanguageProvider language={language}>
- <SidebarLive company="co-1" channels={channels} states={{ reach: 'idle' }}>
+ <SidebarLive person="p-1" company="co-1" channels={channels} states={{ reach: 'idle' }}>
   <ul><li><AgentTile agent="reach" href="/c/rs/chat/reach" named={['Reach', 'Runs the ads.']} title="Reach"><bdi>Reach</bdi></AgentTile></li></ul>
   <ChannelList slug="rs" company="co-1" person="p-1" manage={false}/>
  </SidebarLive>
@@ -34,7 +34,7 @@ test('an Agent that fails while the page shows looks stuck in the sidebar within
  const tile = screen.getByRole('link', { name: 'Reach · Runs the ads. · Idle' });
  await expect.element(tile).toBeVisible();
  await vi.advanceTimersByTimeAsync(5000);
- expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1');
+ expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1&person=p-1');
  await expect.element(screen.getByRole('link', { name: 'Reach · Runs the ads. · Stuck' })).toBeVisible();
  expect(screen.container.querySelector('.agent-tile .dot')?.className).toBe('dot dot--stuck');
 });
@@ -76,4 +76,24 @@ test('one poll carries the channels\' counts and the Agents\' states', async () 
  expect(asked).toHaveBeenCalledTimes(1);
  await expect.element(screen.getByLabelText('4 new messages')).toBeVisible();
  await expect.element(screen.getByRole('link', { name: 'Reach · Runs the ads. · Waiting on you' })).toBeVisible();
+});
+
+// #776: a page whose read of the channels failed, and a poll that failed, keep the channels the sidebar shows, what an
+// earlier poll brought among them.
+test('a failed read of the channels keeps the ones the sidebar shows, a poll\'s among them, from the next page and from a poll', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const general: ChannelSummary = { kind: 'general', id: 'ch-1', unread: 0 };
+ vi.stubGlobal('fetch', async () => answer({}, [{ ...general, unread: 4 }]));
+ const drawn = (channels: ChannelSummary[] | null) => <LanguageProvider language="en"><SidebarLive person="p-1" company="co-kept" channels={channels} states={{}}><ChannelList slug="rs" company="co-kept" person="p-1" manage={false}/></SidebarLive></LanguageProvider>;
+ const first = await render(drawn([general]));
+ await expect.element(first.getByRole('link', { name: 'general' })).toBeVisible();
+ await vi.advanceTimersByTimeAsync(5000);
+ await expect.element(first.getByLabelText('4 new messages')).toBeVisible();
+ first.unmount();
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'channelNotRead' }), { status: 503 }));
+ const next = await render(drawn(null));
+ await expect.element(next.getByLabelText('4 new messages')).toBeVisible();
+ await vi.advanceTimersByTimeAsync(5000);
+ await expect.element(next.getByLabelText('4 new messages')).toBeVisible();
+ next.unmount();
 });

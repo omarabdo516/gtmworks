@@ -8,13 +8,17 @@ import { passwordProblem } from '@/lib/password.mjs';
 import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { appUrl } from '@/lib/app-origin.mjs';
+import { cappedForm } from '@/lib/request-body.mjs';
 
 export async function POST(request:NextRequest) {
  if(!await setupIsOpen()) {
   logActionFailure('first_run_setup_closed',new Error('Setup closed at start'));
   notFound();
  }
- const form=await request.formData(), code=form.get('code'), language=form.get('language')==='ar'?'ar':'en';
+ // The form is read only up to its limit (#778): a larger body is refused before it is read.
+ const form=await cappedForm(request,16000);
+ if(!form) return new NextResponse(null,{status:413});
+ const code=form.get('code'), language=form.get('language')==='ar'?'ar':'en';
  // Only the link the installer printed opens setup (issue #50): nothing is created without its code.
  if(!setupCodeMatches(code)) {
   logActionFailure('first_run_wrong_code',new Error('Setup code missing or wrong'));

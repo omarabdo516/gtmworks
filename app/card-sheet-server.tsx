@@ -12,6 +12,7 @@ import { ModelLine } from './model-line';
 import { modelCauseOf, modelCauseOutcomes, modelOutcome } from '@/lib/model-causes';
 import type { CardSheetData } from './card-sheet';
 import type { SheetChat } from './card-sheet-chat';
+import { ReadFailed } from '@/lib/read-failed';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 
@@ -52,7 +53,8 @@ async function sheetChat(db:Db,company:string,card:number,me:string):Promise<She
  if(!row) return {kind:'none'};
  if(row.channel_id) {
   const channel=await channelRecord(db,me,company,row.channel_id);
-  if(channel) return {kind:'channel',record:channel,person:me};
+  if(channel==='failed') throw new ReadFailed('card channel');
+  if(channel!=='missing') return {kind:'channel',record:channel,person:me};
   return {kind:'channel-locked',name:typeof row.title==='string'?row.title:''};
  }
  if(row.conversation_id) {

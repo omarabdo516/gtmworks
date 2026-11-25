@@ -48,6 +48,18 @@
   "ar": { "title": "سطر الشغل بيقولك الوكيل بيعمل إيه على طول", "body": "وانت مستني الوكيل يرد على رسالتك، السطر اللي تحت المحادثة بيقول «بيفكر» أو الخطوة اللي هو فيها دلوقتي، في المحادثة والقناة وشات البطاقة، وبيفضل لحد ما الرد يظهر، والرد بقى بيظهر أول ما الوكيل يخلّص." }
  },
  {
+  "issue": 774,
+  "date": "2026-11-25",
+  "en": { "title": "Only an Owner changes an Owner", "body": "A Manager can no longer remove an Owner, change an Owner's Role or Grants, or change their own Role or Grants, and the team page no longer offers them those controls; Managers still manage Contributors, Viewers and other Managers as before." },
+  "ar": { "title": "المالك بس هو اللي يغيّر في المالك", "body": "المدير مبقاش يقدر يشيل مالك أو يغيّر دوره أو صلاحياته، ولا يغيّر دوره أو صلاحياته هو، وصفحة الفريق مبقتش بتعرضله الحاجات دي؛ والمديرين لسه بيديروا المساهمين والمشاهدين والمديرين التانيين زي الأول." }
+ },
+ {
+  "issue": 720,
+  "date": "2026-11-25",
+  "en": { "title": "Your account's choices keep the keyboard focus", "body": "Choosing Light, Dark or System, or a language, in Your account with the keyboard now keeps the focus on that choice while it is saved, and the arrow keys still move between the choices." },
+  "ar": { "title": "اختيارات حسابك بتحافظ على مكان الكيبورد", "body": "لما تختار الشكل أو اللغة في «حسابك» بالكيبورد، التركيز بقى بيفضل على اختيارك وهو بيتحفظ، والأسهم لسه بتنقلك بين الاختيارات." }
+ },
+ {
   "issue": 756,
   "date": "2026-11-25",
   "en": { "title": "Your message shows the moment you send it", "body": "A message you send in a Conversation or a channel is on screen as soon as you press Send, with its files, and the Agent's line reads Thinking from then, even while the server is busy; if it can't be sent, its words go back in the box." },

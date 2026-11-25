@@ -61,6 +61,7 @@ test('first-run refusals log distinct causes and retain their responses and acco
    '@/lib/app-origin.mjs':{appUrl},
    '@/lib/setup-code.mjs':{setupCodeMatches},
    '@/lib/i18n.mjs':i18n,
+   '@/lib/request-body.mjs':await import('../lib/request-body.mjs'),
   });
   const {NextRequest}=require('next/server');
   const body=Object.fromEntries(Object.entries(scenario.input ?? input).filter(([,value])=>value!==undefined));
@@ -109,6 +110,7 @@ test('failed first-run tests print only the last 40 matching server lines; passi
   'node:path':require('node:path'),
   '../scripts/first-run-db.mjs':{},
   './sign-in':{},
+  './dialog-exit':{},
  },{console:{log:line=>output.push(line)}});
  await afterEach({},{status:'passed',expectedStatus:'passed'});
  assert.equal(reads,0);

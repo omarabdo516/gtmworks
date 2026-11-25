@@ -7,7 +7,7 @@ import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestByt
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
-import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { routePermission } from '@/lib/route-permissions.mjs';
 import { channelRecord } from '@/lib/channels';
 import { channelSessionTurns } from '@/lib/company-app-items';
 import { uuid } from '@/lib/conversations';
@@ -100,7 +100,10 @@ async function respond(request:NextRequest) {
   }
   const company=typeof body.company==='string'?body.company:''; const channelId=typeof body.channel==='string'?body.channel:'';
   if(![company,channelId].every(value=>uuid.test(value))) return refuse('channelFailed',400);
-  if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
+  // A membership read that failed is an error the browser asks again after (#776), never "not found".
+  const allowed=await routePermission(db,'app/api/channels/route.ts',request.method,company,user.id);
+  if(allowed==='failed') return refuse('channelNotRead',503);
+  if(allowed==='refused') return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
   if(writing&&body.intent==='permit') return await permit(db,body);
  if(writing&&body.intent==='answer') return await answer(db,body);
  if(writing&&body.intent==='done') return await done(db,body);
@@ -120,10 +123,13 @@ async function respond(request:NextRequest) {
   // other way leaves it waiting, since reading a channel is not reading a mention.
   if(typeof body.mention==='string'&&/^\d{1,19}$/.test(body.mention)) await db.rpc('read_channel_mention',{ch:channelId,message:Number(body.mention)});
   const record=await channelRecord(db,user.id,company,channelId,true,(_agent,session,profile)=>channelSessionTurns(company,profile,session));
-  if(!record) return refuse('channelNotFound',404);
+  // A read that failed is an error the browser asks again after, keeping what it shows (#776), never an empty channel.
+  if(record==='failed') return refuse('channelNotRead',503);
+  if(record==='missing') return refuse('channelNotFound',404);
   if(!record.open) return reply(record);
   await driveChannelRuns(service(),{channel:channelId});
-  return reply(await channelRecord(db,user.id,company,channelId,true,(_agent,session,profile)=>channelSessionTurns(company,profile,session))??record);
+  const again=await channelRecord(db,user.id,company,channelId,true,(_agent,session,profile)=>channelSessionTurns(company,profile,session));
+  return reply(typeof again==='string'?record:again);
  } catch { logActionFailure('channel',new Error('Channel request failed')); return refuse('channelFailed',400); }
 }
 export const GET=respond;

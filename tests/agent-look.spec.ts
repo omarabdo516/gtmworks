@@ -1,4 +1,4 @@
-import { test, expect, freshSeed } from './fresh-seed';
+import { test, expect, freshSeed, laneRows } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { appOrigin } from './lane.mjs';
@@ -65,6 +65,9 @@ test('the Owner changes a look from Settings and the details; it is kept, logged
  await expect(sidebarFace(page)).toHaveAttribute('data-colour',before!);
  await page.keyboard.press('Escape');
  await expect(page.locator('#dp-look')).toBeFocused();
+ // The face changes at once and the reset is saved after it (lib/agent-look-saves); a reload while it is still on its way
+ // cancels it, so the new page is read once the database keeps it (#754: the reload's read is now quick enough to win).
+ await expect.poll(()=>laneRows(`select picked_colour from public.agent_looks where agent_id='${reach}'`)[0]?.picked_colour??null,{timeout:10000}).toBeNull();
  await page.reload();
  await expect(sidebarFace(page)).toHaveAttribute('data-colour',before!);
 });
