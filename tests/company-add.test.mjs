@@ -40,7 +40,7 @@ case "$*" in
  *'{{.State.Running}}'*) echo true;;
  *'.HostConfig.Memory'*) echo "2147483648 1500000000 \${DISK_LABEL:-10g}";;
  # The work disk's helper (#507): a size the disk does not hold is refused with what it holds (WORK_DISK_REFUSE_FILE).
- *'/usr/local/bin/work-disk '*' mount '*) if [ -n "\${WORK_DISK_REFUSE_FILE:-}" ] && [ -f "$WORK_DISK_REFUSE_FILE" ]; then echo 'used 3000'; exit 4; fi;;
+ *'/usr/local/bin/work-disk '*' mount '*' 2g') if [ -n "\${WORK_DISK_REFUSE_FILE:-}" ] && [ -f "$WORK_DISK_REFUSE_FILE" ]; then echo 'used 3000'; exit 4; fi;;
 esac
 exit 0
 `;

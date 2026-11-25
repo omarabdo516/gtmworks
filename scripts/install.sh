@@ -1070,13 +1070,15 @@ company_limits() {
   if [ -n "$disk" ]; then
     resized=0
     work_disk_up "$slug" >&2 || resized=$?
+    # What the disk holds, read now: starting the sandbox again below reads the disk again.
+    held=$disk_used
     if [ "$resized" -ne 0 ]; then
       write_limits "$slug" "$old_memory" "$old_cpus" "$old_disk" || return 1
       # The disk is mounted as it was (work-disk mounts it again when it refuses), so the Company runs again on it.
       start_engine_again "$slug" >&2 && sandbox_restart "$slug" >&2 \
         || echo "Company \"$name\"'s Engine or work sandbox did not come back: run this command again, or the install command." >&2
       if [ "$resized" -eq 4 ]; then
-        echo "The limits of Company \"$name\" were not changed: its work disk holds $disk_used MiB, which does not fit in $disk. Its disk is kept as it was."
+        echo "The limits of Company \"$name\" were not changed: its work disk holds $held MiB, which does not fit in $disk. Its disk is kept as it was."
       else
         echo "The limits of Company \"$name\" were not changed: its work disk could not be resized." >&2
       fi
