@@ -2,12 +2,13 @@ import { expect, type Page } from '@playwright/test';
 
 type Step = { name: string, link: string, path: string, content: string, search?: string, gone?: string, motion?: { shown: number, settled: number } };
 // Each step leaves from a sidebar entry the shell has (#8): Numbers opens its own page (#35) where Home used to be the
-// first entry, and Activity log opens /log (#11). On the board a Card opens as its sheet (#116). The sheet's own
-// motion is its allowance over the budgets (app/shell.css, .sheet): the 280ms slide-in runs after it is
-// shown, and the 190ms slide-out runs before the board is shown again. The Card's page still opens from the list.
+// first entry, and Activity log opens /log (#11). On the board a Card opens in its window (#678, was the sheet of #116).
+// The window's own motion is its allowance over the budgets (app/card-window.css, .cw): the 280ms rise runs after it is
+// shown, and the 190ms leave runs before the board is shown again. From the list a Card opens in the same window, over
+// the board the list leaves for.
 // A step that opens a new page counts `settled` from the end of the reference's own motion (#135): the page region's
 // fadeIn (design-reference/index.html .view-enter, 200ms, after the page is shown) and the 150ms fade of the row that
-// becomes current (.sb-item, .agent-tile), which runs beside it. A Card's sheet opens over the same page, which does not fade.
+// becomes current (.sb-item, .agent-tile), which runs beside it. A Card's window opens over the same page, which does not fade.
 // A step that opens the board (Marketing board, and the Inbox, which is the board on "Waiting on you") also waits for the
 // board's entrance (#131, #559): its progress bars grow for 700ms from when it is shown (app/board.css gw-bar-grow;
 // design-reference boardEnter), beside the page's fade.
@@ -17,12 +18,12 @@ const opensBoard = { shown: 0, settled: Math.max(pageFadeIn, rowFade, boardEnter
 export const clickPath: Step[] = [
   { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page', motion: opensPage },
   { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board', motion: opensBoard },
-  { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } },
-  // The sheet's top bar can hold the Card's More menu beside Close (#692), so this step names Close (#706).
-  { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn[aria-label="Close"]', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
+  { name: 'open card', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.cw[open]', motion: { shown: 0, settled: 280 } },
+  // The window's head holds the Card's More menu beside Close (#692), so this step names Close (#706).
+  { name: 'close card', link: '.cw[open] .cw-head .circle-btn[aria-label="Close the card"]', path: '/work/board', search: '', content: '.board', gone: '.cw[open]', motion: { shown: 190, settled: 190 } },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr', motion: opensPage },
-  { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: opensPage },
-  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensBoard },
+  { name: 'open card from the list', link: '.table a[href$="/board?card=1"]', path: '/work/board', search: '?card=1', content: '.cw[open]', motion: opensBoard },
+  { name: 'close card on the board', link: '.cw[open] .cw-head .circle-btn[aria-label="Close the card"]', path: '/work/board', search: '', content: '.board', gone: '.cw[open]', motion: { shown: 190, settled: 190 } },
   { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar', motion: opensPage },
   // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensBoard },
