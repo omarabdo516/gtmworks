@@ -12,15 +12,15 @@ contrast, and the English/Arabic direction checks are never removed.
 
 As Hermes and T3 Code run their CI (#76): a first job decides what runs, the fast layers run on every pull request, and
 the whole-app browser and install suites run only when their own area changed, on `main`, or when asked for by hand.
-Every job runs on a GitHub-hosted `ubuntu-latest` runner (decision 0038, #334). The visual lane runs in its own `visual`
-job, followed by the measured navigation budgets, which need a machine no other job shares; `ci.sh
-integration` leaves the `measured` project empty (`GTMWORKS_HOSTED_ELSEWHERE`). The visual lane and the measured budgets
-run on a push to `main` and on a manual run only, never on a pull request, and `check` does not wait for them (Omar,
-2026-11-17, #257). The chat's open time needs a machine no shard shares too, so it runs in its own `chat-open` job, on a
+Every job runs on a GitHub-hosted `ubuntu-latest` runner (decision 0038, #334). The measured navigation budgets run in
+their own `budgets` job, as they need a machine no other job shares; `ci.sh integration` leaves the `measured` project
+empty (`GTMWORKS_HOSTED_ELSEWHERE`). The budgets run on a push to `main` and on a manual run only, never on a pull
+request, and `check` does not wait for them (Omar, 2026-11-17, #257). No job compares a screenshot with an approved
+image: a screen is held to the design system (Omar, 2026-11-25, #805). The chat's open time needs a machine no shard shares too, so it runs in its own `chat-open` job, on a
 pull request too (#421): `ci.sh integration` leaves the `alone` project empty (`GTMWORKS_HOSTED_ELSEWHERE`), and
-`./ci.sh chat-open` runs it with one lane, one build and the one test. When they fail on `main`, the `visual` job opens
-or updates one issue labelled `visual-regression` that names each failed screen and links the difference images
-(`scripts/visual-regression.mjs`); no pull request is blocked by it. A job that
+`./ci.sh chat-open` runs it with one lane, one build and the one test. When the budgets fail on `main`, the `budgets` job
+opens or updates one issue labelled `budget-regression` that names each failed budget (`scripts/budget-regression.mjs`);
+no pull request is blocked by it. A job that
 starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs reserved-ports`, #225).
 
 - `changes` decides which suites a change needs (`scripts/ci-areas.mjs`, like Hermes `detect` and T3 Code `Changes`).
@@ -61,7 +61,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   lines of `supabase/config.toml` that choose images (`scripts/supabase-images.sh`). The `supabase-images` job keeps
   it: with the key cached it only looks the key up, and after a key change it pulls the images on an empty project (no
   migrations, so a broken one cannot stop it) and saves them. `database` and a GitHub-hosted `integration` restore the
-  archive when it is there and otherwise pull for themselves, without waiting; `visual`, on main only, waits for it. A
+  archive when it is there and otherwise pull for themselves, without waiting; `budgets`, on main only, waits for it. A
   warm cache makes no registry call, the job never fails a run, and each job log ends with how many images the registry
   served.
 - `image` builds the app image once per run, when the browser suite or the install proof is asked for, and on every
@@ -86,15 +86,15 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   default privileges, the first-run reset helpers, the image the proxy suite runs in), the seed, `public/`, and the code
   the journeys drive that no component test covers. That code is the server code under `app/` (its `.ts` route handlers
   and server actions, where the server checks permissions), `lib/` outside the catalogues, `worker/` and the root files
-  the build and server read. Screens alone (the rest of `app/`, `components/`, the catalogues in `lib/messages/`, the
-  visual lane's files) start no browser job on a pull request (#257). Its suite runs on `GTMWORKS_TEST_LANES`
+  the build and server read. Screens alone (the rest of `app/`, `components/`, the catalogues in `lib/messages/`) start
+  no browser job on a pull request (#257). Its suite runs on `GTMWORKS_TEST_LANES`
   lanes (four in CI), one per Playwright worker:
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
   The order is functional, then first run; the chat's open time and the faces' frame rate (project `alone`,
   `chat-steps.spec.ts` and `face-frames.spec.ts`, one worker and no other browser beside it, #346, #697) and the navigation time budgets (project `measured`) are empty here: they run in
-  their own jobs with the machine to themselves (`chat-open`, #421, and `visual`), and a failure in one group skips none
+  their own jobs with the machine to themselves (`chat-open`, #421, and `budgets`), and a failure in one group skips none
   of the next.
 - `chat-open` is the chat's open time (#346, #421) with a machine to itself, on a pull request too: `./ci.sh chat-open`
   starts one lane's stack, builds the app, and runs `npx playwright test --project=alone --no-deps`, so the test in
@@ -104,21 +104,14 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   (#697). A change to it runs it with the browser suite's own area,
   on a draft as on a ready pull request, and `check` is red when its job failed or was cancelled or was skipped while
   the browser suite was asked for (`scripts/ci-verdict.mjs`).
-- `visual` is the visual lane (#257), on `main` and on a manual run only: the fourteen key screens in
-  `tests/visual-lane/screens.json` (sign-in, first run, Home, the board, a Card, the chat, a channel, Agents, an
-  Agent's details, Members, Numbers, Approvals, a proposed change in Omar's chat with Lead (#19) and Recurring tasks (#31); the list is capped
-  at 15), each in Arabic at 1440 and 390 in the light and dark themes, compared byte for byte with
-  `tests/visual-lane/images/` (52 images). One browser pinned by
-  digest (`tests/visual-lane/renderer`) draws them in its container through Playwright's own server, so every machine
-  makes the same bytes; the tests, the app and lane 0's stack stay on the runner (`playwright.lane.config.ts`). Each
-  screen starts from the seed and signs in again, so the screens pass in any order. Text that follows the calendar is
-  replaced by fixed text before the picture (the log's day-group header, times and the chart labels, #276), so a run
-  that crosses midnight draws the same bytes. Before each comparison the guards
-  (`tests/visual-lane-guards.ts`) refuse a font that did not load, a clock that is not fixed and a request off the
-  machine; every dark picture keeps its text at 4.5:1, and the light Home, board and Card keep their quiet text at 4.5:1
-  and weaker than the body text. Then the measured navigation budgets run. When a picture changes on purpose, one
-  command refreshes the images: `./ci.sh visual-update` (Docker needed; without it, the `Visual baselines` workflow
-  uploads them as `visual-baselines`).
+- `budgets` is the measured navigation budgets (project `measured`, `tests/navigation.spec.ts`, #224), on `main` and
+  on a manual run only, with a machine no other job shares: `./ci.sh budgets` starts one lane's stack, builds the app
+  and runs `npx playwright test --project=measured --no-deps`. A failure on `main` opens or updates the
+  `budget-regression` issue.
+- No CI job compares a screenshot with an approved image (Omar, 2026-11-25, #805, which removed the visual lane of
+  #257). A screen is held to the design system: `DESIGN.md`, the tokens and the approved reference in
+  `design-reference/`. Text contrast is still measured, from the drawn styles and not from a picture
+  (`tests/contrast.spec.ts`, in the functional project).
 - Design parity is checked once, at delivery, outside CI (Omar, 2026-11-17, #257). The worker that delivers a screen
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
@@ -155,8 +148,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
 - `install-measure` is the profile-size measurement (#126, #400): twenty more Agent profiles in one Company, ten with
   the Engine's bundled Skills and ten without; it prints each one's seconds to be ready, the Engine container's memory
   around them, the disk one profile takes with and without its Skills, and one line of numbers. It is no check a pull
-  request needs, so it runs on a push to `main` and on a manual run only, never on a pull request, like the visual lane
-  (#408, Omar, 2026-11-19); `check` does not wait for it. It makes the install and the two Companies its prepare step
+  request needs, so it runs on a push to `main` and on a manual run only, never on a pull request, like the navigation
+  budgets (#408, Omar, 2026-11-19); `check` does not wait for it. It makes the install and the two Companies its prepare step
   reads on a fresh isolated Docker machine of its own, and loads the run's one image. The numbers the README states come
   from its log, line `capacity: …`.
 - A manual run (`gh workflow run ci.yml --ref <branch>`) runs the fast job and the database; the browser suite and the install
@@ -185,8 +178,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   turns off the browser's cache and changes the headers a test reads. Each context reports the outside addresses it
   tried: a test fails naming each host, and one a hook tried is kept for the worker, with the test before it, and fails
   the worker when it ends. `tests/components/offline-setup.ts` fails a component test the same way. Name lookups are
-  not guarded. The visual lane (#257, which aborts outside requests with guards of its own) and
-  the install suite, which drives a real install on purpose, are not guarded, nor yet the containers' network.
+  not guarded. The install suite, which drives a real install on purpose, are not guarded, nor yet the containers' network.
   `provider-hosts.test.mjs` fails `static` when a tracked file under `tests/` names a real model provider host
   (`scripts/provider-hosts.mjs`): tests talk to the fake engine, the fake Hermes or the install proof's fake provider.
 - The nightly `Time zones` workflow (`time-zones.yml`, #266) runs the node tests (`npm test`) and `./ci.sh components`
@@ -199,7 +191,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
 
 Every job of the full check has a time limit near its budget: one and a half times the minutes measured on run 44636876755,
 the first run with every other ticket of spec #401, kept between 3 and 12 minutes; `chat-open` is new in #421, and its
-first run confirms the 5 minutes estimated for one lane's stack, one build and the one test. `visual` and `install-measure`
+first run confirms the 5 minutes estimated for one lane's stack, one build and the one test. `budgets` and `install-measure`
 are no part of it and keep the limits they had. A job that runs past its limit ends as cancelled or failed, and `check` is red
 either way. `tests/ci-budgets.test.mjs` reads the limits from `.github/workflows/ci.yml` and fails when one rises without
 the table changing.
@@ -216,9 +208,8 @@ the table changing.
 | `install` | 9.5 min, its slowest area (backup) | 12 min |
 | `check` | 0.1 min | 3 min |
 
-A pull request that changes only screens runs the fast job with its component tests; the compared screens run on `main`
-and on a manual run only (#257), where a failed comparison uploads its expected, actual and difference images in
-`lane-screenshots` and the `visual-regression` issue links them. A change to the journeys'
+A pull request that changes only screens runs the fast job with its component tests; its look is held to the design
+system and checked once at delivery, with no screenshot compared in CI (#805). A change to the journeys'
 area builds the app image once and runs the whole browser suite on it, and `lib/` outside the catalogues and `worker/`
 also run the install. Screens alone get their journeys and install proof on `main`, where every push runs every suite
 unless every file is a document.
@@ -255,7 +246,8 @@ the parts are timed from run 43642299138.
 | compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | none | removed (#81): Playwright's HTML report (uploaded by `integration`) and GitHub reporter show each failure and mark each flaky test |
 | check | summary | the one required check | 0.1 min | 0.1 min | keep; judges six stages (the lane, #257) |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
-| visual-baselines.yml | tool | refreshes approved images | by hand | unchanged | keep |
+| visual-baselines.yml | tool | refreshed the visual lane's approved images | by hand | none | removed with the visual lane (#805) |
+| visual lane (`visual` job: `visual-lane.spec.ts`, its guards, 52 approved images, a pinned renderer) | compared screens | 14 key screens byte for byte, on `main` (#257) | its own job on `main` | none; the navigation budgets keep the job as `budgets`, and contrast moved to `contrast.spec.ts` | removed (Omar, 2026-11-25, #805): screens are held to the design system |
 | release.yml install test | release | the release installs and updates from its two files | per release | unchanged | keep |
 
 ## Removed tests
@@ -265,11 +257,12 @@ the parts are timed from run 43642299138.
 | `hermes-usage.test.mjs` "a completed run carries the input and output tokens Hermes reported" (#81) | Duplicate: the same `readRun` and token parsing are asserted for a completed run elsewhere. | `hermes-runs.test.mjs` "a run is read as pending until Hermes reports its terminal status, output and session" (usage `{input:14000,output:12}`), and `engine.test.mjs` "the Hermes driver reads a slow run as running, then completed with the reply, session and usage". |
 | `hermes-usage.test.mjs` "a run Hermes no longer knows is lost, with unknown usage" (#81) | Duplicate: a cleared run and an unknown id take the same 404 path in the fake and in `readRun`. | Lost with unknown usage: `hermes-runs.test.mjs` "a run Hermes no longer knows is read as lost, not as unreachable". A 500 read as unreachable: `hermes-runs.test.mjs` "a run is read as pending until Hermes reports its terminal status, output and session". |
 | `first-run.test.mjs` "destructive first-run helpers refuse remote app and Supabase targets" (#81) | Duplicate: every refusal and the accepted local pair are proven on the same helpers, and there also before any command runs. | `first-run-db.test.mjs` "both helpers refuse remote targets before any command executes" (remote app, remote Supabase) and "first-run reset streams SQL to local psql in a fail-fast transaction" (the local pair is accepted). |
-| `app.spec.ts` "landing and screenshots of every charter route" | Its only check was where a person of several companies lands after signing in from the sign-in page; the rest wrote unchecked screenshots. | Landing: merged into `app.spec.ts` "the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step" (the same person, the same page, the same check). Screens: `visual-lane.spec.ts` compares sign-in, Home, approvals and settings members exactly, in Arabic (#257). |
+| `app.spec.ts` "landing and screenshots of every charter route" | Its only check was where a person of several companies lands after signing in from the sign-in page; the rest wrote unchecked screenshots. | Landing: merged into `app.spec.ts` "the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step" (the same person, the same page, the same check). Screens: held to the design system and checked once at delivery (#805; the visual lane that compared them, #257, is removed). |
 | `compare-failures.test.mjs` and `scripts/compare-failures.mjs` (#81) | They tested and ran our own job that named PR failures also red on main. Playwright's own report replaces the job. | Nothing replaces the job; the HTML report artifact lists each failure of the run. |
 | `flaky-tests.test.mjs` and `scripts/flaky-tests.mjs` (#81) | They tested and ran our own job that filed an issue per flaky test. Playwright's own report replaces the job. | Playwright's GitHub reporter and HTML report mark a test that passed only on its retry as flaky. |
 | `playwright-journal.test.mjs`, the journal reporter and `docs/ci-test-journal.md` (#81) | They kept our own record of a Playwright run killed before its report, including the tests it never started. #81 removes that record. | Nothing lists the tests a killed run never started; Playwright's list reporter prints in the job log each test that ended. A killed run still fails `check` (`ci-verdict.test.mjs`). |
-| `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | `visual-lane.spec.ts` compares the members and agents settings screens exactly, in Arabic (#257). |
+| `visual-lane.spec.ts`, `visual-lane-guards.spec.ts`, `visual-baselines.test.mjs` and their helpers (#805) | They compared 14 key screens with approved images on `main`. Of the 8 issues the lane opened from 2026-11-17, none was an unintended change to a screen (Omar, 2026-11-25). | Contrast: `contrast.spec.ts`. The look: the design system, checked once at delivery with the Design compare tool (`design/compare/`). `visual-regression.test.mjs` became `budget-regression.test.mjs`. |
+| `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | Held to the design system and checked once at delivery (#805; the visual lane that compared them, #257, is removed). |
 | `touch-diagnostics.test.mjs` and `touch-diagnostics.mjs` (#218) | They recorded and printed what the page saw during `app.spec.ts`'s touch drag on CI, which keeps no trace of a functional test. The drag now runs as a component test on the test's own clock. | `components/board-touch.test.tsx` (the swipe and the held drag). Nothing replaces the recorder. |
 | `ci-verdict.test.mjs` "a draft is red when any stage that ran failed or was cancelled" (#405) | Its only distinct input was the draft flag; the verdict reads no draft state now, so it repeated the per-stage failure checks. | `ci-verdict.test.mjs` "DATABASE: a failed or cancelled run is red, even where it could have been skipped" (and the same for INTEGRATION and INSTALL), "classification and the fast job must succeed", and "a fast step that failed is red even when the job reports success". |
 

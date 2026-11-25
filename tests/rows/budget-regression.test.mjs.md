@@ -1,0 +1,1 @@
+| `budget-regression.test.mjs` | When the navigation budgets fail on main, the budget-regression issue names each failed budget with its block, file and line, the commit and the run; a run that wrote no report, or an unreadable one, still opens it and says to read the run. (#224, #805; was visual-regression.test.mjs, #257) | 0.1 s | — | new |

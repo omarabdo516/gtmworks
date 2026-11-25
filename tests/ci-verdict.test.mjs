@@ -184,9 +184,9 @@ test('a manual run with both suites off asks check for the image the measurement
   assert.equal(verdict({ IMAGE_RUN: String(asked), IMAGE_RESULT: 'skipped' }), 1);
 });
 
-test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
-  assert.equal(verdict({ VISUAL_RUN: undefined, VISUAL_RESULT: undefined, LANE_RUN: undefined, LANE_RESULT: undefined }), 0);
-  assert.equal(verdict({ VISUAL_RESULT: 'failure', LANE_RESULT: 'failure' }), 0);
+test('check passes with no navigation budgets at all: a pull request never runs them (#257, #805)', () => {
+  assert.equal(verdict({ BUDGETS_RUN: undefined, BUDGETS_RESULT: undefined }), 0);
+  assert.equal(verdict({ BUDGETS_RESULT: 'failure' }), 0);
 });
 
 test('classification and the fast job must succeed', () => {
@@ -267,7 +267,7 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   assert.equal(step.env.INSTALL_RUN, '${{ needs.changes.outputs.install }}');
   assert.equal(step.env.INSTALL_RESULT, '${{ needs.install.result }}');
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
-  assert.deepEqual(Object.keys(step.env).filter(key => /VISUAL|LANE/.test(key)), []);
+  assert.deepEqual(Object.keys(step.env).filter(key => /BUDGETS|VISUAL|LANE/.test(key)), []);
   // The fast job runs on every change; only its component step follows the first job's answer, and an unknown answer
   // runs it.
   assert.deepEqual(jobs.fast.needs, ['changes']);
@@ -337,22 +337,22 @@ test('the fast job restores its dependencies by lock-file hash and the browser b
   assert.equal(versions.size, 1, [...versions].join(', '));
 });
 
-// Omar, 2026-11-17: the compared screens (and the navigation budgets with them) run on a push to main and on a manual
-// run, never on a pull request, and no pull request waits for them. Each job's condition is read for every event.
-test('a pull request starts no compared-screen job, and check needs none of them (#257)', async () => {
+// Omar, 2026-11-17: the navigation budgets run on a push to main and on a manual run, never on a pull request, and no
+// pull request waits for them (#257, #805). Each job's condition is read for every event.
+test('a pull request starts no navigation-budget job, and check needs none of them (#257, #805)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
-  const screenJobs = ['visual'];
-  for (const name of screenJobs) {
+  const mainJobs = ['budgets'];
+  for (const name of mainJobs) {
     assert.ok(jobs[name], name);
     const condition = jobs[name].if ?? '';
     assert.match(condition, /github\.event_name == '(push|workflow_dispatch)'/, `${name} names the events it runs on`);
     assert.doesNotMatch(condition.replace(/github\.event_name == '(push|workflow_dispatch)'/g, ''), /event_name|pull_request/, `${name} has no other event test`);
     assert.doesNotMatch(condition, /\|\|\s*needs\.changes\.result/, `${name} cannot start because classification failed`);
   }
-  for (const [name, job] of Object.entries(jobs)) if (!screenJobs.includes(name)) {
-    for (const need of [job.needs ?? []].flat()) assert.ok(!screenJobs.includes(need), `${name} waits for ${need}`);
+  for (const [name, job] of Object.entries(jobs)) if (!mainJobs.includes(name)) {
+    for (const need of [job.needs ?? []].flat()) assert.ok(!mainJobs.includes(need), `${name} waits for ${need}`);
   }
 });
 

@@ -7,9 +7,10 @@
 # install proof load that build instead of building their own (#403, #406). The install proof is one job, one matrix
 # entry per area, each on a fresh isolated Docker machine of its own (#406). The profile-size measurement
 # (`install-measure`) is no check a pull request needs: it runs on a push to main and on a manual run only, like the
-# visual lane (#408). The visual lane's key screens and the measured navigation budgets (`visual`) run on a push to main
-# and on a manual run only, never on a pull request, and `check` does not wait for them
-# (Omar, 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. The chat's open
+# navigation budgets (#408). The measured navigation budgets (`budgets`) run on a push to main and on a manual run only,
+# never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257, #805): a failure on main opens or
+# updates one issue labelled budget-regression. No job compares screenshots: a screen is held to the design system (#805).
+# The chat's open
 # time runs in its own job (`chat-open`) with a machine to itself, on a pull request too (#421). A push to main runs
 # every suite unless every file is a document; a manual run starts the browser and install suites only through inputs that
 # default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was
@@ -17,8 +18,6 @@
 # Every job runs on a GitHub-hosted ubuntu-latest runner (decision 0038, #334); the measured navigation budgets need a
 # machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so a job reserves them
 # before it starts the stack (#225).
-# The visual lane (#257) compares twelve key screens in Arabic, light and dark, drawn by one browser pinned by
-# digest (tests/visual-lane/renderer) so every runner makes the same bytes.
 name: CI
 
 on:
@@ -189,7 +188,7 @@ jobs:
   # that choose images (scripts/supabase-images.sh, #259). With the key cached it only looks the key up; after a key
   # change it pulls the images on an empty project and saves them. `database` and `integration` do not wait for it
   # (their own time comes first): each restores the archive when there is one and otherwise pulls for itself, from its
-  # own runner. `visual`, on main only, waits for it. It never fails a run, and it is no part of the full check: its own
+  # own runner. `budgets`, on main only, waits for it. It never fails a run, and it is no part of the full check: its own
   # limit is longer so a cache-key change finishes and saves (#411).
   supabase-images:
     needs: [changes]
@@ -270,16 +269,15 @@ jobs:
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
         run: ./ci.sh database
 
-  # The visual lane (#257): its twelve key screens against their approved images, drawn in the pinned renderer, and its
-  # guard tests, then the measured navigation budgets on a machine no other job shares.
-  visual:
+  # The measured navigation budgets (#224) on a machine no other job shares, on a push to main and on a manual run only.
+  budgets:
     needs: [changes, supabase-images]
     if: ${{ !cancelled() && ((github.event_name == 'push' && needs.changes.outputs.integration != 'false') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
-      # A failure on main opens or updates the visual-regression issue.
+      # A failure on main opens or updates the budget-regression issue.
       issues: write
     steps:
       - uses: actions/checkout@v4
@@ -301,72 +299,42 @@ jobs:
         with:
           path: ${{ runner.temp }}/supabase-images
           key: ${{ steps.images.outputs.key }}
-      - name: visual
+      - name: navigation budgets
         env:
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
-        run: ./ci.sh visual
-      - name: say which screens differ and how to refresh them
-        if: failure()
-        run: |
-          screens=$(find test-results/lane -name '*-diff.png' -printf '%f\n' 2> /dev/null | sed 's/-diff\.png$//' | sort -u || true)
-          {
-            echo '### The visual lane failed'
-            echo
-            if [[ -n $screens ]]; then
-              echo 'These pictures differ from their approved images:'
-              printf -- '- `%s`\n' $screens
-            else
-              echo 'No picture differs from its approved image: the log says what failed.'
-            fi
-            echo
-            echo 'The expected, actual and difference images are in the `lane-screenshots` artifact of this run.'
-            echo 'When the change is intended, refresh the images with `./ci.sh visual-update` (or the Visual baselines workflow) and commit them.'
-          } >> "$GITHUB_STEP_SUMMARY"
-      # A failing comparison writes its expected, actual and difference images here.
-      - name: upload the lane's screenshots
-        id: screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lane-screenshots
-          path: test-results/lane/
-          if-no-files-found: ignore
-          retention-days: 14
-      # The lane's and the budgets' app servers write their output to files, not the job log.
+        run: ./ci.sh budgets
+      # The budgets' app server writes its output to files, not the job log.
       - name: upload the server logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: visual-server-logs
+          name: budgets-server-logs
           path: playwright-report/*.log
           if-no-files-found: ignore
           retention-days: 14
-      - name: upload Playwright reports
+      - name: upload the Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-visual
-          path: |
-            playwright-report/lane-html/
-            playwright-report/html/
+          name: playwright-report-budgets
+          path: playwright-report/html/
           if-no-files-found: ignore
           retention-days: 30
       # One open issue holds the latest failure on main: a new failure comments on it, or opens it when none is open.
-      - name: open or update the visual-regression issue
+      - name: open or update the budget-regression issue
         if: ${{ failure() && github.event_name == 'push' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          ARTIFACT_URL: ${{ steps.screenshots.outputs.artifact-url }}
         run: |
-          body=$(node scripts/visual-regression.mjs ci-ledger/visual "$GITHUB_SHA" "$RUN_URL" "$ARTIFACT_URL")
-          title=$(node scripts/visual-regression.mjs --title ci-ledger/visual "$GITHUB_SHA" "$RUN_URL" "$ARTIFACT_URL")
-          gh label create visual-regression -R "$GITHUB_REPOSITORY" --color B60205 --description 'The visual job failed on main' 2> /dev/null || true
-          issue=$(gh issue list -R "$GITHUB_REPOSITORY" --label visual-regression --state open --limit 1 --json number -q '.[0].number')
+          body=$(node scripts/budget-regression.mjs ci-ledger/budgets/measured.json "$GITHUB_SHA" "$RUN_URL")
+          title=$(node scripts/budget-regression.mjs --title ci-ledger/budgets/measured.json "$GITHUB_SHA" "$RUN_URL")
+          gh label create budget-regression -R "$GITHUB_REPOSITORY" --color B60205 --description 'The navigation budgets failed on main' 2> /dev/null || true
+          issue=$(gh issue list -R "$GITHUB_REPOSITORY" --label budget-regression --state open --limit 1 --json number -q '.[0].number')
           if [[ -n $issue ]]; then
             gh issue comment "$issue" -R "$GITHUB_REPOSITORY" --body "$body"
           else
-            gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
+            gh issue create -R "$GITHUB_REPOSITORY" --label budget-regression --title "$title" --body "$body"
           fi
 
   # The app image, built once per run with its own layer cache (#403). The browser suite's shards, the install proof and

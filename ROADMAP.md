@@ -212,7 +212,7 @@ Last on the roadmap, after everything is stable [rs 0082 Q19].
 ## 13. Quality and how gtmworks is built
 
 - ✅ **Fast, trustworthy checks.** A draft runs the fast checks only, a ready PR runs the full suites it needs, 7-day quarantine for flaky tests, install areas of their own. [#255, #332, #333 to #338, #402 to #410, decision 0049]
-- ✅ **Compared screens on main.** The visual lane runs on main only and opens one issue on a failure. [#257, #291]
+- ✅ **Screens held to the design system.** No screenshot is compared in CI: each screen is checked once at delivery against `DESIGN.md` and the approved reference, and text contrast is measured on every browser run. The navigation budgets run on main only and open one issue on a failure. [#257, #291, #805]
 - 🟡 **The approved design is matched screen by screen.** Merged; waiting for the release (#572). [#4, #8, FEATURES.md, #127 to #135]
 - 🟡 **Cloud Claude Code sessions.** One command brings up the full local app and walks it as a person; Matt's skills are vendored. Merged; waiting for the release (#572). [#473, #485, #487]
 - 🟡 **Flaky tests and CI.** About two dozen open issues (flaky journeys, dockerd in cloud sessions, a missing visual baseline, a hydration mismatch). [#497, #501, #510, #520, #521, #522, #526, #528, #529, #534, #537, #540, #542, #546, #547, #548, #553, #557, #559, #560, #561, #564, #566, #568]

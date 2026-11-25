@@ -163,8 +163,7 @@ test('the app build gets NODE_OPTIONS without the guard, also when it was inheri
 });
 
 // The proofs above load the guard themselves, so this pins that every runner still loads it.
-// The compared screens and the small visual lane (#257, playwright.lane.config.ts, its own outside-request guard) are #257's.
-test('every test runner loads the guard, and every browser spec but the compared screens uses the guarded test', () => {
+test('every test runner loads the guard, and every browser spec uses the guarded test', () => {
   const read = path => readFileSync(path, 'utf8');
   assert.match(JSON.parse(read('package.json')).scripts.test, /^node --import \.\/tests\/offline\.mjs --test /);
   // CI and `./ci.sh fast` run the node tests through the fast runner (#258).
@@ -174,6 +173,6 @@ test('every test runner loads the guard, and every browser spec but the compared
   assert.match(read('vitest.config.mts'), /proxy: nowhere/);
   for (const config of ['playwright.config.ts', 'playwright.proxy.config.ts']) assert.match(read(config), /globalTeardown: join\(__dirname, 'tests\/offline-teardown\.ts'\)/, config);
   assert.match(read('tests/fresh-seed.ts'), /from '\.\/offline-browser'/);
-  const specs = globSync('tests/**/*.spec.ts').filter(path => !/^tests\/visual-lane[^/]*\.spec\.ts$/.test(path));
+  const specs = globSync('tests/**/*.spec.ts');
   assert.deepEqual(specs.filter(path => !/import \{[^}]*\btest\b[^}]*\} from '\.\.?\/(fresh-seed|offline-browser)'/.test(read(path))), []);
 });

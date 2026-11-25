@@ -77,8 +77,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `apps` | Settings, Apps: the app catalogue (#30) | `/c/rs-learning/settings?section=apps` (needs a Company profile in the Engine) |
 | `account` | Settings, Your account | `/c/rs-learning/settings?section=account` |
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
-| `routines` | Settings, Recurring tasks: every Agent's Routines with schedule, next run, Run now and the switch (#31) | `/c/rs-learning/settings?section=routines` (needs an Engine holding Routines: the visual lane's `routines` state and its fake Engine) |
-| `good-morning` | An Agent's page, Good morning: the main Agent's daily message, its switch, time and hint (#182) | `/c/rs-learning/settings?agent=<main Agent>` (needs an Engine holding the main Agent's profile: `npm run cloud:up`'s fake Engine, or the visual lane's `good-morning` state) |
+| `routines` | Settings, Recurring tasks: every Agent's Routines with schedule, next run, Run now and the switch (#31) | `/c/rs-learning/settings?section=routines` (needs an Engine holding Routines, such as `npm run cloud:up`'s fake Engine with Routines made there) |
+| `good-morning` | An Agent's page, Good morning: the main Agent's daily message, its switch, time and hint (#182) | `/c/rs-learning/settings?agent=<main Agent>` (needs an Engine holding the main Agent's profile: `npm run cloud:up`'s fake Engine) |
 | `morning` | The morning message: Lead's greeting and its card, Waiting on you, Ran overnight and the foot (#183) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000030` (needs the fixture's morning Conversation) |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
@@ -189,7 +189,7 @@ A screen, or a part's motion, is matched with the reference once, in the pull re
 - Differences kept on purpose: each one with its reason, or "none".
 ```
 
-The same pull request adds its row to [DELIVERY.md](DELIVERY.md), which lists every delivered screen with the pull request that holds its record. After delivery the screen's look is our own: the visual lane compares it with our last approved screenshots (`docs/agents/visual-comparison.md`), not with the reference.
+The same pull request adds its row to [DELIVERY.md](DELIVERY.md), which lists every delivered screen with the pull request that holds its record. After delivery the screen is held to the design system (`DESIGN.md`, the tokens and `design-reference/`); no screenshot is compared with an approved image in CI (#805).
 
 ## Demo-only parts of the reference (do not build)
 

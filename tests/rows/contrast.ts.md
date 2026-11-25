@@ -1,0 +1,1 @@
+| `contrast.ts` | browser helper: text contrast measured from the drawn styles, every visible text run in the dark theme and the quiet labels in the light theme (moved from visual-lane-guards.ts, #257, #805) | — | — | helper, new (#805) |
