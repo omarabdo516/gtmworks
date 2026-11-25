@@ -12,14 +12,6 @@
 .gw .all-convos .cv-seg button .gw-icon { width: 16px; height: 16px; }
 .gw .all-convos .cv-seg button[aria-pressed="true"] { font-weight: 600; }
 .gw .all-convos .chip__n { font-size: var(--gw-fs-xs); color: var(--gw-text-3); margin-inline-start: -2px; }
-.gw .all-convos .bt-search { position: relative; display: flex; align-items: center; color: var(--gw-text-3); }
-.gw .all-convos .bt-search .gw-icon { position: absolute; inset-inline-start: 12px; width: 16px; height: 16px; pointer-events: none; }
-.gw .all-convos .bt-search input {
-  width: 220px; height: 36px; padding: 0 var(--s3); padding-inline-start: 36px; border-radius: var(--gw-r-full); border: 0.5px solid var(--gw-border-2);
-  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none;
-}
-.gw .all-convos .bt-search input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
-.gw .all-convos .bt-search input::placeholder { color: var(--gw-text-4); opacity: 1; }
 .gw .all-convos .cv-body { padding: 0 var(--s8) var(--s8); display: flex; flex-direction: column; align-items: flex-start; gap: var(--s4); }
 .gw .all-convos .cv-list { display: flex; flex-direction: column; align-self: stretch; max-width: 880px; margin: 0; padding: 4px; list-style: none; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
 .gw .all-convos .cv-row { display: flex; align-items: center; gap: var(--s2); padding: 2px; }
@@ -59,8 +51,6 @@
   .gw .all-convos .board-tools.bt2 { padding: var(--s3) var(--s4); }
   .gw .all-convos .cv-body { padding-inline: var(--s4); }
   .gw .all-convos .bsel { margin-inline: var(--s4); border-radius: var(--gw-r-lg); }
-  .gw .all-convos .bt-search, .gw .all-convos .bt-search input { width: 100%; }
-  .gw .all-convos .bt-search { flex: 1 1 100%; }
   /* 44px touch targets on a phone. */
   .gw .all-convos .cv-more { height: 44px; }
 }

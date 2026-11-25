@@ -1,5 +1,7 @@
 import type { PermissionChoice , QuestionAnswer } from './engine.mjs';
 import type { AppState } from './app-catalogue.mjs';
+import { isThumbnail } from './attachments.mjs';
+import { replyShown } from './media-tags.mjs';
 export type { PermissionChoice };
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
 // another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
@@ -126,11 +128,12 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
   return turn?.steps.length?[{run_id:message.run_id,steps:turn.steps,seconds:turn.seconds}]:[];
  }):[];
 }
-// A file a person sent with a message (#155; design-reference: filesHTML): its name, and the id its own route serves it by.
-type MessageFile={id:number,name:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
-type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
-export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at';
+// A file a person sent with a message (#155; design-reference: filesHTML), or an Agent handed over in its reply (#708):
+// its name, the id its own route serves it by, and whether it is a raster image the page draws as a thumbnail.
+export type MessageFile={id:number,name:string,image?:true};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
+type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
+export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
 export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
@@ -158,10 +161,14 @@ const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='
 // never written by the person: it draws no bubble, and what its run showed stays.
 // The files a message carries (#155) are read beside the messages, by the message they were linked to; a file still
 // waiting for its message (a turn that has not started) is named by its send key instead (withTeamWork).
-export type StoredFile={id:number,name:string,message_id:number|null,send_key:string|null,position:number};
+// An Agent's reply names the files it could not hand over (#708, ADR 0028): kept with the message, and any `MEDIA:` tag
+// still in its text (a reply kept before) is taken out and named the same way, so no path is ever shown.
+export type StoredFile={id:number,name:string,message_id:number|null,send_key:string|null,position:number,content_type?:string};
+export const messageFiles=(rows:{id:number,name:string,content_type?:string}[]):MessageFile[]=>rows.map(({id,name,content_type})=>({id,name,...(content_type&&isThumbnail(content_type)?{image:true as const}:{})}));
 export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],files:StoredFile[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
- const sent=files.filter(row=>row.message_id===message.id).map(({id,name})=>({id,name}));
- const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(message.agent_id?{agent_id:message.agent_id}:{}),...(sent.length?{files:sent}:{})};
+ const sent=messageFiles(files.filter(row=>row.message_id===message.id));
+ const text=message.author==='agent'?replyShown(message.body,message.missed_files):{body:message.body};
+ const plain={id:message.id,author:message.author,author_name:message.author_name,...text,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(message.agent_id?{agent_id:message.agent_id}:{}),...(sent.length?{files:sent}:{})};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  // A connect card (#203) sits right under the reply's text, before the run's other cards (design-reference: msgHTML).
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)).sort((a,b)=>Number(isConnect(b))-Number(isConnect(a))); const cards=ofRun.map(row=>row.card);
@@ -189,7 +196,7 @@ export const withBoardNote=(record:ConversationMessage[],reply:number|undefined)
 // Agent's own reply, which was written after it. It is gtmworks's record, never a message of the Conversation.
 export type HandoverAnswer={id:number,from:string,name:string,face:string,body:string,at:string};
 export const withHandoverAnswers=(record:ConversationMessage[],answers:HandoverAnswer[]):ConversationMessage[]=>
- mergedByTime(record,[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,body:answer.body,created_at:answer.at,kind:'handed',to:answer.from})),'after');
+ mergedByTime(record,[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,...replyShown(answer.body),created_at:answer.at,kind:'handed',to:answer.from})),'after');
 // #477: a job an asked Agent handed on, made inside that Agent's Run rather than under a reply of the chat, is its own
 // quiet row among the turns (`kind` handedOn), where it was made: after the answer that handed it on was asked for, and
 // before the answer it brought back.
@@ -238,7 +245,7 @@ export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],qu
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>{ const waiting=files.filter(row=>row.send_key===turn.send_key&&row.message_id===null).map(({id,name})=>({id,name})); return {id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(waiting.length?{files:waiting}:{}),...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}; })];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>{ const waiting=messageFiles(files.filter(row=>row.send_key===turn.send_key&&row.message_id===null)); return {id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(waiting.length?{files:waiting}:{}),...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}; })];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.

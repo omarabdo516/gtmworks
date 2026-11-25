@@ -3,7 +3,8 @@ import type { BoardColumn } from './board-columns.mjs';
 import { agentFaceStates, type AgentFaceState } from './agent-face-states';
 import type { SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
-import { handoverEnding, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
+import { replyShown } from './media-tags.mjs';
+import { handoverEnding, messageFiles, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
@@ -31,11 +32,12 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // not finish (#375) marks its row `failed`, one its person's Stop ended (#478) `stopped`, and one that ended with no reply
 // for a cause a retry cannot fix (#428, #530) also says so under its row (`model`: the cause, and whose leg it was).
 // A message may carry images (#156), drawn as chips under it for every Member.
-type ChannelFile={id:number,name:string};
+// A file of a channel message (#156), or of an Agent's reply there (#708); an image is drawn as a thumbnail.
+type ChannelFile={id:number,name:string,image?:true};
 type ChannelFace={name:string,face:string};
 export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,files:ChannelFile[],mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
- | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
+ | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[],files?:ChannelFile[],missed?:string[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
  | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true,stopped?:true,model?:{cause:ModelCause,agent:string}};
@@ -84,11 +86,11 @@ export type ChannelRecord={
  // Subscription and models, a Member is told to ask the Owner. Absent otherwise.
  modelLine?:{owner:boolean},
 };
-type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
+type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string,missed_files?:string[]|null};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
 type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,outcome:string|null};
 type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said_before?:string|null};
-type StoredFile={id:number,message_id:number,name:string};
+type StoredFile={id:number,message_id:number,name:string,content_type?:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
 type StoredCard=ReplyCardRow&{channel_message_id:number,channel_ordinal:number|null,addressed_to:string|null};
 type StoredSession={message_id:number,agent_id:string,profile:string,session:string,reply:number};
@@ -100,11 +102,12 @@ export type StoredHandover={id:number,message:number,from_agent:string,from_name
 // asking Agent's reply once it came. A chain (#477) adds each of its steps the same way, a step handed on having no reply
 // of its own: its answer is the Agent's that asked it, whose own answer follows.
 const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{model:{cause,agent:row.model_agent??row.to_name}}:{}; };
+// A handover's words keep no file of their own (#708): a tag in them is named as a file not attached, never shown.
 export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_agent},to:{name:row.to_name,face:row.to_agent},goal:row.goal,at:row.created_at,
   ...handoverEnding(row),...handoverModel(row)},
- ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_agent,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
- ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_agent,body:row.reply,at:row.closed_at}]:[]),
+ ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_agent,...replyShown(row.summary),at:row.answered_at,to:row.from_name}]:[]),
+ ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_agent,...replyShown(row.reply),at:row.closed_at}]:[]),
 ]);
 // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
 // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
@@ -138,14 +141,14 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  for(const run of runs) runsOf.set(run.message_id,[...(runsOf.get(run.message_id)??[]),run]);
  for(const group of runsOf.values()) group.sort((a,b)=>(a.ordinal??1)-(b.ordinal??1));
  const {data:openRuns}=await db.from('channel_runs').select('message_id,ordinal,agent_id').eq('channel_id',channel).is('outcome',null);
- const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,reply_to,reply_ordinal,hand_card,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
+ const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,reply_to,reply_ordinal,hand_card,created_at,missed_files').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
  // The quiet lines the channel got (#207). Not messages: nobody writes them, they are never called, and they start no
  // Run. Only the ones inside the messages shown are drawn.
  const notes=((await db.from('channel_notes').select('id,kind,invitee_name,actor_name,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredNote[];
  const ordered=[...latest].reverse();
  // The images of the messages shown (#156). The table's own policy shows only this channel's to a Member of it.
  const shown=latest.map(message=>message.id);
- const attached=(shown.length?((await db.from('channel_attachments').select('id,message_id,name').in('message_id',shown).order('position')).data||[]):[]) as StoredFile[];
+ const attached=(shown.length?((await db.from('channel_attachments').select('id,message_id,name,content_type').in('message_id',shown).order('position')).data||[]):[]) as StoredFile[];
  const {data:members}=await db.rpc('channel_members',{ch:channel});
  // A team channel's Agents come with it, also one hidden from the reader elsewhere, so its replies keep their face.
  const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
@@ -218,11 +221,14 @@ export async function channelRecord(db:Database,person:string,company:string,cha
    .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...saidParts(row)}]:[]; }) as ChannelPermission[]});
  const written:[ChannelMessage[],ChannelMessage[]]=[
   ordered.map((message):ChannelMessage=>{
-   if(message.author==='agent') return {id:message.id,author:'agent',name:message.author_name,face:message.agent_id||'',body:message.body,at:message.created_at,
-    ...(stepsOf.has(message.id)?{steps:stepsOf.get(message.id)}:{}),...(message.reply_to!==null&&cardsOf.has(`${message.reply_to}:${message.reply_ordinal??1}`)?{cards:cardsOf.get(`${message.reply_to}:${message.reply_ordinal??1}`)}:{})};
+   // An Agent's reply carries the files it handed over and names the ones it could not (#708); no tag is shown.
+   if(message.author==='agent') { const files=messageFiles(attached.filter(file=>file.message_id===message.id));
+    return {id:message.id,author:'agent',name:message.author_name,face:message.agent_id||'',...replyShown(message.body,message.missed_files),at:message.created_at,
+    ...(files.length?{files}:{}),
+    ...(stepsOf.has(message.id)?{steps:stepsOf.get(message.id)}:{}),...(message.reply_to!==null&&cardsOf.has(`${message.reply_to}:${message.reply_ordinal??1}`)?{cards:cardsOf.get(`${message.reply_to}:${message.reply_ordinal??1}`)}:{})}; }
    const mentions=(runsOf.get(message.id)??[]).map(mentionOf);
    return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,
-    files:attached.filter(file=>file.message_id===message.id).map(file=>({id:file.id,name:file.name})),
+    files:messageFiles(attached.filter(file=>file.message_id===message.id)),
     mention:mentions[0]??null,mentions,...(message.hand_card?{handDone:true as const}:{})};
   }),
   notes.filter(note=>oldest===undefined||note.created_at>=oldest).map((note):ChannelMessage=>note.kind==='card'

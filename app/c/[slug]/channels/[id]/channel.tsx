@@ -12,6 +12,7 @@ import { named } from '@/lib/bidi';
 import { faceStateWords } from '@/lib/agent-face-states';
 import { OpenedHere } from '@/app/sidebar-live';
 import { ShellIcon } from '@/components/shell-icon';
+import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
@@ -250,7 +251,8 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
   <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<When at={message.at} className="sender__time"/></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
-  <div className="bubble bubble--agent" dir="auto">{message.body}</div>
+  {!!message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
+  <ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/channel/${id}`}/>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
  </li>;
  // Every name that called an Agent is marked, so is every Member's name a message gives (#200), and each Agent that could

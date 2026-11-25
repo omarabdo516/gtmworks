@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
 import { ShellIcon } from '@/components/shell-icon';
+import { ReplyFiles } from '@/app/reply-files';
 import { AgentFace } from '@/components/agent-face';
 import { HandedRow } from '@/app/handed-row';
 import { SharedFace } from '@/app/sidebar-live';
@@ -134,7 +135,7 @@ function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:C
      : message.author==='handoff'
      ? <HandedRow key={message.id} from={{id:message.from.face,name:message.from.name}} to={{id:message.to.face,name:message.to.name}} title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>
      : message.author==='agent'
-     ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div><div className="bubble bubble--agent" dir="auto">{message.body}</div></li>
+     ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div>{!!message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}<ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/channel/${id}`}/></li>
      : <li key={message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg`} data-author="person">
       {!message.mine&&<div className="sender"><span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(message.name.trim())[0]||'?'}</span><bdi>{firstName(message.name)}</bdi></div>}
       {!!message.body.trim()&&<div className={`bubble ${message.mine?'bubble--user':'bubble--peer'}`} dir="auto">{message.body}</div>}

@@ -64,7 +64,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at').then(({data})=>(data||[]) as unknown as SavedRow[]),
   // The files each message was sent with (#155), read beside it: the message they were linked to, or the send key of a
   // turn still waiting. Only this Conversation's own person reads them (RLS, conversation_attachments_read).
-  db.from('conversation_attachments').select('id,name,message_id,send_key,position').eq('conversation_id',conversation).order('position').then(({data})=>(data||[]) as StoredFile[]),
+  db.from('conversation_attachments').select('id,name,content_type,message_id,send_key,position').eq('conversation_id',conversation).order('position').then(({data})=>(data||[]) as StoredFile[]),
   db.rpc('conversation_working_for',{conversation}),
   db.from('people').select('name').eq('id',person).maybeSingle(),
   tiedCard(db,company,conversation),
