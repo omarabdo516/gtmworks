@@ -1,5 +1,11 @@
 [
  {
+  "issue": 714,
+  "date": "2026-11-25",
+  "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },
+  "ar": { "title": "خلّص الخطوة اللي الوكيل سلّمهالك على شاشته", "body": "لما الوكيل يقف عند خطوة على شاشته عشان تعملها انت، كارته في الشات فيه «افتح الشاشة» اللي بتفتح الشاشة وعليها شريط باسم الخطوة و«عملتها»؛ والشاشة بتقول «صاحي · مستنيك» ليك انت بس، وبيجيلك تنبيه أول ما توصل، و«عملتها» من هناك أو من كارت الشات بتسجّل الخطوة مرة واحدة." }
+ },
+ {
   "issue": 713,
   "date": "2026-11-25",
   "en": { "title": "Take control of an Agent's Screen", "body": "In an Agent's large Screen view, any member who is not a viewer can take control for one session to sign in or finish a step with their own mouse and keyboard while the Agent holds still, watching it live; Done, closing the view, leaving the page or losing the connection gives it back, and anyone else watching sees who has control." },
