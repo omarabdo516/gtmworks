@@ -14,7 +14,7 @@ import '@/app/settings.css';
 // Company's default and each Agent's model, and turns sub-agents on for one Agent; a member reads every value and has no
 // control.
 const refresh = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/settings' }));
 afterEach(() => { refresh.mockReset(); vi.unstubAllGlobals(); });
 
 const company = '10000000-0000-0000-0000-000000000001';

@@ -94,6 +94,23 @@ try {
     if (result.exceptionDetails) throw new Error(`The page failed: ${result.exceptionDetails.exception?.description ?? result.exceptionDetails.text}`);
     return result;
   };
+  // Chromium lists the page's target before its document has loaded: an evaluation then runs in the blank document
+  // that comes first, where frame() is not yet defined, and one in flight while the page commits is lost with it. A
+  // render under a low memory limit loads slowly enough to meet this (#746), so the page's own document is waited for.
+  let loaded = false;
+  const loadBy = Date.now() + 30000;
+  while (!loaded && Date.now() < loadBy) {
+    if (chromiumEnded !== null) throw new Error(`Chromium ended with ${chromiumEnded} before the page loaded`);
+    try {
+      // A call lost while the page commits never answers: each is given a second, then asked again.
+      const answer = await Promise.race([send('Runtime.evaluate', { expression: 'location.protocol === "file:" && document.readyState === "complete"', returnByValue: true }), sleep(1000).then(() => null)]);
+      loaded = answer?.result?.value === true;
+    } catch (error) {
+      if (String(error.message).startsWith('Chromium closed devtools')) throw error;
+    }
+    if (!loaded) await sleep(100);
+  }
+  if (!loaded) throw new Error('the page did not load within 30 s');
   await evaluate({ expression: 'document.fonts.ready.then(() => typeof frame === "function" || Promise.reject(new Error("the page defines no frame()")))', awaitPromise: true });
   for (let frame = 0; frame < frames; frame++) {
     await evaluate({ expression: `frame(${frame})` });

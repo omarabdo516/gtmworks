@@ -16,10 +16,9 @@ const saudi='From now on, write every Saudi ad in a light Saudi dialect';
 const emojis='From now on, no emojis';
 
 test.describe.configure({mode:'serial'});
-// A serial file's retry starts again from its first test, so its seed starts again from the snapshot too (#451): on the
-// lane that ran it the rows the first attempt inserted are still there, and inserting them again would fail.
+// A serial file's retry starts again from its first test, and its beforeAll from the seed (#451, tests/fresh-seed.ts).
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file,true);
+ freshSeed(testInfo);
  query(`do $$ begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.','suggest-ads'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.','suggest-alone');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner';

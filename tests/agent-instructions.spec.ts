@@ -17,7 +17,7 @@ const saved='You are Lead.\nWrite short posts.\nNever promise a date.';
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  // The main Agent keeps the Company's own profile: How it works is the SOUL.md there.
  fake.settings.profiles.set(profile,{soul:'You are Lead.\nWrite short posts.\n',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});

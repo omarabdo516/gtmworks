@@ -13,7 +13,7 @@ import '@/app/shell.css';
 // row, says the Agent will ask again and moves the focus as the reference does.
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/settings' }));
 afterEach(() => { vi.unstubAllGlobals(); refresh.mockClear(); });
 const permissions: StandingPermission[] = [
  { entry: 'mcp:meta-ads/create_campaign', app: { key: 'meta-ads', name: 'Meta Ads' }, tool: 'create_campaign', allowedBy: 'Omar', allowedAt: '2026-06-10T10:05:00Z' },

@@ -351,7 +351,7 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
  await mouse('mousePressed', from.left + from.width / 2, from.top + 20);
  for (let step = 1; step <= 10; step++) await mouse('mouseMoved', from.left + from.width / 2 + (to.left + to.width / 2 - from.left - from.width / 2) * step / 10, from.top + 20 + (to.top + 40 - from.top - 20) * step / 10);
  await mouse('mouseReleased', to.left + to.width / 2, to.top + 40);
- await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own', { icon: 'hand' }]]);
+ await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own', { icon: 'hand', opensPage: true }]]);
  expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9']]);
  document.querySelector<HTMLElement>('.kcard[data-card-id="9"] a')!.focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');

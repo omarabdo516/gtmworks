@@ -18,7 +18,7 @@ const label=(text:string)=>`Remove the rule: ${text.length>40?`${text.slice(0,40
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  query(`do $$ begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${company}','${connection}','Ads','Runs the ads.','rules-ads');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${company}' and removed_at is null and role<>'owner';

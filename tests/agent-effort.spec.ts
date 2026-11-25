@@ -17,7 +17,7 @@ const writerProfile=`ag-${writer.replaceAll('-','')}`;
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  const profile=(config:object)=>({soul:'',provider:'auto',model:'',key:fake.settings.key,config,credentials:{}});
  // The main Agent keeps the Company profile and has no level saved: the Engine reads it as Medium. The Writer's own

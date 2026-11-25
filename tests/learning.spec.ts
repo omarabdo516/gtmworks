@@ -26,7 +26,7 @@ const otherRule='Answer every comment within the day';
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.configDefaults=fixture.defaults;
  fake.settings.configSchema={fields:fixture.schema,category_order:[]};
@@ -70,14 +70,16 @@ const saving=async(page:import('@playwright/test').Page,click:()=>Promise<void>)
  const reads:string[]=[];
  const read=(request:import('@playwright/test').Request)=>{
   const headers=request.headers();
-  if(request.method()==='GET'&&headers.rsc==='1'&&!headers['next-router-prefetch']&&new URL(request.url()).pathname==='/c/rs-learning/settings') reads.push(request.url());
+  // The page read again is a router refresh, which marks its tree `refetch` (Next-Router-State-Tree); a link's full
+  // prefetch sends no prefetch header, so on a loaded runner the overlay's section links still prefetching were counted
+  // as reads (#746).
+  if(request.method()==='GET'&&headers.rsc==='1'&&decodeURIComponent(headers['next-router-state-tree']??'').includes('"refetch"')&&new URL(request.url()).pathname==='/c/rs-learning/settings') reads.push(request.url());
  };
  const save=page.waitForResponse(response=>{
   const request=response.request();
   return request.method()==='POST'&&new URL(response.url()).pathname==='/api/agent-settings';
  },{timeout:30000});
- // The overlay's links prefetch each section in full once the page loads (lib/link.tsx); those reads end first, so a
- // read counted here is one the save started.
+ // The click comes once the page has settled.
  await page.waitForLoadState('networkidle');
  page.on('request',read);
  try {

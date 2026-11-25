@@ -22,7 +22,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000,timezoneId:'Africa/Cairo'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.configDefaults={stt:{language:'en'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}};
  fake.settings.profiles.set(profile,{soul:'Lead the team.',provider:'auto',model:'',key:fake.settings.key,config:toolConfig({profile}),credentials:{},

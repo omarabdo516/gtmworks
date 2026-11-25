@@ -24,6 +24,12 @@
   "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
  },
  {
+  "issue": 746,
+  "date": "2026-11-25",
+  "en": { "title": "A Card's note waits for its Card", "body": "When the board can't move a Card and opens it instead, its note now stays its full time on the Card's page, however long the page takes to open." },
+  "ar": { "title": "ملاحظة البطاقة بتستنى البطاقة", "body": "لما اللوحة ما تقدرش تنقل بطاقة وتفتحها بدل كده، الملاحظة بتاعتها بقت بتفضل وقتها كله على صفحة البطاقة، مهما الصفحة اتأخرت في الفتح." }
+ },
+ {
   "issue": 715,
   "date": "2026-11-25",
   "en": { "title": "An Agent's channel files in its Files tab", "body": "The Files tab in an Agent's details now also lists the files it sent in the channels you are in, named for their channel, beside the files of its cards and your chats with it." },

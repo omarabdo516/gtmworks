@@ -42,7 +42,7 @@ const memoryTab=(details:Awaited<ReturnType<typeof openDetails>>)=>details.getBy
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const name of [profile,own(ads),own(seo)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.memory.set(profile,{memory:notes.slice(0,2),profile:notes.slice(2)});

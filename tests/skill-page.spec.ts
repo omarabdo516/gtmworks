@@ -24,7 +24,7 @@ const content=`---\nname: ${skill}\ndescription: Writes the Friday recap.\n---\n
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.configDefaults=fixture.defaults;
  fake.settings.configSchema={fields:fixture.schema,category_order:[]};

@@ -24,7 +24,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.beforeAll(async({},testInfo)=>{
  // A retry starts from the seed again: the Agents and Conversations below are inserted once per run of this file.
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  query(`do $$ begin
   update public.people set language='en' where id in ('${reviewer}','${viewer}');
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,template,profile) values
