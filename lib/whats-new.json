@@ -72,6 +72,30 @@
   "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك أو وقف أو نايم، والقايمة الجانبية بتتابعه في ثواني؛ وبيسمعك وإنت بتكتبله، وبينتبه لما تنادي اسمه، وبيسلّم عليك، وبيتولد مرة واحدة قدام اللي طلبه؛ ونفس الوش في كل حتة، وبيفضل في المحادثات والقنوات والبطاقات والسجل القديمة حتى لو الوكيل اتشال، ومبتتحركش لو مختار حركة أقل؛ والمالك يقدر يغيّر شكل أي وكيل ولونه وطبعه من شباك صغير بيتفتح من وشه أو بطاقته أو إعداداته." }
  },
  {
+  "issue": 714,
+  "date": "2026-11-25",
+  "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },
+  "ar": { "title": "خلّص الخطوة اللي الوكيل سلّمهالك على شاشته", "body": "لما الوكيل يقف عند خطوة على شاشته عشان تعملها انت، بطاقته في الشات فيها «افتح الشاشة» اللي بتفتح الشاشة وعليها شريط باسم الخطوة و«عملتها»؛ والشاشة بتقول «صاحي · مستنيك» ليك انت بس، وبيجيلك تنبيه أول ما توصل، و«عملتها» من هناك أو من بطاقة الشات بتسجّل الخطوة مرة واحدة." }
+ },
+ {
+  "issue": 713,
+  "date": "2026-11-25",
+  "en": { "title": "Take control of an Agent's Screen", "body": "In an Agent's large Screen view, any member who is not a viewer can take control for one session to sign in or finish a step with their own mouse and keyboard while the Agent holds still, watching it live; Done, closing the view, leaving the page or losing the connection gives it back, and anyone else watching sees who has control." },
+  "ar": { "title": "خد الدفة من شاشة الوكيل", "body": "في شاشة الوكيل الكبيرة، أي عضو مش مشاهد يقدر ياخد الدفة للجلسة دي بس عشان يسجّل دخول أو يخلّص خطوة بالماوس والكيبورد بتوعه والوكيل واقف مكانه، وبيتفرج عليها لايف؛ و«خلصت» أو قفل الشاشة أو الخروج من الصفحة أو انقطاع الاتصال بيرجّع الدفة، وأي حد تاني بيتفرج بيشوف الدفة مع مين." }
+ },
+ {
+  "issue": 712,
+  "date": "2026-11-25",
+  "en": { "title": "Watch an Agent's Screen and wake it", "body": "An Agent's details now show whether its Screen is awake, asleep or waking up with a small live picture, Watch opens a large view that keeps refreshing, and any member who is not a viewer can wake it, with the reason in one line when it cannot wake, such as another Agent of the company using the screen." },
+  "ar": { "title": "اتفرج على شاشة الوكيل وصحّيها", "body": "تفاصيل الوكيل بقت بتوريك شاشته صاحية ولا نايمة ولا بتصحى بصورة صغيرة حيّة، و«اتفرج» بتفتح شاشة كبيرة بتتحدّث لوحدها، وأي عضو مش مشاهد يقدر يصحّيها، ولو مصحيتش بيقولك السبب في سطر، زي إن وكيل تاني في الشركة شغال على الشاشة." }
+ },
+ {
+  "issue": 711,
+  "date": "2026-11-25",
+  "en": { "title": "Agents work on a Screen", "body": "An Agent now works on a desktop and browser inside its company's work sandbox: one Screen the company's Agents share, so an account signed in there is signed in for all of them; it wakes when an Agent needs it and sleeps after 30 minutes unused, an Agent publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screen fits." },
+  "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
+ },
+ {
   "issue": 708,
   "date": "2026-11-24",
   "en": { "title": "Agents send you files in the chat", "body": "When an Agent makes a PDF, a spreadsheet, an image or any other file in its work folder, it sends it in its reply as a file you open and download, with images shown as thumbnails, and a file it cannot send says so instead of showing a path." },

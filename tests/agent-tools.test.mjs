@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { engineReady, runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
+import { channelToolSpecTexts, engineReady, runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 
@@ -293,7 +293,55 @@ test('hand_over asks the database to show the handed step as the model wrote it,
   sent('Publish',{app:'WordPress',line:'Ready',rows:[],url:null}),sent('Send',{app:'Klaviyo',line:'Ready',rows:[]}),
   sent('Pay',{app:'Stripe',line:'Ready',rows:[],note:`${'n'.repeat(239)}…`}),sent('Pay',{app:'Stripe',line:'Ready',rows:[]})]);
  assert.deepEqual(fake.agentReads,[]);
- assert.match(JSON.parse(toolSpecTexts().hand_over).description,/may not do yourself.*Done it.*approves, publishes and spends nothing/s);
+ assert.match(JSON.parse(toolSpecTexts().hand_over).description,/do themselves.*Done it.*approves, publishes and spends nothing/s);
+});
+
+// #714: a step the Agent stopped at on its own Screen is handed over with `screen` true, which the card keeps, so its
+// second button opens that Screen. Only the model's true sets it. A channel has no one person to open a Screen for: its
+// tool has no such flag, and a call that sends one anyway keeps none.
+test('hand_over keeps "on my screen" only for the model\'s true, and a channel\'s handed step never keeps it',async()=>{
+ const {rpcs,call}=harness({},{state:'shown',card:44});
+ await call('hand_over',{title:'Publish the campaign',line:'Ready in Meta Ads Manager',app:'Meta Ads',screen:true});
+ await call('hand_over',{title:'Publish',line:'Ready',app:'WordPress',screen:false});
+ await call('hand_over',{title:'Publish',line:'Ready',app:'WordPress',screen:'true'});
+ const sent=(/** @type {string} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'hand',title,content}];
+ assert.deepEqual(rpcs,[sent('Publish the campaign',{app:'Meta Ads',line:'Ready in Meta Ads Manager',rows:[],screen:true}),
+  sent('Publish',{app:'WordPress',line:'Ready',rows:[]}),sent('Publish',{app:'WordPress',line:'Ready',rows:[]})]);
+ const spec=JSON.parse(toolSpecTexts().hand_over);
+ assert.equal(spec.parameters.properties.screen.type,'boolean');
+ assert.match(spec.parameters.properties.screen.description,/your own screen/);
+ const channel=JSON.parse(channelToolSpecTexts([]).hand_over);
+ assert.equal(channel.parameters.properties.screen,undefined);
+ assert.doesNotMatch(channel.description,/screen/i);
+ const posted=/** @type {[string,object][]} */([]);
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ posted.push([name,args]); return {data:{state:'shown',card:12},error:null}; }};
+ await runToolCall({db,engine:fakeEngine().engineFor({}),profile,channel:{message:17},run:'char:17'},{id:'call_1',name:'hand_over',arguments:{title:'Publish',line:'Ready',app:'WordPress',screen:true}});
+ assert.deepEqual(posted,[['channel_show_card',{message:17,run:'char:17',call:'call_1',kind:'hand',title:'Publish',content:{app:'WordPress',line:'Ready',rows:[]}}]]);
+});
+
+// #714: the step on the Screen is the button the Agent stopped at, such as "Publish", which the card keeps beside its
+// title for the Screen's line, banner and toast. It is kept only with "on my screen", and a channel keeps neither.
+test('hand_over keeps the button the Agent stopped at on its screen, and only with "on my screen"',async()=>{
+ const {rpcs,call}=harness({},{state:'shown',card:45});
+ await call('hand_over',{title:'Publish the campaign',line:'Ready',app:'Meta Ads',screen:true,step:'Publish'});
+ await call('hand_over',{title:'Publish',line:'Ready',app:'WordPress',step:'Publish'});
+ await call('hand_over',{title:'Pay',line:'Ready',app:'Stripe',screen:true,step:'   '});
+ await call('hand_over',{title:'Pay',line:'Ready',app:'Stripe',screen:true,step:'P'.repeat(41)});
+ const sent=(/** @type {string} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'hand',title,content}];
+ assert.deepEqual(rpcs,[sent('Publish the campaign',{app:'Meta Ads',line:'Ready',rows:[],screen:true,step:'Publish'}),
+  sent('Publish',{app:'WordPress',line:'Ready',rows:[]}),sent('Pay',{app:'Stripe',line:'Ready',rows:[],screen:true}),
+  sent('Pay',{app:'Stripe',line:'Ready',rows:[],screen:true,step:`${'P'.repeat(39)}…`})]);
+ const spec=JSON.parse(toolSpecTexts().hand_over);
+ assert.equal(spec.parameters.properties.step.type,'string');
+ assert.match(spec.parameters.properties.step.description,/button/);
+ // gtmworks does not hold the Agent still: the description promises nothing of the kind.
+ assert.doesNotMatch(spec.parameters.properties.screen.description,/hold still/);
+ const channel=JSON.parse(channelToolSpecTexts([]).hand_over);
+ assert.equal(channel.parameters.properties.step,undefined);
+ const posted=/** @type {[string,object][]} */([]);
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ posted.push([name,args]); return {data:{state:'shown',card:12},error:null}; }};
+ await runToolCall({db,engine:fakeEngine().engineFor({}),profile,channel:{message:17},run:'char:17'},{id:'call_1',name:'hand_over',arguments:{title:'Publish',line:'Ready',app:'WordPress',screen:true,step:'Publish'}});
+ assert.deepEqual(posted,[['channel_show_card',{message:17,run:'char:17',call:'call_1',kind:'hand',title:'Publish',content:{app:'WordPress',line:'Ready',rows:[]}}]]);
 });
 
 // #203: an Agent asks its person for an app on gtmworks's list that its own profile does not have connected. The Engine is
@@ -347,7 +395,9 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
  });
  assert.equal(sha(specs.show_draft),'14f3e489f8903145db328693857952e95f34678a9071a2b50a48f1180ff4754c','show_draft (#136)');
  assert.equal(sha(specs.show_review),'5370ac820042bd31ca7cb07dc9a1b7e7002a9e43427ed9ebb33fd6fd926dc9e1','show_review (#137)');
- assert.equal(sha(specs.hand_over),'ac501c0e535a035daad42a48657f74cd84e53800e73c720db040b2d3adb8518d','hand_over (#139)');
+ // #714 gave it the optional "on my screen" with the button it stopped at, and the step the Agent wants its person to
+ // do (ADR 0020): a Run pinned before keeps the earlier text in the database (pin_run) and resends that.
+ assert.equal(sha(specs.hand_over),'956edb77ac1606c8255785557f3533e6cb386a9bd7012ba5de70e42eb7d34f4d','hand_over (#139, #714)');
 });
 
 // #148: a channel Run's card calls are kept against its channel message, not a Conversation, so the channel reads them

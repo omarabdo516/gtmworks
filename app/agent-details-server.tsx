@@ -15,6 +15,7 @@ import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/en
 import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
 import { AgentLibrary } from '@/app/agent-library';
+import { AgentScreen } from '@/app/agent-screen';
 import { AgentMemory } from '@/app/agent-memory';
 import { AgentRoutines } from '@/app/agent-routines';
 import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
@@ -106,7 +107,8 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const library=role==='owner'||role==='manager'?<AgentLibrary company={company} slug={slug} agent={agent} name={name}/>:undefined;
 
  return {status:faceOf(agent).state,tab:pickTab(tab),
-  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
+  // The Agent's Screen (#712): read in the browser after the panel is drawn; Wake it is for a Member who is not a Viewer.
+  tabs:detailsTabs({t,slug,agent,screen:<AgentScreen key={`screen-${agent}`} company={company} agent={agent} name={name} canWake={writer}/>,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
    // The Agent's Routines (#205): read in the browser too; the Owner and Managers change them, as in Settings (#31).
    routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,
    permissions:standing.permissions?.length?<StandingPermissions key={`standing-${agent}`} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0)+(channelFileCount??0),

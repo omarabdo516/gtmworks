@@ -48,5 +48,5 @@ Old data is not copied into the Engine, and the old tables, functions, policies 
 ## Consequences
 
 - No ticket adds a gtmworks table for something the Engine keeps. A new need for skills, soul, steps or usage is met through the management listener.
-- Opening a chat reads the Hermes session. It must stay under 1 second; #346 measured 238 ms in the seeded stack.
+- Opening a chat reads the Hermes session. It must stay under 1 second; #346 measured 238 ms in the seeded stack. [ADR 0030](0030-a-screen-never-waits-on-the-engine.md) changes this: the chat draws without the session, and the Steps arrive after.
 - Steps are matched to replies by time. This is safe because the bundled Hermes runs on the same machine as the database.

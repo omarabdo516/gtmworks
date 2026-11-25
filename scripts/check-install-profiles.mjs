@@ -918,4 +918,191 @@ try {
  assert.ok(!said.includes(`${marker}-leak`)&&!said.includes('theirs'),'no byte of the other profile comes back');
  writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');
+} else if(step==='screen-open'||step==='screen-sleep'||step==='screen-wake'||step==='screen-live') {
+// The Company's Screen (#711, vault decision 0068): one display and one browser profile in the Company's sandbox, shared
+// by its Agents. screen-open: the first Company's main Agent is asked to open a page on its Screen. Its Run is offered
+// computer_use (the Engine finds the sandbox image's driver the install copied in), so it captures the Screen, which
+// wakes it, opens the page with the sandbox's own browser on the display the Engine published, and lists the Screen's
+// windows with computer_use until the page's title is there. The Engine's display.status, asked on its management
+// listener's /api/ws as the Engine contract will, then reads the Screen awake on :20 inside the sandbox. The profile's
+// idle stop is set short for the proof first (the default, 30 minutes, is the Engine's and is put back by screen-wake).
+// screen-sleep: display.status, read every few seconds, until the Screen is asleep: the listener stops an idle Screen
+// only for a profile a display.* call named there (tui_gateway/methods_display_watch.py), which screen-open's call did.
+// screen-wake: the same Agent uses its Screen again, and display.status reads it awake.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+// One JSON-RPC call on the management listener's /api/ws, admitted by the Engine's own key (the session-token provider
+// of a gated listener takes it as `?token=`).
+const display=async(method,params={})=>{
+ const socket=new WebSocket(`${firstEngine.managementAddress.replace(/^http/,'ws')}/api/ws?token=${encodeURIComponent(firstEngine.key)}`);
+ try {
+  return await new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>reject(new Error(`${method} was not answered within 60 s`)),60000);
+   socket.addEventListener('message',event=>{
+    const data=JSON.parse(String(event.data));
+    if(data.id!==1) return;
+    clearTimeout(timer);
+    if(data.error) reject(new Error(`${method}: ${data.error.message}`)); else resolve(data.result);
+   });
+   socket.addEventListener('close',event=>{ clearTimeout(timer); reject(new Error(`${method}: the listener closed /api/ws (${event.code} ${event.reason})`)); });
+   socket.addEventListener('open',()=>socket.send(JSON.stringify({jsonrpc:'2.0',id:1,method,params:{profile:first.profile,...params}})));
+  });
+ } finally { socket.close(); }
+};
+const shownStatus=status=>({running:status.running,display:status.display,placement:status.placement});
+if(step==='screen-sleep') {
+ const asleep=await until('the idle Screen asleep',async()=>{ const status=await display('display.status'); return status.running?null:status; },300);
+ assert.equal(asleep.blocker,null,'an asleep Screen can wake again');
+ writeProof({step,marker,profile:first.profile,screen:shownStatus(asleep)});
+} else if(step==='screen-live') {
+ // screen-live (#713, ADR 0029): the awake Screen's live stream through gtmworks's own address only. The Owner signs in
+ // as a browser does (the session cookie the app reads), opens /api/display/ws on the gateway, the install's one public
+ // address, with the Origin a browser sends (the app refuses one whose host is not the Host the gateway passed on), and
+ // holds the stream: the real Xvnc's RFB handshake to its framebuffer of 1440 by 900, then a full picture.
+ // Taking control leaves the Engine's lease with a person, a pointer move goes through, and "Done" gives it back; both
+ // are one Company log row with the Owner. Then the socket closes while in control, as a lost connection, and the lease
+ // is back with the Agent.
+ const {createServerClient}=await import('@supabase/ssr');
+ const {supabaseSettings}=await import(`${process.cwd()}/lib/supabase-settings.mjs`);
+ const {default:WebSocketClient}=await import('ws');
+ const settings=supabaseSettings();
+ const jar=new Map();
+ const browser=createServerClient(settings.url,settings.anonKey,{cookieOptions:settings.cookieOptions,cookies:{getAll:()=>[...jar].map(([name,value])=>({name,value})),setAll:items=>{ for(const {name,value} of items) { if(value) jar.set(name,value); else jar.delete(name); } }}});
+ const signedIn=await browser.auth.signInWithPassword(credentials);
+ assert.equal(signedIn.error,null,'the Owner signs in');
+ const owner=signedIn.data.user.id;
+ const cookie=[...jar].map(([name,value])=>`${name}=${value}`).join('; ');
+ const open=()=>{
+  const socket=new WebSocketClient(`${origin.replace(/^http/,'ws')}/api/display/ws?company=${first.company}&agent=${first.agent}`,{headers:{cookie,origin}});
+  const said=[]; let bytes=Buffer.alloc(0); let wake=()=>{};
+  socket.on('message',(data,binary)=>{ if(binary) bytes=Buffer.concat([bytes,data]); else said.push(JSON.parse(String(data))); wake(); });
+  const closed=new Promise(resolve=>socket.on('close',code=>{ wake(); resolve(code); }));
+  socket.on('error',()=>{});
+  const wait=async(what,ready,seconds=30)=>{
+   const end=Date.now()+seconds*1000;
+   for(;;) { const found=ready(); if(found) return found; if(Date.now()>end) throw new Error(`${what} within ${seconds}s: ${JSON.stringify(said)}`); await new Promise(resolve=>{ wake=resolve; setTimeout(resolve,500); }); }
+  };
+  const heard=(what,match)=>wait(what,()=>said.find(message=>Object.entries(match).every(([key,value])=>message[key]===value)));
+  const take=async count=>{ await wait('RFB bytes',()=>bytes.length>=count); const out=bytes.subarray(0,count); bytes=bytes.subarray(count); return out; };
+  return {socket,said,closed,heard,take,available:()=>bytes.length,drop:()=>{ bytes=Buffer.alloc(0); }};
+ };
+ const live=open();
+ await live.heard('the Screen controlled by its Agent',{control:'agent'});
+ await live.heard('a live stream',{stream:'open'});
+ const version=String(await live.take(12));
+ assert.match(version,/^RFB 003\.00[378]\n$/,'the stream is the Screen\'s RFB');
+ live.socket.send(Buffer.from('RFB 003.008\n'));
+ const [count]=await live.take(1);
+ assert.ok(count>0,'the Screen offers a security type');
+ const types=[...await live.take(count)];
+ assert.ok(types.includes(1),`the Screen's stream needs no password inside the Engine (offered ${types})`);
+ live.socket.send(Buffer.from([1]));
+ assert.equal((await live.take(4)).readUInt32BE(0),0,'the handshake is accepted');
+ live.socket.send(Buffer.from([1]));
+ const init=await live.take(24);
+ const width=init.readUInt16BE(0), height=init.readUInt16BE(2);
+ await live.take(init.readUInt32BE(20));
+ assert.deepEqual([width,height],[1440,900],'the stream is the Screen at the Engine\'s size');
+ // A full picture, asked in the Screen's own pixel format: held for ten seconds through the gateway.
+ const ask=Buffer.alloc(10); ask[0]=3; ask.writeUInt16BE(width,6); ask.writeUInt16BE(height,8);
+ live.socket.send(ask);
+ const held=Date.now();
+ let received=0;
+ while(Date.now()-held<10000) { await new Promise(resolve=>setTimeout(resolve,500)); received+=live.available(); live.drop(); }
+ assert.ok(received>100000,`a full picture came through gtmworks (${received} bytes)`);
+ assert.equal(live.socket.readyState,live.socket.OPEN,'the stream is still open after ten seconds');
+ // Take control, a pointer move, then Done.
+ live.socket.send(JSON.stringify({take:true}));
+ await live.heard('control for the Owner',{control:'mine'});
+ assert.equal((await display('display.status')).lease?.holder,'human','the Engine\'s lease is with a person');
+ const pointer=Buffer.alloc(6); pointer[0]=5; pointer.writeUInt16BE(100,2); pointer.writeUInt16BE(100,4);
+ live.socket.send(pointer);
+ live.socket.send(JSON.stringify({giveBack:true}));
+ await live.heard('control given back',{given:true});
+ assert.equal((await display('display.status')).lease?.holder,'agent','the Engine\'s lease is back with the Agent');
+ // A socket ended while in control gives it back.
+ live.socket.send(JSON.stringify({take:true}));
+ await until('control taken again',async()=>live.said.filter(message=>message.control==='mine').length>=2,30);
+ live.socket.terminate();
+ await until('the lease back with the Agent after the socket ended',async()=>(await display('display.status')).lease?.holder==='agent',30);
+ // The Owner reads the log as they would in Activity: the service role has no grant on it.
+ const rows=await checked(browser.from('company_log').select('action,actor_id').eq('agent_id',first.agent).in('action',['agent_screen_taken','agent_screen_given_back']));
+ const by=action=>rows.filter(row=>row.action===action&&row.actor_id===owner).length;
+ await until('the give-back rows',async()=>{ const again=await checked(browser.from('company_log').select('action,actor_id').eq('agent_id',first.agent).eq('action','agent_screen_given_back')); return again.filter(row=>row.actor_id===owner).length>=2; },30);
+ assert.equal(by('agent_screen_taken'),2,'each take is one log row with the Owner');
+ writeProof({step,marker,profile:first.profile,screen:{width,height},bytes:received});
+} else {
+await pointAtFakeModel(firstEngine,first.profile);
+const idle=step==='screen-open'?0.5:30;
+const idled=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',body:JSON.stringify({config:{bot_desktop:{idle_stop_minutes:idle}}})});
+assert.equal(idled.status,200,`the profile's idle stop is set to ${idle} minutes`);
+const title=`SCREEN-${marker}`;
+const page=`/work/${first.profile}/${marker}-screen.html`;
+// The page, written beside the Agent's work and opened with the sandbox's browser on the Screen's own display (the
+// launcher publishes it in the profile's folder under /tmp/hermes-bot-desktop) and the Screen's one browser profile.
+const open=`printf '<!doctype html><title>${title}</title><h1>${marker}</h1>' > ${page} && set -a && . "$(ls -t /tmp/hermes-bot-desktop/*/env | head -n 1)" && set +a && exec chromium --user-data-dir="$HOME/.hermes/bot-desktop/browser-profile" --no-first-run --no-default-browser-check file://${page}`;
+const offered=[];
+const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+// The pinned Engine defers computer_use behind its tool search (tools.tool_search.defer): `tool_search` lists it by name
+// and `tool_call` invokes it, as the sandbox-mcp step calls a deferred tool; a Run that lists it directly calls it so.
+let direct=false;
+const call=(done,name,args)=>name==='computer_use'&&!direct
+ ?{id:`call_screen_${done}`,type:'function',function:{name:'tool_call',arguments:JSON.stringify({calls:[{name,arguments:args}]})}}
+ :{id:`call_screen_${done}`,type:'function',function:{name,arguments:JSON.stringify(args)}};
+const plan=(messages,body)=>{
+ const tools=(body?.tools||[]).map(tool=>tool?.function).filter(Boolean);
+ // The Engine also asks the model for its own auxiliary calls, with no tools: only a Run's own requests count.
+ if(tools.length) {
+  direct=tools.some(tool=>tool.name==='computer_use');
+  const deferred=tools.some(tool=>tool.name==='tool_call')&&/\bcomputer_use\b/.test(tools.find(tool=>tool.name==='tool_search')?.description||'');
+  offered.push({names:tools.map(tool=>tool.name),computerUse:direct||deferred});
+ }
+ if(!tools.length) return null;
+ const text=textOf(messages);
+ const answers=messages.filter(message=>message.role==='tool');
+ const done=answers.length;
+ if(text.includes(`SCREEN-WAKE ${marker}`)) return done<1?call(done,'computer_use',{action:'capture',mode:'ax'}):null;
+ if(!text.includes(`SCREEN-OPEN ${marker}`)) return null;
+ if(done===0) return call(done,'computer_use',{action:'capture',mode:'ax'});
+ if(done===1) return call(done,'terminal',{command:open,background:true});
+ const seen=answers.slice(2).some(message=>JSON.stringify(message.content).includes(title));
+ if(seen||done>=16) return null;
+ return done%2===0?call(done,'computer_use',{action:'list_windows'}):call(done,'computer_use',{action:'wait',seconds:2});
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const message=step==='screen-open'?`SCREEN-OPEN ${marker}: open the page on your Screen.`:`SCREEN-WAKE ${marker}: look at your Screen.`;
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ // A Run that never replies says how far it came: how often it asked the model, with which tools, and what each tool
+ // answered, cut short (the tool answers are the Screen's and the sandbox's, never a key).
+ const answer=await until('reply on the Screen check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300)
+  .catch(error=>{ throw new Error(`${error.message}: the model was asked ${asked.length} times, first offered ${JSON.stringify(offered[0])}, tool answers ${JSON.stringify(results.map(result=>result.slice(0,300)))}`); });
+ assert.ok(answer.body.includes(reply),answer.body);
+ // The Run itself was offered computer_use, and never the browser tools no Agent gets: what the model was sent, not the
+ // toolsets the profile reports, which read its settings only.
+ assert.ok(offered.length>0&&offered.every(request=>request.computerUse),`the Run is offered computer_use: ${JSON.stringify(offered[0])}`);
+ assert.ok(!offered.some(request=>request.names.some(name=>/^browser_/.test(name||''))),'the Run is offered no browser tool');
+ const captured=String(results[0]??'');
+ assert.ok(results.length>=1&&!/human_has_control|not ready|not installed|is not running/.test(captured),`the Screen is captured: ${captured.slice(0,400)}`);
+ if(step==='screen-open') {
+  const launched=(()=>{ try { return JSON.parse(String(results[1])); } catch { return null; } })();
+  assert.ok(launched&&!launched.error,`the page is opened on the Screen: ${String(results[1]).slice(0,400)}`);
+  assert.ok(results.slice(2).some(result=>result.includes(title)),`computer_use lists the page's window on the Screen: ${results.at(-1)?.slice(0,600)}`);
+ }
+ const status=await display('display.status');
+ assert.equal(status.running,true,'display.status reads the Screen awake');
+ assert.equal(status.display,':20','the Screen is the Company\'s one display');
+ assert.equal(status.placement,'terminal:ssh','the Screen is inside the Company\'s sandbox, reached over ssh');
+ assert.equal(status.lease?.holder,'agent','the Agent holds its Screen');
+ writeProof({step,marker,profile:first.profile,screen:shownStatus(status),window:step==='screen-open'?title:undefined});
+} finally { model.close(); model.closeAllConnections(); }
+}
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker> | screen-open <marker> | screen-sleep <marker> | screen-wake <marker> | screen-live <marker>');

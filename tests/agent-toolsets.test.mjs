@@ -8,12 +8,12 @@ import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, pr
 const pinnedToolsets=['web','search','x_search','vision','video','image_gen','video_gen','computer_use','terminal','skills','browser','cronjob','file','tts','todo','memory','context_engine',
  'session_search','connections','project','bot_room','desktop_ui','onboarding','catalog','clarify','code_execution','delegation','kanban','debugging','safe','coding'];
 
-test('every Agent gets the terminal, files and code in the work sandbox beside the fixed set', () => {
+test('every Agent gets the terminal, files and code in the work sandbox and its own Screen beside the fixed set', () => {
  // ADR 0018: web, vision, image generation, skills, the task list, memory, session search, the question tool,
- // scheduled work, and the work sandbox's terminal, files and code execution (#393), read as one literal list so a
- // change is seen here.
+ // scheduled work, the work sandbox's terminal, files and code execution (#393), and its Screen (#711), read as one
+ // literal list so a change is seen here.
  assert.deepEqual([...everyAgentGets],['web','vision','image_gen','skills','todo','memory','session_search','clarify','cronjob',
-  'terminal','file','code_execution']);
+  'terminal','file','code_execution','computer_use']);
  for(const name of [...everyAgentGets,...noAgentGets]) assert.ok(pinnedToolsets.includes(name),name);
  const config=toolConfig({profile:'ag-a0000000000000000000000000000001'});
  assert.deepEqual(config.platform_toolsets.api_server,[...everyAgentGets]);
@@ -26,6 +26,26 @@ test('every Agent gets the terminal, files and code in the work sandbox beside t
  assert.deepEqual(config.approvals,{unattended_mode:'approve'});
 });
 
+test('every Agent\'s Screen wakes when the Agent needs it and sleeps after the Engine\'s idle time', () => {
+ // #711: computer_use is offered on every profile, browser (its browser_exec runs in the Engine's container) never is,
+ // and the profile's Screen starts by itself; the idle stop is the Engine's own default, which gtmworks does not write.
+ const own='ag-a0000000000000000000000000000001';
+ for(const subagents of [false,true]) {
+  const config=toolConfig({subagents,profile:own});
+  assert.ok(config.platform_toolsets.api_server.includes('computer_use'));
+  assert.ok(!config.agent.disabled_toolsets.includes('computer_use'));
+  assert.ok(config.agent.disabled_toolsets.includes('browser'));
+  assert.deepEqual(config.bot_desktop,{auto_start:true});
+ }
+ // A saved config whose Screen would not start by itself is written again, like one in another folder.
+ const kept={terminal:{cwd:`/work/${own}`},approvals:{unattended_mode:'approve'}};
+ assert.equal(profileSettingsDiffer({...kept,bot_desktop:{auto_start:true}},own),false);
+ assert.equal(profileSettingsDiffer({...kept,bot_desktop:{auto_start:false}},own),true,'a Screen that does not wake by itself');
+ assert.equal(profileSettingsDiffer(kept,own),true,'the Engine\'s default, off');
+ // An existing profile the Engine reports without it is not the fixed set, so the worker corrects it.
+ assert.equal(toolsDiffer(fixedToolsets().filter(name=>name!=='computer_use')),true);
+});
+
 test('a profile starts in its own folder in the work folder and needs no approval for code, or it is written again', () => {
  const own='ag-a0000000000000000000000000000001';
  const other='co-10000000000000000000000000000002';
@@ -34,7 +54,7 @@ test('a profile starts in its own folder in the work folder and needs no approva
  assert.deepEqual(toolConfig({profile:other}).terminal,{cwd:`/work/${other}`});
  assert.notEqual(toolConfig({profile:own}).terminal.cwd,toolConfig({profile:other}).terminal.cwd);
  assert.equal(profileSettingsDiffer(toolConfig({profile:own}),own),false);
- assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${own}`},approvals:{unattended_mode:'approve'}},own),false);
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${own}`},approvals:{unattended_mode:'approve'},bot_desktop:{auto_start:true}},own),false);
  assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${other}`},approvals:{unattended_mode:'approve'}},own),true,'another profile\'s folder');
  assert.equal(profileSettingsDiffer({terminal:{cwd:'/work'},approvals:{unattended_mode:'approve'}},own),true,'the work folder itself');
  assert.equal(profileSettingsDiffer({terminal:{cwd:'.'},approvals:{unattended_mode:'approve'}},own),true,'the Engine\'s own disk');
@@ -42,8 +62,8 @@ test('a profile starts in its own folder in the work folder and needs no approva
  assert.equal(profileSettingsDiffer({approvals:{unattended_mode:'deny'},terminal:{cwd:`/work/${own}`}},own),true);
 });
 
-test('no Agent gets a switch for browser, computer_use, speech, video, project, desktop, catalog, onboarding, kanban or connections', () => {
- assert.deepEqual([...noAgentGets],['browser','computer_use','tts','video','video_gen','project','desktop_ui','catalog','onboarding','kanban','connections']);
+test('no Agent gets a switch for browser, speech, video, project, desktop, catalog, onboarding, kanban or connections', () => {
+ assert.deepEqual([...noAgentGets],['browser','tts','video','video_gen','project','desktop_ui','catalog','onboarding','kanban','connections']);
  for(const subagents of [false,true]) {
   const config=toolConfig({subagents});
   for(const name of noAgentGets) {

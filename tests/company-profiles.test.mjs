@@ -246,6 +246,37 @@ test('the profile check compares what the Engine reports with the fixed set, cor
  } finally { await fake.close(); }
 });
 
+test('an existing Agent is brought onto its Screen by the profile check, its memory, sessions and soul untouched (#711)', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name='ag-a0000000000000000000000000000711'; const soul='You are Ads.\n';
+  // The set every Agent had before #711: computer_use among the toolsets no Agent gets, and no Screen setting.
+  const before={platform_toolsets:{api_server:['web','vision','image_gen','skills','todo','memory','session_search','clarify','cronjob','terminal','file','code_execution']},
+   agent:{disabled_toolsets:['browser','computer_use','tts','video','video_gen','project','desktop_ui','catalog','onboarding','kanban','connections','delegation']},
+   terminal:{cwd:`/work/${name}`},approvals:{unattended_mode:'approve'}};
+  assert.equal((await provideProfile(install(fake),{name,soul,config:before,forbidden:before.agent.disabled_toolsets})).state,'configured');
+  fake.settings.memory.set(name,{memory:['Brand voice is warm'],profile:[]});
+  fake.settings.sessions.set('s-711',{profile:name,messages:[{role:'user',content:'Hi'}]});
+  const calls=[];
+  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','begin_profile_tools','record_profile_tools']);
+  const read=await readToolsets({address:fake.address,profile:name,key:'test-only-key'});
+  assert.ok(read.toolsets.includes('computer_use'),'the Agent has its Screen');
+  assert.ok(!read.toolsets.includes('browser'),'browser stays off');
+  assert.equal(toolsDiffer(read.toolsets),false);
+  const kept=fake.settings.profiles.get(name);
+  assert.equal(kept.config.bot_desktop?.auto_start,true,'the Screen starts by itself');
+  assert.equal(kept.soul,soul);
+  assert.deepEqual(fake.settings.memory.get(name),{memory:['Brand voice is warm'],profile:[]});
+  assert.equal(fake.settings.sessions.get('s-711')?.profile,name);
+  // Corrected once: the next check reads the fixed set and writes nothing.
+  calls.length=0;
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due']);
+ } finally { await fake.close(); }
+});
+
 test('every profile a Company serves, its main Agent and each made Agent included, offers the terminal, files and code', async () => {
  const fake=await fakeHermes();
  try {

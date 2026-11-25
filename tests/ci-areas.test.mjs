@@ -78,7 +78,7 @@ for (const path of ['worker/index.mjs', 'supabase/seed.sql', 'tests/frame.spec.t
 
 // The library, the worker and the server the image runs keep their install trigger (#69): only the install drives them
 // against the real bundled Hermes (conversation, Agent, company profiles); the browser suite uses fake engines.
-for (const path of ['lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs', 'next.config.mjs', 'server.js']) {
+for (const path of ['lib/engine.mjs', 'lib/i18n/messages.en.json', 'worker/index.mjs', 'next.config.mjs', 'server.js', 'scripts/web-server.mjs']) {
   test(`${path} runs the browser suite and the install`, () => {
     assert.deepEqual(areas(path), { components: /^lib\//.test(path) ? 'true' : 'false', database: 'false', integration: 'true', install: 'true' });
   });

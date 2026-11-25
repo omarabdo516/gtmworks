@@ -113,6 +113,14 @@ Its mark in `public/logos/brand/open-design.svg` is its own `apps/web/public/bra
 under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0); its licence is copied beside the
 built daemon, `/opt/open-design/app/LICENSE`. Keep this notice while the sandbox image ships Open Design.
 
+## noVNC
+
+Source: https://github.com/novnc/noVNC (npm `@novnc/novnc` 1.7.0). The large view of an Agent's Screen draws its live
+stream with noVNC's RFB client, unchanged, from the package's own files (ADR 0029, `app/screen-live.ts`). noVNC is
+licensed under the Mozilla Public License 2.0 (https://www.mozilla.org/MPL/2.0/); its licence and its notices are the
+package's `LICENSE.txt`, which names the licences of the files it vendors. Its source is the release above. Keep this
+notice while the app ships noVNC.
+
 ## Lobe Icons
 
 Source: https://github.com/lobehub/lobe-icons (npm `@lobehub/icons-static-svg` 1.104.0). The AI providers' logos in

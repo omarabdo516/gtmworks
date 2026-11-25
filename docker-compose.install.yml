@@ -133,7 +133,7 @@ services:
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:?Run scripts/install.sh}
       SETUP_CODE: ${SETUP_CODE:?Run scripts/install.sh}
       GTMWORKS_SELF_HOSTED: "true"
-    command: [sh, -c, "node lib/install-env.mjs validate web && exec node server.js"]
+    command: [sh, -c, "node lib/install-env.mjs validate web && exec node scripts/web-server.mjs"]
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s

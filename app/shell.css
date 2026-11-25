@@ -690,7 +690,7 @@
 .gw .details .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
 @media (hover: hover) { .gw .details .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); } }
 /* The Agent's screen (design-reference: .scr, .scr__off, .scr-card, .scr-thumb), drawn in code from tokens so it follows
-   the theme. Sizes inside are container units, as the reference's are; only the empty frame is built (#21). */
+   the theme. Sizes inside are container units, as the reference's are (#21); the real Screen follows (#712). */
 .gw .details .scr {
   position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); width: 100%; aspect-ratio: 16 / 10;
   container-type: size; overflow: hidden; border-radius: var(--gw-r-md); background: var(--gw-bg-pane);
@@ -708,6 +708,132 @@
 }
 .gw .details .scr__off .gw-icon { width: 7cqw; height: 7cqw; }
 .gw .details .scr-card, .gw .details .scr-thumb { display: block; border-radius: var(--gw-r-md); }
+/* The real Screen (#712; design-reference: .scr-st, .dot--waking, .scr__off--waking, .scr__wake, .scr__ln, .scr-thumb,
+   .scr-ov, .scr-ov__pill, .scr-ov__line): its state beside the heading, the Engine's own picture filling the frame while
+   it is awake, and the one action shown on pointing or keyboard focus, in the corner on a touch screen. */
+.gw .details .scr-st { display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-2); }
+.gw .dot--waking { animation: gw-breathe 1.4s ease-in-out infinite; }
+.gw .details .scr__off--waking > span:last-child { animation: gw-breathe 1.4s ease-in-out infinite; }
+.gw .details .scr__wake { display: grid; gap: 1.4cqw; width: 34%; justify-items: center; }
+.gw .details .scr__ln { display: block; flex: none; width: var(--w, 80%); height: 1.1cqw; border-radius: var(--gw-r-full); background: var(--gw-bg-active); }
+.gw .details .scr__shot { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; background: var(--gw-bg-subtle); }
+.gw .details .scr-thumb { position: relative; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; text-align: inherit; font: inherit; color: inherit; }
+.gw .details .scr-thumb.is-static, .gw .details .scr-thumb[aria-disabled="true"] { cursor: default; }
+.gw .details .scr-thumb:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .details .scr-ov {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: var(--s4); border-radius: var(--gw-r-md); text-align: center; pointer-events: none;
+  background: color-mix(in srgb, var(--gw-bg-pane) 80%, transparent);
+  opacity: 0; transition: opacity var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .details .scr-ov__pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
+  background: var(--gw-primary); color: var(--gw-on-primary); font-size: var(--gw-fs-sm); font-weight: 600; line-height: 1; white-space: nowrap;
+  transform: translateY(4px); transition: transform var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .details .scr-ov__pill .gw-icon { width: 16px; height: 16px; }
+.gw .details .scr-ov__line {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-width: 100%;
+  font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-1); text-wrap: pretty;
+}
+.gw .details .scr-thumb:focus-visible .scr-ov { opacity: 1; }
+.gw .details .scr-thumb:focus-visible .scr-ov__pill { transform: none; }
+@media (hover: hover) {
+  .gw .details .scr-thumb:hover .scr-ov { opacity: 1; }
+  .gw .details .scr-thumb:hover .scr-ov__pill { transform: none; }
+}
+@media (hover: none) {
+  .gw .details .scr-ov { opacity: 1; background: transparent; justify-content: flex-end; align-items: flex-end; padding: var(--s2); }
+  .gw .details .scr-ov__pill { transform: none; }
+  .gw .details .scr-ov__line { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gw .details :is(.scr-ov, .scr-ov__pill) { transition: none; transform: none; }
+  .gw :is(.dot--waking, .details .scr__off--waking > span:last-child) { animation: none; }
+}
+/* A refused wake says why in one line, under the card. */
+.gw .details .scr-err { margin: var(--s2) 0 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); text-wrap: pretty; }
+/* The large view (design-reference: .viewer, .vw, .vw__head, .vw__titles, .vw__title, .vw-chip, .vw__body, .vw__stage,
+   .vw__screen, .vw-off, .vw__foot, .vw-mode, .modal.is-closing). Its step list is not built, so the stage is the whole body. */
+.gw dialog.viewer {
+  position: fixed; inset: 0; margin: auto; display: block; padding: 0; border: 0;
+  width: min(1180px, calc(100vw - 48px)); height: min(820px, calc(100dvh - 48px)); max-width: none; max-height: none;
+  border-radius: var(--gw-r-lg); background: var(--gw-bg-chrome); color: var(--gw-text-1); box-shadow: var(--gw-shadow-modal); overflow: hidden;
+  font-family: var(--gw-font); font-size: var(--gw-fs-base); line-height: 1.5; -webkit-font-smoothing: antialiased; text-align: start;
+}
+.gw dialog.viewer::backdrop { background: var(--gw-bg-scrim); }
+.gw dialog.viewer[open] { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out); }
+.gw dialog.viewer.is-closing { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
+.gw .vw { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; min-height: 0; }
+.gw .vw__head { display: flex; align-items: center; gap: var(--s3); padding: var(--s4) var(--s5); border-bottom: 0.5px solid var(--gw-border-3); }
+.gw .vw__titles { flex: 1 1 0; min-width: 0; display: grid; }
+.gw .vw__title { margin: 0; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.gw .vw-chip { align-self: center; height: 28px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); flex: none; }
+.gw .vw-chip .gw-icon { width: 14px; height: 14px; }
+.gw .vw__body { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.gw .vw__stage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3); padding: var(--s5); min-height: 0; overflow-y: auto; background: var(--gw-bg-sidebar); }
+.gw .vw__screen, .gw .vw-off, .gw .vw__stage > .scr-err { width: 100%; max-width: min(100%, calc((100dvh - 380px) * 1.6)); }
+.gw .vw__screen { min-width: 280px; }
+.gw .vw-off { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.gw .vw-off p { flex: 1 1 260px; margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); }
+.gw .vw-off .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full); font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap; background: var(--gw-primary); color: var(--gw-on-primary); cursor: pointer; }
+.gw .vw-off .btn .gw-icon { width: 16px; height: 16px; }
+@media (hover: hover) { .gw .vw-off .btn:hover { background: var(--gw-primary-hover); } }
+.gw .vw__stage > .scr-err { margin: 0; padding: 0; }
+/* A step handed over on the Screen (#714; design-reference: .vw-hand, .vw-hand .badge, .vw-hand__t, .ck-badge,
+   .scr-st--wait): the banner under the Screen in the view, and the card's waiting state. */
+.gw .vw-hand {
+  width: 100%; max-width: min(100%, calc((100dvh - 380px) * 1.6));
+  display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md);
+  background: var(--gw-bg-pane); box-shadow: var(--gw-shadow-card); flex-wrap: wrap;
+}
+.gw .vw-hand .badge { align-self: center; }
+.gw .vw-hand .ck-badge .gw-icon { width: 13px; height: 13px; }
+.gw .vw-hand__t { flex: 1 1 240px; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.gw .vw-hand__t b { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw .vw-hand__t span { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .vw-hand .btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
+  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; cursor: pointer; background: var(--gw-primary); color: var(--gw-on-primary);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .vw-hand .btn:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); cursor: default; }
+@media (hover: hover) { .gw .vw-hand .btn:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+@media (prefers-reduced-motion: reduce) { .gw .vw-hand .btn { transition: none; } }
+@media (max-width: 599px) { .gw .vw-hand { max-width: 100%; } }
+.gw .details .scr-st--wait { color: var(--gw-wait-text); font-weight: 600; }
+.gw .vw__foot { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--s5); border-top: 0.5px solid var(--gw-border-3); background: var(--gw-bg-chrome); flex-wrap: wrap; }
+.gw .vw-mode { flex: 1 1 320px; min-width: 0; display: grid; gap: 2px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .vw-mode b { color: var(--gw-text-1); font-size: var(--gw-fs-base); font-weight: 600; }
+/* Take control (#713; design-reference: .vw-chip--ctrl, .vw-foot__acts, .vw-take__d, .btn, .scr.is-control): the chip
+   while in control, the foot's actions, and the live stream drawn by noVNC over the last picture until it shows. */
+.gw .vw-chip--ctrl { background: var(--gw-primary); color: var(--gw-on-primary); font-weight: 600; }
+.gw .vw-foot__acts { display: inline-flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.gw .vw-foot__acts .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
+  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .vw-foot__acts .btn .gw-icon { width: 16px; height: 16px; }
+.gw .vw-foot__acts .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .vw-foot__acts .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+@media (hover: hover) {
+  .gw .vw-foot__acts .btn--primary:hover { background: var(--gw-primary-hover); }
+  .gw .vw-foot__acts .btn--secondary:hover { background: var(--gw-btn2-hover); }
+}
+.gw .vw-take__d { display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-2); white-space: nowrap; }
+.gw .vw-take__d .gw-icon { width: 14px; height: 14px; }
+.gw .details .scr.is-control { box-shadow: var(--gw-text-1) 0 0 0 2px inset; }
+.gw .details .scr__body:has(> .scr__live) { position: relative; }
+.gw .details .scr__live { position: absolute; inset: 0; z-index: 1; display: grid; background: var(--gw-bg-subtle); }
+.gw .details .scr__live.is-waiting { opacity: 0; pointer-events: none; }
+.gw .details .scr.is-control .scr__live { inset: 2px; }
+@media (prefers-reduced-motion: reduce) { .gw .vw-foot__acts .btn { transition: none; } }
+@media (max-width: 599px) {
+  .gw dialog.viewer { width: 100vw; height: 100dvh; border-radius: 0; }
+  .gw :is(.vw__head, .vw__foot) { padding-inline: var(--s4); }
+  .gw .vw__stage { padding: var(--s3); }
+  .gw .vw__screen { min-width: 0; }
+}
 .gw .details .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 @media (hover: hover) {
   .gw .details a.panel-row:hover { background: var(--gw-bg-hover); }
