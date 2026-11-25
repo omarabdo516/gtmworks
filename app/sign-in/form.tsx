@@ -11,9 +11,9 @@ const browserSupabase=async()=>(await import('@/lib/browser-supabase')).browserS
 // The password goes from this browser straight to the auth service, through the install's gateway, never through gtmworks'
 // server: the gateway then counts the auth service's rate limit per visitor's connection, not for the app as a whole.
 // The links keep the language chosen on this page.
-export default function Form({next}:{next:string}) {
+export default function Form({next,notice}:{next:string,notice?:'couldNotAcceptTheInvitation'}) {
  const {t,language}=useI18n();
- const [message,setMessage]=useState<''|'wrongEmailOrPassword'|'tooManySignInAttempts'|'couldNotSignIn'>('');
+ const [message,setMessage]=useState<''|'wrongEmailOrPassword'|'tooManySignInAttempts'|'couldNotSignIn'|'couldNotAcceptTheInvitation'>(notice||'');
  const [pending,setPending]=useState(false);
  async function signIn(event:React.FormEvent<HTMLFormElement>) {
   event.preventDefault();

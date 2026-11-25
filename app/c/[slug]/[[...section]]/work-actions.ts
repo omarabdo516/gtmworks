@@ -111,7 +111,7 @@ export const addIdea=withActionLog('addIdea',async function addIdea(form: FormDa
  revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
  return {card:Number(data.id)};
 });
-export const workAction=withActionLog('workAction',async function workAction(form: FormData) { const {t}=await getI18n();
+export const workAction=withActionLog('workAction',async function workAction(form: FormData) {
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
  let error: {message:string}|null=null; let created: number|undefined;
  // The action's permission (lib/route-permissions.mjs) for this operation, with the role read now; the database checks
@@ -163,6 +163,6 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='label-settings') { const result=await db.from('work_labels').update({name:String(form.get('name')),color:String(form.get('color'))}).eq('company_id',company).eq('id',Number(form.get('label'))).select('id'); error=result.error || (!result.data?.length?{message:'not permitted'}:null); }
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
- if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
+ if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${error.message.includes('contributors cannot move')?'youCannotMoveTheCardToThisStage':error.message.includes('approval required')?'boardNeedsApproval':error.message.includes('decision required')?'boardDecideFirst':'couldNotSaveTheChangeCheckPermissionsAnd'}`); }
  if(created) redirect(`${base}/${created}`);
 });

@@ -5,7 +5,7 @@ select json_build_object(
  'states_for_people',has_function_privilege('authenticated','public.agent_face_states(uuid)','execute')
   and not has_function_privilege('anon','public.agent_face_states(uuid)','execute')
   and not has_function_privilege('service_role','public.agent_face_states(uuid)','execute'),
- 'states_as_reader',(select not prosecdef and proconfig=array['search_path=""'] and position('waiting_list' in pg_get_functiondef(oid))>0
+ 'states_as_reader',(select not prosecdef and 'search_path=""'=any(proconfig) and position('waiting_list' in pg_get_functiondef(oid))>0
   from pg_proc where oid='public.agent_face_states(uuid)'::regprocedure),
  'work_for_the_reader',(select prosecdef and position('can_see_agent' in pg_get_functiondef(oid))>0 and position('auth.uid()' in pg_get_functiondef(oid))>0
   from pg_proc where oid='public.agent_work(uuid)'::regprocedure),

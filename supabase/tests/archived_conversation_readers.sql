@@ -39,7 +39,7 @@ insert into decisions
   'public.close_handover_follow_up(bigint,text,text,text)','public.handover_writer(bigint)','public.open_conversation_runs(uuid,uuid,bigint)','public.stopped_runs_open()',
   'public.stop_open_handovers(uuid,bigint)','public.pin_run_history(uuid,uuid)','public.queue_unknown_start(public.conversation_run_reservations)']) fn
  union all select fn,'exempt','reads an Agent''s own state across the Conversations it is in (whether it works now, may move, what it was allowed, what it suggested): archiving a Conversation changes nothing the Agent did or holds' from unnest(array[
-  'public.agent_move_blocked(uuid)','public.move_company_profile(uuid)','public.agent_open_run(uuid,uuid)','public.agent_run_facts(uuid,uuid)','public.agent_permission_grants(uuid,uuid)',
+  'public.agent_move_blocked(uuid)','public.move_company_profile(uuid)','public.agent_open_run(uuid,uuid)','public.agent_run_facts(uuid,uuid)','public.agent_work(uuid)','public.agent_permission_grants(uuid,uuid)',
   'public.agent_permission_inflight(uuid,uuid)','public.agent_permission_sending(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn
  union all select fn,'exempt','makes a Conversation, which is current, or finds the one it made before' from unnest(array[
   'public.choose_work_mode(uuid,text)','public.open_first_conversation(uuid,uuid,uuid,text)',
