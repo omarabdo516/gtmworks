@@ -22,8 +22,8 @@ async function streams({engine=engineFor,recheck=60000}={}) {
  fake.settings.profiles.set('ads',profile); fake.settings.screens.set('ads',{running:true});
  const may={level:'control',name:'Mona'}, rows=[];
  const people={
-  admit:async(_request,query)=>({company:query.get('company'),agent:query.get('agent'),profile:'ads'}),
-  access:async()=>({...may}),
+  admit:async(_request,query)=>({company:query.get('company'),agent:query.get('agent'),profile:'ads',person:query.get('as')??'mona'}),
+  access:async at=>({...may,...may.level==='control'&&at.person!=='mona'?{name:at.person}:{}}),
   logged:async(_at,row)=>{ rows.push(row); },
  };
  const handle=screenStreams({hermes:{address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'},engine,people,recheck});
@@ -31,8 +31,8 @@ async function streams({engine=engineFor,recheck=60000}={}) {
  server.on('upgrade',(request,socket,head)=>{ void handle(request,socket,head,new URL(request.url??'/','http://gtmworks').searchParams); });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(undefined)));
  const sockets=[];
- const open=()=>{
-  const ws=new WebSocket(`ws://127.0.0.1:${/** @type {any} */(server.address()).port}${screenStreamPath}?company=${company}&agent=${agent}`);
+ const open=(as='mona',{resume=false}={})=>{
+  const ws=new WebSocket(`ws://127.0.0.1:${/** @type {any} */(server.address()).port}${screenStreamPath}?company=${company}&agent=${agent}&as=${as}${resume?'&resume=1':''}`);
   sockets.push(ws);
   const said=[]; let code=null;
   ws.on('message',(data,binary)=>{ if(!binary) said.push(JSON.parse(String(data))); });
@@ -92,6 +92,77 @@ test('a person already watching when a failed give-back frees the Screen may tak
   await second.heard('control taken',{control:'mine'});
   assert.equal(at.lease(),'human');
  } finally { held.failing=false; for(const viewer of held) await viewer.close(); await at.close(); }
+});
+
+// #752: a page whose connection drops opens a new socket within seconds, while the server finds the old one dead only on
+// its heartbeat. Here the old socket stays open on the server, as a dead one does until then.
+test('a person who reconnects while their old socket still holds control has it on the new socket, with no log row',async()=>{
+ const at=await streams();
+ try {
+  const old=at.open();
+  await old.heard('the stream',{stream:'open'});
+  old.send({take:true});
+  await old.heard('control taken',{control:'mine'});
+  const before=old.said.length;
+  const back=at.open('mona',{resume:true});
+  await back.heard('control on the new socket',{control:'mine'});
+  await back.heard('the stream',{stream:'open'});
+  await old.heard('the old socket watching',{control:'other',by:'Mona'},before);
+  assert.equal(at.lease(),'human');
+  // The heartbeat ends the old socket: control stays with the new one.
+  old.ws.terminate();
+  await old.closed();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(at.lease(),'human');
+  assert.ok(!back.said.some(message=>message.control&&message.control!=='mine'),'the new socket keeps control');
+  back.send({giveBack:true});
+  await back.heard('given back',{given:true});
+  assert.equal(at.lease(),'agent');
+  assert.deepEqual(at.rows,['taken','givenBack']);
+ } finally { await at.close(); }
+});
+
+test('control moves between one person\'s sockets on their take, never to another person\'s, and a new view takes nothing on arrival',async()=>{
+ const at=await streams();
+ try {
+  const first=at.open();
+  await first.heard('the stream',{stream:'open'});
+  first.send({take:true});
+  await first.heard('control taken',{control:'mine'});
+  const someone=at.open('omar');
+  await someone.heard('control with Mona',{control:'other',by:'Mona'});
+  someone.send({take:true});
+  await someone.heard('the take refused',{refused:'held',by:'Mona'});
+  const second=at.open();
+  await second.heard('a new view watching',{control:'other',by:'Mona'});
+  second.send({take:true});
+  await second.heard('control on the second socket',{control:'mine'});
+  const before=second.said.length;
+  first.send({take:true});
+  await first.heard('control back on the first',{control:'mine'},1);
+  await second.heard('the second watching',{control:'other',by:'Mona'},before);
+  assert.equal(at.lease(),'human');
+  assert.deepEqual(at.rows,['taken']);
+ } finally { await at.close(); }
+});
+
+test('the old socket ending while control moves to the new one leaves it with the new one',async()=>{
+ const at=await streams();
+ try {
+  const old=at.open();
+  await old.heard('the stream',{stream:'open'});
+  old.send({take:true});
+  await old.heard('control taken',{control:'mine'});
+  // Both at once: the heartbeat ends the old socket as the page's new one arrives asking for control back.
+  const back=at.open('mona',{resume:true});
+  old.ws.terminate();
+  await old.closed();
+  await back.heard('the stream',{stream:'open'});
+  await new Promise(resolve=>setTimeout(resolve,200));
+  const last=back.said.filter(message=>message.control).at(-1);
+  if(last?.control==='mine') { assert.equal(at.lease(),'human'); assert.deepEqual(at.rows,['taken']); }
+  else { assert.equal(last?.control,'agent'); assert.equal(at.lease(),'agent'); assert.deepEqual(at.rows,['taken','givenBack']); }
+ } finally { await at.close(); }
 });
 
 test('an open socket is checked again: a person who no longer sees the Agent is closed, and control goes back',async()=>{
