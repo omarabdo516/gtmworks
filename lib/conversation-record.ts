@@ -42,8 +42,10 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,approved_value?:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
- // The stamp first (#767): read before the rows, so a change made while they are read gives the next poll a new stamp.
- const stamped=db.rpc('conversation_stamp',{conversation}).then(({data})=>typeof data==='string'?data:null,()=>null);
+ // The stamp first (#767), awaited before the rows are read: a change made while they are read then gives the next
+ // poll a new stamp, never a stamp newer than the rows it came with.
+ const stamp=await db.rpc('conversation_stamp',{conversation}).then(({data})=>typeof data==='string'?data:null,()=>null);
+ const stamped=Promise.resolve(stamp);
  const [{ends,resets,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_run_resets(run_id,resets_at),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'

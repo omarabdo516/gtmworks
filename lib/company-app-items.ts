@@ -70,7 +70,10 @@ export const agentToolItems=cache(async(company:string,agent:string,language:Lan
   const tools=await readAgentTools(await supabase(),{company,agent,test:false,cause:cause=>{ why=cause; }});
   if(tools) lastTools.set(key,{tools,at:Date.now()});
   else console.log(appsUnreadLine({company,agent,cause:why}));
-  const shown=tools??(()=>{ const kept=lastTools.get(key); return kept&&Date.now()-kept.at<toolsKeptFor?kept.tools:null; })();
+  // Only a read the Engine failed answers from the last good list: an Agent the reader does not see (or whose profile is
+  // gone) reads nothing, so the list one reader kept never reaches another who may not see that Agent.
+  const engineFailed=!tools&&why!=='noProfile'&&why!=='database';
+  const shown=tools??(engineFailed?(()=>{ const kept=lastTools.get(key); return kept&&Date.now()-kept.at<toolsKeptFor?kept.tools:null; })():null);
   const text:Text=language==='ar'?ar:en;
   return shown&&shown.map(tool=>({...tool,use:text[`use.${tool.key}`]??text['use.custom']}));
  } catch { console.log(appsUnreadLine({company,agent,cause:'failed'})); return null; }
