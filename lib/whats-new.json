@@ -1,5 +1,11 @@
 [
  {
+  "issue": 774,
+  "date": "2026-11-25",
+  "en": { "title": "Only an Owner changes an Owner", "body": "A Manager can no longer remove an Owner, change an Owner's Role or Grants, or change their own Role or Grants, and the team page no longer offers them those controls; Managers still manage Contributors, Viewers and other Managers as before." },
+  "ar": { "title": "المالك بس هو اللي يغيّر في المالك", "body": "المدير مبقاش يقدر يشيل مالك أو يغيّر دوره أو صلاحياته، ولا يغيّر دوره أو صلاحياته هو، وصفحة الفريق مبقتش بتعرضله الحاجات دي؛ والمديرين لسه بيديروا المساهمين والمشاهدين والمديرين التانيين زي الأول." }
+ },
+ {
   "issue": 720,
   "date": "2026-11-25",
   "en": { "title": "Your account's choices keep the keyboard focus", "body": "Choosing Light, Dark or System, or a language, in Your account with the keyboard now keeps the focus on that choice while it is saved, and the arrow keys still move between the choices." },

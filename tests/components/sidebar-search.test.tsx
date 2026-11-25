@@ -15,7 +15,7 @@ const chats = [{ id: 'cv-1', title: 'Search check for June', at: now }, { id: 'c
 
 test('the magnifier opens a focused field that narrows the recent chats by title; Escape empties it, then closes it', async () => {
  const screen = await render(<LanguageProvider language="en"><SidebarSearchProvider>
-  <SearchToggle/><SearchBox/><RecentChats slug="rs-learning" company="10000000-0000-0000-0000-000000000001" chats={chats} lead="Lead"/>
+  <SearchToggle/><SearchBox/><RecentChats person="p-1" slug="rs-learning" company="10000000-0000-0000-0000-000000000001" chats={chats} lead="Lead"/>
  </SidebarSearchProvider></LanguageProvider>);
  const toggle = screen.getByRole('button', { name: 'Search chats' });
  await expect.element(screen.getByRole('link')).toHaveLength(2);

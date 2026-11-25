@@ -55,7 +55,7 @@ export async function send(company:string,agent:string,action:RoutineAction,fiel
  if(!response) return {error:'routineFailed',unlogged:false};
  const body=await response.json().catch(()=>null) as {error?:string,logged?:boolean,routine?:Routine|null}|null;
  if(response.ok) return {error:null,unlogged:body?.logged===false,routine:body?.routine??null};
- return {error:body?.error==='routineBusy'?'routineBusy':'routineFailed',unlogged:false};
+ return {error:body?.error==='routineBusy'||body?.error==='routineZoneUnknown'?body.error:'routineFailed',unlogged:false};
 }
 export const warnUnlogged=(t:T,unlogged:boolean)=>{ if(unlogged) toast(t('routineNotLogged'),{icon:'shield'}); };
 

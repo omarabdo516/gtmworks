@@ -14,7 +14,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const general: ChannelSummary = { kind: 'general', id: 'ch-g', unread: 2 };
 const launch: ChannelSummary = { kind: 'team', name: 'Launch week', id: 'ch-t', unread: 1 };
 const list = ({ initial = [general, launch], ...props }: Partial<ComponentProps<typeof ChannelList>> & { initial?: ChannelSummary[] } = {}, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>
- <SidebarLive company="co-1" channels={initial} states={{}}><ChannelList slug="rs" company="co-1" person="p-1" manage={false} {...props}/></SidebarLive>
+ <SidebarLive person="p-1" company="co-1" channels={initial} states={{}}><ChannelList slug="rs" company="co-1" person="p-1" manage={false} {...props}/></SidebarLive>
 </LanguageProvider>);
 
 test('each channel shows how many messages are new, and the one being read shows none', async () => {
@@ -44,7 +44,7 @@ test('the counts are asked again while the page shows, so a new message raises t
  const screen = await list();
  expect(asked).not.toHaveBeenCalled();
  await vi.advanceTimersByTimeAsync(5000);
- expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1');
+ expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1&person=p-1');
  await expect.element(screen.getByLabelText('3 new messages')).toBeVisible();
 });
 

@@ -9,4 +9,6 @@ export function requiredFor(table: Record<string, Entry>, key: string, part?: st
 type Db = SupabaseClient;
 export function permitted(db: Db, required: Access, company?: unknown, person?: string): Promise<boolean>;
 export function routeAllowed(db: Db, file: string, method: string, company?: unknown, person?: string): Promise<boolean>;
+export function permission(db: Db, required: Access, company?: unknown, person?: string): Promise<'allowed' | 'refused' | 'failed'>;
+export function routePermission(db: Db, file: string, method: string, company?: unknown, person?: string): Promise<'allowed' | 'refused' | 'failed'>;
 export function actionAllowed(db: Db, name: string, company?: unknown, operation?: string, person?: string): Promise<boolean>;

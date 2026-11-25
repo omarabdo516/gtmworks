@@ -23,7 +23,18 @@ const Now=createContext<Live|null>(null);
 // answer asked for since then is kept only while it answers that page's. `refresh` asks at once, after the reader opened
 // something that changes a face (OpenedHere).
 const noHands:ScreenHand[]=[];
-export function SidebarLive({company,slug,channels,states,handed=noHands,children}:{company:string,slug?:string,channels:ChannelSummary[],states:Record<string,AgentFaceState>,handed?:ScreenHand[],children:ReactNode}) {
+// A page whose read of the channels failed passes null (#776): the ones this tab showed last for this Company stay, a
+// poll's among them. Kept in the browser only: the server draws a failed read as no channels, never a list from shared
+// state, which could be another reader's. Keyed by the reader and the Company: another account signed in from another tab
+// never gets this reader's list.
+const channelsShown=new Map<string,ChannelSummary[]>();
+// The page read last recorded for each Company: a page's own list is kept once, so drawing it again never undoes a newer poll.
+const pageRead=new Map<string,ChannelSummary[]>();
+const inBrowser=typeof window!=='undefined';
+export function SidebarLive({company,person,slug,channels:read,states,handed=noHands,children}:{company:string,person:string,slug?:string,channels:ChannelSummary[]|null,states:Record<string,AgentFaceState>,handed?:ScreenHand[],children:ReactNode}) {
+ const shownKey=`${person}:${company}`;
+ if(read&&inBrowser&&pageRead.get(shownKey)!==read) { pageRead.set(shownKey,read); channelsShown.set(shownKey,read); }
+ const channels=useMemo(()=>read??(inBrowser?channelsShown.get(shownKey):undefined)??[],[read,shownKey]);
  const [polled,setPolled]=useState<{basis:SidebarNow,now:SidebarNow}|null>(null);
  const basis=useMemo(()=>({channels,agents:states,handed}),[channels,states,handed]);
  const now=polled?.basis===basis?polled.now:basis;
@@ -34,8 +45,9 @@ export function SidebarLive({company,slug,channels,states,handed=noHands,childre
    clearTimeout(timer);
    if(document.visibilityState==='visible') {
     try {
-     const response=await fetch(`/api/sidebar?company=${company}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) setPolled(was=>kept(was,basis,answer)); }
+     // The poll names the reader it draws for: after another tab signed in as someone else, the route answers nothing.
+     const response=await fetch(`/api/sidebar?company=${company}&person=${person}`,{cache:'no-store'});
+     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(shownKey,answer.channels); setPolled(was=>kept(was,basis,answer)); } }
     } catch {}
    }
    if(!stopped) { clearTimeout(timer); timer=setTimeout(poll,pollEvery); }
@@ -46,7 +58,7 @@ export function SidebarLive({company,slug,channels,states,handed=noHands,childre
   // question shows its own state without waiting for the next poll.
   const ended=onWatchedRunEnded(()=>ask.current());
   return ()=>{stopped=true;clearTimeout(timer);ask.current=()=>{};ended();};
- },[company,basis]);
+ },[company,person,basis,shownKey]);
  const refresh=useCallback(()=>ask.current(),[]);
  // A step "Done it" kept on this page leaves the Screen at once, and the poll is asked again (#714).
  const [done,setDone]=useState<ReadonlySet<number>>(()=>new Set());
