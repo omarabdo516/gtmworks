@@ -32,7 +32,7 @@ export function SidebarLive({company,channels,states,children}:{company:string,c
    if(document.visibilityState==='visible') {
     try {
      const response=await fetch(`/api/sidebar?company=${company}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) setPolled({basis,now:answer}); }
+     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) setPolled(was=>kept(was,basis,answer)); }
     } catch {}
    }
    if(!stopped) { clearTimeout(timer); timer=setTimeout(poll,pollEvery); }
@@ -47,6 +47,17 @@ export function SidebarLive({company,channels,states,children}:{company:string,c
  const refresh=useCallback(()=>ask.current(),[]);
  const live=useMemo(()=>({...now,refresh}),[now,refresh]);
  return <Now value={live}>{children}</Now>;
+}
+
+// An answer of the poll keeps what did not change as it was, so a poll that changes nothing draws nothing again, and
+// one Agent's new state leaves the channels as they were: sixteen faces drawn again every 5 seconds made a long task
+// on a slow CPU (tests/face-frames.spec.ts, #697).
+const same=(a:unknown,b:unknown)=>a===b||JSON.stringify(a)===JSON.stringify(b);
+function kept(was:{basis:SidebarNow,now:SidebarNow}|null,basis:SidebarNow,answer:SidebarNow) {
+ const prior=was?.basis===basis?was.now:basis;
+ const now={channels:same(prior.channels,answer.channels)?prior.channels:answer.channels,agents:same(prior.agents,answer.agents)?prior.agents:answer.agents};
+ if(now.channels===prior.channels&&now.agents===prior.agents) return was?.basis===basis?was:{basis,now:prior};
+ return {basis,now};
 }
 
 // The reader's channels as the sidebar last read them.
