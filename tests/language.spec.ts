@@ -128,7 +128,7 @@ test('English default, account language across sessions/devices, automatic conte
     await expectNumberOrder(titleNode,index===0);
     await page.goto(paths[index]);
     await expect(page.locator('.cw[open] .cw-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
-    await expectNumberOrder(page.locator('.cw[open] .cw-title'),index===0);
+    await expectNumberOrder(page.locator('.cw[open] .cw-title-btn'),index===0);
     await expect(page.locator('.recent-cards').getByRole('link',{name:title,exact:true}).locator('.recent-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
     await page.goto('/c/rs-learning/work/board');
    }
