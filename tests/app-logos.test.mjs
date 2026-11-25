@@ -21,6 +21,8 @@ test('every app of the catalogue maps to a logo file in public/', () => {
   for (const app of apps.filter(app => !noCompany.has(app.key))) assert.ok(logoOf(app.key), `${app.key} has a logo`);
   // A ready-made role's app with no drawn mark of its own (#424) takes its file too.
   assert.equal(logoOf('github'), '/logos/simple/github.svg');
+  // The last app to take its mark (#580): DeepWiki's own favicon, no longer its letter.
+  assert.equal(logoOf('deepwiki'), '/logos/brand/deepwiki.svg');
 });
 
 // Each mark is the company the app is: these keys name a company another product shares a name with.
@@ -30,7 +32,6 @@ test('a shared name takes the right company\'s mark', () => {
   assert.equal(logoOf('make'), '/logos/simple/make.svg', 'Make.com');
   assert.match(readFileSync('public/logos/simple/make.svg', 'utf8'), /<title>Make<\/title>/);
   assert.match(logoOf('kiwi') ?? '', /^\/logos\/brand\/kiwi\.(svg|png)$/, 'Kiwi.com');
-  assert.equal(logoOf('deepwiki'), '/logos/brand/deepwiki.svg', 'DeepWiki (#580)');
 });
 
 // A logo ships inside the install and draws nothing from outside: no script, no handler, no address of another site;
