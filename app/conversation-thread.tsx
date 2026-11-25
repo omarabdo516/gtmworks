@@ -186,6 +186,11 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed}=record;
+ // "Try again" on a message that was not sent (#764): the same turn waits again, and the record is read until its reply.
+ const retry=async(sendKey:string)=>{
+  const failure=await postMessage({company,conversation:conversation.id,intent:'retry',sendKey});
+  if(!failure) asked();
+ };
  // A Run's events ended: the record is read now, so its reply is drawn without waiting for the next tick (#763).
  // The Run's end is kept, so the time until its reply is drawn is reported once that reply is (#762).
  const endedAt=useRef<number|null>(null);
@@ -306,13 +311,16 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
    // #477: a job an asked Agent handed on is its own quiet row between the turns, as a channel draws every handover.
    :message.kind==='handedOn'&&message.cards?.[0]?.kind==='handed'?handed(message.cards[0],`handedOn${message.id}`,'li',rise(index).trim()||undefined)
-   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi>{when(message.created_at,'sender__time')}</div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}${message.posting?' is-sending':''}${rise(index)}`} data-author="person" data-kind={message.kind} aria-busy={message.posting?true:undefined}>
+   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi>{when(message.created_at,'sender__time')}</div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&message.behind?' is-queued':''}${message.posting?' is-sending':''}${rise(index)}`} data-author="person" data-kind={message.kind} aria-busy={message.posting?true:undefined}>
    {!!message.body.trim()&&<div className="bubble-row">{when(message.created_at,'bubble__time')}<div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {/* A message being sent has no stored files to open yet: their names alone (#756). */}
    {!!message.files?.length&&message.kind==='sending'&&<div className="msg-files">{message.files.map(file=><span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>)}</div>}
    {!!message.files?.length&&message.kind!=='sending'&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
-   {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
-   {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
+   {message.kind==='queued'&&message.behind&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
+   {/* Not sent (#764): the Engine refused its Run or was not reached; the message stays, and "Try again" starts the same
+       turn. One refused for the Conversation's model goes back to the box instead (#158). */}
+   {message.kind==='queued'&&message.failed&&<p className="note" role="alert" data-outcome="not-sent">{c('conversationNotSent')}
+    {writer&&message.key&&!message.model_refused&&<> <button type="button" className="link-btn" onClick={()=>void retry(message.key!)}>{c('conversationTryAgain')}</button></>}</p>}
    {message.kind==='answer'&&message.failed&&<p className="note" role="status">{c('conversationAnswerNotDelivered')}</p>}
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}

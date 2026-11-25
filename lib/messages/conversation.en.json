@@ -1,7 +1,8 @@
 {
   "conversationWorkingForPerson": "Working for {0}",
   "conversationQueued": "It’ll read this after the current reply",
-  "conversationQueuedFailed": "Not sent: the agent engine wouldn’t start it. Send it again.",
+  "conversationNotSent": "Not sent",
+  "conversationTryAgain": "Try again",
   "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.",
   "conversationAddressed": "To {0} · the agent wasn’t asked",
   "conversationStop": "Stop {0}",

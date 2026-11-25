@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -13,11 +14,11 @@ const hermes={address:'http://hermes:8642',key:'test-only-key'};
 const connection='f9000000-0000-0000-0000-000000000001';
 const rules=['من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها','Answer every comment within the day'];
 const note='Answer in short points.';
-function databases({pinned,attempt=1,address='http://hermes:8642'}) {
+function databases({pinned,attempt=1,address='http://hermes:8642',held=note}) {
  const asked=/** @type {string[]} */([]);
  const rpc=async(/** @type {string} */ name,/** @type {any} */ given)=>{ asked.push(name);
   if(name==='conversation_agent') return {data:null,error:null};
-  if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,profile:'writer',note},error:null};
+  if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,profile:'writer',note:held},error:null};
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:[{company:'co',agent:'a',person:'p',send_key:'k',message:'Draft the offer email',connection,profile:'writer',note,retry:false}],error:null};
   if(name==='conversation_handover_agents') return {data:[],error:null};
@@ -27,12 +28,13 @@ function databases({pinned,attempt=1,address='http://hermes:8642'}) {
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
   if(name==='pin_lead_brief') return {data:null,error:null};
-  if(name==='begin_start') return {data:attempt,error:null};
+  if(name==='begin_turn_start') return {data:attempt,error:null};
   if(['send_conversation_message','record_conversation_turn'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };
  const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
- const db={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_messages'?null:{id:'a9000000-0000-0000-0000-000000000001'})};
- const service={rpc,from:()=>chain({instructions:null})};
+ const queued=withTurnQueue(rpc);
+ const db={rpc:queued,from:(/** @type {string} */ table)=>chain(table==='conversation_messages'?null:{id:'a9000000-0000-0000-0000-000000000001'})};
+ const service={rpc:queued,from:()=>chain({instructions:null})};
  return {db,service,asked,hermes:{address,key:'test-only-key'}};
 }
 const send=(/** @type {ReturnType<typeof databases>} */ {db,service,hermes},/** @type {object} */ engine)=>sendMessage(db,service,{company:'co',conversation:'c',sendKey:'k',message:'Draft the offer email',hermes,...engine});
@@ -59,8 +61,7 @@ test('a queued turn starts with no rules either',async()=>{
 });
 
 test('a run of an Agent with no rules is told none and offered only what was pinned; a run never pinned is offered nothing',async()=>{
- const fake=fakeEngine(); const quiet=databases({pinned:{tools:['create_agent','save_rule'],rules:[]}});
- quiet.db.rpc=async(name,given)=>name==='reserve_conversation_turn'?{data:{state:'reserved',connection,profile:'writer',note:null},error:null}:quiet.service.rpc(name,given);
+ const fake=fakeEngine(); const quiet=databases({pinned:{tools:['create_agent','save_rule'],rules:[]},held:null});
  await send(quiet,{engineFor:fake.engineFor});
  assert.equal(fake.runs[0].instructions,null);
  assert.deepEqual(fake.runs[0].tools.map(tool=>tool.name),['create_agent','save_rule']);

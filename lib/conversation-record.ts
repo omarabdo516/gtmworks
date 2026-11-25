@@ -162,7 +162,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   ...(found.good_morning_day?{morningDay:found.good_morning_day}:{}),
-  messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files),firstReply)
+  messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files,waiting(messages,ends,commandRuns).length>0),firstReply)
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
   usage:(await read)?.usage??null,
   pending:waiting(messages,ends,commandRuns).length>0||queuedWaiting(queued),

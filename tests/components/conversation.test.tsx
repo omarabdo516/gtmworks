@@ -107,6 +107,26 @@ for (const [language, line] of [['en', 'The agent engine did not take that model
  expect(later.container.querySelector('.composer-error')).toBeNull();
 });
 
+// #764: a message is stored the moment it is sent and its Run starts after. A turn the Engine refused stays with "Not sent"
+// under it and "Try again", which posts the same send key; one waiting behind the current reply says so, and one about to
+// start is an ordinary message.
+for (const [language, notSent, tryAgain, waits] of [['en', 'Not sent', 'Try again', 'It’ll read this after the current reply'], ['ar', 'ما اتبعتتش', 'جرّب تاني', 'هيقراها بعد الرد اللي شغال عليه']] as const) test(`in ${language} a message that was not sent stays with its line and Try again, which sends the same turn`, async () => {
+ const posts: unknown[] = [];
+ vi.stubGlobal('fetch', vi.fn(async (_: string, init?: RequestInit) => { if (init?.method === 'POST') posts.push(JSON.parse(String(init.body))); return Response.json(talk([sent])); }));
+ const refused = { id: 0, author: 'person' as const, author_name: 'Omar', body: 'Now the email version', created_at: at, kind: 'queued' as const, failed: true, key: 'k7640000-0000-0000-0000-000000000001' };
+ const screen = await render(view(talk([sent, refused]), language));
+ const turn = screen.getByRole('list', { name: language === 'en' ? 'Messages' : 'الرسائل' }).getByRole('listitem').filter({ hasText: 'Now the email version' });
+ await expect.element(turn.getByRole('alert')).toHaveTextContent(`${notSent} ${tryAgain}`);
+ expect(screen.container.querySelector('textarea')?.value, 'the words stay in the transcript, not back in the box').toBe('');
+ await turn.getByRole('button', { name: tryAgain }).click();
+ await expect.poll(() => posts).toEqual([{ company: 'co-1', conversation: 'cv-2', intent: 'retry', sendKey: 'k7640000-0000-0000-0000-000000000001' }]);
+ const waiting = await render(view(talk([sent, { ...refused, failed: undefined, key: undefined, behind: true }], { pending: true }), language));
+ await expect.element(waiting.getByText(waits)).toBeVisible();
+ const starting = await render(view(talk([sent, { ...refused, failed: undefined, key: undefined }], { pending: true }), language));
+ expect(starting.container.querySelector('.is-queued'), 'a turn about to start is an ordinary message').toBeNull();
+ expect(starting.container.querySelector('.queued')).toBeNull();
+});
+
 // Review of #330: on the same mounted Conversation, the model line goes once the refused message is no longer the latest
 // (another tab sent one); the message in the box stays, and so does a line about something else.
 test('the model line goes when the refused message is no longer the latest, keeping the box\'s text and any other line', async () => {

@@ -134,7 +134,7 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 export type MessageFile={id:number,name:string,image?:true};
 // A message its person just sent is drawn by the page before its record holds it (`sending`, #756, lib/sending.ts),
 // `posting` until the send is answered; no record the server reads has one.
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn'|'sending',to?:string,failed?:boolean,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn'|'sending',to?:string,failed?:boolean,behind?:true,key?:string,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
 export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
@@ -243,12 +243,17 @@ export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand
 // A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
 // of the record uses, waiting or started.
 export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
-export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender='',files:StoredFile[]=[]):ConversationMessage[]=>{
+// A waiting turn is stored the moment it is sent and its Run starts after (#764): it reads as waiting behind the current
+// reply (`behind`) only while a Run is open (`busy`) or an earlier turn still waits; one that failed carries its send key,
+// so "Try again" names the same turn.
+export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender='',files:StoredFile[]=[],busy=true):ConversationMessage[]=>{
  // The record keeps its own order (by id); each note goes before the first message written after it.
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>{ const waiting=messageFiles(files.filter(row=>row.send_key===turn.send_key&&row.message_id===null)); return {id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(waiting.length?{files:waiting}:{}),...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}; })];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index,all)=>{ const waiting=messageFiles(files.filter(row=>row.send_key===turn.send_key&&row.message_id===null));
+   const behind=!turn.failed_at&&(busy||all.slice(0,index).some(earlier=>!earlier.failed_at));
+   return {id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(waiting.length?{files:waiting}:{}),...(behind?{behind:true as const}:{}),...(turn.failed_at?{failed:true,key:turn.send_key,...(turn.model_refused?{model_refused:true}:{})}:{})}; })];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.

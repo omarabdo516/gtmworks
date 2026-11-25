@@ -1,5 +1,11 @@
 [
  {
+  "issue": 764,
+  "date": "2026-11-25",
+  "en": { "title": "Your message is kept the moment you send it", "body": "A message you send is stored before the Agent is asked, so closing the page or a slow server never loses it; if the agent engine can't start on it, it stays in the Conversation marked Not sent, with Try again." },
+  "ar": { "title": "رسالتك بتتحفظ أول ما تبعتها", "body": "الرسالة اللي بتبعتها بتتحفظ قبل ما الوكيل يتسأل، فقفل الصفحة أو بطء السيرفر عمره ما يضيّعها؛ ولو محرك الوكلاء ماقدرش يبدأ عليها، بتفضل في المحادثة ومكتوب تحتها «ما اتبعتتش» ومعاها «جرّب تاني»." }
+ },
+ {
   "issue": 763,
   "date": "2026-11-25",
   "en": { "title": "The working line always says what the Agent is doing", "body": "While an Agent works on your message, the line under the conversation reads Thinking or the step it is on now, in a Conversation, a channel and a card's chat alike, and it holds until the reply is drawn, which now comes as soon as the Agent finishes." },

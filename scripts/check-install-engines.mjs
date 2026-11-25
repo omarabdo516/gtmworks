@@ -105,7 +105,7 @@ try {
   const send={person:user.id,company:target.company,conversation,sendKey:randomUUID(),agent:target.agent,message:mode==='sandbox'?`SANDBOX-RUN ${file}: مرحباً، اكتب عنواناً قصيراً.`:'مرحباً، اكتب عنواناً قصيراً.'};
   // A profile the worker has not confirmed yet refuses the send as pending and stores nothing, so the same send is made
   // again until it is ready (#282).
-  const sent=await until(`${target.name} ready for a run`,async()=>{ const result=await sendMessage(owner,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  const sent=await until(`${target.name} ready for a run`,async()=>{ const result=await sendMessage(owner,service,send); return 'queued' in result?null:result; },180);
   assert.deepEqual(sent,{conversation});
   const answer=await until(`a reply in ${target.name}`,async()=>(await checked(owner.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
   assert.ok(answer.body.includes(reply),answer.body);

@@ -751,41 +751,52 @@ test('the install job proves profiles per company on the pinned release, after t
  assert.match(script,/assert\.deepEqual\(\[await listsSkill\(otherEngine,other\.profile\),await listsSkill\(otherEngine,other\.secondProfile\)\],\[false,false\]/);
 });
 
-// The person's session and the service role, as sendMessage sees them; every call is recorded in order.
-function conversationDatabases({profile,reserve=null,record=null}) {
- const order=[];
- const db={order,args:{},rpc:async(name,args)=>{ order.push(name); db.args[name]=args;
-   if(name==='conversation_agent') return {data:null,error:null};
-   // The sender's one entry point reserves the run when the Agent is free (reserve_conversation_turn, #team-work).
-   if(name==='reserve_conversation_turn') return reserve||{data:{state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile,note:null},error:null};
-   if(name==='send_conversation_message') return record||{data:true,error:null};
-   if(name==='release_conversation_run') return {data:true,error:null};
-   return {data:null,error:{message:'unexpected'}}; },
-  from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
- const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='conversation_handover_agents'?{data:[],error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; }};
- return {db,service,order};
+// The person's session and the service role, as sendMessage sees them; every call is recorded in order. A send stores
+// its turn (#764); the one starter claims it on the profile the database pins (`profile`), or finds none to claim
+// (`claim` false: the profile's tools are not yet the fixed set, so the claim waits).
+function conversationDatabases({profile,claim=true}) {
+ const order=[]; const args={}; let stored=null; let settled=false;
+ const answer=(name,given)=>{ args[name]=given;
+  if(name==='conversation_agent') return {data:null,error:null};
+  if(name==='queue_conversation_turn') { stored=given; return {data:{state:'queued'},error:null}; }
+  if(name==='queued_conversations') return {data:stored&&!settled?[{conversation:'c'}]:[],error:null};
+  if(name==='claim_conversation_turn') return {data:stored&&!settled&&claim?[{company:two,agent:stored.agent,person:'p',send_key:stored.message_key,message:stored.message,connection:'f9000000-0000-0000-0000-000000000001',profile,note:null,retry:false,has_files:false}]:[],error:null};
+  if(name==='begin_turn_start') return {data:1,error:null};
+  if(name==='conversation_handover_agents') return {data:[],error:null};
+  if(name==='pin_run') return {data:{tools:null,rules:[]},error:null};
+  if(['pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return {data:null,error:null};
+  if(name==='record_conversation_turn'||name==='fail_conversation_turn') { settled=true; return {data:true,error:null}; }
+  return {data:null,error:{message:'unexpected'}};
+ };
+ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001',instructions:null},error:null})};
+ const db={rpc:async(name,given)=>{ order.push(name); return answer(name,given); },from:()=>chain};
+ const service={rpc:async(name,given)=>{ order.push(`service ${name}`); return answer(name,given); },from:()=>chain};
+ return {db,service,order,args};
 }
 const engine=order=>({engineFor:connection=>({start:async()=>{ order.push(`start ${connection.profile}`); return 'run_1'; }})});
+const hermes={address:'http://hermes:8642',key:'test-only-key'};
 
-test('a run is reserved on its pinned profile before Hermes is called, and recorded after', async () => {
+test('a message is stored before Hermes is called, and its Run starts on its pinned profile after', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
- const {db,service,order}=conversationDatabases({profile:companyProfile(two)});
- const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(order)});
+ const {db,service,order,args}=conversationDatabases({profile:companyProfile(two)});
+ const sent=await sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(order)});
  assert.deepEqual(sent,{conversation:'c'});
- // The reservation keeps the message for the record.
- assert.equal(db.args.reserve_conversation_turn.message,'Hi');
- // The record names the pin the run started on, the one the reservation made.
- assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','service conversation_handover_agents','service pin_run','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.equal(args.queue_conversation_turn.message,'Hi');
+ // The record names the pin the run started on, the one the claim made.
+ assert.equal(args.record_conversation_turn.started_on,'f9000000-0000-0000-0000-000000000001');
+ assert.deepEqual(order.slice(0,2),['conversation_agent','queue_conversation_turn']);
+ assert.deepEqual(order.filter(step=>step.startsWith('service ')||step.startsWith('start ')).filter(step=>step!=='service pin_lead_brief'),['service queued_conversations','service claim_conversation_turn','service conversation_handover_agents','service pin_run','service pin_run_history','service pin_run_model','service begin_turn_start',`start ${companyProfile(two)}`,'service record_conversation_turn']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools are not the fixed set', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const borrowed=conversationDatabases({profile:companyProfile(three)});
- assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
+ assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(borrowed.order)}),{error:'conversationHermesFailed',status:502});
  assert.ok(!borrowed.order.some(step=>step.startsWith('start')));
- const pending=conversationDatabases({profile:companyProfile(two),reserve:{data:null,error:{code:'55000',message:'agentToolsPending'}}});
- assert.deepEqual(await sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(pending.order)}),{error:'conversationAgentToolsPending',status:409});
+ assert.deepEqual(borrowed.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:0},'the message stays, not sent');
+ // The claim waits while the profile's tools are pending: the message is stored and waits, and nothing starts.
+ const pending=conversationDatabases({profile:companyProfile(two),claim:false});
+ assert.deepEqual(await sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(pending.order)}),{conversation:'c',queued:true});
  assert.ok(!pending.order.some(step=>step.startsWith('start')));
 });
 
@@ -842,28 +853,17 @@ test('the worker abandons unrecorded reservations in one database update and nev
  assert.doesNotMatch(source,/settle|engineFor|\.start\(/,'no replay path is left');
 });
 
-test('a late record of an abandoned reservation asks the person to send again', async () => {
- const {sendMessage}=await import('../lib/conversation-runs.mjs');
- const late=conversationDatabases({profile:companyProfile(two),record:{data:null,error:{code:'55000',message:'conversationSendAgain'}}});
- assert.deepEqual(await sendMessage(late.db,late.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(late.order)}),{error:'conversationSendAgain',status:409});
- for(const language of ['en','ar']) assert.notEqual(i18n(language).t('conversationSendAgain'),'conversationSendAgain');
-});
-
-test('a run that never started releases its reservation at once; a started one leaves it to the record', async () => {
+test('a run the Engine refused fails its turn for that attempt; a started one is recorded and never failed', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const refused=conversationDatabases({profile:companyProfile(two)});
  const refusing={engineFor:connection=>({start:async()=>{ refused.order.push(`start ${connection.profile}`); return null; }})};
- assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...refusing}),{error:'conversationHermesFailed',status:502});
- assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'release_conversation_run']);
- assert.deepEqual(refused.db.args.release_conversation_run,{conversation:'c',c:two,message_key:'k',attempt:1});
- // A Connection that cannot be used never reaches the engine, and its reservation is released too.
- const borrowed=conversationDatabases({profile:companyProfile(three)});
- assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(borrowed.order)}),{error:'conversationNotFound',status:404});
- assert.equal(borrowed.order.at(-1),'release_conversation_run');
- // A run that started is recorded, never released: the record ends its reservation.
+ assert.deepEqual(await sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes,...refusing}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'service fail_conversation_turn']);
+ assert.deepEqual(refused.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:1});
+ // A run that started is recorded, never failed: the record ends its reservation.
  const started=conversationDatabases({profile:companyProfile(two)});
- assert.deepEqual(await sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(started.order)}),{conversation:'c'});
- assert.ok(!started.order.includes('release_conversation_run'));
+ assert.deepEqual(await sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(started.order)}),{conversation:'c'});
+ assert.ok(!started.order.includes('service fail_conversation_turn'));
 });
 
 // Each Agent's own profile (ADR 0016), as the worker sees it: the profiles it never confirmed and those marked as
