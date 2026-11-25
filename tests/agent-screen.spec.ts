@@ -305,7 +305,9 @@ test('a Member takes control of the Screen for this session, works it with their
 
 test('a page that loses its connection while in control says control went back, as closing the screen does',async({page})=>{
  fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
- // The page's own socket passes through as it is, until the connection is cut from the page's side.
+ // The page's own socket passes through as it is, until the connection is cut on the page's side, as a network that
+ // drops. The server gives control back when its heartbeat finds the dead socket, which the case above shows with a
+ // socket that ends without a closing word; here it is what the page says.
  const sockets:{close:(options?:{code?:number,reason?:string})=>Promise<void>}[]=[];
  await page.routeWebSocket(/\/api\/display\/ws/,socket=>{ socket.connectToServer(); sockets.push(socket); });
  const {card}=await openScreen(page,'omar@example.com');
@@ -317,7 +319,7 @@ test('a page that loses its connection while in control says control went back, 
  await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('human');
  await sockets.at(-1)?.close({code:1011,reason:'lost'});
  await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
- await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ await expect(view.getByRole('button',{name:'Take control'})).toBeVisible();
 });
 
 test('while one person holds the Screen, another sees Watching only with who has control and no picture of what is typed',async({page,browser})=>{
@@ -478,7 +480,8 @@ test('an Agent hands its person a step on its Screen: the toast opens it, Open t
 test('Open the screen from a board Card\'s chat goes to the Agent\'s details with the view open on Done it, naming the button it stopped at',async({page})=>{
  fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
  const {conversation,hand,drop}=handedOnScreen();
- const [{id:board}]=rows(`insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id) select '${company}',id,'December campaign','${ads}','${conversation}' from public.work_stages where company_id='${company}' and board_column='progress' order by position,id limit 1 returning id`);
+ // The Conversation's Card on the board, made with its first message.
+ const [{id:board}]=rows(`select id from public.work_cards where conversation_id='${conversation}'`);
  try {
   hand('Publish');
   await page.setViewportSize({width:1440,height:900});
@@ -497,7 +500,7 @@ test('Open the screen from a board Card\'s chat goes to the Agent\'s details wit
   const details=page.getByRole('complementary',{name:'Details: Ads',exact:true});
   const screenCard=details.locator('section.dp-sec').filter({has:page.getByRole('heading',{name:/^Agent’s screen/})});
   await expect(screenCard.locator('.scr-ov__line')).toHaveText('Stopped at “Publish” in Meta Ads · handed to you');
- } finally { drop(); query(`delete from public.work_cards where id=${board}`); }
+ } finally { drop(); }
 });
 
 test('a step handed on the Screen is its person\'s alone: another Member and a Viewer see the Screen as usual',async({page})=>{
