@@ -105,6 +105,7 @@ test('an Agent\'s files are its Cards\' and the reader\'s own Conversations\' wi
    { id: 4, name: 'old.png', size: 90, created_at: '2026-06-01T09:00:00Z', conversation_id: 'c-2', agent_name: 'Meta Ads' },
   ],
   titles: new Map([['c-1', 'Plan the June campaign']]),
+  channelFiles: [],
  });
  assert.deepEqual(files.map(file => [file.name, file.source, file.href]), [
   ['audiences.csv', 'Plan the June campaign', '/c/rs-learning/files/conversation/3'],

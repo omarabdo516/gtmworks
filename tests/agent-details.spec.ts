@@ -210,13 +210,15 @@ test('every file of the Agent is listed, past fifty, and the heading counts what
  await expect(panel.locator('.panel-row__t').last()).toHaveText('file-1.txt');
 });
 
-// A file the Agent handed over in a team channel (#715) is every Member's of that channel: the Owner and the Contributor
-// in it read it, the Viewer outside it does not, and a person's own file in that channel is not the Agent's.
+// A file the Agent handed over in a channel (#715) is every Member's of that channel: the Owner and the Contributor in the
+// team channel read its file, the Viewer outside it does not, a person's own file there is not the Agent's, and the
+// general channel's file, every Member's, is named by the general channel's word.
+const generalChannel='69000000-0000-0000-0000-000000000001'; // supabase/seed.sql
 test('the Files tab lists the files the Agent handed over in a channel the reader is a Member of',async({page})=>{
- const [replied,sent]=[`${company}/channels/${id(14)}/reply-details`,`${company}/channels/${id(14)}/sent-details`];
+ const [replied,sent,general]=[`${company}/channels/${id(14)}/reply-details`,`${company}/channels/${id(14)}/sent-details`,`${company}/channels/${generalChannel}/reply-details`];
  const storage=await serviceStorage();
- for(const path of [replied,sent]) expect((await storage.upload(path,bytes,{contentType:'text/plain',upsert:true})).error).toBeNull();
- query(`do $$ declare m bigint; said bigint; begin
+ for(const path of [replied,sent,general]) expect((await storage.upload(path,bytes,{contentType:'text/plain',upsert:true})).error).toBeNull();
+ query(`do $$ declare m bigint; said bigint; asked bigint; told bigint; begin
   insert into public.channels(id,company_id,kind,name,created_by,create_key) values ('${id(14)}','${company}','team','launch','${omar}','${id(15)}');
   insert into public.channel_people(channel_id,company_id,person_id,added_by) values ('${id(14)}','${company}','${omar}','${omar}'),('${id(14)}','${company}','${reviewer}','${omar}');
   insert into public.channel_agents(channel_id,company_id,agent_id,added_by) values ('${id(14)}','${company}','${copy}','${omar}');
@@ -225,14 +227,18 @@ test('the Files tab lists the files the Agent handed over in a channel the reade
   insert into public.channel_attachments(company_id,channel_id,send_key,message_id,position,name,content_type,size,path,created_at) values
    ('${company}','${id(14)}','${id(16)}',m,0,'brief-notes.txt','text/plain',40,'${sent}','2026-06-14T09:00:00Z'),
    ('${company}','${id(14)}',md5('details-copy-run')::uuid,said,0,'launch-copy.txt','text/plain',2048,'${replied}','2026-06-15T09:00:00Z');
+  insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values ('${company}','${generalChannel}','person','${omar}','Omar','@Copy the plan','${id(17)}') returning id into asked;
+  insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to) values ('${company}','${generalChannel}','agent','${copy}','Copy','The plan.',asked) returning id into told;
+  insert into public.channel_attachments(company_id,channel_id,send_key,message_id,position,name,content_type,size,path,created_at) values
+   ('${company}','${generalChannel}',md5('details-copy-general')::uuid,told,0,'plan.txt','text/plain',300,'${general}','2026-06-13T09:00:00Z');
  end $$;`);
  for(const email of ['omar@example.com','reviewer@example.com']) {
   const details=await openDetails(page,email,copy,'Copy');
   await tab(details,'Files').click();
   const panel=details.getByRole('tabpanel');
-  await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 1');
-  await expect(panel.locator('.panel-row__t')).toHaveText(['launch-copy.txt']);
-  await expect(panel.locator('.panel-row__d')).toHaveText(['2 KB · #launch']);
+  await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
+  await expect(panel.locator('.panel-row__t')).toHaveText(['launch-copy.txt','plan.txt']);
+  await expect(panel.locator('.panel-row__d')).toHaveText(['2 KB · #launch','300 B · #general']);
   const link=await panel.getByRole('link',{name:'launch-copy.txt'}).getAttribute('href');
   expect(link).toMatch(/^\/c\/rs-learning\/files\/channel\/\d+$/);
   const opened=await page.request.get(link!);
@@ -242,7 +248,7 @@ test('the Files tab lists the files the Agent handed over in a channel the reade
  }
  const details=await openDetails(page,'viewer@example.com',copy,'Copy');
  await tab(details,'Files').click();
- await expect(details.getByRole('tabpanel')).not.toContainText('launch-copy.txt');
+ await expect(details.getByRole('tabpanel').locator('.panel-row__t')).toHaveText(['plan.txt']);
 });
 
 // Each tile carries the reader's own state of its Agent (#184): Meta Ads has an open Run, Copy an item waiting on Omar,

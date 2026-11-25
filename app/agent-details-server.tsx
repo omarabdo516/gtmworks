@@ -21,7 +21,7 @@ import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 import { readAgentPermissions } from '@/lib/standing-permissions.mjs';
 import { StandingPermissions } from '@/app/standing-permissions';
-import { channelTitle, type ChannelName } from '@/lib/channels';
+import { channelNameOf, channelTitle } from '@/lib/channels';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentFaceState,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
@@ -95,7 +95,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
 
  const titles=new Map(talks.flatMap((talk,index)=>{ const line=firsts[index]?.split('\n')[0]; return line?[[talk,line] as [string,string]]:[]; }));
  const files=agentFiles({slug,cards,cardFiles:(cardFileRows||[]) as {id:number,name:string,size:number,created_at:string,card_id:number}[],conversationFiles:talkFiles,titles,
-  channelFiles:((channelFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,channels:ChannelName}[]).map(file=>({...file,channel:channelTitle(t,file.channels)}))});
+  channelFiles:((channelFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,channels:{kind:string,name:string|null}}[]).map(file=>({...file,channel:channelTitle(t,channelNameOf(file.channels))}))});
  const filesList=files.length?<ul className="panel-card">{files.map(file=><li key={file.key} className="panel-row"><span className="panel-row__icon"><ShellIcon name="file"/></span><span className="panel-row__text">
    <a className="panel-row__t od-truncate dp-file" href={file.href} target="_blank" rel="noreferrer" title={file.name}><bdi dir="auto">{file.name}</bdi></a>
    <span className="panel-row__d"><bdi dir="ltr">{fileSize(file.size)}</bdi> · <bdi>{file.source}</bdi></span></span></li>)}</ul>:undefined;
