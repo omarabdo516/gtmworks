@@ -15,8 +15,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useChangeWords, modelParts, type ModelChoice } from '@/app/change-words';
-import { madeDay, useZone } from '@/app/agent-made';
-import { dayOf } from '@/lib/activity-log.mjs';
+import { ReaderTime } from '@/app/agent-made';
 import type { ChangeProposalView } from '@/lib/conversations';
 
 // The field an Owner edits a proposal in, as lib/agent-changes.mjs reads it from the Agent's Engine profile.
@@ -51,12 +50,11 @@ function useChangeRead(company:string|undefined,change:ChangeProposalView,unread
 const providerMarks:Record<string,string>={google:'gemini'};
 
 export function ChangeCard({change,company,owner=false,unread=false,answer}:{change:ChangeProposalView,company?:string,owner?:boolean,unread?:boolean,answer?:ReactNode}) {
- const {language}=useI18n(); const zone=useZone(); const {c,cb}=useCardText();
+ const {language}=useI18n(); const {c,cb}=useCardText();
  const read=useChangeRead(company,change,unread);
  const [editing,setEditing]=useState(false);
  // Today its time, another day its day, as the other cards of a chat say when they were answered.
- const when=(at:string)=><time dateTime={at} data-utc={zone}>{dayOf(new Date().toISOString(),zone)===dayOf(at,zone)
-  ?new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone}):madeDay(at,language,zone)}</time>;
+ const when=(at:string)=><ReaderTime at={at} orDay/>;
  const words=useChangeWords();
  const choices=read&&read!=='loading'&&read.edit?.kind==='model'?read.edit.options:[];
  const shown=(value:unknown)=>change.change==='model'?words.model(value):words.shown(value);
