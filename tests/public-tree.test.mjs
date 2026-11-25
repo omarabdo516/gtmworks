@@ -61,7 +61,7 @@ test('the public tree deploys nothing of ours', () => {
  assert.deepEqual(offenders(new RegExp(piece('\\benvironment', ':')), inWorkflows), [], 'deployment environment');
  assert.deepEqual(offenders(new RegExp(piece('\\bsecrets', '\\.(?!GITHUB_TOKEN\\b)')), inWorkflows), [], 'secret other than GITHUB_TOKEN');
  const ci = load(texts.get('.github/workflows/ci.yml'));
- for (const job of ['changes', 'fast', 'image', 'database', 'visual', 'integration', 'chat-open', 'install', 'check']) assert.ok(ci.jobs[job], job);
+ for (const job of ['changes', 'fast', 'image', 'database', 'budgets', 'integration', 'chat-open', 'install', 'check']) assert.ok(ci.jobs[job], job);
  for (const job of ['deploy', 'deploy-db']) assert.equal(ci.jobs[job], undefined, job);
  assert.deepEqual(ci.jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'chat-open', 'install']);
 });

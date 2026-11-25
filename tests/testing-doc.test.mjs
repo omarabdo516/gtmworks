@@ -201,7 +201,7 @@ test('cases in any form are listed by Playwright and each needs its own row', ()
 test('every case of the functional project has its decision, and only kept cases are still in their file', () => {
   const listed = listCases('playwright.config.ts', ['functional', 'alone']);
   assert.ok(new Set(listed.cases.map(item => item.file)).size > 30, 'Playwright lists the functional project\'s spec files');
-  for (const file of ['visual-lane.spec.ts', 'first-run.spec.ts', 'navigation.spec.ts', 'proxy/production-shape.spec.ts']) assert.ok(!listed.cases.some(item => item.file === file), `${file} is not in the functional project`);
+  for (const file of ['first-run.spec.ts', 'navigation.spec.ts', 'proxy/production-shape.spec.ts']) assert.ok(!listed.cases.some(item => item.file === file), `${file} is not in the functional project`);
   assert.deepEqual(decisionProblems(caseDecisions(readRows()), listed), []);
 });
 
