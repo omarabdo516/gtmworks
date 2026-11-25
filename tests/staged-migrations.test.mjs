@@ -5,11 +5,15 @@ import { readFileSync, readdirSync } from 'node:fs';
 // ADR 0023: an update applies every migration before this release's app starts, while the release it replaces still
 // serves, and a migration whose name ends in _cutover only once this release's app and worker answer. So every other
 // migration from the staged removal of Agent levels on keeps the database usable by the previous release: it takes no
-// column, no table and no function signature away. The first step of that removal only adds; the cutover removes.
+// column, no table and no function signature away. The first step of that removal only adds; the cutover removes. The
+// Card's board (#668) is removed the same way: its first steps (#676 to #683) only add, and its cutover (#684) removes.
 const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')&&!name.endsWith('.verify.sql')).sort();
 const read=name=>readFileSync(`supabase/migrations/${name}`,'utf8');
 const firstStep='20270408100000_one_set_of_tools.sql';
 const cutover='20270416000000_one_set_of_tools_cutover.sql';
+const cardFirstStep='20270417000000_card_status.sql';
+const cardCutover='20270418000000_card_kanban_cutover.sql';
+const cutovers=migrations.filter(name=>name.endsWith('_cutover.sql'));
 
 // The Supabase CLI applies migrations in the numeric order of their versions, the installer and the local database in
 // the order their names sort in: one order only while every version has the same 14 digits.
@@ -49,18 +53,30 @@ test('the first step of the levels removal keeps the level, and the cutover remo
  assert.ok(migrations.indexOf(cutover)>migrations.indexOf(firstStep),'the cutover sorts after the first step it follows');
 });
 
+test('the first steps of the Card board keep its old shapes, and its cutover removes them after them', () => {
+ for(const name of migrations.filter(name=>name>=cardFirstStep&&name<cardCutover))
+  assert.doesNotMatch(read(name),/drop table public\.(work_stages|work_labels|work_card_labels|work_checklist|work_assignees|approval_steps)\b/,`${name} drops an old shape before the cutover`);
+ const last=read(cardCutover);
+ for(const table of ['work_card_labels','work_labels','work_checklist','work_assignees','approval_steps','work_stages'])
+  assert.match(last,new RegExp(`drop table if exists public\\.${table};`),`the Card cutover drops ${table}`);
+ assert.match(last,/drop column if exists stage_id/);
+ assert.ok(migrations.indexOf(cardCutover)>migrations.indexOf(cardFirstStep),'the Card cutover sorts after its first steps');
+});
+
 // The installer applies a cutover by its name, after every other migration, wherever its name sorts; the Supabase CLI
 // and the local database apply it in the order the names sort. So a migration whose name sorts after the cutover (once
 // no version is left before it) is applied after the cutover there and before it on an install: the same only when it
 // makes nothing the cutover makes and reads nothing the cutover takes away.
-test('a migration sorting after the cutover makes nothing the cutover makes and reads nothing it takes away', () => {
- const last=read(cutover);
- const made=new Set([...last.matchAll(/create (?:or replace )?(?:function|view|trigger|policy) (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
- const removed=new Set([...last.matchAll(/drop (?:function|table|column|policy|view|trigger)(?: if exists)? (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
- assert.ok(made.size&&removed.size,'the cutover makes and removes what it names');
- for(const name of migrations.slice(migrations.indexOf(cutover)+1)) {
-  const sql=read(name);
-  for(const word of [...made,...removed]) assert.doesNotMatch(sql,new RegExp(`\\b${word}\\b`),`${name} names ${word}, which the cutover makes or takes away`);
+test('a migration sorting after a cutover makes nothing the cutover makes and reads nothing it takes away', () => {
+ for(const each of cutovers) {
+  const last=read(each);
+  const made=new Set([...last.matchAll(/create (?:or replace )?(?:function|view|trigger|policy) (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
+  const removed=new Set([...last.matchAll(/drop (?:function|table|column|policy|view|trigger)(?: if exists)? (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
+  assert.ok(made.size&&removed.size,`${each} makes and removes what it names`);
+  for(const name of migrations.slice(migrations.indexOf(each)+1).filter(name=>!name.endsWith('_cutover.sql'))) {
+   const sql=read(name);
+   for(const word of [...made,...removed]) assert.doesNotMatch(sql,new RegExp(`\\b${word}\\b`),`${name} names ${word}, which ${each} makes or takes away`);
+  }
  }
 });
 

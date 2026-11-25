@@ -21,7 +21,6 @@ insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created
 insert into auth.identities (id,user_id,identity_data,provider,provider_id,last_sign_in_at,created_at,updated_at) select id,id,jsonb_build_object('sub',id::text,'email',email),'email',email,now(),now(),now() from auth.users where id::text like '20000000-%';
 insert into public.people (id,name) values ('20000000-0000-0000-0000-000000000001','عمر'),('20000000-0000-0000-0000-000000000002','مدير'),('20000000-0000-0000-0000-000000000003','مراجع'),('20000000-0000-0000-0000-000000000004','مشاهد'),('20000000-0000-0000-0000-000000000005','عضو');
 insert into public.members (company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) select id,'20000000-0000-0000-0000-000000000001','owner',true,true,true from public.companies;
-update public.approval_steps set person_id='20000000-0000-0000-0000-000000000001',role=null where company_id='10000000-0000-0000-0000-000000000001';
 insert into public.members (company_id,person_id,role) values
 ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','manager'),
 ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','contributor'),
@@ -40,18 +39,22 @@ update auth.users set encrypted_password=extensions.crypt('local-seed-password',
 insert into public.people(id,name) select ('30000000-0000-0000-0000-00000000000'||n)::uuid, name from unnest(array['وكيل المحتوى','المصمم','الناقد','وكيل الإعلانات','Lead']) with ordinality x(name,n);
 insert into public.members(company_id,person_id,role,agent_role) select '10000000-0000-0000-0000-000000000001',p.id,'contributor',x.agent_role::public.member_agent_role from (values (1,'writer'),(2,'designer'),(3,'critic'),(4,null),(5,'account_manager')) x(n,agent_role) join public.people p on p.id=('30000000-0000-0000-0000-00000000000'||x.n)::uuid;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',false);
-insert into public.work_cards(company_id,stage_id,title,channel,format,go_live,next_actor) select s.company_id,s.id,x.title,x.channel,x.format,now()+make_interval(days=>x.days),'30000000-0000-0000-0000-000000000001' from (values (1,'أفكار لمحتوى الشهر','Instagram','بوست',4),(2,'دليلك لاختيار المسار المناسب','Facebook','كاروسيل',8),(3,'نصائح للمتعلّمين الجدد','Instagram','ريل',12),(4,'رحلة التعلّم تبدأ هنا','Instagram','بوست',16),(5,'إعلان البرنامج القادم','Facebook','كاروسيل',20)) x(pos,title,channel,format,days) join public.work_stages s on s.position=x.pos and s.company_id='10000000-0000-0000-0000-000000000001';
+-- Five Cards on RS Learning's board, one in each column of the work (#668): their channel, format and label and their
+-- to-do item in the description, as Cards moved over from the old fields read (#684).
+insert into public.work_cards(company_id,status,title,description,go_live) select '10000000-0000-0000-0000-000000000001',x.status,x.title,
+ '**Channel:** '||x.channel||E'\n\n**Format:** '||x.format||E'\n\n**Labels:** '||x.label||E'\n\n- ['||case when x.pos<3 then 'x' else ' ' end||'] Caption Written',now()+make_interval(days=>x.days)
+ from (values (1,'ideas','أفكار لمحتوى الشهر','Instagram','بوست','static',4),(2,'planned','دليلك لاختيار المسار المناسب','Facebook','كاروسيل','carosel',8),(3,'progress','نصائح للمتعلّمين الجدد','Instagram','ريل','reel',12),
+  (4,'progress','رحلة التعلّم تبدأ هنا','Instagram','بوست','static',16),(5,'waiting','إعلان البرنامج القادم','Facebook','كاروسيل','carosel',20)) x(pos,status,title,channel,format,label,days) order by x.pos;
 select set_config('request.jwt.claim.sub','',false);
--- Seed distinct agent actions and assignments through the same audit triggers.
+-- Each Card is on one of the legacy agent persons, through the same audit triggers; the Card in review is on the one who
+-- sent it there, and its review waits for every Owner and Manager who sees it (#681).
 do $$ declare n integer; agent uuid; target bigint; begin
  for n in 1..5 loop
-  agent=('30000000-0000-0000-0000-00000000000'||n)::uuid;
+  agent=('30000000-0000-0000-0000-00000000000'||case when n=5 then 1 else n end)::uuid;
   select id into target from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' order by id offset n-1 limit 1;
   perform set_config('request.jwt.claim.sub',agent::text,true);
-  update public.work_cards set next_actor=agent where id=target and approval_step_id is null;
-  insert into public.work_assignees(company_id,card_id,person_id) values ('10000000-0000-0000-0000-000000000001',target,agent);
-  insert into public.work_checklist(company_id,card_id,title,done) values ('10000000-0000-0000-0000-000000000001',target,'Caption Written',n<3);
-  insert into public.work_card_labels(company_id,card_id,label_id) select '10000000-0000-0000-0000-000000000001',target,id from public.work_labels where company_id='10000000-0000-0000-0000-000000000001' and name=case when n=3 then 'reel' when n in (2,5) then 'carosel' else 'static' end;
+  update public.work_cards set assignee_person=agent,review_submitter=case when n=5 then agent end,review_entered_at=case when n=5 then now() end where id=target;
+  if n=5 then insert into public.work_reviews(company_id,card_id,asked_by) values ('10000000-0000-0000-0000-000000000001',target,agent); end if;
  end loop;
  perform set_config('request.jwt.claim.sub','',true);
 end $$;

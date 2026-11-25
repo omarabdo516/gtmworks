@@ -7,7 +7,7 @@ const quote=sql=>`'${sql.replaceAll("'","''")}'`;
 // Run the production SQL with real triggers and constraints, without changing seeded data.
 const sql=`begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(14);
 update public.companies set slug='bootstrap-original' where slug='rs-learning';
 insert into auth.users(id,email) values
  ('90000000-0000-0000-0000-000000000001','${owner}'),
@@ -20,7 +20,6 @@ select is((select name from public.companies where slug='rs-learning'),'RS Learn
 select is((select count(*)::int from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning' and m.role='owner' and m.removed_at is null),1,'one active Owner');
 select ok((select grant_publishing and grant_money_figures and grant_customer_data from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning'),'all Owner grants');
 select is((select name from public.people where id='90000000-0000-0000-0000-000000000001'),'bootstrap-owner','the Owner is a person named from the email');
-select is((select count(*)::int from public.approval_steps s join public.companies c on c.id=s.company_id where c.slug='rs-learning' and s.role='owner'),1,'Owner-only default approval');
 select set_config('test.bootstrap_before', (select md5(jsonb_build_object(
  'company',(select to_jsonb(c) from public.companies c where slug='rs-learning'),
  'person',(select to_jsonb(p) from public.people p where id='90000000-0000-0000-0000-000000000001'),

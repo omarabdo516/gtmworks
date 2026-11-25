@@ -1,9 +1,8 @@
--- The column guard runs on every insert and update of a stage, as the function's owner, and no stage before review is
--- shown as Live or Done.
+-- The column guard was the stage table's; since the Card cutover (#684) every move is checked by check_card_move, with an
+-- empty search path, and not callable without signing in. Waiting on you is reached only by a review.
 select json_build_object(
- 'guard_on_insert_and_update',exists(select 1 from pg_trigger where tgrelid='public.work_stages'::regclass and tgname='work_stage_place' and tgenabled='O'
-  and (tgtype & 4)<>0 and (tgtype & 16)<>0),
- 'places_as_owner',(select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='public.work_stage_place()'::regprocedure),
- 'not_callable_by_people',not has_function_privilege('authenticated','public.work_stage_place()','execute') and not has_function_privilege('anon','public.work_stage_place()','execute'),
- 'no_early_stage_live_or_done',not exists(select 1 from public.work_stages where kind in ('ideas','before_review') and board_column in ('live','done'))
+ 'stage_guard_gone',to_regprocedure('public.work_stage_place()') is null,
+ 'moves_checked',(select proconfig @> array['search_path=""'] from pg_proc where oid=to_regprocedure('public.check_card_move(uuid,bigint,text)')),
+ 'not_callable_anonymously',not has_function_privilege('anon','public.check_card_move(uuid,bigint,text)','execute'),
+ 'waiting_only_by_review',position('waiting' in pg_get_functiondef(to_regprocedure('public.check_card_move(uuid,bigint,text)')))>0
 );

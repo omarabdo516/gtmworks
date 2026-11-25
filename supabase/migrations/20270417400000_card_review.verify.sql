@@ -1,5 +1,5 @@
--- #681: one review on an exact Version, decided by an Owner or a Manager who sees the Card; no Card is left waiting on
--- an approval step outside a review.
+-- #681: one review on an exact Version, decided by an Owner or a Manager who sees the Card. Approval steps went with the
+-- Card cutover (#684), so a Card waits on a review alone.
 select json_build_object(
  'reviews',to_regclass('public.work_reviews') is not null,
  'one_open',exists(select 1 from pg_indexes where schemaname='public' and indexname='work_reviews_one_open'),
@@ -8,6 +8,6 @@ select json_build_object(
  'ask',has_function_privilege('authenticated','public.ask_review(uuid,bigint)','execute') and not has_function_privilege('anon','public.ask_review(uuid,bigint)','execute') and not has_function_privilege('service_role','public.ask_review(uuid,bigint)','execute'),
  'decide',has_function_privilege('authenticated','public.decide_review(uuid,bigint,bigint,text,text)','execute') and not has_function_privilege('anon','public.decide_review(uuid,bigint,bigint,text,text)','execute') and not has_function_privilege('service_role','public.decide_review(uuid,bigint,bigint,text,text)','execute'),
  'approved',(select count(*)=2 from information_schema.columns where table_schema='public' and table_name='work_cards' and column_name in ('approved_version','approved_at')),
- 'no_step_outside_review',not exists(select 1 from public.work_cards w where w.approval_step_id is not null and w.status='waiting' and w.archived_at is null
-  and not exists(select 1 from public.work_reviews r where r.card_id=w.id and r.decision is null))
+ 'no_step_outside_review',to_regclass('public.approval_steps') is null
+  and not exists(select 1 from information_schema.columns where table_schema='public' and table_name='work_cards' and column_name='approval_step_id')
 );

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
+import { cardShapesAsTheyStood, connectionsAsTheyStood, testDb } from './pgtap.mjs';
 
 // The Agency and the reviewer Role are removed (#7, ADR 0012). The database is put back in its earlier shape inside
 // the transaction (the reviewer Role, the Agency flag, a policy using the bypass), a reviewer is seeded, and the real
@@ -16,6 +16,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(19);
 -- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
 ${connectionsAsTheyStood}
+-- The approval steps, stages and the Card's step and next actor the migration converts, dropped since (#684).
+${cardShapesAsTheyStood}
 create temporary table migration_history(name text primary key);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
 -- Tables dropped later stood then, and the migration rewrites their policies: the external-agent API's (#341) and the
@@ -98,7 +100,9 @@ select is((select count(*)::int from public.hermes_connections where id='f700000
 select set_config('request.jwt.claim.sub','${manager}',true);
 select is((select count(*)::int from public.hermes_connections),0,'a Manager does not read Connections');
 reset role;
-select is((select string_agg(key||'='||value,',' order by key) from (${verify}) v, json_each_text(v.json_build_object) where value<>'true'),null,'every verify check passes after the migration');
+-- The verify file describes the schema today, which has no approval steps since the Card cutover (#684): the two checks
+-- it makes of that are the cutover's, not this migration's.
+select is((select string_agg(key||'='||value,',' order by key) from (${verify}) v, json_each_text(v.json_build_object) where value<>'true' and key not in ('approvers_owner_manager','approval_step_saving_gone')),null,'every verify check passes after the migration');
 select * from finish();
 rollback;
 `;

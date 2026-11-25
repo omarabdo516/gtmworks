@@ -1,14 +1,12 @@
 select json_build_object(
  'roles',(select string_agg(e.enumlabel,',' order by e.enumsortorder) from pg_enum e where e.enumtypid='public.member_role'::regtype)='owner,manager,contributor,viewer',
  'no_reviewer_type',to_regtype('public.member_role_with_reviewer') is null,
- 'approvers_owner_manager',exists(select 1 from pg_constraint where conrelid='public.approval_steps'::regclass and conname='approval_steps_approver_role')
-  and not exists(select 1 from pg_constraint where conrelid='public.approval_steps'::regclass and contype='c' and pg_get_constraintdef(oid) like '%reviewer%')
-  and position('reviewer' in pg_get_functiondef('public.approval_holds(uuid,bigint)'::regprocedure))=0
-  and position('reviewer' in pg_get_functiondef('public.approval_actor(uuid,bigint)'::regprocedure))=0,
+ -- Approval steps went with the Card cutover (#684): a review is decided by an Owner or a Manager, never a reviewer role.
+ 'approvers_owner_manager',to_regclass('public.approval_steps') is null
+  and position('reviewer' in pg_get_functiondef(to_regprocedure('public.decide_review(uuid,bigint,bigint,text,text)')))=0,
  'role_checks_kept',exists(select 1 from pg_constraint where conrelid='public.members'::regclass and conname='members_agent_role_check')
   and exists(select 1 from pg_constraint where conrelid='public.role_permissions'::regclass and conname='no_contributor_viewer_approval'),
- 'approval_step_saving',has_function_privilege('authenticated','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)','execute')
-  and not has_function_privilege('anon','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)','execute'),
+ 'approval_step_saving_gone',to_regprocedure('public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)') is null,
  'no_agency_functions',to_regprocedure('public.agency_access()') is null and to_regprocedure('public.is_agency_owner()') is null,
  'no_agency_flag',not exists(select 1 from information_schema.columns where table_schema='public' and table_name='people' and column_name='agency_owner'),
  'no_agency_policy',not exists(select 1 from pg_policies where concat(qual,' ',with_check) ~ '(agency_access|is_agency_owner|agency_owner)' or policyname in ('company_agency_read','member_agency_read')),
