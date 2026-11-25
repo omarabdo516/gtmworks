@@ -157,3 +157,34 @@ test('on a phone the window is full screen, and its details are reached by scrol
  await page.keyboard.press('Tab');
  await expect(card.getByLabel('Publishing date')).toBeFocused();
 });
+
+test('a description is read drawn and its to-do items are ticked while reading: the database, the Activity and the tile follow, and a Viewer cannot press a box', async ({ page, browser }) => {
+ // #679: card 1's description, written as #680's editor will save it (Markdown).
+ query(`update public.work_cards set description=E'# Brief\\n\\n- [ ] Write the hook\\n- [x] Pick the format\\n\\n<b>raw</b> stays text' where id=1`);
+ await signIn(page, 'reviewer@example.com', `${board}?card=1`);
+ const card = windowOf(page);
+ await expect(card.getByRole('heading', { name: 'Brief', level: 3 })).toBeVisible();
+ await expect(card.getByText('<b>raw</b> stays text')).toBeVisible();
+ await expect(card.locator('.de-prog')).toHaveText('1/2 done');
+ const hook = card.getByRole('checkbox', { name: 'Write the hook' });
+ await hook.click();
+ await expect(hook).toHaveAttribute('aria-checked', 'true');
+ await expect.poll(() => JSON.parse(query(`select description_version v, split_part(description,E'\\n',3) line from public.work_cards where id=1`))[0]).toEqual({ v: 1, line: '- [x] Write the hook' });
+ await expect(card.locator('.de-prog')).toHaveText('2/2 done');
+ await card.getByRole('tab', { name: /Activity/ }).click();
+ await expect(card.getByText('ticked', { exact: false }).filter({ hasText: 'Write the hook' })).toBeVisible();
+ // The keyboard unticks it.
+ await card.getByRole('tab', { name: /Comments/ }).click();
+ await card.getByRole('checkbox', { name: 'Pick the format' }).focus();
+ await page.keyboard.press('Space');
+ await expect.poll(() => JSON.parse(query(`select split_part(description,E'\\n',4) line from public.work_cards where id=1`))[0].line).toBe('- [ ] Pick the format');
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__todo')).toContainText('1/2');
+
+ const viewer = await (await browser.newContext()).newPage();
+ await signIn(viewer, 'viewer@example.com', `${board}?card=1`);
+ const read = windowOf(viewer).getByRole('checkbox', { name: 'Write the hook' });
+ await expect(read).toHaveAttribute('aria-disabled', 'true');
+ await expect(read).toHaveAttribute('aria-checked', 'true');
+ await expect(windowOf(viewer).locator('.de button')).toHaveCount(0);
+});

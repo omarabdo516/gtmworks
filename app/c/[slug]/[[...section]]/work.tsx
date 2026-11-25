@@ -35,9 +35,11 @@ import { ArchiveConfirm } from '@/app/archive-confirm';
 import type { ArchiveAnswer, ArchiveIntent, ArchiveStop } from '@/lib/archive-stops';
 import { useArchivedList, type ReadArchived } from './archived-list';
 import type { ArchivedPage } from '@/lib/archived-cards';
+import { CardDescription, type TickResult, type TickTodo } from '@/app/card-description';
+import { todoProgress } from '@/lib/card-description.mjs';
 import '@/app/board.css';
 type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string};
-export type Card={id:number,title:string,stage_id:number,status:string,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,assignee_agent?:string|null,assignee_person?:string|null,kept_agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+export type Card={id:number,title:string,stage_id:number,status:string,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,assignee_agent?:string|null,assignee_person?:string|null,kept_agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null,description?:string|null,description_version?:number|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // workAction is the board's server action (work-actions.ts), handed in so this client file never imports the server module.
 export type WorkAction=(form:FormData)=>Promise<void>;
 // "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back. The shape lives here
@@ -51,13 +53,14 @@ export type PlaceCard=(form:FormData)=>Promise<PlaceResult>;
 // value, as the database holds it), or refused for a reason told in words.
 export type SaveResult={saved:string}|{stale:string}|{error:string};
 type SaveCard=(form:FormData)=>Promise<SaveResult>;
+type TickTodoAction=(form:FormData)=>Promise<TickResult>;
 export type IdeaResult={card:number}|{failed:true};
 // Archiving or restoring Cards (#670): the Cards the database archived or restored, or none.
 // Which question of what archiving would stop is the newest still wanted: an answer to an older or dropped one is ignored.
 function newestQuestion() { let newest=0; return {ask:()=>++newest,drop:()=>{ newest++; },newest:(asked:number)=>asked===newest}; }
 type ArchiveCards=(company:string,intent:ArchiveIntent|'undo',cards:number[],version?:string)=>Promise<ArchiveAnswer<number>>;
 export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
-export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
+export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
 // The board's archive list (#670, #705): the server's first page, how many archived Cards the reader sees (null when it
 // could not be read), and an archived Card the address names that the page does not hold, which opens over the board.
 type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
@@ -250,6 +253,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // Read from every Card, not the drawn ones, so a filter that brings a waiting Card back does not shake it again.
  const fresh=useNewlyWaiting(p.cards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
  const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel_id?t('boardCardChannel'):c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
+  // The description's to-do count on the tile (#679), "2/5", only when it has to-do items.
+  const todos=todoProgress(c.description); const todoChip=todos.total>0&&<span className={`kcard__todo od-nowrap${todos.done===todos.total?' is-all':''}`} title={t('deTileTodos',String(todos.done),String(todos.total))}><span aria-hidden="true"><ShellIcon name="todo"/><bdi dir="ltr" className="num">{todos.done}/{todos.total}</bdi></span><span className="sr-only">{t('deTileTodos',String(todos.done),String(todos.total))}</span></span>;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
  // The line an idea added in the column carries (#188; design-reference: saveIdea's prog): who thought of it. A Card
  // made from a message has its mode and a Card read from the board's data keeps its brief, so neither takes this line.
@@ -272,7 +277,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    </>:progress?<span className="kcard__prog"><span className="kcard__t" dir="auto">{progress.next||stageName(c)} · <span className="num">{progress.pct}%</span></span><span className="bar" role="progressbar" aria-label={t('boardProgress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.pct}><span className="bar__fill" style={{transform:`scaleX(${progress.pct/100})`}}/></span></span>
    :brief?<span className="kcard__t" dir="auto">{brief}</span>:idea?<span className="kcard__t" dir="auto">{idea}</span>:null}
    {crew.length>1&&<span className="kcard__crew"><span className="fstack" aria-hidden="true">{crew.map(a=><AgentFace key={a.id} agent={a.id} size={18}/>)}</span><span className="kcard__crew-t">{t('boardWorkedOn')} {crew.map((a,i)=><Fragment key={a.id}>{i>0&&t('boardNamesJoin')}<bdi>{a.name}</bdi></Fragment>)}</span></span>}
-   {own?<ChatCardFoot agent={own} job={job} due={due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars">{letter(agent,18)}<bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
+   {own?<ChatCardFoot agent={own} job={job} due={(todoChip||due(c))&&<>{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars">{letter(agent,18)}<bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
   </KanbanCard>; };
  // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
  // and Decline or Make it team-wide.
@@ -349,9 +354,14 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // held (its marketing fields, its checklist, its labels), read as it is. #684 moves them into the description.
  const windowDescription=(c:Card)=>{ const fields=([['hook',t('hook')],['offering',t('offering')],['segment',t('segment')],['goal',t('goal')],['channel',t('channel')],['format',t('format')],['caption',t('caption')]] as const).filter(([key])=>String(c[key]||'').trim());
   const todos=p.items.filter(i=>i.card_id===c.id); const labels=p.cardLabels.filter(x=>x.card_id===c.id).flatMap(x=>p.labels.find(l=>l.id===x.label_id)??[]);
-  if(!fields.length&&!todos.length&&!labels.length&&!c.mode) return null;
+  const body=c.description||'';
+  if(!body.trim()&&!fields.length&&!todos.length&&!labels.length&&!c.mode) return null;
   const tick=p.canCreate&&!c.archived_at;
-  return <>{c.mode&&<p className="cw-mode">{modeChip(c)}</p>}{fields.length>0&&<dl className="cw-kv">{fields.map(([key,label])=><div key={key} className="cw-kv__r"><dt>{label}</dt><dd dir="auto">{String(c[key])}</dd></div>)}</dl>}
+  // The description, read drawn and ticked while reading (#679); the old fields below it until they move into it (#684).
+  const tickOne:TickTodo=async(line,item,done)=>{ if(!p.tickTodo) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+   const form=new FormData(); for(const [key,value] of Object.entries({company:p.company,slug:p.slug,card:String(c.id),line:String(line),item,done:String(done)})) form.set(key,value);
+   return p.tickTodo(form); };
+  return <>{body.trim()&&<CardDescription body={body} slug={p.slug} canTick={tick} tick={tickOne}/>}{c.mode&&<p className="cw-mode">{modeChip(c)}</p>}{fields.length>0&&<dl className="cw-kv">{fields.map(([key,label])=><div key={key} className="cw-kv__r"><dt>{label}</dt><dd dir="auto">{String(c[key])}</dd></div>)}</dl>}
    {labels.length>0&&<div className="member-chips">{labels.map(l=><span dir="auto" className="label-chip" style={{borderColor:l.color}} key={l.id}>{l.name}</span>)}</div>}
    {todos.length>0&&<ul className="cw-todos" aria-label={t('checklist')}>{todos.map(i=><li key={i.id}>{tick?<form action={workAction}>{hidden('check')}<input type="hidden" name="card" value={c.id}/><input type="hidden" name="item" value={i.id}/><input type="hidden" name="done" value={String(!i.done)}/><input type="hidden" name="view" value="sheet"/>
     <label dir="auto"><input type="checkbox" checked={i.done} onChange={e=>e.currentTarget.form?.requestSubmit()}/> {i.title}</label></form>:<span className="cw-todo" dir="auto"><span className={`cw-todo__box${i.done?' is-done':''}`} role="img" aria-label={t(i.done?'cwTodoDone':'cwTodoOpen')}>{i.done&&<ShellIcon name="check"/>}</span>{i.title}</span>}</li>)}</ul>}</>; };

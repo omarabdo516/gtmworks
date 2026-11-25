@@ -1,5 +1,11 @@
 [
  {
+  "issue": 679,
+  "date": "2026-11-25",
+  "en": { "title": "A card's description, with to-do items you tick as you read", "body": "A card's description shows headings, lists, quotes, links, tables, pictures and code, each line in its own direction; you tick its to-do items as you read, and the list and the tile count how many are done." },
+  "ar": { "title": "وصف البطاقة، ومهامها بتعلّم عليها وإنت بتقرا", "body": "وصف البطاقة بيعرض العناوين والقوايم والاقتباسات واللينكات والجداول والصور والكود، وكل سطر في اتجاهه؛ وبتعلّم على مهامها وإنت بتقرا، والقايمة والبطاقة على اللوحة بيعدّوا اللي خلص." }
+ },
+ {
   "issue": 678,
   "date": "2026-11-25",
   "en": { "title": "A card opens in one window", "body": "A card opens over the board, full screen on a phone, with its status, its result and versions, comments the whole team reads with @ and files, its activity and runs, and its assignee, publishing date, project and files beside them, each saved as you change it; the card page and its private chat tab are gone, and a chat that made a card stays your own conversation." },

@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
 import type { Card, IdeaResult, PlaceResult, SaveResult, UndoResult } from './work';
+import type { TickResult } from '@/app/card-description';
 import { archiveIntents, type ArchiveAnswer, type ArchiveIntent, type ArchiveStopKind } from '@/lib/archive-stops';
 import { archivedCardPage, type ArchivedCursor, type ArchivedPage, type ArchivedWant } from '@/lib/archived-cards';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
@@ -117,6 +118,22 @@ export const saveCard=withActionLog('saveCard',async function saveCard(form: For
  const answer=data as {saved:boolean,value:string};
  revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
  return answer.saved?{saved:answer.value}:{stale:answer.value};
+});
+// One to-do of a Card's description ticked or unticked while reading (#679): the item is named by the line the reader saw
+// it on and its text, so tick_card_todo finds it where it now is when the text changed meanwhile, and refuses it when it
+// is gone. It answers instead of redirecting: the window shows the tick at once and takes it back on a refusal.
+export const tickTodo=withActionLog('tickTodo',async function tickTodo(form: FormData): Promise<TickResult> {
+ const {t}=await getI18n();
+ const db=await supabase(); const company=String(form.get('company'));
+ if(!await actionAllowed(db,'tickTodo',company)) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ const {data,error}=await db.rpc('tick_card_todo',{c:company,card:Number(form.get('card')),line:Number(form.get('line')),item:String(form.get('item')??''),done:form.get('done')==='true'});
+ if(error) {
+  if(String(error.message||'').includes('to-do changed')) return {gone:true};
+  logActionFailure('tickTodo',error,{form});
+  return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ }
+ revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
+ return (data as {changed:boolean}).changed?{ticked:true}:{changed:false};
 });
 // An idea from the Ideas column (#188): made once per request key, so Add pressed twice or a retry is one Card (#452). It
 // answers the form with its Card instead of redirecting, since a redirect rejects the promise the form waits on.

@@ -93,6 +93,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for ea
 
 - 🟡 **The board.** Six columns, each a Card's status, that anyone who may edit moves a Card between, Live and Done included; drag with undo, Shift plus arrows to reorder, motion as designed. Merged; waiting for the release (#572). [#34, #131, #168, #174, #676, ADR 0026]
 - ✅ **The Card window.** A Card opens in one window over the board, full screen on a phone: its status, title, callout, Result with its Versions, Comments the team shares (with @ and files), Activity and Runs, and its properties beside them, each saved as it changes and refused when someone changed it meanwhile; a chat tied to a Card stays its person's own Conversation. It replaces the sheet and the Card page. [#116, #678, ADR 0026]
+- 🟡 **A rich description.** A Card's description is Markdown, read drawn with headings, lists, to-do items, quotes, links, tables, pictures and code, each line in its own direction; to-do items are ticked while reading with a count beside the list and on the tile, and a long one folds. Writing it on the page is next. [#679, #680]
 - ✅ **Board, calendar and list views of Cards.** [#34, `work.tsx` has `work/calendar` and `work/list`]
 - ✅ **Versions and Approvals.** Editing makes a new Version, an approval applies to one exact Version, and an Agent never approves. [#16, #137, GLOSSARY.md Version, Approval]
 - ✅ **"Waiting on you".** One list for approvals, questions, permissions, requests and mentions. [#16, #165, #200]

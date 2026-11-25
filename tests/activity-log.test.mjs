@@ -12,6 +12,10 @@ test('Card, Member and Agent rows say who changed what', () => {
  // Files added to the Card itself in its window (#678) name the files.
  const files = describeEntry({ subject: 'card', action: 'files_added', details: { names: ['brief.pdf', 'logo.png'] } });
  assert.deepEqual([files.act, files.to], [['logActFilesAdded'], { text: 'brief.pdf, logo.png' }]);
+ // A to-do ticked or unticked while reading (#679) is one quiet row naming the item.
+ const ticked = describeEntry({ subject: 'card', action: 'todo_ticked', details: { item: 'Write the hook', done: true } });
+ const unticked = describeEntry({ subject: 'card', action: 'todo_ticked', details: { item: 'اكتب الخطاف', done: false } });
+ assert.deepEqual([ticked.act, ticked.to, unticked.act, unticked.to], [['logActTodoTicked'], { text: 'Write the hook' }, ['logActTodoUnticked'], { text: 'اكتب الخطاف' }]);
  const note = describeEntry({ subject: 'card', action: 'note', body: 'ملاحظة' });
  assert.deepEqual([note.act, note.note], [['logActNote'], 'ملاحظة']);
  // An idea added in the Ideas column (#188) says so, in both languages.
