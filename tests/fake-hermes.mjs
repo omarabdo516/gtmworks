@@ -20,6 +20,8 @@ export const failedRunText='Something else went wrong while the model was answer
 // #712: one grab of a Screen, as the pinned Engine's display.thumbnail sends it (tools/bot_desktop/thumbnail.py: a JPEG
 // data URL): a 16 by 10 JPEG whose comment names the grab, so every grab is a picture of its own.
 const screenJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAKABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGooor6Q8w/9k=','base64');
+/** @param {string} viewer */
+export const viewerHash=viewer=>createHash('sha256').update(viewer).digest('hex').slice(0,12);
 /** @param {number} grab */
 export function screenFrame(grab) {
  const note=Buffer.from(`grab ${grab}`);
@@ -122,8 +124,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // display, so a start fails while another profile's Screen runs (sandbox_host.py: display :20). `screenCalls` keeps
   // every /api/ws request with the token it came with; `screenStartDelay` holds a start as the Engine's does while the
   // desktop comes up; `screenPictureUrl` replaces what a grab sends.
-  screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human'}>} */(new Map()),
+  screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human',viewer?:string|null}>} */(new Map()),
   screenCalls:/** @type {{method:string,params:any,token:string|null}[]} */([]),screenStartDelay:0,screenPictureUrl:/** @type {string|null} */(null),screenGrabs:0,
+  // #713: the live stream (/api/display/ws, hermes_cli/web_routers/display.py): every ticket display.observe minted, and
+  // every keyboard and pointer message that reached a Screen, which the Engine lets through only from the viewer holding
+  // its lease (tools/bot_desktop/rfb_filter.py). `screenStreams` counts the streams open now.
+  screenTickets:/** @type {Map<string,{profile:string,viewer:string,expires:number}>} */(new Map()),
+  screenInputs:/** @type {{profile:string,viewer:string,kind:'key'|'pointer',down?:boolean,key?:number,x?:number,y?:number,mask?:number}[]} */([]),screenStreams:0,
   // Profiles the Run API answers 404 for, as Hermes does for one it does not serve; a removed profile joins them.
   unknownProfiles:/** @type {string[]} */([]),
   // The root profile's model block, which a new profile copies (hermes_cli/profiles.py, _seed_model_config); none
@@ -1049,8 +1056,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  const sockets=new WebSocketServer({noServer:true});
  management.on('upgrade',(request,socket,head)=>{
   const url=new URL(request.url||'/','http://management');
+  if(url.pathname==='/api/display/ws') { sockets.handleUpgrade(request,socket,head,ws=>displayStream(ws,url.searchParams.get('display_ticket')??'')); return; }
   if(url.pathname!=='/api/ws'||url.searchParams.get('token')!==settings.key) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
   sockets.handleUpgrade(request,socket,head,ws=>{
+   // The viewer ids display.observe minted on this connection: acquire and release take only those (methods_display.py
+   // _foreign_viewer_id), so an id read off the wire or minted for another connection is refused.
+   const minted=new Set();
    ws.send(JSON.stringify({jsonrpc:'2.0',method:'event',params:{type:'gateway.ready',payload:{heartbeat:true}}}));
    ws.on('message',async raw=>{
     let call; try { call=JSON.parse(String(raw)); } catch { return; }
@@ -1064,7 +1075,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const status=()=>({profile:name,supported:screen.supported!==false,installed:!screen.missing?.length,missing:screen.missing??[],running:screen.running===true,pid:null,
      display:screen.running?':20':null,socket:null,geometry:'1440x900',install_command:null,browser:null,blocker:screen.missing?.length?`missing: ${screen.missing.join(', ')}`:null,
      memory_available_mb:null,memory_limit_mb:null,placement:'terminal:ssh',image_switch:null,
-     lease:{holder:screen.holder??'agent',viewer_id:null,viewer_hash:screen.holder==='human'?'0123456789ab':null,since:0,epoch:0,reason:null},profile_key:`/opt/data/profiles/${name}`});
+     lease:lease(),profile_key:`/opt/data/profiles/${name}`});
+    // The lease as the Engine shows it (tools/bot_desktop/lease.py public_view): the holder's viewer id only as its hash.
+    function lease() { return {holder:screen.holder??'agent',viewer_id:null,viewer_hash:screen.holder==='human'?viewerHash(screen.viewer??'0123456789ab'):null,since:0,epoch:0,reason:null}; }
+    const foreign=()=>{ if(minted.has(String(params.viewer_id??''))) return false; fail(5300,'viewer_id was not minted for this connection; call display.observe first'); return true; };
     if(call.method==='display.status') return ok(status());
     if(call.method==='display.start') {
      if(settings.screenStartDelay) await new Promise(resolve=>setTimeout(resolve,settings.screenStartDelay));
@@ -1078,10 +1092,75 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if(!screen.running) return ok({data_url:null});
      return ok({data_url:settings.screenPictureUrl??`data:image/jpeg;base64,${screenFrame(++settings.screenGrabs).toString('base64')}`});
     }
+    if(call.method==='display.observe') {
+     if(!screen.running) return fail(5300,'this profile\'s Bot Desktop is not running; call display.start first');
+     const viewer=randomUUID().replaceAll('-',''); minted.add(viewer);
+     const ticket=randomUUID();
+     settings.screenTickets.set(ticket,{profile:name,viewer,expires:Date.now()+30000});
+     return ok({ticket,path:'/api/display/ws',viewer_id:viewer,...status()});
+    }
+    // Last writer wins (lease.acquire): the Engine itself never refuses a take while another viewer holds.
+    if(call.method==='display.lease.acquire') {
+     if(foreign()) return;
+     screen.holder='human'; screen.viewer=String(params.viewer_id);
+     return ok({lease:lease()});
+    }
+    // A release by a viewer that does not hold is ignored; one with no viewer and `force` releases whoever holds.
+    if(call.method==='display.lease.release') {
+     if(params.viewer_id===undefined||params.viewer_id===null) {
+      if(screen.holder==='human'&&!params.force) return fail(5300,'viewer_id required to release another viewer\'s lease (or pass force: true)');
+      screen.holder='agent'; screen.viewer=null; return ok({lease:lease()});
+     }
+     if(foreign()) return;
+     if(screen.holder==='human'&&screen.viewer===params.viewer_id) { screen.holder='agent'; screen.viewer=null; }
+     return ok({lease:lease()});
+    }
     fail(-32601,`unknown method: ${call.method}`);
    });
   });
  });
+ // The live stream of a Screen (hermes_cli/web_routers/display.py): accepted, then closed with 4401 unless it brings a
+ // ticket display.observe minted, unused and under 30 seconds old; with one, raw RFB 3.8 as binary frames from a Screen
+ // of 64 by 40 with no password, which answers each full request with one plain picture. Keyboard and pointer messages
+ // reach the Screen only from the viewer that holds its lease; the stream also ends when its Screen stops.
+ function displayStream(ws,ticket) {
+  const held=settings.screenTickets.get(ticket); settings.screenTickets.delete(ticket);
+  if(!held||held.expires<Date.now()) { ws.close(4401,'display ticket missing, expired or used'); return; }
+  const screen=settings.screens.get(held.profile)??{};
+  if(!screen.running) { ws.close(4001,'Bot Desktop is not running'); return; }
+  settings.screenStreams++; ws.on('close',()=>{ settings.screenStreams--; });
+  const width=64, height=40;
+  let stage='version', buffer=Buffer.alloc(0);
+  const u16=n=>{ const b=Buffer.alloc(2); b.writeUInt16BE(n); return b; }; const u32=n=>{ const b=Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+  ws.send(Buffer.from('RFB 003.008\n'));
+  const allowed=()=>screen.holder==='human'&&screen.viewer===held.viewer;
+  const lengths={0:20,3:10,4:8,5:6};
+  ws.on('message',(data,binary)=>{
+   if(!binary) { ws.close(1003,'RFB is binary'); return; }
+   buffer=Buffer.concat([buffer,Buffer.from(/** @type {Buffer} */(data))]);
+   for(;;) {
+    if(stage==='version') { if(buffer.length<12) return; buffer=buffer.subarray(12); stage='security'; ws.send(Buffer.from([1,1])); continue; }
+    if(stage==='security') { if(buffer.length<1) return; buffer=buffer.subarray(1); stage='init'; ws.send(u32(0)); continue; }
+    if(stage==='init') {
+     if(buffer.length<1) return; buffer=buffer.subarray(1); stage='ready';
+     const name=Buffer.from(`${held.profile}`);
+     ws.send(Buffer.concat([u16(width),u16(height),Buffer.from([32,24,0,1]),u16(255),u16(255),u16(255),Buffer.from([16,8,0,0,0,0]),u32(name.length),name]));
+     continue;
+    }
+    if(!buffer.length) return;
+    const type=buffer[0];
+    let size=lengths[type];
+    if(type===2) { if(buffer.length<4) return; size=4+4*buffer.readUInt16BE(2); }
+    else if(type===6) { if(buffer.length<8) return; size=8+buffer.readUInt32BE(4); }
+    else if(size===undefined) { ws.close(1003,`unknown RFB message ${type}`); return; }
+    if(buffer.length<size) return;
+    const message=buffer.subarray(0,size); buffer=buffer.subarray(size);
+    if(type===3&&message[1]===0) ws.send(Buffer.concat([Buffer.from([0,0]),u16(1),u16(0),u16(0),u16(width),u16(height),u32(0),Buffer.alloc(width*height*4,0x80)]));
+    if(type===4&&allowed()) settings.screenInputs.push({profile:held.profile,viewer:held.viewer,kind:'key',down:message[1]===1,key:message.readUInt32BE(4)});
+    if(type===5&&allowed()) settings.screenInputs.push({profile:held.profile,viewer:held.viewer,kind:'pointer',mask:message[1],x:message.readUInt16BE(2),y:message.readUInt16BE(4)});
+   }
+  });
+ }
  await new Promise(resolve=>server.listen(port,host,resolve));
  await new Promise(resolve=>management.listen(managementPort,host,resolve));
  const closing=listener=>new Promise(resolve=>{listener.close(resolve);listener.closeAllConnections();});

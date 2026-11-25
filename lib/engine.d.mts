@@ -99,6 +99,18 @@ export type Engine={
 export type ScreenState={state:'none'|'asleep'|'awake',control:'agent'|'person',refusal:null|'missing'};
 export type ScreenRead={state:'found',screen:ScreenState}|{state:'missing'|'unreachable'};
 export type ScreenWake={state:'awake',screen:ScreenState}|{state:'notStarted',reason:'missing'|'failed'}|{state:'missing'|'unreachable'};
+// A viewer of an Agent's Screen (#713): who controls it as this viewer sees it, a take refused while another viewer
+// holds, a give-back (by force for control nobody holds any more), a live RFB stream on a fresh ticket, and close, which
+// gives back what it holds.
+export type ScreenControl='agent'|'mine'|'other'|'gone';
+export type ScreenViewer={
+ control():Promise<ScreenControl>,
+ take():Promise<{state:'taken'|'held'|'failed'}>,
+ giveBack(options?:{force?:boolean}):Promise<{state:'given'|'failed'}>,
+ stream():Promise<WebSocket|null>,
+ close():Promise<void>,
+};
+export type ScreenViewerOpen={state:'open',viewer:ScreenViewer}|{state:'asleep'|'missing'|'unreachable'};
 export type ScreenPicture={state:'found',type:string,body:Uint8Array}|{state:'asleep'|'withheld'|'failed'|'missing'|'unreachable'};
 export function engineFor(connection:EngineConnection):Engine;
 export type RunEnd='completed'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'stopped'|'lost';
