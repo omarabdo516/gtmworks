@@ -188,7 +188,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>&{unread?:true};
 // The Conversation's own rows could not be read (#768): a state of its own, never an empty Conversation.
-export class ConversationUnread extends Error { constructor() { super('conversationUnread'); this.name='ConversationUnread'; } }
+class ConversationUnread extends Error { constructor() { super('conversationUnread'); this.name='ConversationUnread'; } }
 
 // Each reply's steps and the Conversation's token use, read from its Agent's Hermes session (#346, #347) on their own
 // request, after the messages are drawn (ADR 0030, #766): by the id of the reply they go under. Null when the session
