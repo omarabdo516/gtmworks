@@ -81,15 +81,15 @@ test('integration is red when one shard failed or was cancelled, green when all 
   for (const result of ['failure', 'cancelled']) assert.equal(verdict({ INTEGRATION_RESULT: result }), 1, result);
 });
 
-test('the integration job runs as 8 shards, each uploading its own artifacts, and check reads the matrix result (#335, #404, #653, #710)', async () => {
+test('the integration job runs as 10 shards, each uploading its own artifacts, and check reads the matrix result (#335, #404, #653, #710, #755)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { integration, check } = jobs;
-  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8] } });
+  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] } });
   const steps = integration.steps;
   const suite = steps.findIndex(step => step.name === 'integration');
-  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/8');
+  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/10');
   // Matrix legs share one outputs namespace, so per-shard outputs could overwrite each other: none are written.
   assert.equal(integration.outputs, undefined);
   const env = check.steps.at(-1).env;
