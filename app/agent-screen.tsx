@@ -7,7 +7,8 @@ import { leave } from '@/lib/motion';
 import { toast } from '@/app/toast';
 import type { AgentScreen as Screen } from '@/lib/agent-screen.mjs';
 import { useScreenLive } from '@/app/screen-live';
-import type { ScreenHand } from '@/app/screen-hands';
+import { handDoneHere, onShowScreen, takeShowScreen, type ScreenHand } from '@/app/screen-hands';
+import { useScreenHand } from '@/app/sidebar-live';
 
 // The "Agent's screen" card at the top of an Agent's details' Activity tab, and its large view (#712; design-reference:
 // screenSecHTML, scrStatusHTML, scrLine, scrScreenHTML, renderViewer, openViewer, scrWake, closeDlg, the viewer's close
@@ -30,6 +31,13 @@ import type { ScreenHand } from '@/app/screen-hands';
 // keyboard work the Screen. "Done" gives it back; closing the view, leaving the page or losing the connection gives it
 // back too, the first with the reference's toast. Anyone else watching meanwhile sees "Watching only" with who has
 // control, and no picture of what is typed.
+//
+// A step the Agent handed over on its Screen (#714; design-reference: scrStatusHTML, scrLine, renderViewer's banner,
+// screenHandDone) is its Conversation's person's alone: the sidebar's poll reads it for them (app/screen-hands.ts). While
+// it waits the awake card reads "Awake · waiting on you" with the line "Stopped at “{step}” in {App} · handed to you", and
+// the view shows its banner with "Done it", the chat card's own press: one record (mark_hand_done). Done, the banner goes,
+// the card reads Awake, and the keyboard moves to the view's close button. "Open the screen" on the chat card opens the
+// view with the keyboard on "Done it".
 type Read=Screen|'unreadable'|null|undefined;
 const leaveMs=190;
 // The picture refreshes at least every two seconds; the state is read again every ten, to see the Screen wake by itself.
@@ -48,6 +56,15 @@ export function AgentScreen({company,agent,name,canWake}:{company:string,agent:s
  const [streaming,setStreaming]=useState(false);
  const [holding,setHolding]=useState(false);
  const thumb=useRef<HTMLButtonElement>(null);
+ const {hand,ask}=useScreenHand(agent);
+ // "Open the screen" (#714): the view opens with the keyboard on "Done it", whether this card was drawn already or is drawn
+ // by the press. The step is read again at once, so one that arrived since the last poll shows.
+ const [toDone,setToDone]=useState(false);
+ useEffect(()=>{
+  const take=()=>{ if(takeShowScreen()===null) return; ask(); setToDone(true); setOpen(true); };
+  take();
+  return onShowScreen(take);
+ },[ask]);
  const query=`company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`;
 
  // The state is read once the card is drawn, again every ten seconds while the page is in view, and whenever something
@@ -120,7 +137,8 @@ export function AgentScreen({company,agent,name,canWake}:{company:string,agent:s
 
  const can=state!=='asleep'||canWake;
  const pill=state==='asleep'?<><ShellIcon name="sun"/><span>{t('screenWake')}</span></>:state==='waking'?<span>{t('screenWakingPill')}</span>:<><ShellIcon name="eye"/><span>{t('screenWatch')}</span></>;
- const line=state==='asleep'?t('screenAsleepLine'):state==='waking'?t('screenWakingLine'):holding?t('screenControlLine',name):null;
+ const waiting=state==='awake'&&!!hand;
+ const line=state==='asleep'?t('screenAsleepLine'):state==='waking'?t('screenWakingLine'):holding?t('screenControlLine',name):hand?t('screenHandLine',hand.title,hand.app):null;
  const overlay=<span className="scr-ov" aria-hidden={can?'false':'true'}>
   {can?<span className="scr-ov__pill">{pill}</span>:null}
   {line?<span className="scr-ov__line">{line}</span>:null}
@@ -128,7 +146,7 @@ export function AgentScreen({company,agent,name,canWake}:{company:string,agent:s
  const frame=<ScreenFrame state={state} picture={picture} withheld={withheld&&!holding} large={false} control={holding} t={t}/>;
  const watch=()=>setOpen(true);
  return <section className="dp-sec" aria-labelledby="scr-h">
-  <h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span><ScreenStatus state={state} t={t}/></h3>
+  <h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span><ScreenStatus state={state} waiting={waiting} t={t}/></h3>
   <div className="scr-card">
    {can?<button ref={thumb} type="button" className="scr-thumb" aria-disabled={state==='waking'?'true':undefined} aria-haspopup={state==='awake'?'dialog':undefined}
     aria-label={state==='asleep'?t('screenWake'):state==='awake'?t('screenWatch'):t('screenWakingPill')}
@@ -137,13 +155,15 @@ export function AgentScreen({company,agent,name,canWake}:{company:string,agent:s
   </div>
   {refused}
   {open?<ScreenViewer company={company} agent={agent} name={name} state={state} picture={picture} withheld={withheld} canWake={canWake} refused={refused}
+   hand={canWake?hand:null} toDone={toDone}
    onWake={()=>void wake()} onStale={readState} onLive={setStreaming} onControl={setHolding}
-   onClosed={()=>{ setOpen(false); setStreaming(false); setHolding(false); readState(); thumb.current?.focus(); }}/>:null}
+   onClosed={()=>{ setOpen(false); setToDone(false); setStreaming(false); setHolding(false); readState(); thumb.current?.focus(); }}/>:null}
  </section>;
 }
 
 type T=ReturnType<typeof useI18n>['t'];
-function ScreenStatus({state,t}:{state:'asleep'|'waking'|'awake',t:T}) {
+function ScreenStatus({state,waiting,t}:{state:'asleep'|'waking'|'awake',waiting:boolean,t:T}) {
+ if(waiting) return <span className="scr-st scr-st--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('screenWaitingOnYou')}</span>;
  const dot=state==='asleep'?'dot--idle':state==='waking'?'dot--waking':'dot--working';
  return <span className="scr-st"><span className={`dot ${dot}`} aria-hidden="true"/>{t(state==='asleep'?'screenAsleep':state==='waking'?'screenWaking':'screenAwake')}</span>;
 }
@@ -163,11 +183,13 @@ function ScreenFrame({state,picture,withheld,large,control=false,live,streaming=
  </div>;
 }
 
-function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused,onWake,onStale,onLive,onControl,onClosed}:{company:string,agent:string,name:string,state:'asleep'|'waking'|'awake',picture:string|null,withheld:boolean,canWake:boolean,refused:ReactNode,onWake:()=>void,onStale:()=>void,onLive:(live:boolean)=>void,onControl:(mine:boolean)=>void,onClosed:()=>void}) {
+function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused,hand,toDone,onWake,onStale,onLive,onControl,onClosed}:{company:string,agent:string,name:string,state:'asleep'|'waking'|'awake',picture:string|null,withheld:boolean,canWake:boolean,refused:ReactNode,hand:ScreenHand|null,toDone:boolean,onWake:()=>void,onStale:()=>void,onLive:(live:boolean)=>void,onControl:(mine:boolean)=>void,onClosed:()=>void}) {
  const {t}=useI18n();
  const box=useRef<HTMLDialogElement>(null); const first=useRef<HTMLButtonElement|null>(null); const closeButton=useRef<HTMLButtonElement>(null);
  const takeButton=useRef<HTMLButtonElement|null>(null); const allowButton=useRef<HTMLButtonElement>(null); const doneButton=useRef<HTMLButtonElement>(null);
- const target=useRef<HTMLDivElement>(null);
+ const target=useRef<HTMLDivElement>(null); const handDone=useRef<HTMLButtonElement>(null);
+ // Opened by "Open the screen", the keyboard goes to "Done it" once its banner is drawn.
+ const wantsDone=useRef(toDone);
  const [leaving,setLeaving]=useState(false); const stopLeaving=useRef(()=>{});
  const [asking,setAsking]=useState(false);
  const focusLater=(button:RefObject<HTMLButtonElement|null>)=>requestAnimationFrame(()=>(button.current??closeButton.current)?.focus());
@@ -184,9 +206,24 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
  // for a Member who may take it, Wake it on an asleep Screen for one who may wake it, else the close button.
  useLayoutEffect(()=>{
   if(box.current&&!box.current.open) box.current.showModal();
-  (first.current??closeButton.current)?.focus();
+  if(wantsDone.current&&handDone.current) { wantsDone.current=false; handDone.current.focus(); }
+  else (first.current??closeButton.current)?.focus();
   return ()=>stopLeaving.current();
  },[]);
+ useEffect(()=>{ if(hand&&wantsDone.current&&handDone.current) { wantsDone.current=false; handDone.current.focus(); } },[hand]);
+ // "Done it" in the view (#714): the chat card's own press, under the person's own session (mark_hand_done), so a step
+ // already done from the chat or another tab answers that first record. Done, the step leaves this page's Screen, the chat
+ // reads its record again, and the keyboard moves to the close button as the banner goes.
+ const [pressing,setPressing]=useState(false);
+ const markDone=async()=>{
+  if(!hand||pressing) return;
+  setPressing(true);
+  const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:hand.conversation,intent:'done',card:hand.card})}).catch(()=>null);
+  const body=await response?.json().catch(()=>null);
+  setPressing(false);
+  if(response?.ok&&typeof body?.at==='string') { closeButton.current?.focus(); handDoneHere(hand.card,'view'); }
+  else toast(t('handFailed'),{icon:'hand'});
+ };
  // Wake it leaves the view once the Screen wakes: the keyboard moves to the close button rather than out of the view.
  useEffect(()=>{ if(state!=='asleep'&&box.current&&!box.current.contains(document.activeElement)) closeButton.current?.focus(); },[state]);
  // Closing while in control gives it back (the socket closes with the view) and says so (the viewer's close handler).
@@ -228,6 +265,7 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
    </header>
    <div className="vw__body"><div className="vw__stage">
     <div className="vw__screen"><ScreenFrame state={state} picture={picture} withheld={withheld&&!mine||other} large control={mine} live={live} streaming={screen.live} t={t}/></div>
+    {hand?<HandBanner hand={hand} agent={name} control={mine} busy={pressing} onDone={()=>void markDone()} doneRef={handDone}/>:null}
     {state==='asleep'?<div className="vw-off"><p>{t('screenSleepNote',name)}</p>
      {canWake?<button ref={first} type="button" className="btn btn--primary" onClick={onWake}><ShellIcon name="sun"/><span>{t('screenWake')}</span></button>:null}
     </div>:null}

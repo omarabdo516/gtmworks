@@ -372,3 +372,110 @@ test('the server takes control only for a Member who is not a Viewer and sees th
  expect(acquires()).toBe(before);
  expect(fake.settings.screens.get(adsProfile)?.holder??'agent').toBe('agent');
 });
+
+// #714: a step the Agent stopped at on its own Screen, handed to its Conversation's person. Its card is shown as the
+// worker shows a hand_over call with "on my screen" (agent_show_card; tests/agent-tools.test.mjs proves the call itself).
+const omar='20000000-0000-0000-0000-000000000001';
+const step={title:'Publish the December campaign',app:'Meta Ads'};
+function handedOnScreen() {
+ const conversation=randomUUID(); const run=`screen-hand-${conversation.slice(0,8)}`;
+ query(`do $$ begin
+   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Ads');
+   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+    values ('${company}','${conversation}','person','${omar}','عمر','Set up the December campaign',gen_random_uuid(),'${run}');
+  end $$;`);
+ let calls=0;
+ const hand=()=>{
+  const call=`call-${calls++}`;
+  query(`select public.agent_show_card('${conversation}','${run}','${call}','hand','${step.title}','${JSON.stringify({app:step.app,line:'The campaign is ready in Ads Manager.',rows:[],screen:true})}'::jsonb)`);
+  return Number(rows(`select id from public.reply_cards where conversation_id='${conversation}' and call_id='${call}'`)[0].id);
+ };
+ // Its steps left open are closed after, so no later test finds them waiting.
+ return {conversation,hand,drop:()=>query(`update public.reply_cards set state='closed' where conversation_id='${conversation}' and state='open'`)};
+}
+
+test('an Agent hands its person a step on its Screen: the toast opens it, Open the screen puts the keyboard on Done it, and Done it in the view is the chat card\'s one record',async({page})=>{
+ test.setTimeout(120000);
+ fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
+ const {conversation,hand,drop}=handedOnScreen();
+ try {
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  // The step arrives while its person has the product open: the toast names the Agent and the step, with Open.
+  const card=hand();
+  const toast=page.locator('.toast');
+  await expect(toast).toContainText('Ads stopped at “Publish the December campaign” and handed it to you',{timeout:15000});
+  await toast.getByRole('button',{name:'Open',exact:true}).click();
+  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${conversation}`));
+  const chatCard=page.getByRole('group',{name:`Handed to you: ${step.title}`});
+  await expect(chatCard).toBeFocused();
+  await expect(chatCard.getByRole('button')).toHaveText(['Open the screen','Done it']);
+  await expect(chatCard.locator('a')).toHaveCount(0);
+  // The Agent's screen card waits on its person, with the step's line.
+  const details=page.getByRole('complementary',{name:'Details: Ads',exact:true});
+  const screenCard=details.locator('section.dp-sec').filter({has:page.getByRole('heading',{name:/^Agent’s screen/})});
+  await expect(screenCard.locator('.scr-st')).toHaveText('Awake · waiting on you');
+  await expect(screenCard.locator('.scr-st')).toHaveClass(/scr-st--wait/);
+  await expect(screenCard.locator('.scr-ov__line')).toHaveText('Stopped at “Publish the December campaign” in Meta Ads · handed to you');
+  // A second tab holds the same card open.
+  const other=await page.context().newPage();
+  await other.goto(`/c/rs-learning/conversations/${conversation}`);
+  const otherCard=other.getByRole('group',{name:`Handed to you: ${step.title}`});
+  await expect(otherCard.getByRole('button',{name:'Done it'})).toBeEnabled();
+
+  // Open the screen: the view, its banner, and the keyboard on its Done it.
+  await chatCard.getByRole('button',{name:'Open the screen'}).click();
+  const view=page.getByRole('dialog',{name:'Ads’s screen'});
+  const banner=view.getByRole('group',{name:step.title});
+  await expect(banner.locator('.badge')).toHaveText('Handed to you');
+  await expect(banner.locator('.vw-hand__t > span')).toHaveText('Ads stopped at “Publish the December campaign” and didn’t press it. Press it yourself in Meta Ads or take control, then “Done it”.');
+  await expect(banner.getByRole('button',{name:'Done it'})).toBeFocused();
+  await expect(view).not.toContainText('never presses');
+
+  // Done it in the view: the banner goes, the card reads Awake, the keyboard is on the close button, the chat card is done.
+  await banner.getByRole('button',{name:'Done it'}).click();
+  await expect(view.locator('.vw-hand')).toHaveCount(0);
+  await expect(view.getByRole('button',{name:'Close the screen'})).toBeFocused();
+  await expect(screenCard.locator('.scr-st')).toHaveText('Awake');
+  await expect(chatCard.locator('.card__outcome')).toContainText('Done ·');
+  const kept=()=>rows(`select state,done_by,done_at from public.reply_cards where id=${card}`);
+  const [first]=kept();
+  expect([first.state,first.done_by]).toEqual(['done',omar]);
+  // The chat card pressed in the other tab answers that record: one record, one log row.
+  await otherCard.getByRole('button',{name:'Done it'}).click();
+  await expect(otherCard.locator('.card__outcome')).toContainText('Done ·');
+  expect(kept()).toEqual([first]);
+  expect(rows(`select count(*)::int as n from public.company_log where action='agent_hand_done' and source_id=${card}`)).toEqual([{n:1}]);
+  await other.close();
+  await view.getByRole('button',{name:'Close the screen'}).click();
+  await expect(view).toHaveCount(0);
+ } finally { drop(); }
+});
+
+test('a step handed on the Screen is its person\'s alone: another Member and a Viewer see the Screen as usual',async({page})=>{
+ fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
+ const {hand,drop}=handedOnScreen();
+ try {
+  hand();
+  // Its person reads it on the sidebar's poll, and nobody else does.
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  const handed=async()=>(await (await page.request.get(`/api/sidebar?company=${company}`)).json()).handed;
+  expect((await handed()).map((row:{title:string})=>row.title)).toEqual([step.title]);
+  for(const email of ['reviewer@example.com','viewer@example.com']) {
+   await page.context().clearCookies();
+   const {card}=await openScreen(page,email);
+   expect(await handed(),email).toEqual([]);
+   await expect(card.locator('.scr-st'),email).toHaveText('Awake');
+   const watch=card.getByRole('button',{name:'Watch',exact:true});
+   await watch.hover();
+   await expect(card.locator('.scr-ov__line'),email).toHaveCount(0);
+   await watch.click();
+   const view=page.getByRole('dialog',{name:'Ads’s screen'});
+   await expect(view.locator('.vw__foot')).toBeVisible();
+   await expect(view.locator('.vw-hand'),email).toHaveCount(0);
+   await expect(page.locator('.toast'),email).toHaveCount(0);
+   await view.getByRole('button',{name:'Close the screen'}).click();
+  }
+ } finally { drop(); }
+});

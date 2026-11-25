@@ -62,8 +62,8 @@ test('a channel Run with no other Agent of the Company to hand to is offered no 
  assert.deepEqual(starts[0].tools.map((/** @type {any} */ tool)=>tool.name),['show_draft']);
  const texts=toolSpecTexts();
  // The handed step is the chat's tool without "on my screen" (#714): a channel has no one person to open a Screen for.
- const {screen:_screen,...properties}=JSON.parse(texts.hand_over).parameters.properties;
  const handOver=JSON.parse(texts.hand_over);
+ const properties={...handOver.parameters.properties}; delete properties.screen;
  assert.deepEqual(channelToolSpecTexts([]),{show_draft:texts.show_draft,show_review:texts.show_review,hand_over:JSON.stringify({...handOver,parameters:{...handOver.parameters,properties}})});
 });
 

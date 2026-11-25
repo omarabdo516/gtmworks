@@ -7,11 +7,14 @@ import { faceStateWords, type AgentFaceState, type FailurePlace } from '@/lib/ag
 import type { ChannelSummary } from '@/lib/channels';
 import { onWatchedRunEnded, shownState, useChatKnows } from '@/lib/live-runs';
 import type { FaceState } from '@/components/face-life';
+import { useRouter } from 'next/navigation';
+import { toast } from '@/app/toast';
+import { onHandDone, type ScreenHand } from '@/app/screen-hands';
 
 const pollEvery=5000;
 // What the sidebar shows that changes while a page stays open: the reader's channels with their unread counts (#24),
-// and the state of each Agent they see (#699), by Agent id.
-export type SidebarNow={channels:ChannelSummary[],agents:Record<string,AgentFaceState>};
+// the state of each Agent they see (#699), by Agent id, and the steps handed to them on an Agent's Screen (#714).
+export type SidebarNow={channels:ChannelSummary[],agents:Record<string,AgentFaceState>,handed:ScreenHand[]};
 type Live=SidebarNow&{refresh:()=>void};
 const Now=createContext<Live|null>(null);
 
@@ -20,9 +23,10 @@ const Now=createContext<Live|null>(null);
 // move, also in a Company worked alone, which has no channels. A newer page brings its own `channels` and `states`; an
 // answer asked for since then is kept only while it answers that page's. `refresh` asks at once, after the reader opened
 // something that changes a face (OpenedHere).
-export function SidebarLive({company,channels,states,children}:{company:string,channels:ChannelSummary[],states:Record<string,AgentFaceState>,children:ReactNode}) {
+const noHands:ScreenHand[]=[];
+export function SidebarLive({company,slug,channels,states,handed=noHands,children}:{company:string,slug?:string,channels:ChannelSummary[],states:Record<string,AgentFaceState>,handed?:ScreenHand[],children:ReactNode}) {
  const [polled,setPolled]=useState<{basis:SidebarNow,now:SidebarNow}|null>(null);
- const basis=useMemo(()=>({channels,agents:states}),[channels,states]);
+ const basis=useMemo(()=>({channels,agents:states,handed}),[channels,states,handed]);
  const now=polled?.basis===basis?polled.now:basis;
  const ask=useRef<()=>void>(()=>{});
  useEffect(()=>{
@@ -45,8 +49,31 @@ export function SidebarLive({company,channels,states,children}:{company:string,c
   return ()=>{stopped=true;clearTimeout(timer);ask.current=()=>{};ended();};
  },[company,basis]);
  const refresh=useCallback(()=>ask.current(),[]);
- const live=useMemo(()=>({...now,refresh}),[now,refresh]);
- return <Now value={live}>{children}</Now>;
+ // A step "Done it" kept on this page leaves the Screen at once, and the poll is asked again (#714).
+ const [done,setDone]=useState<ReadonlySet<number>>(()=>new Set());
+ useEffect(()=>onHandDone(card=>{ setDone(was=>new Set(was).add(card)); ask.current(); }),[]);
+ const open=useMemo(()=>done.size?now.handed.filter(hand=>!done.has(hand.card)):now.handed,[now.handed,done]);
+ const live=useMemo(()=>({...now,handed:open,refresh}),[now,open,refresh]);
+ return <Now value={live}>{slug&&<HandedToasts slug={slug} handed={now.handed}/>}{children}</Now>;
+}
+
+// A step an Agent hands over on its Screen while its person has the product open (#714; design-reference: scrHandOver's
+// toast): "{Agent} stopped at “{step}” and handed it to you", with "Open", which opens its Conversation at the card. The
+// steps the page was drawn with are no arrival.
+function HandedToasts({slug,handed}:{slug:string,handed:ScreenHand[]}) {
+ const {t}=useI18n(); const router=useRouter();
+ const seen=useRef<Set<number>|null>(null);
+ useEffect(()=>{
+  if(!seen.current) { seen.current=new Set(handed.map(hand=>hand.card)); return; }
+  const arrived=handed.filter(hand=>!seen.current!.has(hand.card));
+  handed.forEach(hand=>seen.current!.add(hand.card));
+  const hand=arrived[0]; if(!hand) return;
+  // The Conversation lands on the card it opens at (`#hand-<card>`) when it is drawn; one already open is drawn again.
+  const path=`/c/${slug}/conversations/${hand.conversation}`;
+  const open=()=>{ if(location.pathname===path) { history.replaceState(history.state,'',`${path}#hand-${hand.card}`); location.reload(); } else router.push(`${path}#hand-${hand.card}`); };
+  toast(t('screenHandToast',hand.agent_name,hand.title),{icon:'hand',action:{label:t('screenHandToastOpen'),run:open}});
+ },[handed,slug,t,router]);
+ return null;
 }
 
 // An answer of the poll keeps what did not change as it was, so a poll that changes nothing draws nothing again, and
@@ -55,13 +82,22 @@ export function SidebarLive({company,channels,states,children}:{company:string,c
 const same=(a:unknown,b:unknown)=>a===b||JSON.stringify(a)===JSON.stringify(b);
 function kept(was:{basis:SidebarNow,now:SidebarNow}|null,basis:SidebarNow,answer:SidebarNow) {
  const prior=was?.basis===basis?was.now:basis;
- const now={channels:same(prior.channels,answer.channels)?prior.channels:answer.channels,agents:same(prior.agents,answer.agents)?prior.agents:answer.agents};
- if(now.channels===prior.channels&&now.agents===prior.agents) return was?.basis===basis?was:{basis,now:prior};
+ const handed=Array.isArray(answer.handed)?answer.handed:prior.handed;
+ const now={channels:same(prior.channels,answer.channels)?prior.channels:answer.channels,agents:same(prior.agents,answer.agents)?prior.agents:answer.agents,
+  handed:same(prior.handed,handed)?prior.handed:handed};
+ if(now.channels===prior.channels&&now.agents===prior.agents&&now.handed===prior.handed) return was?.basis===basis?was:{basis,now:prior};
  return {basis,now};
 }
 
 // The reader's channels as the sidebar last read them.
 export const useSidebarChannels=()=>useContext(Now)?.channels??[];
+// The newest step this reader was handed on an Agent's Screen, as the sidebar last read it (#714), or null; outside the
+// sidebar's reach none. `ask` reads it again at once.
+export function useScreenHand(agent:string):{hand:ScreenHand|null,ask:()=>void} {
+ const live=useContext(Now);
+ const hand=live?.handed.find(item=>item.agent===agent)??null;
+ return {hand,ask:live?.refresh??(()=>{})};
+}
 // An Agent's state for this reader as the sidebar last read it; `drawn` (the state the page was drawn with) outside the
 // sidebar's reach, as in Settings, or for an Agent it does not list.
 export function useAgentState(agent:string,drawn:AgentFaceState='idle'):AgentFaceState {

@@ -1,7 +1,11 @@
 import { expect, test, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { HandBanner } from '@/app/agent-screen';
 import { LanguageProvider } from '@/lib/i18n-client';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }), usePathname: () => '/c/rs/home', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 // #714: the banner of a step handed over on the Agent's Screen, in its large view (design-reference: renderViewer's
 // banner, .vw-hand): the "Handed to you" badge, the step's title, one line that the Agent stopped there, and "Done it".
