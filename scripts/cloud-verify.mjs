@@ -157,13 +157,14 @@ async function journey(page) {
  await page.locator('.sidebar').getByRole('link',{name:'Marketing board',exact:true}).click();
  await expect(page).toHaveURL(`${origin}/c/${seeded.company}/work/board`);
  await expect(page.locator('#board-cols > .col')).toHaveCount(6);
- await page.goto(`${origin}/c/${seeded.company}/work/new`);
+ // The one New card form (#683), from the Ideas column's "+": the Card lands at the top of Ideas.
  const title=`Cloud card ${Date.now()}`;
- const create=page.getByRole('button',{name:'Create card'});
- await hydrated(page.getByLabel('Message',{exact:true}),title,create);
+ await expect(async()=>{ await page.locator('.col[data-column="ideas"]').getByRole('button',{name:'Add an idea'}).click(); await expect(page.getByRole('dialog')).toBeVisible({timeout:2000}); }).toPass({timeout:60000});
+ const create=page.getByRole('dialog').getByRole('button',{name:'Add card'});
+ await hydrated(page.getByRole('dialog').getByRole('textbox',{name:'Title'}),title,create);
  await create.click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/,{timeout:30000});
- const card=Number(new URL(page.url()).pathname.split('/').pop());
+ await expect(page).toHaveURL(/\/work\/board\?show=\d+/,{timeout:30000});
+ const card=Number(new URL(page.url()).searchParams.get('show'));
  await page.goto(`${origin}/c/${seeded.company}/work/board`);
  const source=page.locator(`.kcard[data-card-id="${card}"]`);
  await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
@@ -177,9 +178,9 @@ async function journey(page) {
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card}"]`)).toBeVisible();
  await screenshot(page,'board-after-move');
- await expect.poll(()=>query(`select c.title,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.id=${card}`))
-  .toEqual([{title,board_column:'planned'}]);
- step(`made the Card "${title}" and dragged it from Ideas to Planned; work_cards has it in the planned column`);
+ await expect.poll(()=>query(`select c.title,c.status from public.work_cards c where c.id=${card}`))
+  .toEqual([{title,status:'planned'}]);
+ step(`made the Card "${title}" and dragged it from Ideas to Planned; work_cards has its status planned`);
 }
 
 const browser=await chromium.launch();

@@ -37,6 +37,7 @@ replay tests/member-agent-visibility-migration.mjs
 replay tests/agent-profile-moves-migration.mjs
 replay tests/agent-key-waits-migration.mjs
 replay tests/card-places-migration.mjs
+replay tests/card-status-migration.mjs
 replay tests/staged-cutover-migration.mjs
 replay tests/agent-looks-migration.mjs
 replay tests/agent-birth-migration.mjs

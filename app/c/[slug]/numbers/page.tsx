@@ -58,12 +58,14 @@ async function Figures({db,company,slug,period,writer,queue,t,language}:{db:Db,c
  ]);
  const feed=(agentRows||[]) as LogRow[];
  const people=await logPeople(db,company,[...feed.flatMap(row=>row.card_id!=null?[row.card_id]:[]),...items.flatMap(item=>item.card_id!=null?[item.card_id]:[])]);
- const {data:submitters}=cards.length?await db.from('work_cards').select('id,review_submitter').eq('company_id',company).in('id',cards.map(card=>card.id)):{data:[]};
+ // An approval waiting shows its Card's assignee (#677: the assignee replaces the one who sent it to review).
+ const {data:assignees}=cards.length?await db.from('work_cards').select('id,assignee_agent,assignee_person').eq('company_id',company).in('id',cards.map(card=>card.id)):{data:[]};
  const locale=localeFor(language);
  const noApp=<NoApp t={t} slug={slug}/>;
  const waitFace=(item:typeof items[number])=>{
-  const submitter=item.kind==='approval'?(submitters||[]).find(card=>card.id===item.id)?.review_submitter as string|null|undefined:undefined;
-  if(submitter) return <WhoFace who={whoOf({actor_kind:people.identities.some(agent=>agent.id===submitter)||people.members.some(member=>member.person_id===submitter&&member.agent_role)?'agent':'person',actor_id:submitter} as LogRow,people,t)}/>;
+  const assignee=item.kind==='approval'?((assignees||[]) as {id:number,assignee_agent:string|null,assignee_person:string|null}[]).find(card=>card.id===item.id):undefined;
+  const submitter=assignee?.assignee_person??assignee?.assignee_agent;
+  if(submitter) return <WhoFace who={whoOf({actor_kind:assignee?.assignee_agent||people.identities.some(agent=>agent.id===submitter)||people.members.some(member=>member.person_id===submitter&&member.agent_role)?'agent':'person',actor_id:submitter} as LogRow,people,t)}/>;
   // A permission request (#165) is its Agent's, so it shows the Agent's face (design-reference: renderDashboard's face(w.agent)).
   if(item.agent) return <span className="lg-face" aria-hidden="true"><AgentFace agent={item.agent.id} size={28}/></span>;
   if(item.asked_by) return <span className="lg-av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]}</span>;

@@ -35,9 +35,9 @@ test('a conversation, a Card note and a channel message each start their Run on 
   const tr=await page.evaluate(()=>document.documentElement.lang).then(lang=>i18n(lang==='ar'?'ar':'en').t);
   // Its own words: a retry on the same lane keeps the file's data, so an earlier note may already be on the Card.
   const note=`@Lead draft the caption ${randomUUID()}`;
-  await page.getByLabel(tr('comment'),{exact:true}).fill(note);
-  await page.getByRole('button',{name:tr('send'),exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:note})).toBeVisible();
+  await page.getByRole('textbox',{name:tr('cwCommentLabel')}).fill(note);
+  await page.getByRole('button',{name:tr('cwPost')}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:note})).toBeVisible();
   const runs=()=>fake.settings.requests.filter(request=>request.method==='POST'&&/\/v1\/runs$/.test(request.path??'')).map(request=>request.path);
   await expect.poll(()=>runs().length,{timeout:30000}).toBe(3);
   expect(runs()).toEqual(Array(3).fill(`/p/${profile}/v1/runs`));

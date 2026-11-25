@@ -6,7 +6,7 @@ import { signIn } from './sign-in';
 // (an Agent by "@" and its name, a Member by their first name), and it offers only what the reader may call: a hidden
 // Agent never appears in a Conversation, while a channel's own Members and Agents do. The caret token, the entries, the
 // keys and the list the note field gets without Commands are proven in tests/composer-mentions.test.mjs,
-// components/message-box.test.tsx and components/card-sheet.test.tsx.
+// components/message-box.test.tsx and components/card-window.test.tsx.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
 const company = '10000000-0000-0000-0000-000000000001';
 const contributor = '20000000-0000-0000-0000-000000000003';

@@ -36,7 +36,7 @@ const frames = () => new Promise(resolve => requestAnimationFrame(() => requestA
 const options = () => vi.mocked(toast).mock.calls.at(-1)![1] as { icon?: string, action?: { label: string, run: () => void } } | undefined;
 const undone = (props: ReturnType<typeof workProps>) => Object.fromEntries(vi.mocked(props.undoMove).mock.calls.at(-1)![0]);
 // The board as the server's answer to the move draws it (#131): the Card in Planned, where it lands.
-const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, stage_id: 2 } : each) });
+const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, stage_id: 2, status: 'planned' } : each) });
 // A Card in Ideas, drawn where the database put it.
 const ideas = () => workProps({ cards: [card({ id: 1, title: 'Launch post', stage_id: 1, board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'undone' as const, column: 'ideas' })) });
 
@@ -110,7 +110,8 @@ test('a move the board refuses is told with no Undo', async () => {
  await showWork(props);
  link(1).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
- await expect.poll(() => toast).toHaveBeenCalledWith('This card is waiting for your decision. Decide in the chat first', { icon: 'hand', opensPage: true });
+ // The Card opens in its window on the same page (#678), so the toast's clock starts at once.
+ await expect.poll(() => toast).toHaveBeenCalledWith('This card is waiting for your decision. Decide in the chat first', { icon: 'hand' });
  expect(options()?.action).toBeUndefined();
  expect(placed(props)).toEqual([]);
  // Nothing drops into "Waiting on you" either: it fills up by itself.

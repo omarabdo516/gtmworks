@@ -9,6 +9,17 @@ const omar = '20000000-0000-0000-0000-000000000001', writer = '30000000-0000-000
 test('Card, Member and Agent rows say who changed what', () => {
  const moved = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'stage_id', old_name: 'أفكار', new_name: 'كتابة' } });
  assert.deepEqual([moved.act, moved.from, moved.to], [['logActMoved'], { text: 'أفكار' }, { text: 'كتابة' }]);
+ // Files added to the Card itself in its window (#678) name the files.
+ const files = describeEntry({ subject: 'card', action: 'files_added', details: { names: ['brief.pdf', 'logo.png'] } });
+ assert.deepEqual([files.act, files.to], [['logActFilesAdded'], { text: 'brief.pdf, logo.png' }]);
+ // A to-do ticked or unticked while reading (#679) is one quiet row naming the item.
+ const ticked = describeEntry({ subject: 'card', action: 'todo_ticked', details: { item: 'Write the hook', done: true } });
+ const unticked = describeEntry({ subject: 'card', action: 'todo_ticked', details: { item: 'اكتب الخطاف', done: false } });
+ assert.deepEqual([ticked.act, ticked.to, unticked.act, unticked.to], [['logActTodoTicked'], { text: 'Write the hook' }, ['logActTodoUnticked'], { text: 'اكتب الخطاف' }]);
+ // A wait set or ended (#682) names the Card waited for, or a hidden Card.
+ const waited = describeEntry({ subject: 'card', action: 'wait_added', details: { waits_for: 3, title: 'Design' } });
+ const unwaited = describeEntry({ subject: 'card', action: 'wait_removed', details: { waits_for: 4, title: null } });
+ assert.deepEqual([waited.act, waited.to, unwaited.act, unwaited.to], [['logActWaitAdded'], { text: 'Design' }, ['logActWaitRemoved'], { key: 'cwHiddenCard' }]);
  const note = describeEntry({ subject: 'card', action: 'note', body: 'ملاحظة' });
  assert.deepEqual([note.act, note.note], [['logActNote'], 'ملاحظة']);
  // An idea added in the Ideas column (#188) says so, in both languages.
@@ -430,6 +441,17 @@ test('a memory or skill change nobody confirmed reads as asked for and not confi
  }
  assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActMemoryEditAsked', 'Ads'), i18n(language).t('logUnconfirmed')]),
   [['asked to edit a note in the memory of Ads', 'Not confirmed'], ['طلب يعدّل ملاحظة في ذاكرة Ads', 'مش متأكد إنه حصل']]);
+});
+
+// #677: a Card's one assignee changed reads as who it went to; nobody chose it when the Agent was removed or the Member
+// left or can only read now, and the row says so.
+test('an assignee change names who it went to, and a removal says why the Card has no assignee', () => {
+ const row = details => describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'assignee', ...details } });
+ assert.deepEqual(row({ old: 'p:1', new: 'a:2', old_name: 'Sara', new_name: 'Ads' }), { act: ['logActAssigned'], obj: undefined, from: { text: 'Sara' }, to: { text: 'Ads' }, note: undefined });
+ assert.deepEqual(row({ old: 'a:2', new: null, old_name: 'Ads' }).act, ['logActUnassigned']);
+ assert.deepEqual(row({ old: 'a:2', new: null, old_name: 'Ads', reason: 'agent_removed' }), { act: ['logActUnassignedRemoved'], obj: undefined, from: { text: 'Ads' }, to: { key: 'logNone' }, note: undefined });
+ assert.deepEqual(row({ old: 'p:1', new: null, old_name: 'Sara', reason: 'member_removed' }).act, ['logActUnassignedLeft']);
+ assert.deepEqual(row({ old: 'p:1', new: null, old_name: 'Sara', reason: 'member_viewer' }).act, ['logActUnassignedViewer']);
 });
 
 test('a change of an Agent\'s look says which part changed, from what to what, and a reset says it is automatic again (#698)', () => {

@@ -16,6 +16,10 @@ insert into decisions
  select fn,'asks','reads only current Cards, or only archived ones, by archived_at' from unnest(array[
   'public.channel_board_card(uuid)','public.archived_cards(uuid)','public.archived_card_list(uuid,text,uuid,bigint,timestamptz,bigint,integer)','public.archived_card_count(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)',
   'public.card_archive_stops(uuid,bigint[])','public.stop_named_channel_run(public.channel_runs,text)']) fn
+ union all select 'public.tick_card_todo(uuid,bigint,integer,text,boolean)','asks','ticks a to-do only on a current Card: an archived one is not found (#679)'
+ union all select fn,'asks','asks for or decides the review of a current Card only: an archived one is not found (#681)' from unnest(array['public.ask_review(uuid,bigint)','public.decide_review(uuid,bigint,bigint,text,text)']) fn
+ union all select fn,'asks','sets, ends or counts the waits of current Cards only: an archived one is not found, and one waited for that is archived holds nobody (#682)' from unnest(array['public.add_card_wait(uuid,bigint,bigint)','public.remove_card_wait(uuid,bigint,bigint)','public.open_card_waits(uuid)','public.wait_open(public.work_card_waits)','public.card_wait_links(uuid,bigint)']) fn
+ union all select 'public.save_card_description(uuid,bigint,text,integer)','asks','writes the description of a current Card only: an archived one is not found (#680)'
  union all select 'public.stop_card_work(uuid,bigint)','exempt','inside the database only: archive_cards stops the work of the one Card it is archiving, before marking it'
  union all select fn,'asks','starts no work on an archived Card and keeps no wait on one (#671): it reads a Card only to ask whether it is archived' from unnest(array[
   'public.begin_note_start(bigint)','public.answer_note_start(bigint,integer,text)','public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)']) fn
@@ -29,6 +33,8 @@ insert into decisions
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
   'public.schedule_approved_card()','public.note_mentions()','public.conversation_reply_card()','public.work_card_place()',
   'public.channel_run_card()','public.channel_reply_card()']) fn
+ union all select fn,'exempt','a trigger (#677): it keeps a Card''s one assignee, current or archived, equal to the old shapes, or lets an assignee removed from the Company go; it lists no Cards and answers no caller' from unnest(array[
+  'public.assignee_from_list()','public.unassign_removed()']) fn
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member' from unnest(array[
   'public.lead_hand_to_agent(uuid,text,text,text,text,text)','public.close_handover_target(bigint,text,text,text)',
   'public.channel_hand_to_agent(bigint,text,text,text,text,text)','public.handover_hand_to_agent(bigint,text,text,text,text,text)',

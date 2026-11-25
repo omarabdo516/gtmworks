@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps, ReactNode } from 'react';
 import { ToastHost, toast } from '@/app/toast';
-import { CardSheet } from '@/app/card-sheet';
+import { CardWindow } from '@/app/card-window';
 import { OverlayFrame } from '@/app/settings-overlay-frame';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -181,34 +181,34 @@ test('the action is a button the keyboard reaches, and pressing it runs it', asy
  expect(run).toHaveBeenCalledTimes(1);
 });
 
-test('a toast raised over the open card sheet shows above it, and stays on the page after the sheet closes', async () => {
+test('a toast raised over the open Card window shows above it, and stays on the page after the window closes', async () => {
  const screen = await show(<div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
+  <CardWindow slug="rs-learning" company="co-1" me="p-1" card={{ id: 7, title: 'Launch post', status: 'ideas', go_live: null, project_id: null, assignee: '' }} data={{ id: 7, working: false, comments: null, commentCount: 0, activity: null, activityCount: 0, runs: [], files: [], creative: null, versions: [], made: { from: 'board', by: '', at: '' }, waits: [] }} symbol="" canWrite={false} alone={false} columnName={column => column} assignees={{ agents: [], people: [] }} projects={[]} send={vi.fn()} save={vi.fn()} move={vi.fn()}/>
  </div>);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
  toast('Saved to the card');
  await expect.element(screen.getByText('Saved to the card')).toBeVisible();
  expect(onTop()).toBe(true);
- await screen.getByRole('button', { name: 'Close', exact: true }).click();
+ await screen.getByRole('button', { name: 'Close the card' }).click();
  await expect.poll(() => document.querySelector('dialog')!.open).toBe(false);
  await expect.element(screen.getByText('Saved to the card')).toBeVisible();
  expect(onTop()).toBe(true);
 });
 
-test('a toast already showing when the card sheet opens moves above it', async () => {
+test('a toast already showing when the Card window opens moves above it', async () => {
  const screen = await show();
  toast('Moved to “Planned”');
  await expect.element(screen.getByText('Moved to “Planned”')).toBeVisible();
  await screen.rerender(<LanguageProvider language="en"><div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
+  <CardWindow slug="rs-learning" company="co-1" me="p-1" card={{ id: 7, title: 'Launch post', status: 'ideas', go_live: null, project_id: null, assignee: '' }} data={{ id: 7, working: false, comments: null, commentCount: 0, activity: null, activityCount: 0, runs: [], files: [], creative: null, versions: [], made: { from: 'board', by: '', at: '' }, waits: [] }} symbol="" canWrite={false} alone={false} columnName={column => column} assignees={{ agents: [], people: [] }} projects={[]} send={vi.fn()} save={vi.fn()} move={vi.fn()}/>
  </div><ToastHost/></LanguageProvider>);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
  await expect.poll(onTop).toBe(true);
 });
 
-test('a toast showing in the card sheet stays on the page when the sheet is taken away open', async () => {
+test('a toast showing in the Card window stays on the page when the window is taken away open', async () => {
  const sheet = <div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
+  <CardWindow slug="rs-learning" company="co-1" me="p-1" card={{ id: 7, title: 'Launch post', status: 'ideas', go_live: null, project_id: null, assignee: '' }} data={{ id: 7, working: false, comments: null, commentCount: 0, activity: null, activityCount: 0, runs: [], files: [], creative: null, versions: [], made: { from: 'board', by: '', at: '' }, waits: [] }} symbol="" canWrite={false} alone={false} columnName={column => column} assignees={{ agents: [], people: [] }} projects={[]} send={vi.fn()} save={vi.fn()} move={vi.fn()}/>
  </div>;
  const screen = await show(sheet);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();

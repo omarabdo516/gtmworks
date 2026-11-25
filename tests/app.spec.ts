@@ -2,6 +2,9 @@ import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
+import { execFileSync } from 'node:child_process';
+import { makeCard } from './make-card';
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the visual
 // lane checks the Arabic faces on its screens; the English ones are read by the next case (#257).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
@@ -34,9 +37,9 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
    const plex=drawn.find(font=>/^(?:__)?IBM[_ ]Plex[_ ]Sans[_ ]Arabic(?:_|$)/.test(font));
    expect(plex,'the shell draws in IBM Plex Sans Arabic').toBeTruthy();
    expect(drawn.filter(font=>font!==family&&font!==plex),'no other face draws text').toEqual([]);
-   if(!['work/board','work/calendar','work/list','approvals'].includes(path)) expect(drawn).toContain(family);
+   if(!['work/board','work/board/1','work/calendar','work/list','approvals'].includes(path)) expect(drawn).toContain(family);
    for(const font of drawn) expect(await page.evaluate(font=>Array.from(document.fonts).some(face=>face.family.replaceAll(/["']/g,'')===font&&face.status==='loaded'),font),`${font} loaded`).toBe(true);
-   for(const el of await page.locator(':is(.content h1,.content h2,.content h3,.modal h2):not(.board-view *)').all()) expect(await el.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
+   for(const el of await page.locator(':is(.content h1,.content h2,.content h3,.modal h2):not(.board-view *, .cw *)').all()) expect(await el.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
    // The shell and the board (ADR 0013) take the approved reference's face (IBM Plex Sans Arabic) in both languages.
    if(width===1440) for(const heading of await page.locator('.sidebar .sb-label, .board-view h1, .board-view h2').all()) expect(await heading.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toMatch(/^(?:__)?IBM[_ ]Plex[_ ]Sans[_ ]Arabic(?:_|$)/);
    if(path==='home') for(const metric of await page.locator('.stats .stat').all()) {
@@ -137,85 +140,76 @@ test('the Owner of every company lands on a Company home from the sign-in page a
 test('a design file over 1MB with an Arabic name is added to a Card and uploaded again as its next version',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
  const file={name:'تصميم.png',mimeType:'image/png',buffer:Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64'), Buffer.alloc(1024*1024)])};
- await page.getByLabel('New design file').setInputFiles(file);
- await page.getByRole('button',{name:"Add design"}).click();
- await expect(page.getByText(/Version 1:/)).toBeVisible();
- await page.locator('input[type=file]').first().setInputFiles(file);
- await page.getByRole('button',{name:"Upload version"}).first().click();
- await expect(page.getByText(/Version 2:/)).toBeVisible();
+ // The Card window's Result (#678): each upload is the next Version of the Card's design.
+ const versions=page.getByRole('dialog').getByRole('list',{name:'Versions'});
+ await page.getByLabel('Upload a version').setInputFiles(file);
+ await expect(versions.getByRole('link',{name:'Open version 1: تصميم.png'})).toBeVisible();
+ await page.getByLabel('Upload a version').setInputFiles(file);
+ await expect(versions.getByRole('link',{name:'Open version 2: تصميم.png'})).toBeVisible();
 });
 
-test('approval queue, rejection and ordered steps',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings/work');
- const settings=page.locator('.approval-settings');
- await settings.getByLabel("New step name").fill('مراجعة إضافية للاختبار');
- await settings.getByLabel("New approver").selectOption('role:owner');
- await settings.getByRole('button',{name:"Add step"}).click();
- await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
- const title=`بطاقة موافقة ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- const cardUrl=page.url();
- await page.getByLabel("Caption",{exact:true}).fill('نص مخصص للمراجعة');
- await page.getByLabel("Offering",{exact:true}).fill('عرض مخصص للمراجعة');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:"Save changes"}).click()]);
- await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- // "Waiting on you" (ADR 0013) holds the card; the sidebar counts the cards waiting for this approver.
- await page.goto('/c/rs-learning/approvals');
+test('a review: an Owner approves it into Planned with its date ahead and into Done with none, and sends one back with a reason the team reads',async({page,browser})=>{
+ // #681: one review, decided by any Owner or Manager who sees the Card, the first answer closing it; approval steps are gone.
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const card=page.getByRole('dialog');
  const waiting=page.locator('.col[data-column="waiting"]');
+ const make=async(name:string)=>{
+  return (await makeCard(page,name)).id;
+ };
+ const sendForReview=async()=>{
+  await card.getByRole('button',{name:/^Status:/}).click();
+  await card.getByRole('menuitemradio',{name:'Send for review'}).click();
+  await expect(card.getByRole('button',{name:/^Status: Waiting on you/})).toBeVisible();
+ };
+ const title=`بطاقة موافقة ${Date.now()}`;
+ const cardId=await make(title);
+ // The Card's old fields are read in the place of its description until #684 moves them into it (#678).
+ query(`update public.work_cards set caption='نص مخصص للمراجعة',offering='عرض مخصص للمراجعة',go_live=now()+interval '10 days' where id=${cardId}`);
+ await page.reload();
+ await sendForReview();
+ // "Waiting on you" (ADR 0013) holds the Card for every Owner and Manager who sees it; the sidebar counts it.
+ await page.goto('/c/rs-learning/approvals');
  const queued=waiting.locator('.approval-card').filter({hasText:title});
  await expect(queued).toBeVisible();
  const count=await waiting.locator('.approval-card').count();
  await expect(page.locator('.sidebar .sb-count[href$="/approvals"]')).toHaveText(String(count));
- await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',new URL(cardUrl).pathname);
- // The decision is made inside the card, beside the caption and the brief it is about.
+ // The decision is made inside the Card, beside the brief it is about.
  await queued.getByRole('link',{name:title}).click();
- // By role: a filled textarea's text is part of its wrapping label's text, so getByLabel stops matching it once it has a caption.
- await expect(page.getByRole('textbox',{name:"Caption",exact:true})).toHaveValue('نص مخصص للمراجعة');
- await expect(page.getByLabel("Offering",{exact:true})).toHaveValue('عرض مخصص للمراجعة');
- const review=page.locator('[data-card-section="review"]');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), review.getByRole('button',{name:"Approve"}).click()]);
- // The second step is also Omar's: the card is still waiting on him.
- await page.goto('/c/rs-learning/approvals');
- await expect(waiting.locator('.approval-card').filter({hasText:title})).toBeVisible();
- await waiting.locator('.approval-card').filter({hasText:title}).getByRole('link',{name:title}).click();
- await page.locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
- await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+ await expect(card.locator('[data-slot="description"]')).toContainText('نص مخصص للمراجعة');
+ const review=card.locator('[data-card-section="review"]');
+ await review.getByRole('button',{name:"Approve"}).click();
+ // Its publishing date is ahead: Planned, with the approved symbol; the review is closed for everyone.
+ await expect(card.getByRole('button',{name:'Status: Planned · Approved'})).toBeVisible();
+ expect(JSON.parse(query(`select decision from public.work_reviews where card_id=${cardId}`))).toEqual([{decision:'approved'}]);
  await page.goto('/c/rs-learning/approvals');
  await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);
- await page.goto(cardUrl);
- await expect(page.locator('.card-stage-line')).toContainText('معتمد');
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
+
+ // A Card with no publishing date, approved by the Manager, is Done.
+ const undated=`بطاقة بلا تاريخ ${Date.now()}`;
+ const undatedId=await make(undated);
+ await sendForReview();
+ const manager=await (await browser.newContext()).newPage();
+ await signIn(manager,'manager@example.com',`/c/rs-learning/work/board?card=${undatedId}`);
+ await manager.getByRole('dialog').locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
+ await expect(manager.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
+
+ // Sent back with a reason: In progress, and the reason is a comment the team reads.
  const rejected=`بطاقة رفض ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(rejected);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- const rejectedUrl=page.url();
- await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+ const rejectedId=await make(rejected);
+ await sendForReview();
+ await page.goto(`/c/rs-learning/work/board?card=${rejectedId}`);
+ const decision=card.locator('[data-card-section="review"]');
+ await decision.getByRole('button',{name:"Send back"}).click();
+ // The reason is required.
+ await decision.getByRole('button',{name:"Send back"}).click();
+ await expect(decision.getByText('Write the reason so whoever works on the card knows what to change.')).toBeVisible();
+ await decision.getByLabel('The reason').fill('يرجى تعديل التصميم');
+ await decision.getByRole('button',{name:"Send back"}).click();
+ await expect(card.getByRole('button',{name:/^Status: In progress/})).toBeVisible();
+ await expect(card.locator('[data-card-section="sent-back"]')).toContainText('يرجى تعديل التصميم');
+ await expect(card.locator('.cw-feed')).toContainText('يرجى تعديل التصميم');
  await page.goto('/c/rs-learning/approvals');
- const row=waiting.locator('.approval-card').filter({hasText:rejected});
- await row.getByRole('link',{name:rejected}).click();
- const decision=page.locator('[data-card-section="review"]');
- await decision.getByText("Reject with a reason").click();
- await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم');
- await decision.getByLabel("Design needs work",{exact:true}).check();
- await decision.getByRole('button',{name:"Confirm rejection"}).click();
- await expect(page.locator('.rejection-notice')).toContainText('يرجى تعديل التصميم');
- await page.goto('/c/rs-learning/approvals');
- await expect(row).toHaveCount(0);
- await page.goto(rejectedUrl);
- await expect(page.locator('.card-stage-line')).toContainText('تصميم ومونتاج');
- await expect(page.locator('.rejection-notice')).toContainText('يرجى تعديل التصميم');
- await page.goto('/c/rs-learning/settings/work');
- const step=page.locator('.approval-settings form').filter({has:page.locator('input[value="مراجعة إضافية للاختبار"]')});
- await step.getByRole('button',{name:"Delete"}).click();
- await expect(step).toHaveCount(0);
+ await expect(waiting.locator('.approval-card').filter({hasText:rejected})).toHaveCount(0);
 });
 
 // The external-agent API is gone (#341): its routes answer not found, with or without a key.
@@ -227,37 +221,25 @@ test('the old agent API routes answer not found', async ({request}) => {
   for(const headers of [key,{}]) expect((await request.fetch(path,{method,headers,data:method==='GET'||method==='DELETE'?undefined:{}})).status(),`${method} ${path}`).toBe(404);
 });
 
-// The caption's lines survive the real save and a reload, in English and in Arabic; its height and direction are
-// checked in components/card-detail.test.tsx.
-test('a caption of several lines in English and Arabic survives saving and a reload',async({page})=>{
- await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
- const caption=page.locator('textarea[name=caption]'); // Found by name: a label's accessible name grows with the text once the field has a value.
- const save=()=>Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]);
- for(const text of ['First line\nSecond line\nThird line','السطر الأول\nالسطر الثاني\nالسطر الثالث']) {
-  await caption.fill(text);
-  await save();
-  await page.reload();
-  await expect(caption).toHaveValue(text);
- }
- await caption.fill('');
- await save(); // Leave the seeded card as the other tests expect it.
-});
-
-// The publishing date's form round trip: an unrelated save leaves the date as it was, and a changed date is read back
-// as its activity on the Card and on Home. The phone layout of these controls is in components/card-detail.test.tsx.
+// The publishing date's round trip in the Card window (#678): another property saved leaves the date as it was, and a
+// changed date is read back as its activity on the Card and on Home.
 test('an unrelated save keeps a Card\'s publishing date, and a changed date reads back on the Card and Home',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/2');
- const dates=page.locator('.detail-row').filter({hasText:'Updated publishing date'});
+ const card=page.getByRole('dialog');
+ await card.getByRole('tab',{name:/^Activity \d+$/}).click();
+ const dates=card.locator('#cw-list .lg-row').filter({hasText:'publishing date'});
  const before=await dates.count();
- await page.getByLabel("Offering",{exact:true}).fill('عرض محدث دون تعديل الموعد');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated Offering: عرض محدث دون تعديل الموعد')).toBeVisible();
+ const title=(await card.getByRole('heading',{level:2}).textContent())!.trim();
+ await card.getByRole('button',{name:title}).click();
+ await card.getByRole('textbox',{name:'Card title'}).fill(`${title} (renamed)`);
+ await page.keyboard.press('Enter');
+ await expect(card.locator('#cw-list')).toContainText(`${title} (renamed)`);
  await expect(dates).toHaveCount(before);
- await page.getByLabel("Publishing date",{exact:true}).fill('2032-11-12T12:00');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated publishing date: November 12')).toBeVisible();
+ await card.getByLabel('Publishing date',{exact:true}).fill('2032-11-12');
+ await expect(dates).toHaveCount(before+1);
+ expect(JSON.parse(query(`select to_char(go_live at time zone 'UTC','YYYY-MM-DD') as day from public.work_cards where id=2`))).toEqual([{day:'2032-11-12'}]);
  await page.goto('/c/rs-learning/home');
- await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText('Updated publishing date: November 12')).toBeVisible();
+ await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText(/Updated publishing date: November 12/)).toBeVisible();
 });
 
 test('an error thrown in the page is reported to the server log endpoint',async({page})=>{

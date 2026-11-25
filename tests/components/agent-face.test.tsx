@@ -6,7 +6,7 @@ import type { ComponentProps } from 'react';
 import { AgentFace } from '@/components/agent-face';
 import { LooksProvider } from '@/lib/agent-looks-client';
 import { useReportRun } from '@/lib/live-runs';
-import { MemberPicker } from '@/lib/work-activity';
+import { Avatar } from '@/lib/work-activity';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { CompanyLooks } from '@/lib/agent-looks';
@@ -128,19 +128,15 @@ test('with reduced motion nothing moves, and the expression still changes', asyn
  expect(getComputedStyle(document.querySelector('.dot')!, '::after').display).toBe('none');
 });
 
-test('a legacy role agent shows its name\'s first letter, as a person does, and the card\'s assignee menu chooses it', async () => {
+test('a legacy role agent shows its name\'s first letter, as a person does', async () => {
  const writer = { id: '30000000-0000-0000-0000-000000000001', role: 'writer', name: 'وكيل المحتوى' };
  const members = [{ person_id: '20000000-0000-0000-0000-000000000002', people: { name: 'Mona' } }, { person_id: writer.id, agent_role: 'writer', people: { name: writer.name } }];
- const screen = await render(<LanguageProvider language="en"><AgentIdentitiesProvider agents={[writer]}>
-  <form><MemberPicker label="Add assignee" name="person" members={members}/></form>
+ await render(<LanguageProvider language="en"><AgentIdentitiesProvider agents={[writer]}>
+  <Avatar id={writer.id} members={members}/>
  </AgentIdentitiesProvider></LanguageProvider>);
- await screen.getByRole('button', { name: 'Add assignee' }).click();
- const option = page.getByRole('menuitemradio', { name: writer.name });
- await expect.element(option).toBeVisible();
- expect(option.element().querySelector('.avatar')!.textContent).toBe('و');
- expect(option.element().querySelector('.face')).toBeNull();
- await option.click();
- await expect.poll(() => new FormData(document.querySelector('form')!).get('person')).toBe(writer.id);
+ const letter = page.getByRole('img', { name: writer.name });
+ await expect.element(letter).toHaveTextContent('و');
+ expect(document.querySelector('.face')).toBeNull();
 });
 
 // #702: a record that names no Agent (a Conversation detached before its Agent's id was kept) shows the first letter of

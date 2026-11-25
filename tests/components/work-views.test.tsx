@@ -16,44 +16,24 @@ vi.mock('@/app/note-actions', () => ({ editNote: vi.fn() }));
 // Card 1 is dated in November 2026, card 3 in December 2026; card 2 has no date, and a month filter keeps it.
 const cards = [card({ go_live: '2026-11-12T12:00:00+00:00' }), card({ id: 2, title: 'Undated', go_live: null }), card({ id: 3, title: 'December card', go_live: '2026-12-01T12:00:00+00:00' })];
 
-test('the board\'s month filter hides a Card dated in another month and keeps an undated one; clearing it brings the Card back', async () => {
+// #683: the board's toolbar has search in place of the Month filter (design-reference-card: bf-q); the List and the
+// Calendar keep their month.
+test('the board\'s search keeps the Cards whose title holds what is typed, and Escape clears it', async () => {
  const screen = await showWork(workProps({ cards }));
- const dated = () => document.querySelectorAll('#board-cols .kcard[data-card-id="1"]').length;
- expect(dated()).toBe(1);
- await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
- await expect.poll(dated).toBe(0);
- expect(document.querySelectorAll('#board-cols .kcard[data-card-id="2"]')).toHaveLength(1);
- expect(document.querySelectorAll('#board-cols .kcard[data-card-id="3"]')).toHaveLength(1);
- await userEvent.selectOptions(screen.getByLabelText('Month'), '');
- await expect.poll(dated).toBe(1);
-});
-
-// #453: the empty Month filter reads All months in the board's own style, not the browser's raw month placeholder.
-test('the board\'s Month filter, with no month chosen, reads "All months" in English', async () => {
- const screen = await showWork(workProps({ cards }));
- const select = screen.getByRole('combobox', { name: 'Month' }).element() as HTMLSelectElement;
- await expect.element(screen.getByRole('combobox', { name: 'Month' })).toHaveValue('');
- expect(select.selectedOptions[0].textContent).toBe('All months');
-});
-
-test('the board\'s Month filter, with no month chosen, reads "كل الشهور" in Arabic', async () => {
- const screen = await showWork(workProps({ cards }), { language: 'ar' });
- const select = screen.getByRole('combobox', { name: 'الشهر' }).element() as HTMLSelectElement;
- await expect.element(screen.getByRole('combobox', { name: 'الشهر' })).toHaveValue('');
- expect(select.selectedOptions[0].textContent).toBe('كل الشهور');
-});
-
-test('the board\'s Month filter lists each month of the Cards, newest first, after All months', async () => {
- const screen = await showWork(workProps({ cards }));
- const select = screen.getByRole('combobox', { name: 'Month' });
- await expect.element(select).toBeVisible();
- expect([...(select.element() as HTMLSelectElement).options].map(option => option.textContent)).toEqual(['All months', 'December 2026', 'November 2026']);
+ const drawn = () => [...document.querySelectorAll('#board-cols .kcard')].map(item => item.getAttribute('data-card-id')).sort();
+ expect(drawn()).toEqual(['1', '2', '3']);
+ await screen.getByRole('button', { name: 'Search cards' }).click();
+ await userEvent.keyboard('december');
+ await expect.poll(drawn).toEqual(['3']);
+ await userEvent.keyboard('{Escape}');
+ await expect.poll(drawn).toEqual(['1', '2', '3']);
+ expect(screen.container.querySelector('select[aria-label="Month"]')).toBeNull();
 });
 
 test('the List filters by month too, and a row\'s title opens its Card', async () => {
  const screen = await showWork(workProps({ section: 'work/list', cards }));
- const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board/${id}"]`).length;
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board/1');
+ const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board?card=${id}"]`).length;
+ await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board?card=1');
  await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
  await expect.poll(() => row(1)).toBe(0);
  expect(row(3)).toBe(1);
@@ -65,7 +45,7 @@ test('the Calendar shows a Card on its publishing day in its month, linking to t
  const screen = await showWork(workProps({ section: 'work/calendar', cards }));
  await userEvent.fill(screen.getByLabelText('Month'), '2026-11');
  const link = screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' });
- await expect.element(link).toHaveAttribute('href', '/c/rs-learning/work/board/1');
+ await expect.element(link).toHaveAttribute('href', '/c/rs-learning/work/board?card=1');
  expect(link.element().closest('.day')!.firstChild!.textContent).toBe('12');
 });
 
@@ -110,72 +90,38 @@ const crewBoard = (more: Partial<WorkProps> = {}) => workProps({
 const shown = () => [...document.querySelectorAll('#board-cols .kcard')].map(item => item.getAttribute('data-card-id')).sort();
 const foot = (id: number) => document.querySelector(`#board-cols .kcard[data-card-id="${id}"] .kcard__foot`)!;
 
-test('the chips are All and the Company\'s Agents, the main Agent first, and no old role agent', async () => {
- const screen = await showWork(crewBoard({ canCreate: false }));
- const tools = screen.getByRole('group', { name: 'Filter by agent' });
- expect(tools.getByRole('button').elements().map(chip => chip.textContent)).toEqual(['All', 'Lead', 'Ads', 'SEO']);
- expect(tools.getByRole('button').elements().slice(1).map(chip => chip.querySelector<HTMLElement>('.chip__face[aria-hidden="true"] .face')?.dataset.agent)).toEqual([lead.id, ads.id, seo.id]);
-});
-
-// Rewritten for #190 from "the Agent filter shows only that Agent's cards, and All brings the others back": the filter
-// now follows a Card's own Agent, and still keeps one Agent's Cards and brings the rest back under All.
-test('pressing an Agent\'s chip keeps only its Cards in every column and the focus on the chip; All shows every Card again', async () => {
- const screen = await showWork(crewBoard());
- const tools = screen.getByRole('group', { name: 'Filter by agent' });
- expect(shown()).toEqual(['1', '2', '3', '4']);
- await tools.getByRole('button', { name: 'Ads', exact: true }).click();
- await expect.element(tools.getByRole('button', { name: 'Ads', exact: true })).toHaveAttribute('aria-pressed', 'true');
- await expect.element(tools.getByRole('button', { name: 'Ads', exact: true })).toHaveFocus();
+// #683: who a Card is on is one menu (design-reference-card: bf-who): everyone, the reader, no one, the Company's
+// Agents and the Members who may be assignees.
+test('the assignee menu offers Everyone, Me, No one, the Company\'s Agents and its Members, and keeps the Cards of the one chosen', async () => {
+ const screen = await showWork(crewBoard({ cards: [...crewBoard().cards, card({ id: 5, title: 'Mine', agent_id: null, assignee_agent: null, assignee_person: 'p-1' })],
+  members: [{ person_id: 'p-1', role: 'owner', people: { name: 'Omar' } }, { person_id: 'p-2', role: 'contributor', people: { name: 'Sara' } }] }));
+ const menu = screen.getByRole('button', { name: 'Assignee: Everyone' });
+ await menu.click();
+ expect(screen.getByRole('menuitemradio').elements().map(item => item.querySelector('.menu__t')!.textContent)).toEqual(['Everyone', 'Me', 'No one', 'Lead', 'Ads', 'SEO', 'Sara']);
+ await screen.getByRole('menuitemradio', { name: 'Ads' }).click();
  await expect.poll(shown).toEqual(['1', '3']);
- expect(document.querySelectorAll('.col[data-column="planned"] .kcard[data-card-id="3"]')).toHaveLength(1);
- await tools.getByRole('button', { name: 'Lead', exact: true }).click();
- await expect.poll(shown).toEqual([]);
- await tools.getByRole('button', { name: 'All', exact: true }).click();
- await expect.element(tools.getByRole('button', { name: 'All', exact: true })).toHaveFocus();
- await expect.poll(shown).toEqual(['1', '2', '3', '4']);
+ await expect.element(screen.getByRole('button', { name: 'Assignee: Ads' })).toHaveFocus();
+ await screen.getByRole('button', { name: 'Assignee: Ads' }).click();
+ await screen.getByRole('menuitemradio', { name: 'Me' }).click();
+ await expect.poll(shown).toEqual(['5']);
+ await screen.getByRole('button', { name: 'Clear filters' }).click();
+ await expect.poll(shown).toEqual(['1', '2', '3', '4', '5']);
 });
 
-test('a Card\'s foot shows its Agent\'s face and name before the channel and the date; a Card with no Agent shows the channel and the date alone', async () => {
- await showWork(crewBoard());
- expect(foot(2).querySelector<HTMLElement>('.kcard__agent .face')!.dataset.agent).toBe(seo.id);
- expect(foot(2).textContent).toBe('SEO· InstagramJun 4');
- expect(foot(4).querySelector('.kcard__agent')).toBeNull();
- expect(foot(4).textContent).toBe('FacebookJun 4');
-});
-
-test('a Card two Agents worked on carries both faces and "Worked on it", and says it in its name; a one-Agent Card has no crew line', async () => {
- const screen = await showWork(crewBoard());
- const crew = document.querySelector('#board-cols .kcard[data-card-id="1"] .kcard__crew')!;
- expect([...crew.querySelectorAll<HTMLElement>('.fstack[aria-hidden="true"] .face')].map(face => face.dataset.agent)).toEqual([seo.id, ads.id]);
- expect(crew.querySelector('.kcard__crew-t')!.textContent).toBe('Worked on it: SEO, Ads');
- expect(crew.nextElementSibling).toBe(foot(1));
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · Worked on it: SEO, Ads', exact: true })).toBeVisible();
- expect(document.querySelectorAll('#board-cols .kcard__crew')).toHaveLength(1);
- await expect.element(screen.getByRole('link', { name: 'Design', exact: true })).toBeVisible();
-});
-
-// #702: Ads was removed after it worked on Card 5. The Card no longer names it as its Agent but keeps that it was, and
-// the Company's looks keep Ads's look and name, so the Card shows it as before, in its crew too; the chips name only
-// the Company's Agents.
-test('a Card whose Agent was removed shows it in the look it had, with its name, in its foot and its crew', async () => {
- const looks: CompanyLooks = { agents: { [ads.id]: { shape: 'blob', colour: 'rose', temperament: 'energetic' }, [seo.id]: { shape: 'circle', colour: 'teal', temperament: 'neat' } }, requests: {}, removed: { [ads.id]: 'Ads' } };
- const screen = await showWork(crewBoard({ cardAgents: [lead, seo], cards: [card({ id: 5, title: 'Kept', agent_id: null, kept_agent_id: ads.id, crew: [ads.id, seo.id] })] }), { looks });
- const face = foot(5).querySelector<HTMLElement>('.kcard__agent .face')!;
- expect([face.dataset.agent, face.dataset.shape, face.dataset.colour]).toEqual([ads.id, 'blob', 'rose']);
- expect(foot(5).querySelector('.kcard__agent bdi')!.textContent).toBe('Ads');
- const crew = document.querySelector('#board-cols .kcard[data-card-id="5"] .kcard__crew')!;
- expect([...crew.querySelectorAll<HTMLElement>('.face')].map(one => one.dataset.agent)).toEqual([ads.id, seo.id]);
- expect(crew.querySelector('.kcard__crew-t')!.textContent).toBe('Worked on it: Ads, SEO');
- const tools = screen.getByRole('group', { name: 'Filter by agent' });
- expect(tools.getByRole('button').elements().map(chip => chip.textContent)).toEqual(['All', 'Lead', 'SEO']);
-});
-
-test('in Arabic the crew\'s names are joined as Arabic joins a list, each kept in its own direction', async () => {
- const screen = await showWork(crewBoard(), { language: 'ar' });
- const line = document.querySelector('#board-cols .kcard[data-card-id="1"] .kcard__crew-t')!;
- expect(line.textContent).toBe('اشتغل عليها: SEO، Ads');
- expect([...line.querySelectorAll('bdi')].map(name => name.textContent)).toEqual(['SEO', 'Ads']);
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · اشتغل عليها: SEO، Ads', exact: true })).toBeVisible();
+// #683: a tile shows its title and one state symbol, then the assignee's face and only the counts above zero, and says
+// all of it in its name (design-reference-card: kcardHTML).
+test('a tile shows its title, its assignee\'s face, its date and the counts above zero, and says all of it in its name', async () => {
+ const screen = await showWork(crewBoard({
+  cards: [card({ agent_id: 'h-ads', description: '- [x] Hook\n- [ ] Caption', go_live: '2026-06-04T12:00:00+00:00' }), card({ id: 4, title: 'Untold', agent_id: null, assignee_agent: null, go_live: null })],
+  attachments: [{ id: 1, card_id: 1, comment_id: null, name: 'brief.pdf', content_type: 'application/pdf' }],
+  activity: [{ id: 1, card_id: 1, action: 'comment_added', details: {}, created_at: '2026-06-01T10:00:00Z', actor_id: 'p-1', evidence: null }, { id: 2, card_id: 1, action: 'comment_added', details: {}, created_at: '2026-06-01T11:00:00Z', actor_id: 'p-1', evidence: null }] }));
+ expect(foot(1).querySelector<HTMLElement>('.kt-face .face')!.dataset.agent).toBe(ads.id);
+ expect([...foot(1).querySelectorAll('.kt-metas > *')].map(meta => meta.textContent)).toEqual(['Jun 4', '1', '2', '1/2']);
+ expect(foot(4).querySelector('.kt-face .cw-noone')).not.toBeNull();
+ expect(foot(4).querySelector('.kt-metas')).toBeNull();
+ await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · Ideas · Assignee: Ads · Publishing date Jun 4 · 1 file · 2 comments · 1 of 2 to-do items done', exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'Untold · Ideas · Assignee: No one', exact: true })).toBeVisible();
+ expect(document.querySelector('#board-cols .kcard__crew, #board-cols .kcard__t, #board-cols .badge')).toBeNull();
 });
 
 // #140: a step an Agent handed to the reader waits in Waiting on you: its Agent and time on top, then the tag (the hand
@@ -269,38 +215,30 @@ const readers: ['en' | 'ar', string, string, { me: string, waiting?: (typeof han
  ['en', 'a Viewer', 'Waiting on the team', { me: 'p-4', canCreate: false }],
  ['ar', 'a Viewer', 'مستني الفريق', { me: 'p-4', canCreate: false }],
 ];
-test.each(readers)('in the %s interface, %s reads a Card whose chat waits under Waiting on you once, with its tag, "%s" and the step\'s title, its stage kept', async (language, _, badge, reader) => {
+test.each(readers)('in the %s interface, %s reads a Card whose chat waits under Waiting on you once, as one question symbol named in it (not "%s")', async (language, _, oldBadge, reader) => {
  await showWork(workProps({ cards: [chatCard()], members, ...reader }), { language });
  const drawn = document.querySelectorAll('#board-cols .kcard[data-card-id="9"]');
  expect(drawn).toHaveLength(1);
  const kcard = drawn[0];
  expect(kcard.closest('.col')!.getAttribute('data-column')).toBe('waiting');
- expect(kcard.getAttribute('data-stage-id')).toBe('3');
  expect(document.querySelectorAll('a.mcard')).toHaveLength(0);
- const waiting = document.querySelector('.col[data-column="waiting"]')!;
- expect(waiting.querySelector('.col__count')!.textContent).toBe('1');
+ expect(document.querySelector('.col[data-column="waiting"] .col__count')!.textContent).toBe('1');
  expect(document.querySelector('.col[data-column="progress"] .col__count')!.textContent).toBe('0');
- const [tag, shown, line] = [...kcard.children].slice(1);
- expect([tag.className, tag.textContent]).toEqual(['wtag wtag--hand', language === 'ar' ? 'اتسلّمتلك' : 'Handed to you']);
- expect(tag.getBoundingClientRect().width).toBeLessThan(line.getBoundingClientRect().width);
- const mine = reader.me === 'p-1';
- expect(shown.className).toBe(mine ? 'badge badge--wait' : 'badge');
- expect(shown.textContent).toBe(badge);
- expect(!!shown.querySelector('.dot.dot--waiting')).toBe(mine);
- expect(!!shown.querySelector('svg')).toBe(!mine);
- expect([line.className, line.textContent]).toEqual(['kcard__t', 'انشر المقال']);
+ // One symbol says it (#683): the question, named in the tile's own name; no badge says it again.
+ expect(kcard.querySelector('.kt-syms .sym[data-sym="question"][aria-hidden="true"]')).not.toBeNull();
+ expect(kcard.querySelector('.badge, .wtag')).toBeNull();
+ expect(kcard.querySelector('a.kcard__title')!.getAttribute('aria-label')).toContain(language === 'ar' ? 'عنده سؤال' : 'Has a question');
+ expect(kcard.textContent).not.toContain(oldBadge);
 });
 
-test('a question waiting in the chat reads as its question with no tag, and the Card is back In progress once nothing waits', async () => {
+test('a question waiting in the chat shows the question symbol, and the Card is back In progress with none once nothing waits', async () => {
  const screen = await showWork(workProps({ cards: [chatCard('question')], members, waiting: [{ ...handed, kind: 'question', id: 43, title: 'Which audience first?' }] }));
  const kcard = () => document.querySelector('#board-cols .kcard[data-card-id="9"]')!;
  expect(kcard().closest('.col')!.getAttribute('data-column')).toBe('waiting');
- expect(kcard().querySelector('.wtag')).toBeNull();
- expect(kcard().querySelector('.kcard__t')!.textContent).toBe('Which audience first?');
+ expect(kcard().querySelector('.sym[data-sym="question"]')).not.toBeNull();
  await screen.rerender(workView(workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3, wait: null })], members })));
  await expect.poll(() => kcard().closest('.col')!.getAttribute('data-column')).toBe('progress');
- expect(kcard().getAttribute('data-stage-id')).toBe('3');
- expect(kcard().querySelector('.badge')).toBeNull();
+ expect(kcard().querySelector('.kt-syms')).toBeNull();
 });
 
 // The Card's chat and its approval count it once, in the column and in the board's own summary.
@@ -309,7 +247,6 @@ test('a Card that both waits for the reader\'s approval and holds their chat\'s 
  await showWork(workProps({ cards: [chatCard()], members, approvableIds: [9], waiting: rows }));
  expect(document.querySelectorAll('#board-cols .kcard[data-card-id="9"]')).toHaveLength(1);
  expect(document.querySelector('.col[data-column="waiting"] .col__count')!.textContent).toBe('1');
- expect(document.querySelector('.board-tools__summary')!.textContent).toBe('1 things waiting on you');
 });
 
 // On the reader's own list (/approvals) the Card stands for its chat's rows too, and a chat with no Card keeps its item.
@@ -323,21 +260,22 @@ test('the reader\'s own Waiting on you draws a Card whose chat waits once, in pl
 });
 
 // A filter that leaves the Card out leaves its chat's step drawn on its own, as before #146, and counted once.
-test('a hand whose Card a filter leaves off the board is drawn as its own row, and every count names what is drawn once', async () => {
+test('a hand whose Card a filter leaves off the board is drawn as its own row, and the column counts what is drawn once', async () => {
  const screen = await showWork(workProps({ cards: [chatCard(), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, waiting: [handed] }));
  const column = () => document.querySelector('.col[data-column="waiting"]')!;
  const rows = () => [...column().querySelectorAll('a.mcard')].map(item => item.getAttribute('href'));
- const counts = () => [column().querySelector('.col__count')!.textContent, document.querySelector('.board-tools__summary')!.textContent];
+ const count = () => column().querySelector('.col__count')!.textContent;
  expect(column().querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
- expect([rows(), counts()]).toEqual([[], ['1', '1 things waiting on you']]);
- await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
+ expect([rows(), count()]).toEqual([[], '1']);
+ await screen.getByRole('button', { name: 'Search cards' }).click();
+ await userEvent.keyboard('December');
  await expect.poll(rows).toEqual(['/c/rs-learning/conversations/c-9#hand-42']);
  expect(document.querySelectorAll('#board-cols .kcard[data-card-id="9"]')).toHaveLength(0);
- expect(counts()).toEqual(['1', '1 things waiting on you']);
- await userEvent.selectOptions(screen.getByLabelText('Month'), '');
+ expect(count()).toBe('1');
+ await userEvent.keyboard('{Escape}');
  await expect.poll(rows).toEqual([]);
  expect(column().querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
- expect(counts()).toEqual(['1', '1 things waiting on you']);
+ expect(count()).toBe('1');
 });
 
 // As a Card waiting on a decision: the drop and Shift+Arrow are refused, say so and open the Card; nothing is sent.
@@ -351,12 +289,12 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
  await mouse('mousePressed', from.left + from.width / 2, from.top + 20);
  for (let step = 1; step <= 10; step++) await mouse('mouseMoved', from.left + from.width / 2 + (to.left + to.width / 2 - from.left - from.width / 2) * step / 10, from.top + 20 + (to.top + 40 - from.top - 20) * step / 10);
  await mouse('mouseReleased', to.left + to.width / 2, to.top + 40);
- await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own', { icon: 'hand', opensPage: true }]]);
- expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9']]);
+ await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own', { icon: 'hand' }]]);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/work/board?card=9', { scroll: false }]]);
  document.querySelector<HTMLElement>('.kcard[data-card-id="9"] a')!.focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  expect(toast).toHaveBeenCalledTimes(2);
- expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9'], ['/c/rs-learning/work/board/9']]);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/work/board?card=9', { scroll: false }], ['/c/rs-learning/work/board?card=9', { scroll: false }]]);
  expect(sent(props)).toEqual([]);
  expect(placed(props)).toEqual([]);
  expect(document.querySelector('.kcard[data-card-id="9"]')!.closest('.col')!.getAttribute('data-column')).toBe('waiting');
@@ -364,26 +302,22 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
 
 // design-reference: syncWaitMarks. The board's first read is the baseline; a Card that starts waiting on the reader after
 // it shakes its badge once, though it is drawn again in another column, and a later read does not shake it again.
-test('the badge of a Card that starts waiting on the reader shakes once, and not on the first read or the next', async () => {
+test('the symbol of a Card that starts waiting on the reader shakes once, and not on the first read or the next', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  try {
-  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 }), card({ id: 5, title: 'Review the reel', stage_id: 4 }), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, approvableIds: [5] });
+  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 }), card({ id: 5, title: 'Review the reel', stage_id: 4, status: 'waiting' }), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, approvableIds: [5] });
   const screen = await showWork(before);
-  const badge = (id: number) => document.querySelector(`.kcard[data-card-id="${id}"] .badge`)!;
-  expect(badge(5).className).toBe('badge badge--wait');
+  const mark = (id: number) => document.querySelector(`.kcard[data-card-id="${id}"] .kt-syms`)!;
+  expect(mark(5).className).toBe('kt-syms');
   const after = { ...before, cards: [chatCard(), before.cards[1], before.cards[2]], waiting: [handed] };
   await screen.rerender(workView(after));
-  await expect.poll(() => badge(9)?.className).toBe('badge badge--wait is-new');
-  expect(getComputedStyle(badge(9)).animationName).toBe('gw-nudge');
-  expect(badge(5).className).toBe('badge badge--wait');
+  await expect.poll(() => mark(9)?.className).toBe('kt-syms is-new');
+  expect(getComputedStyle(mark(9).querySelector('.sym')!).animationName).toBe('gw-nudge');
+  expect(mark(5).className).toBe('kt-syms');
   vi.advanceTimersByTime(1200);
-  await expect.poll(() => badge(9).className).toBe('badge badge--wait');
+  await expect.poll(() => mark(9).className).toBe('kt-syms');
   await screen.rerender(workView({ ...after, items: [] }));
-  expect(badge(9).className).toBe('badge badge--wait');
-  await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
-  await expect.poll(() => document.querySelector('.kcard[data-card-id="9"]')).toBeNull();
-  await userEvent.selectOptions(screen.getByLabelText('Month'), '');
-  await expect.poll(() => badge(9)?.className).toBe('badge badge--wait');
+  expect(mark(9).className).toBe('kt-syms');
  } finally { vi.useRealTimers(); }
 });
 
@@ -394,19 +328,19 @@ test('a Card that waits again soon after its first nudge keeps its second one fo
   const idle = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 })], members });
   const waits = { ...idle, cards: [chatCard()], waiting: [handed] };
   const screen = await showWork(idle);
-  const badge = () => document.querySelector('.kcard[data-card-id="9"] .badge');
+  const mark = () => document.querySelector('.kcard[data-card-id="9"] .kt-syms');
   await screen.rerender(workView(waits));
-  await expect.poll(() => badge()?.className).toBe('badge badge--wait is-new');
+  await expect.poll(() => mark()?.className).toBe('kt-syms is-new');
   vi.advanceTimersByTime(600);
   await screen.rerender(workView(idle));
-  await expect.poll(badge).toBeNull();
+  await expect.poll(mark).toBeNull();
   await screen.rerender(workView(waits));
-  await expect.poll(() => badge()?.className).toBe('badge badge--wait is-new');
+  await expect.poll(() => mark()?.className).toBe('kt-syms is-new');
   vi.advanceTimersByTime(600);
   await new Promise(resolve => requestAnimationFrame(resolve));
-  expect(badge()!.className).toBe('badge badge--wait is-new');
+  expect(mark()!.className).toBe('kt-syms is-new');
   vi.advanceTimersByTime(600);
-  await expect.poll(() => badge()!.className).toBe('badge badge--wait');
+  await expect.poll(() => mark()!.className).toBe('kt-syms');
  } finally { vi.useRealTimers(); }
 });
 
@@ -426,4 +360,45 @@ test('a decided suggestion is said once with the Agent\'s name the page read, an
   await new Promise(resolve => setTimeout(resolve, 80));
   expect(toast).not.toHaveBeenCalled();
  } finally { history.replaceState(history.state, '', start); }
+});
+
+// #677: the bell holds the reader's own list: the Cards they can act on, the Cards assigned to them (which stay in their
+// columns), the requests and the mentions, and its number is its rows. A Viewer has no bell.
+test('the bell counts its rows and lists the Card to act on, the Cards assigned to the reader, a request and a mention, each opening what it names', async () => {
+ const at = '2026-06-01T00:00:00Z';
+ const waiting = [
+  { kind: 'approval', id: 1, title: 'أفكار لمحتوى الشهر', body: 'Owner review', asked_by: '', card_id: 1, conversation_id: null, created_at: at },
+  { kind: 'agent_request', id: 40, title: 'Ads', body: 'Runs the ads', asked_by: 'Sara', card_id: null, conversation_id: null, created_at: at },
+  { kind: 'mention', id: 50, title: 'Script', body: '@Omar look', asked_by: 'Sara', card_id: 3, conversation_id: null, created_at: at },
+ ];
+ const assigned = [{ id: 1, title: 'أفكار لمحتوى الشهر', status: 'waiting' }, { id: 3, title: 'Script', status: 'planned' }];
+ const props = workProps({ cards: [card({ stage_id: 4 }), card({ id: 3, title: 'Script', stage_id: 2, next_actor: 'p-1' })], waiting, assigned, approvableIds: [1] });
+ const screen = await showWork(props);
+ const bell = screen.getByRole('button', { name: 'Waiting on you: 4', exact: true });
+ await expect.element(bell).toHaveTextContent('4');
+ // Nothing says it twice (#683): the bell alone counts what waits.
+ expect(document.querySelector('.board-tools__summary')).toBeNull();
+ expect(document.querySelector('#board-cols .kcard[data-card-id="3"]')!.closest('[data-column]')?.getAttribute('data-column'), 'a Card assigned to the reader stays in its column').toBe('planned');
+ await bell.click();
+ const menu = screen.getByRole('menu', { name: 'Waiting on you: 4' });
+ await expect.element(menu.getByRole('menuitem').first()).toHaveFocus();
+ const groups = [...menu.element().querySelectorAll('[role="group"]')].map(group => [group.getAttribute('aria-label'), [...group.querySelectorAll('[role="menuitem"]')].map(row => [row.textContent, row.getAttribute('href')])]);
+ expect(groups).toEqual([
+  ['Stopped at an Agent', [['أفكار لمحتوى الشهر', '/c/rs-learning/work/board?card=1']]],
+  ['Assigned to you', [['ScriptPlanned', '/c/rs-learning/work/board?card=3']]],
+  ['Requests waiting for your answer', [['AdsSara', '/c/rs-learning/approvals']]],
+  ['Mentions of you', [['ScriptSara', '/c/rs-learning/work/board?card=3']]],
+ ]);
+ await userEvent.keyboard('{Escape}');
+ await expect.element(bell).toHaveFocus();
+ await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
+});
+
+test('an empty bell says nothing waits, and a Viewer has no bell', async () => {
+ const screen = await showWork(workProps({ waiting: [], assigned: [] }));
+ await screen.getByRole('button', { name: 'Waiting on you: 0', exact: true }).click();
+ await expect.element(screen.getByRole('menu')).toHaveTextContent('Nothing waiting on you');
+ screen.unmount();
+ await showWork(workProps({ canCreate: false }));
+ expect(document.querySelector('.waiting-bell')).toBeNull();
 });

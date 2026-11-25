@@ -8,8 +8,8 @@ import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { boardCardColumns } from '@/lib/board-columns.mjs';
-import { currentNoteText, drawnAt, parseCard } from '@/lib/activity-log.mjs';
-import { cardSheet } from '@/app/card-sheet-server';
+import { currentNoteText, parseCard } from '@/lib/activity-log.mjs';
+import { cardWindow } from '@/app/card-window-server';
 import { orderAgents } from '@/lib/sidebar.mjs';
 import Members from './members';
 import Home from './home';
@@ -17,16 +17,16 @@ import AgentAccess from './agent-access';
 import CompanyHermesAgents from './company-hermes-agents';
 import Skills from './skills';
 import { companySkillAgents } from '@/lib/company-skill-items';
-import Work, { type Card } from './work';
-import { addIdea, archiveCards, archivedCardList, placeMove, workAction, undoMove } from './work-actions';
+import Work, { type Card, type OpenReview } from './work';
+import { archiveCards, newCard, archivedCardList, placeMove, saveCard, saveDescription, tickTodo, uploadDescriptionPicture, workAction, undoMove } from './work-actions';
 import { archivedCardCount, archivedCardPage } from '@/lib/archived-cards';
 import Projects from './projects';
 import Usage from './usage';
 import { managedUsage } from '@/lib/company-app-items';
-import { Approvals, ApprovalSettings } from './approvals';
+import { Approvals } from './approvals';
 import { type WorkActivity, type WorkMember } from '@/lib/work-activity';
 
-export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,show?:string,idea?:string,decided?:string,item?:string,invited?:string}>}) { const {t,language}=await getI18n();
+export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,show?:string,idea?:string,added?:string,decided?:string,item?:string,invited?:string}>}) { const {t,language}=await getI18n();
  const {slug,section:parts}=await params; const cardId=parts?.[0]==='work' && parts?.[1]==='board' && parts?.[2] ? Number(parts[2]) : undefined; const section=cardId?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const {data:{user}}=await db.auth.getUser();
  // Signing in returns to the page asked for, with the settings overlay's own state (section, agent, period), the Card
  // open over the board (card) and the Card a chat shows on the board (show) kept, so a link to Settings, Subscription
@@ -61,12 +61,12 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
   'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong',
   'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-writtenLate':'waitingChangeWrittenLate','change-reasonMissing':'waitingChangeReasonMissing','change-editInvalid':'waitingChangeEditInvalid'};
  const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):failed.startsWith('change-')?t('waitingChangeFailed'):message;
- const {steps,cards:myCards,visible:myVisibleCards,items:waitingItems,count:waitingCount,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,membership?.role || '');
+ const {cards:myCards,visible:myVisibleCards,items:waitingItems,assigned:assignedCards,count:waitingCount,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,membership?.role || '');
  const isWork=section.startsWith('work/')||section==='settings/work';
  // The board, the board under a new Card (/work/new) and the board opened on Waiting on you (/approvals).
  const onBoard=section==='work/board'||section==='work/new'||section==='approvals';
  // An idea just added comes back on the board with its own address (#188): the Card flashes and the board toasts it.
- const ideaAdded=onBoard&&query.idea==='1';
+ const ideaAdded=!onBoard?undefined:query.idea==='1'?'idea' as const:query.added==='1'?'card' as const:undefined;
  // A decided learning suggestion comes back to the board with its outcome and its Agent's name (#169): the address names
  // the waiting item, never the Agent, and the page reads its name here as the person reading the board.
  const decidedItem=section==='approvals'&&(query.decided==='approve'||query.decided==='reject')&&/^[1-9]\d{0,17}$/.test(query.item||'')?Number(query.item):null;
@@ -84,17 +84,18 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // Home's Agent tiles read their in-progress Cards on their own, newest first, so the capped Card list never hides one (#460).
  // shortcut: one read for every Agent, so past the Data API's 1,000 rows one Agent's Cards could crowd out another's; read per Agent if a Company ever holds that many in progress.
  const [workData,{data:agentRows},homeAgentCards]=await Promise.all([
-  (isWork||section==='home'||section==='approvals')?Promise.all(['work_stages','work_labels','work_cards','work_checklist','work_activity','work_creatives','work_versions','work_card_labels','work_assignees','work_attachments'].map(t=>t==='work_cards'?onBoard?boardCards():cards():read(t))):[],
+  (isWork||section==='home'||section==='approvals')?Promise.all(['work_stages','work_labels','work_cards','work_checklist','work_activity','work_creatives','work_versions','work_card_labels','work_attachments'].map(t=>t==='work_cards'?onBoard?boardCards():cards():read(t))):[],
   onBoard?db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]},
-  section==='home'?db.from('work_cards').select('id,title,stage_id,next_actor,agent_id,created_at,wait:card_wait,work_stages!inner(board_column)').eq('company_id',company.id).not('agent_id','is',null).eq('work_stages.board_column','progress').order('created_at',{ascending:false}).order('id',{ascending:false}):{data:[],error:null},
+  section==='home'?db.from('work_cards').select('id,title,status,assignee_agent,created_at,wait:card_wait').eq('company_id',company.id).not('assignee_agent','is',null).eq('status','progress').order('created_at',{ascending:false}).order('id',{ascending:false}):{data:[],error:null},
  ]);
  const cardAgents=orderAgents((agentRows||[]) as {id:string,connection_id:string,name:string,speciality:string,is_default:boolean}[]);
  // The Card list is capped at the Data API's row limit; the reader's own pending approvals were read by id
  // (approvalQueue, company-scoped), so one past the cap still reaches Waiting on you and its board column.
  if(workData[2]?.data) { const known=new Set(workData[2].data.map((c:{id:number})=>c.id)); const missing=(onBoard?myVisibleCards:myCards).filter(c=>!known.has(c.id));
   if(onBoard&&missing.length) workData[2].data.push(...((await boardCards().in('id',missing.map(c=>c.id))).data||[])); else workData[2].data.push(...missing); }
- // A Card open over the board (#116) is named in the board's address; one the reader's own board does not hold opens nothing.
- const sheetId=section==='work/board'&&!cardId?parseCard(query.card):null;
+ // A Card opens in its window over the board (#116, #678), named in the board's address (?card=) or by the address its
+ // page had (/work/board/<id>, an old link, the log's, a morning's); one the reader's own board does not hold opens nothing.
+ const sheetId=section==='work/board'?cardId??parseCard(query.card):null;
  // A chat's corner pill opens the board on its Card (#144).
  const shownId=section==='work/board'&&!cardId?parseCard(query.show)??undefined:undefined;
  // The Card list is capped, so a Card the address names (open over the board, or shown from a chat) is read by id (the
@@ -114,12 +115,12 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const [archivedFirst,archivedTotal]=onArchiveBoard?await Promise.all([archivedCardPage<Card>(db,company.id,{}),archivedCardCount(db,company.id)]):[null,null];
  const archivedNamed:Card[]=[];
  const archived=()=>[...(archivedFirst?.items||[]),...archivedNamed];
- for(const named of [cardId,shownId,sheetId]) if(onArchiveBoard&&named!=null&&!archived().some(c=>c.id===named)&&!workData[2]?.data?.some(c=>c.id===named)) {
+ for(const named of [shownId,sheetId]) if(onArchiveBoard&&named!=null&&!archived().some(c=>c.id===named)&&!workData[2]?.data?.some(c=>c.id===named)) {
   const {data:asked}=await db.rpc('archived_cards',{c:company.id}).select('*').eq('id',named).maybeSingle(); if(asked) archivedNamed.push(asked as Card); }
  const isArchived=(id:number|null|undefined)=>id!=null&&archived().some(c=>c.id===id)&&!workData[2]?.data?.some(c=>c.id===id);
  for(const named of [cardId,shownId]) if(isArchived(named)) redirect(`/c/${slug}/work/board?card=${named}`);
  const sheetArchived=isArchived(sheetId);
- const sheet=sheetId!=null&&(sheetArchived||workData[2]?.data?.some(c=>c.id===sheetId))?await cardSheet(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate&&!sheetArchived,t,language}):undefined;
+ const sheet=sheetId!=null&&(sheetArchived||workData[2]?.data?.some(c=>c.id===sheetId))?await cardWindow(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate&&!sheetArchived,t,language}):undefined;
  const {data:workMembers}=(isWork||section==='home'||section==='approvals')?await db.from('members').select('person_id,role,agent_role,people(name)').is('removed_at',null).eq('company_id',company.id):{data:[]};
  const {data:workAgents}=isWork?await db.rpc('company_agents',{c:company.id}):{data:[]};
  const {data:projects}=(isWork||section==='projects')?await db.from('work_projects').select('id,name,goal,status').eq('company_id',company.id).order('id'):{data:[]};
@@ -128,6 +129,10 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const versionRows=workData[6]?.data || [];
  const signed=versionRows.length ? await db.storage.from('creatives').createSignedUrls(versionRows.map(v=>v.path),3600) : {data:[]};
  const versions=versionRows.map((v,i)=>({...v,url:signed.data?.[i]?.signedUrl || null}));
+ // The open reviews (#681): each Card in review, the Version it is decided on and who asked.
+ const {data:openReviews}=isWork||section==='approvals'?await db.from('work_reviews').select('card_id,version_id,asked_by,asked_at').eq('company_id',company.id).is('decision',null):{data:[]};
+ // How many Cards each Card still waits for (#682), hidden ones counted: the number on its tile.
+ const {data:openWaits}=isWork||section==='approvals'?await db.rpc('open_card_waits',{c:company.id}):{data:[]};
  const commentIds=(workData[4]?.data || []).filter(a=>a.action==='comment_added').map(a=>Number((a.details as {id?:unknown}|null)?.id)).filter(Number.isSafeInteger);
  const {data:currentComments}=commentIds.length?await db.from('work_comments').select('id,body').eq('company_id',company.id).in('id',[...new Set(commentIds)]):{data:[]};
  const activityRows=await Promise.all(currentNoteText(workData[4]?.data || [],(currentComments||[]) as {id:number,body:string}[]).map(async a=>{
@@ -135,18 +140,8 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
   const {data}=await db.storage.from('creatives').createSignedUrl(a.evidence.slice(5),3600);
   return {...a,evidence_url:data?.signedUrl || null};
  }));
- // An open Card's notes (#22): their current text (an edit changes it), the Runs their Agent mentions started, and the
- // Agents' replies in the log. Read as the signed-in person, so an Agent hidden from them and its replies are left out.
- const cardNotes=isWork&&cardId?await Promise.all([
-  db.from('work_comments').select('id,body,edited_at,author_id,created_at').eq('company_id',company.id).eq('card_id',cardId),
-  db.from('note_runs').select('note_id,agent_id,agent_name,outcome').eq('company_id',company.id).eq('card_id',cardId),
-  db.from('company_log').select('actor_id,actor_name,body,details,created_at').eq('company_id',company.id).eq('card_id',cardId).eq('action','note_reply'),
-  db.from('hermes_agents').select('id,name,connection_id').eq('company_id',company.id),
- ]).then(([comments,runs,replies,agents])=>({me:user.id,owner:membership?.role==='owner',drawnAt:drawnAt(),comments:comments.data||[],runs:runs.data||[],agents:agents.data||[],
-  replies:(replies.data||[]).map(r=>({reply_to:Number(r.details?.reply_to),actor_id:r.actor_id,actor_name:r.actor_name,body:r.body||'',created_at:r.created_at}))})):undefined;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- const openCard=workData[2]?.data?.find(c=>c.id===cardId);
  const settingsLeaf:Record<string,string>={'settings/members':'members','settings/work':'workSettings'};
- const crumbs=openCard?[{label:t('work'),href:`/c/${slug}/work/board`},{label:openCard.title}]:settingsLeaf[section]?[{label:company.name,href:`/c/${slug}/home`},{label:t('settings'),href:`/c/${slug}/settings`},{label:t(settingsLeaf[section])}]:undefined;
- return <Shell company={company} companies={companies || []} personId={user.id} section={section} title={title} crumbs={crumbs} personName={person?.name || user.email || ''} role={roleNames[membership?.role || ''] || ''} owner={membership?.role==='owner'} approvalCount={waitingCount} cardId={workData[2]?.data?.some(c=>c.id===cardId)?cardId:sheet?.id}><main className="content">{isWork?<><Work key={`${company.id}:${section==='work/new'?'new':'work'}`} workAction={workAction} placeMove={placeMove} addIdea={addIdea} undoMove={undoMove} archiveCards={archiveCards} archived={onArchiveBoard?{first:archivedFirst,total:archivedTotal,named:archivedNamed}:undefined} readArchived={archivedCardList} me={user.id} initialCreating={section==='work/new'} canCreate={canCreate} alone={company.work_mode==='alone'} notes={cardNotes} agents={(workAgents||[]) as {person_id:string,role:string,granted:boolean}[]} slug={slug} company={company.id} section={section==='work/new'?'work/board':section} cardId={cardId} stages={(workData[0]?.data || []).sort((a,b)=>a.position-b.position)} labels={workData[1]?.data || []} cards={workData[2]?.data || []} items={workData[3]?.data || []} activity={activityRows.sort((a,b)=>b.id-a.id)} creatives={workData[5]?.data || []} versions={versions} cardLabels={workData[7]?.data || []} assignees={workData[8]?.data || []} attachments={(workData[9]?.data || []).map(({id,card_id,comment_id,name,content_type})=>({id,card_id,comment_id,name,content_type}))} projects={projects || []} message={message} members={(workMembers || []) as unknown as Parameters<typeof Work>[0]['members']} approvableIds={myVisibleCards.map(c=>c.id)} waiting={waitingItems} sheet={sheet} show={shownId} ideaAdded={ideaAdded} cardAgents={cardAgents || []}/>{section==='settings/work'&&<ApprovalSettings slug={slug} company={company.id} steps={steps} members={(workMembers || []) as unknown as Parameters<typeof ApprovalSettings>[0]['members']} manage={manage}/>}</>:section==='projects'?<Projects slug={slug} company={company.id} projects={projects || []} counts={cardCounts} canEdit={canCreate} message={message}/>:section==='approvals'?<><Approvals key={`${company.id}:waiting`} me={user.id} canCreate={canCreate} alone={company.work_mode==='alone'} cardAgents={cardAgents} agents={((await db.rpc('company_agents',{c:company.id})).data||[]) as {person_id:string,role:string,granted:boolean}[]} slug={slug} company={company.id} stages={(workData[0]?.data || []).sort((a,b)=>a.position-b.position)} labels={workData[1]?.data || []} cards={workData[2]?.data || []} items={workData[3]?.data || []} activity={activityRows.sort((a,b)=>b.id-a.id) as WorkActivity[]} creatives={workData[5]?.data || []} versions={versions} cardLabels={workData[7]?.data || []} assignees={workData[8]?.data || []} attachments={(workData[9]?.data || []).map(({id,card_id,comment_id,name,content_type})=>({id,card_id,comment_id,name,content_type}))} projects={(await db.from('work_projects').select('id,name').eq('company_id',company.id).order('id')).data || []} message={waitingFailure} members={(workMembers || []) as unknown as WorkMember[]} approvableIds={myVisibleCards.map(c=>c.id)} waiting={waitingItems} ruleDecision={ruleDecision}/></>:section==='skills'?<Skills company={company.id} slug={slug} agents={skillAgents} manage={manage} refused={query.refused} failed={!!query.failed}/>:section==='agents'?<div className="stack"><CompanyHermesAgents key={company.id} company={company.id} owner={canOwner} initial={companyHermesAgents || []}/>{canOwner&&<AgentAccess company={company.id} slug={slug} agents={accessAgents || []} grants={accessGrants || []} message={message}/>}</div>:section==='usage'?<Usage slug={slug} rows={usageRows}/>:section==='settings/members'?<Members members={(members || []) as unknown as Parameters<typeof Members>[0]['members']} audit={audit || []} slug={slug} company={company.id} manage={manage} canOwner={canOwner} message={message} invited={invitedEmail}/>:section==='home'?<Home slug={slug} companyId={company.id} agentCards={homeAgentCards.error?null:(homeAgentCards.data||[]) as unknown as NonNullable<Parameters<typeof Home>[0]['agentCards']>} cards={workData[2]?.error?null:workData[2]?.data || []} stages={workData[0]?.error?null:workData[0]?.data || []} activity={workData[4]?.error?null:activityRows as WorkActivity[]} members={(workMembers || []) as unknown as Parameters<typeof Home>[0]['members']} approvalCount={approvalsAvailable?myVisibleCards.length:null}/>:<section className="panel"><h2>{title}</h2><EmptyState icon={Inbox} message={placeholders[section]?t(placeholders[section]):t('noDataToDisplayYet')}/></section>}</main></Shell>;
+ const crumbs=settingsLeaf[section]?[{label:company.name,href:`/c/${slug}/home`},{label:t('settings'),href:`/c/${slug}/settings`},{label:t(settingsLeaf[section])}]:undefined;
+ return <Shell company={company} companies={companies || []} personId={user.id} section={section} title={title} crumbs={crumbs} personName={person?.name || user.email || ''} role={roleNames[membership?.role || ''] || ''} owner={membership?.role==='owner'} approvalCount={waitingCount} cardId={sheet?.id}><main className="content">{isWork?<><Work key={`${company.id}:${section==='work/new'?'new':'work'}`} workAction={workAction} saveCard={saveCard} tickTodo={tickTodo} saveDescription={saveDescription} uploadPicture={uploadDescriptionPicture} reviews={(openReviews||[]) as OpenReview[]} openWaits={(openWaits||[]) as {card_id:number,waiting:number}[]} placeMove={placeMove} newCard={newCard} undoMove={undoMove} archiveCards={archiveCards} archived={onArchiveBoard?{first:archivedFirst,total:archivedTotal,named:archivedNamed}:undefined} readArchived={archivedCardList} me={user.id} initialCreating={section==='work/new'} canCreate={canCreate} alone={company.work_mode==='alone'} agents={(workAgents||[]) as {person_id:string,role:string,granted:boolean}[]} slug={slug} company={company.id} section={section==='work/new'?'work/board':section} stages={(workData[0]?.data || []).sort((a,b)=>a.position-b.position)} labels={workData[1]?.data || []} cards={workData[2]?.data || []} items={workData[3]?.data || []} activity={activityRows.sort((a,b)=>b.id-a.id)} creatives={workData[5]?.data || []} versions={versions} cardLabels={workData[7]?.data || []} attachments={(workData[8]?.data || []).map(({id,card_id,comment_id,name,content_type})=>({id,card_id,comment_id,name,content_type}))} projects={projects || []} message={message} members={(workMembers || []) as unknown as Parameters<typeof Work>[0]['members']} approvableIds={myVisibleCards.map(c=>c.id)} waiting={waitingItems} assigned={assignedCards} opened={sheet} show={shownId} ideaAdded={ideaAdded} cardAgents={cardAgents || []}/></>:section==='projects'?<Projects slug={slug} company={company.id} projects={projects || []} counts={cardCounts} canEdit={canCreate} message={message}/>:section==='approvals'?<><Approvals key={`${company.id}:waiting`} reviews={(openReviews||[]) as OpenReview[]} openWaits={(openWaits||[]) as {card_id:number,waiting:number}[]} me={user.id} canCreate={canCreate} alone={company.work_mode==='alone'} cardAgents={cardAgents} agents={((await db.rpc('company_agents',{c:company.id})).data||[]) as {person_id:string,role:string,granted:boolean}[]} slug={slug} company={company.id} stages={(workData[0]?.data || []).sort((a,b)=>a.position-b.position)} labels={workData[1]?.data || []} cards={workData[2]?.data || []} items={workData[3]?.data || []} activity={activityRows.sort((a,b)=>b.id-a.id) as WorkActivity[]} creatives={workData[5]?.data || []} versions={versions} cardLabels={workData[7]?.data || []} attachments={(workData[8]?.data || []).map(({id,card_id,comment_id,name,content_type})=>({id,card_id,comment_id,name,content_type}))} projects={(await db.from('work_projects').select('id,name').eq('company_id',company.id).order('id')).data || []} message={waitingFailure} members={(workMembers || []) as unknown as WorkMember[]} approvableIds={myVisibleCards.map(c=>c.id)} waiting={waitingItems} assigned={assignedCards} ruleDecision={ruleDecision}/></>:section==='skills'?<Skills company={company.id} slug={slug} agents={skillAgents} manage={manage} refused={query.refused} failed={!!query.failed}/>:section==='agents'?<div className="stack"><CompanyHermesAgents key={company.id} company={company.id} owner={canOwner} initial={companyHermesAgents || []}/>{canOwner&&<AgentAccess company={company.id} slug={slug} agents={accessAgents || []} grants={accessGrants || []} message={message}/>}</div>:section==='usage'?<Usage slug={slug} rows={usageRows}/>:section==='settings/members'?<Members members={(members || []) as unknown as Parameters<typeof Members>[0]['members']} audit={audit || []} slug={slug} company={company.id} manage={manage} canOwner={canOwner} message={message} invited={invitedEmail}/>:section==='home'?<Home slug={slug} companyId={company.id} agentCards={homeAgentCards.error?null:(homeAgentCards.data||[]) as unknown as NonNullable<Parameters<typeof Home>[0]['agentCards']>} cards={workData[2]?.error?null:workData[2]?.data || []} activity={workData[4]?.error?null:activityRows as WorkActivity[]} members={(workMembers || []) as unknown as Parameters<typeof Home>[0]['members']} approvalCount={approvalsAvailable?myVisibleCards.length:null}/>:<section className="panel"><h2>{title}</h2><EmptyState icon={Inbox} message={placeholders[section]?t(placeholders[section]):t('noDataToDisplayYet')}/></section>}</main></Shell>;
 }

@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition, type ComponentProps } from 'react';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import Link, { pageBeingOpened } from '@/lib/link';
+import Link from '@/lib/link';
+import { pageBeingOpened } from '@/lib/page-opening';
 import { ShellIcon } from '@/components/shell-icon';
 import { moreSections, themeChoices } from '@/lib/sidebar.mjs';
 import { rememberOpener } from './settings-opener';

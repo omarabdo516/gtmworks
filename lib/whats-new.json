@@ -1,27 +1,51 @@
 [
  {
-  "issue": 714,
+  "issue": 683,
   "date": "2026-11-25",
-  "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },
-  "ar": { "title": "خلّص الخطوة اللي الوكيل سلّمهالك على شاشته", "body": "لما الوكيل يقف عند خطوة على شاشته عشان تعملها انت، بطاقته في الشات فيها «افتح الشاشة» اللي بتفتح الشاشة وعليها شريط باسم الخطوة و«عملتها»؛ والشاشة بتقول «صاحي · مستنيك» ليك انت بس، وبيجيلك تنبيه أول ما توصل، و«عملتها» من هناك أو من بطاقة الشات بتسجّل الخطوة مرة واحدة." }
+  "en": { "title": "One New card form, and a board that filters by who and which project", "body": "New card on the toolbar and + on Ideas open the same form with a title, a description, an assignee and a project; the board filters by assignee and project, and each card tells its state in one symbol." },
+  "ar": { "title": "فورم واحد لبطاقة جديدة، ولوحة بتفلتر بمين وأنهي مشروع", "body": "«بطاقة جديدة» في الشريط و+ في الأفكار بيفتحوا نفس الفورم فيه عنوان ووصف ومسؤول ومشروع؛ واللوحة بتفلتر بالمسؤول والمشروع، وكل بطاقة بتقول حالتها برمز واحد." }
  },
  {
-  "issue": 713,
+  "issue": 680,
   "date": "2026-11-25",
-  "en": { "title": "Take control of an Agent's Screen", "body": "In an Agent's large Screen view, any member who is not a viewer can take control for one session to sign in or finish a step with their own mouse and keyboard while the Agent holds still, watching it live; Done, closing the view, leaving the page or losing the connection gives it back, and anyone else watching sees who has control." },
-  "ar": { "title": "خد الدفة من شاشة الوكيل", "body": "في شاشة الوكيل الكبيرة، أي عضو مش مشاهد يقدر ياخد الدفة للجلسة دي بس عشان يسجّل دخول أو يخلّص خطوة بالماوس والكيبورد بتوعه والوكيل واقف مكانه، وبيتفرج عليها لايف؛ و«خلصت» أو قفل الشاشة أو الخروج من الصفحة أو انقطاع الاتصال بيرجّع الدفة، وأي حد تاني بيتفرج بيشوف الدفة مع مين." }
+  "en": { "title": "Write a card's description where you read it", "body": "Press Edit in a card to write its description in place: / for blocks, the usual Markdown shortcuts, @ to call someone or an Agent, pictures, and a bar of blocks on a phone. It saves by itself, and when someone else changes it at the same time both changes are kept." },
+  "ar": { "title": "اكتب وصف البطاقة مكان ما بتقراه", "body": "دوس «عدّل» في البطاقة عشان تكتب وصفها في مكانه: / للبلوكات، واختصارات ماركداون المعتادة، و@ تنادي حد أو وكيل، وصور، وشريط بلوكات على الموبايل. بيتحفظ لوحده، ولو حد تاني غيّر فيه في نفس الوقت التغييرين بيتحفظوا." }
  },
  {
-  "issue": 712,
+  "issue": 682,
   "date": "2026-11-25",
-  "en": { "title": "Watch an Agent's Screen and wake it", "body": "An Agent's details now show whether its Screen is awake, asleep or waking up with a small live picture, Watch opens a large view that keeps refreshing, and any member who is not a viewer can wake it, with the reason in one line when it cannot wake, such as another Agent of the company using the screen." },
-  "ar": { "title": "اتفرج على شاشة الوكيل وصحّيها", "body": "تفاصيل الوكيل بقت بتوريك شاشته صاحية ولا نايمة ولا بتصحى بصورة صغيرة حيّة، و«اتفرج» بتفتح شاشة كبيرة بتتحدّث لوحدها، وأي عضو مش مشاهد يقدر يصحّيها، ولو مصحيتش بيقولك السبب في سطر، زي إن وكيل تاني في الشركة شغال على الشاشة." }
+  "en": { "title": "A card waits for other cards", "body": "In a card, Waits for names the cards it waits for and Waited for by the cards waiting for it; the tile shows how many it still waits for, and a card that is live, done or archived holds nobody up." },
+  "ar": { "title": "البطاقة بتستنى بطاقات تانية", "body": "جوه البطاقة، «مستنية» بيقول البطاقات اللي مستنياها و«مستنياها» بيقول اللي مستنيين عليها؛ والبطاقة على اللوحة بتعرض هي مستنية كام، والبطاقة اللي بقت شغالة لايف أو خلصت أو اتأرشفت ماتعطّلش حد." }
  },
  {
-  "issue": 711,
+  "issue": 681,
   "date": "2026-11-25",
-  "en": { "title": "Agents work on a Screen", "body": "An Agent now works on a desktop and browser inside its company's work sandbox: one Screen the company's Agents share, so an account signed in there is signed in for all of them; it wakes when an Agent needs it and sleeps after 30 minutes unused, an Agent publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screen fits." },
-  "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
+  "en": { "title": "One review, by any Owner or Manager", "body": "A card in review shows its version with Approve and Send back; any Owner or Manager who sees it decides, the first answer counts, and a card sent back gets the reason as a comment. Approval steps are gone." },
+  "ar": { "title": "مراجعة واحدة، من أي مالك أو مدير", "body": "البطاقة اللي في المراجعة بتعرض نسختها مع «وافق» و«رجّعها»؛ أي مالك أو مدير شايفها يقرر، وأول رد هو اللي بيتحسب، والبطاقة اللي بترجع بيتكتب سببها كتعليق. خطوات الموافقة اتشالت." }
+ },
+ {
+  "issue": 679,
+  "date": "2026-11-25",
+  "en": { "title": "A card's description, with to-do items you tick as you read", "body": "A card's description shows headings, lists, quotes, links, tables, pictures and code, each line in its own direction; you tick its to-do items as you read, and the list and the tile count how many are done." },
+  "ar": { "title": "وصف البطاقة، ومهامها بتعلّم عليها وإنت بتقرا", "body": "وصف البطاقة بيعرض العناوين والقوايم والاقتباسات واللينكات والجداول والصور والكود، وكل سطر في اتجاهه؛ وبتعلّم على مهامها وإنت بتقرا، والقايمة والبطاقة على اللوحة بيعدّوا اللي خلص." }
+ },
+ {
+  "issue": 678,
+  "date": "2026-11-25",
+  "en": { "title": "A card opens in one window", "body": "A card opens over the board, full screen on a phone, with its status, its result and versions, comments the whole team reads with @ and files, its activity and runs, and its assignee, publishing date, project and files beside them, each saved as you change it; the card page and its private chat tab are gone, and a chat that made a card stays your own conversation." },
+  "ar": { "title": "البطاقة بتفتح في شباك واحد", "body": "البطاقة بتفتح فوق اللوحة، وعلى الموبايل بتاخد الشاشة كلها، وفيها حالتها ونتيجتها ونسخها، وتعليقات الفريق كله بيقراها ومعاها @ وملفات، ونشاطها ومرات تشغيلها، وجنبهم المسؤول وميعاد النشر والمشروع والملفات، وكل حاجة بتتحفظ أول ما تغيّرها؛ وصفحة البطاقة وتبويب المحادثة الخاص راحوا، والمحادثة اللي عملت بطاقة بتفضل محادثتك انت." }
+ },
+ {
+  "issue": 677,
+  "date": "2026-11-25",
+  "en": { "title": "One assignee on a card, and your list under the bell", "body": "A card has one assignee, an Agent you see or a member who is not a viewer, with Assign to me; a card assigned to you is listed under the board's bell with what you can act on, your mentions and requests until it is live or done, and a card whose Agent is removed or whose member leaves is left with no assignee, logged." },
+  "ar": { "title": "مسؤول واحد عن البطاقة، وقايمتك تحت الجرس", "body": "البطاقة ليها مسؤول واحد، وكيل بتشوفه أو عضو مش بيقرا بس، ومعاها «خليها عليّا»؛ والبطاقة اللي عليك بتظهر تحت جرس اللوحة مع اللي تقدر تعمل فيه حاجة واللي اتذكرت فيه والطلبات لحد ما تبقى شغالة لايف أو تخلص، ولو الوكيل اتشال أو العضو خرج البطاقة بتفضل من غير مسؤول، ومتسجّلة." }
+ },
+ {
+  "issue": 676,
+  "date": "2026-11-25",
+  "en": { "title": "A card's column is its status", "body": "Anyone who may edit work moves a card to any column, Live and Done included, Waiting on you fills by itself with reviews and questions, and Home counts the cards made by status and the work delivered by its approvals." },
+  "ar": { "title": "عمود البطاقة هو حالتها", "body": "أي حد يقدر يعدّل في الشغل بيحرّك البطاقة لأي عمود، حتى «شغال لايف» و«خلص»، و«مستنيك» بيتملى لوحده بالمراجعات والأسئلة، والرئيسية بتعدّ البطاقات اللي اتعملت حسب حالتها والشغل اللي اتسلّم بالموافقات عليه." }
  },
  {
   "issue": 746,
@@ -46,6 +70,30 @@
   "date": "2026-11-25",
   "en": { "title": "Every Agent has a face of its own", "body": "Each Agent is now a living orb in its own colour, shape and temperament that breathes, blinks, looks toward your pointer and shows when it is thinking, working, done, waiting on you, stuck or asleep, the sidebar following within seconds; it listens while you write to it, perks up when you name it, greets you and is born once for whoever asked for it; the same face shows everywhere, kept in old conversations, channels, cards and the log after the Agent is removed, and it stays still with reduced motion; the Owner changes any Agent's shape, colour and temperament in a small window opened from its face, its card or its settings." },
   "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك أو وقف أو نايم، والقايمة الجانبية بتتابعه في ثواني؛ وبيسمعك وإنت بتكتبله، وبينتبه لما تنادي اسمه، وبيسلّم عليك، وبيتولد مرة واحدة قدام اللي طلبه؛ ونفس الوش في كل حتة، وبيفضل في المحادثات والقنوات والبطاقات والسجل القديمة حتى لو الوكيل اتشال، ومبتتحركش لو مختار حركة أقل؛ والمالك يقدر يغيّر شكل أي وكيل ولونه وطبعه من شباك صغير بيتفتح من وشه أو بطاقته أو إعداداته." }
+ },
+ {
+  "issue": 714,
+  "date": "2026-11-25",
+  "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },
+  "ar": { "title": "خلّص الخطوة اللي الوكيل سلّمهالك على شاشته", "body": "لما الوكيل يقف عند خطوة على شاشته عشان تعملها انت، بطاقته في الشات فيها «افتح الشاشة» اللي بتفتح الشاشة وعليها شريط باسم الخطوة و«عملتها»؛ والشاشة بتقول «صاحي · مستنيك» ليك انت بس، وبيجيلك تنبيه أول ما توصل، و«عملتها» من هناك أو من بطاقة الشات بتسجّل الخطوة مرة واحدة." }
+ },
+ {
+  "issue": 713,
+  "date": "2026-11-25",
+  "en": { "title": "Take control of an Agent's Screen", "body": "In an Agent's large Screen view, any member who is not a viewer can take control for one session to sign in or finish a step with their own mouse and keyboard while the Agent holds still, watching it live; Done, closing the view, leaving the page or losing the connection gives it back, and anyone else watching sees who has control." },
+  "ar": { "title": "خد الدفة من شاشة الوكيل", "body": "في شاشة الوكيل الكبيرة، أي عضو مش مشاهد يقدر ياخد الدفة للجلسة دي بس عشان يسجّل دخول أو يخلّص خطوة بالماوس والكيبورد بتوعه والوكيل واقف مكانه، وبيتفرج عليها لايف؛ و«خلصت» أو قفل الشاشة أو الخروج من الصفحة أو انقطاع الاتصال بيرجّع الدفة، وأي حد تاني بيتفرج بيشوف الدفة مع مين." }
+ },
+ {
+  "issue": 712,
+  "date": "2026-11-25",
+  "en": { "title": "Watch an Agent's Screen and wake it", "body": "An Agent's details now show whether its Screen is awake, asleep or waking up with a small live picture, Watch opens a large view that keeps refreshing, and any member who is not a viewer can wake it, with the reason in one line when it cannot wake, such as another Agent of the company using the screen." },
+  "ar": { "title": "اتفرج على شاشة الوكيل وصحّيها", "body": "تفاصيل الوكيل بقت بتوريك شاشته صاحية ولا نايمة ولا بتصحى بصورة صغيرة حيّة، و«اتفرج» بتفتح شاشة كبيرة بتتحدّث لوحدها، وأي عضو مش مشاهد يقدر يصحّيها، ولو مصحيتش بيقولك السبب في سطر، زي إن وكيل تاني في الشركة شغال على الشاشة." }
+ },
+ {
+  "issue": 711,
+  "date": "2026-11-25",
+  "en": { "title": "Agents work on a Screen", "body": "An Agent now works on a desktop and browser inside its company's work sandbox: one Screen the company's Agents share, so an account signed in there is signed in for all of them; it wakes when an Agent needs it and sleeps after 30 minutes unused, an Agent publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screen fits." },
+  "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
  },
  {
   "issue": 708,

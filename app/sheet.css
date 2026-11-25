@@ -1,5 +1,4 @@
 /* A Card's sheet over the board (#116), ported from the approved reference (design-reference/index.html: side sheet,
-   "the card sheet", sheet-tabs, sheet-body, note-composer, note-hint, ro-line). Colours come from the shell's gw tokens
    (app/shell.css), which also draws the close button, the badge, the tabs' base and the composer; the log inside is
    drawn by app/log.css. */
 .gw .sheet {
@@ -11,10 +10,6 @@
   font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
 }
 .gw .sheet::backdrop { background: var(--gw-bg-scrim); }
-/* A Card a channel put on the board (#151) opens on the channel's mark (design-reference: renderSheetHead's hp-hash). */
-.gw .sheet .hp-hash { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
-.gw .sheet .hp-hash .gw-icon { width: 14px; height: 14px; }
-.gw .sheet .hp-hash--lg { width: 28px; height: 28px; margin-top: 2px; }
 .gw .sheet[open] { animation: sheetIn var(--gw-dur-slow) var(--gw-ease-out); }
 .gw .sheet.is-closing { animation: sheetOut 190ms var(--gw-ease-in) forwards; }
 @keyframes sheetIn { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -45,30 +40,13 @@
 .gw .sheet .dot--waiting { background: var(--gw-wait); }
 .gw .sheet .badge .dot { width: 6px; height: 6px; }
 
-/* «المحادثة» | «السجل»: Chat is drawn but not open on a Card with no Agent the reader sees (app/card-sheet-chat.tsx). */
-.gw .sheet .sheet-tabs { justify-content: flex-start; padding: 2px 0 0; margin-inline-start: -4px; }
-/* A plain button, as the reference's: the product's flex buttons would drop the space before the Log count. */
-.gw .sheet .sheet-tabs button { display: inline-block; }
-.gw .sheet .sheet-tabs button[aria-selected="true"] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
-.gw .sheet .sheet-tabs button[aria-disabled="true"] { color: var(--gw-text-3); }
-@media (hover: hover) { .gw .sheet .sheet-tabs button:not([aria-disabled="true"]):hover { color: var(--gw-text-1); } }
-.gw .sheet .sheet-tabs__n { color: var(--gw-text-3); }
 
 .gw .sheet-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
 .gw .sheet .transcript { padding: var(--s6) var(--s5); -webkit-mask-image: none; mask-image: none; }
 .gw .sheet .sheet-log { padding: var(--s5); }
 .gw .sheet .lg-wrap { display: grid; gap: var(--s5); }
 .gw .sheet .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
-/* The Chat tab (#145): the Conversation across the sheet's width, and its empty and lock states centred in it
-   (design-reference: .sheet .transcript__col, emptyChatHTML's sheet branch, .priv-sheet__ic). Every reply card is
-   already the column's width. */
-/* The Chat tab's transcript and composer are the body's two rows while it shows; hidden, it keeps its state. */
-.gw .sheet .sheet-pane { display: contents; }
-.gw .sheet .sheet-pane[hidden] { display: none; }
 .gw .sheet .transcript__col { max-width: none; }
-.gw .sheet .empty-chat--sheet h2 { font-size: var(--gw-fs-lg); }
-.gw .sheet .priv-sheet__ic { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
-.gw .sheet .priv-sheet__ic .gw-icon { width: 20px; height: 20px; }
 .gw .sheet .composer-area { padding: var(--s2) var(--s4) var(--s4); }
 .gw .sheet .note-composer .composer__input { padding-inline-start: var(--s2); }
 .gw .sheet .note-hint { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: var(--s2) auto 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-align: center; }
@@ -80,16 +58,6 @@
 
 @media (max-width: 767px) {
   /* 44px touch targets on a phone (PRODUCT.md), where the reference draws 26px tabs and 24px links. */
-  .gw .sheet :is(.sheet-tabs button, .sheet__meta .link-btn) { position: relative; }
-  .gw .sheet .sheet-tabs button::before { content: ""; position: absolute; inset: -9px 0; }
   .gw .sheet .sheet__meta .link-btn::before { content: ""; position: absolute; inset: -10px 0; }
 }
 
-/* The Card's "More" menu and an archived Card's callout (#670; design-reference-card: #cw-more, .cw-call__head--c). */
-.gw .sheet .more-menu { position: relative; flex: none; }
-.gw .sheet .more-menu__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
-.gw .sheet .sheet-archived { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-tertiary); }
-.gw .sheet .sheet-archived > .gw-icon { width: 18px; height: 18px; flex: none; color: var(--gw-text-3); }
-.gw .sheet .sheet-archived__q { flex: 1 1 0; min-width: 0; margin: 0; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
-.gw .sheet .sheet-archived .btn .gw-icon { width: 14px; height: 14px; }
-@media (max-width: 767px) { .gw .sheet .more-menu .circle-btn, .gw .sheet .sheet-archived .btn { min-width: 44px; min-height: 44px; } }

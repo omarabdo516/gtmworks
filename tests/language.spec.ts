@@ -7,6 +7,7 @@ import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 import { appOrigin } from './lane.mjs';
+import { makeCard } from './make-card';
 
 async function chooseLanguage(page:Page,language:Language) {
  await chooseLanguageInSettings(page,language);
@@ -78,21 +79,17 @@ test('English default, account language across sessions/devices, automatic conte
  const suffix=Date.now();
  const titles=[`بطاقة من الإعدادات 1440 ${suffix}`,`Settings card 1440 ${suffix}`];
  const calendarTitles=[`ع 1440 ${suffix.toString(36)}`,`A 1440 ${suffix.toString(36)}`];
- const goLive=`${new Date().toISOString().slice(0,10)}T12:00`;
+ const goLive=new Date().toISOString().slice(0,10);
  const paths:string[]=[];
  for(const title of [...titles,...calendarTitles]) {
-  await page.goto('/c/rs-learning/work/new');
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button',{name:'Create card',exact:true}).click();
-  await expect(page.locator('.modal h2').first()).toHaveText(title);
-  paths.push(new URL(page.url()).pathname);
-  await page.locator('input[name=go_live]').fill(goLive);
+  paths.push((await makeCard(page,title)).path);
+  // The Card window saves its publishing date as it changes (#678).
   await Promise.all([
    page.waitForResponse(response=>response.request().method()==='POST' && new URL(response.url()).pathname===paths.at(-1)),
-   page.getByRole('button',{name:'Save changes',exact:true}).click()
+   page.getByRole('dialog').getByLabel('Publishing date',{exact:true}).fill(goLive)
   ]);
   await page.reload();
-  await expect(page.locator('input[name=go_live]')).toHaveValue(goLive);
+  await expect(page.getByRole('dialog').getByLabel('Publishing date',{exact:true})).toHaveValue(goLive);
  }
  try {
   for(const language of ['en','ar'] as const) {
@@ -121,14 +118,15 @@ test('English default, account language across sessions/devices, automatic conte
    await expect(page.getByRole('menu')).toHaveCount(0);
    await page.goto('/c/rs-learning/work/board');
    for(const [index,title] of titles.entries()) {
-    const link=page.locator('.card').getByRole('link',{name:title,exact:true});
+    // The tile's link is named with its state and assignee too (#683), so it is found by the title it shows.
+    const link=page.locator('.card .kcard__title').filter({has:page.getByText(title,{exact:true})});
     const titleNode=link.locator('strong');
     await expect(titleNode).toHaveCSS('direction',index===0?'rtl':'ltr');
     await expectTitleAligned(titleNode,link.locator('..'),index===0?'right':'left');
     await expectNumberOrder(titleNode,index===0);
     await page.goto(paths[index]);
-    await expect(page.locator('.modal h2').first()).toHaveCSS('direction',index===0?'rtl':'ltr');
-    await expectNumberOrder(page.locator('.modal h2').first(),index===0);
+    await expect(page.locator('.cw[open] .cw-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
+    await expectNumberOrder(page.locator('.cw[open] .cw-title-btn'),index===0);
     await expect(page.locator('.recent-cards').getByRole('link',{name:title,exact:true}).locator('.recent-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
     await page.goto('/c/rs-learning/work/board');
    }

@@ -1,6 +1,9 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
+import { makeCard } from './make-card';
+// The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
+const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await card.getByRole('button',{name:/^Status:/}).click(); await card.getByRole('menuitemradio',{name:'Send for review'}).click(); };
 
 // The board's motion as built (#131; design-reference: dragStart, dragMove, dragScroll, dragEnd, land, boardEnter,
 // syncWaitMarks): a carried Card leans with the pointer and scrolls the columns at an edge, flies back when it moves
@@ -9,10 +12,9 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const rs='10000000-0000-0000-0000-000000000001';
-// A Card of this test's own in a stage, at its column's end; with `done`/`open` checklist items it shows a progress bar.
-const cardIn=(title:string,stage:string,checklist?:{done:number,open:number})=>{
+// A Card of this test's own in a stage, at its column's end.
+const cardIn=(title:string,stage:string)=>{
  const id=Number(rows(`insert into public.work_cards(company_id,stage_id,title) select '${rs}',id,'${title} ${Date.now()}' from public.work_stages where company_id='${rs}' and name='${stage}' returning id`)[0].id);
- if(checklist) query(`insert into public.work_checklist(company_id,card_id,title,done) select '${rs}',${id},'Step '||x,x<=${checklist.done} from generate_series(1,${checklist.done+checklist.open}) x`);
  return id;
 };
 const card=(page:Page,id:number)=>page.locator(`#board-cols .kcard[data-card-id="${id}"]`);
@@ -211,24 +213,18 @@ test('a Card carried until its own place is out of the window and dropped in ano
  expect(await columnOf(page,id)).toBe('progress');
 });
 
-test('the progress bars grow in when the board opens and the class that does it is gone after a second, leaving the edge fade; with reduced motion they are drawn at their value',async({page})=>{
- const id=cardIn('Bar','كتابة',{done:1,open:1});
+test('the board\'s entrance class is gone after a second, leaving the edge fade',async({page})=>{
+ // The tile has no progress bar since #683 (design-reference-card: kcardHTML counts its to-dos instead), so the entrance
+ // only has to leave the pager's fade where it found it.
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  await page.reload();
- const bar=card(page,id).locator('.bar__fill');
- expect(await bar.evaluate(el=>{ const style=getComputedStyle(el); return {name:style.animationName,duration:style.animationDuration,fill:style.animationFillMode,transition:style.transition}; }))
-  .toEqual({name:'gw-bar-grow',duration:'0.7s',fill:'both',transition:'transform 0.28s cubic-bezier(0.2, 0, 0, 1)'});
  // More columns wait past the board's edge, so it fades there (BoardPager). The fade is the pager's, and taking the
  // entrance class off must leave it (#572: React drew the board's class again and wiped it).
  await expect(page.locator('#board-cols')).toHaveClass(/\bhas-more-end\b/);
  await page.waitForTimeout(1000);
  await expect(page.locator('#board-cols.board--enter')).toHaveCount(0);
- expect(await bar.evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
  await expect(page.locator('#board-cols')).toHaveClass(/\bhas-more-end\b/);
  expect(await page.locator('#board-cols').evaluate(el=>getComputedStyle(el).maskImage)).toContain('linear-gradient');
- await page.emulateMedia({reducedMotion:'reduce'});
- await page.reload();
- expect(await bar.evaluate(el=>({name:getComputedStyle(el).animationName,transform:getComputedStyle(el).transform}))).toEqual({name:'none',transform:'matrix(0.5, 0, 0, 1, 0, 0)'});
 });
 
 test('a Card newly waiting on the approver nudges its badge and pops the sidebar count once, not on a reload and not when the count falls',async({page,context})=>{
@@ -238,23 +234,19 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
  const tab=await context.newPage();
- await tab.goto('/c/rs-learning/work/new');
- await tab.getByLabel('Message',{exact:true}).fill(`Nudge ${Date.now()}`);
- await tab.getByRole('button',{name:'Create card'}).click();
- await expect(tab).toHaveURL(/\/work\/board\/\d+$/);
- const id=Number(new URL(tab.url()).pathname.split('/').pop());
- await tab.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
- await tab.getByRole('button',{name:'Add design'}).click();
- await expect(tab.getByText(/Version 1:/)).toBeVisible();
+ const {id}=await makeCard(tab,`Nudge ${Date.now()}`);
+ await tab.getByLabel('Upload a version').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
+ await expect(tab.getByRole('dialog').getByRole('list',{name:'Versions'}).getByRole('link',{name:/^Open version 1/})).toBeVisible();
  await page.reload();
  const count=page.locator('.sb-count');
  const before=Number(await count.textContent());
- await tab.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
- await expect(tab.locator('.card-stage-line')).toContainText('مراجعة');
+ await sendForReview(tab);
+ await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
  await redraw('ArrowRight');
- const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .badge--wait`);
+ // The Card's state symbol nudges once (#683: the symbol in place of the waiting badge).
+ const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .kt-syms`);
  await expect(badge).toHaveClass(/is-new/);
- expect(await badge.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-nudge',duration:'0.52s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
+ expect(await badge.locator('.sym').evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-nudge',duration:'0.52s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
  await expect(count).toHaveText(String(before+1));
  await expect(count).toHaveClass(/is-pop/);
  expect(await count.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-count-pop',duration:'0.36s',easing:'cubic-bezier(0.34, 1.45, 0.64, 1)'});
@@ -266,9 +258,10 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  // Approving it: the count falls when the board is drawn again, and neither plays.
  await tab.reload();
  await tab.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
- await expect(tab.locator('.card-stage-line')).not.toContainText('مراجعة');
+ // With no publishing date, an approved Card is Done (#681).
+ await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
  await redraw('ArrowLeft');
  await expect(count).toHaveText(String(before));
  await expect(count).not.toHaveClass(/is-pop/);
- await expect(page.locator('#board-cols .badge--wait.is-new')).toHaveCount(0);
+ await expect(page.locator('#board-cols .kt-syms.is-new')).toHaveCount(0);
 });

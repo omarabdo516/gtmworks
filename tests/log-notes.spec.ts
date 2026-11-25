@@ -23,12 +23,12 @@ const noteOf=(body:string)=>Number(rows(`select id from public.work_comments whe
 test('the writer edits a note from its Card and again from the Activity log; both show its latest text, marked edited, until it locks',async({page})=>{
  const stamp=Date.now(), first=`First note ${stamp}`, second=`Second note ${stamp}`, third=`Third note ${stamp}`;
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/2');
- const box=page.getByLabel('Comment',{exact:true});
- await expect(box).toHaveAttribute('placeholder','Write a note for the team, @ to call someone or an agent…');
+ const box=page.getByRole('textbox',{name:'Write a comment'});
+ await expect(box).toHaveAttribute('placeholder','Comment… @ calls someone or an Agent');
  await expect(page.locator('#note-hint')).toHaveText('You can edit your note for 5 minutes only, then it locks. An agent you call answers here.');
  await box.fill(first);
- await page.getByRole('button',{name:'Send',exact:true}).click();
- await expect(page.locator('.comment-body').filter({hasText:first})).toBeVisible();
+ await page.getByRole('button',{name:'Post the comment'}).click();
+ await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:first})).toBeVisible();
  const note=noteOf(first);
  const onCard=page.locator(`#note-${note}`);
  await expect(onCard.getByText(/^You can edit it for [0-4]:\d\d$/)).toBeVisible();
@@ -36,7 +36,7 @@ test('the writer edits a note from its Card and again from the Activity log; bot
  await onCard.getByRole('button',{name:'Edit',exact:true}).click();
  await onCard.getByRole('textbox',{name:'Edit the note'}).fill(second);
  await onCard.getByRole('button',{name:'Save',exact:true}).click();
- await expect(onCard.locator('.comment-body')).toHaveText(second);
+ await expect(onCard.locator('.lg-note')).toHaveText(second);
  await expect(onCard.getByText('Edited',{exact:true})).toBeVisible();
 
  await page.goto('/c/rs-learning/log');
@@ -50,7 +50,7 @@ test('the writer edits a note from its Card and again from the Activity log; bot
  await expect(row.getByRole('status')).toHaveText('Note edited; it now carries an “Edited” mark');
 
  await page.goto('/c/rs-learning/work/board/2');
- await expect(onCard.locator('.comment-body')).toHaveText(third);
+ await expect(onCard.locator('.lg-note')).toHaveText(third);
  await expect(onCard.getByText('Edited',{exact:true})).toBeVisible();
  expect(rows(`select count(*)::int n from public.work_activity where action='comment_added' and details->>'id'='${note}'`)[0].n,'an edit is not a second comment').toBe(1);
 
@@ -68,9 +68,9 @@ test('the writer edits a note from its Card and again from the Activity log; bot
 test('a Member named in a note finds one item in Waiting on you, and it opens the note on its Card',async({page,browser})=>{
  const body=`@مراجع please check the hook ${Date.now()}`;
  await signIn(page,'manager@example.com','/c/rs-learning/work/board/3');
- await page.getByLabel('Comment',{exact:true}).fill(body);
- await page.getByRole('button',{name:'Send',exact:true}).click();
- await expect(page.locator('.comment-body').filter({hasText:body})).toBeVisible();
+ await page.getByRole('textbox',{name:'Write a comment'}).fill(body);
+ await page.getByRole('button',{name:'Post the comment'}).click();
+ await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:body})).toBeVisible();
  const note=noteOf(body);
  const title=String(rows(`select title from public.work_cards where id=3`)[0].title);
 
@@ -82,7 +82,7 @@ test('a Member named in a note finds one item in Waiting on you, and it opens th
  await expect(items.locator('.mcard__q')).toHaveText(body);
  await items.click();
  await expect(reviewer).toHaveURL(new RegExp(`/c/rs-learning/work/board/3#note-${note}$`));
- await expect(reviewer.locator(`#note-${note} .comment-body`)).toHaveText(body);
+ await expect(reviewer.locator(`#note-${note} .lg-note`)).toHaveText(body);
  await expect(reviewer.locator(`#note-${note}`)).toBeInViewport();
  await reviewer.close();
  expect(rows(`select person_id::text from public.waiting_items where note_id=${note}`)).toEqual([{person_id:'20000000-0000-0000-0000-000000000003'}]);
@@ -110,8 +110,8 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`note:${note}`,input:'مدير: @Faye draft the teaser'}]);
   // The writer keeps the Card open while Faye works; her reply shows there without a reload.
   await signIn(page,'manager@example.com','/c/rs-learning/work/board/4');
+  await expect(page.locator(`#note-${note} .note-working`)).toContainText('Faye · Working on the request from مدير…');
   const under=page.locator(`#note-${note} + li`);
-  await expect(under).toContainText('is working on it');
   const reads=await Promise.all([drive(),drive()]);
   expect(reads[0].closed+reads[1].closed).toBe(1);
   expect(await drive()).toEqual({started:0,closed:0});
@@ -119,10 +119,10 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   const reply=`Reply ${stamp} to: مدير: @Faye draft the teaser`;
   expect(rows(`select actor_name,action,body,details->>'reply_to' reply_to from public.company_log where source='note_runs' and source_id=${note}`)).toEqual([{actor_name:'Faye',action:'note_reply',body:reply,reply_to:String(note)}]);
 
-  await expect(under).toHaveAttribute('data-author','agent');
-  await expect(under).toContainText('Faye');
   await expect(under).toContainText('replied in the log',{timeout:15000});
-  await expect(under.locator('.comment-body')).toHaveText(reply);
+  await expect(under.locator('.lg-name')).toHaveText('Faye');
+  await expect(under.locator('.lg-note')).toHaveText(reply);
+  await expect(page.locator(`#note-${note} .note-working`)).toHaveCount(0);
   await page.goto('/c/rs-learning/log?card=4');
   const replyRow=page.locator('.lgp-body .lg-row').filter({hasText:reply});
   await expect(replyRow).toHaveCount(1);
@@ -135,8 +135,8 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
 
 test('a Viewer reads a Card\'s notes with no note field, and the view-only line in its place',async({page})=>{
  await signIn(page,'viewer@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
- await expect(page.getByLabel('Comment',{exact:true})).toHaveCount(0);
- await expect(page.getByRole('button',{name:'Send',exact:true})).toHaveCount(0);
- await expect(page.locator('.modal .ro-line')).toHaveText('Your account is view-only: you can read the whole log, without writing notes.');
+ await expect(page.locator('.cw[open]')).toBeVisible();
+ await expect(page.getByRole('textbox',{name:'Write a comment'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Post the comment'})).toHaveCount(0);
+ await expect(page.locator('.cw[open] .cw-comp .ro-line')).toHaveText('Read only');
 });

@@ -62,19 +62,16 @@ test('a project is created, a card is filed into it, and the board and list show
  const total=await page.locator('.card').count();
  expect(total).toBeGreaterThan(1);
  const title=(await page.locator('.card strong').first().innerText()).trim();
+ // The Card window's Project menu (#678) files it, saved as it is chosen, and the Card keeps it on a reload.
  await page.locator('.card a').first().click();
- await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- const section=page.locator('[data-card-section=project]');
- await section.getByLabel('Project',{exact:true}).selectOption({label:name});
- await save(page,section.getByRole('button',{name:'Save'}));
- await expect(page.locator('.card-stage-line')).toContainText(name);
- // The picker keeps the saved project after the form resets, so another Save does not take the card out.
- await expect(section.getByLabel('Project',{exact:true})).toHaveValue(/^\d+$/);
- await save(page,section.getByRole('button',{name:'Save'}));
- await expect(section.getByLabel('Project',{exact:true})).toHaveValue(/^\d+$/);
- await expect(page.locator('.card-stage-line')).toContainText(name);
- await expect(page.locator('.detail-row').filter({hasText:`Filed the card in ${name}`})).toHaveCount(1);
+ const card=page.getByRole('dialog');
+ await card.getByRole('button',{name:/^Project:/}).click();
+ await card.getByRole('menuitemradio',{name,exact:true}).click();
+ await expect(card.getByRole('button',{name:`Project: ${name}`})).toBeVisible();
+ await page.reload();
+ await expect(card.getByRole('button',{name:`Project: ${name}`})).toBeVisible();
+ await card.getByRole('tab',{name:/^Activity \d+$/}).click();
+ await expect(card.locator('#cw-list .lg-row').filter({hasText:'changed the project'}).filter({hasText:name})).toHaveCount(1);
 
  // The board and the list filter by project.
  await page.goto('/c/rs-learning/work/board');
@@ -104,9 +101,7 @@ test('a project is created, a card is filed into it, and the board and list show
    await expect(page.locator('.card')).toHaveCount(1);
    await shoot(page,`projects-board-${language}`);
    await page.locator('.card a').first().click();
-   await page.getByRole('dialog').getByRole('link',{name:{en:'Card details',ar:'تفاصيل البطاقة'}[language]}).click();
-   await expect(page).toHaveURL(/\/work\/board\/\d+$/);
-   await expect(page.locator('[data-card-section=project] select')).toBeVisible();
+   await expect(page.getByRole('dialog').getByRole('button',{name:`${{en:'Project',ar:'المشروع'}[language]}: ${name}`})).toBeVisible();
    await shoot(page,`projects-card-${language}`);
   }
  } finally { await chooseLanguage(page,'en'); }

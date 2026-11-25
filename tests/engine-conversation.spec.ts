@@ -684,17 +684,16 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   query(`select public.agent_show_card('${conversation}','${run}','call-1','draft','خطة المقال','{"line":"مسودة","rows":[]}'::jsonb)`);
   show();
   const reviewer=await member('reviewer@example.com'), viewer=await member('viewer@example.com');
-  const badges={en:{omar:'Waiting on you',reviewer:'Waiting on عمر',viewer:'Waiting on the team',tag:'Handed to you'},ar:{omar:'مستنيك',reviewer:'مستني عمر',viewer:'مستني الفريق',tag:'اتسلّمتلك'}};
   for(const value of ['en','ar'] as const) {
    language(value);
    for(const [who,on] of [['omar',page],['reviewer',reviewer],['viewer',viewer]] as const) {
     await on.reload();
     await expect(on.locator(`.col[data-column="waiting"] .kcard[data-card-id="${card}"]`),`${who} in ${value}`).toHaveCount(1);
     await expect(kcard(on)).toHaveCount(1);
-    await expect(kcard(on).locator('.wtag--hand')).toHaveText(badges[value].tag);
-    await expect(kcard(on).locator('.badge')).toHaveText(badges[value][who]);
-    await expect(kcard(on).locator('.badge')).toHaveClass(who==='omar'?'badge badge--wait':'badge');
-    await expect(kcard(on).locator('.kcard__t')).toHaveText(handTitle);
+    // One question symbol says it, named in the tile's name (#683); no badge or line says it again.
+    await expect(kcard(on).locator('.kt-syms .sym[data-sym="question"]')).toHaveCount(1);
+    await expect(kcard(on).locator('a.kcard__title')).toHaveAccessibleName(new RegExp(value==='ar'?'عنده سؤال':'Has a question'));
+    await expect(kcard(on).locator('.badge, .wtag, .kcard__t')).toHaveCount(0);
    }
    await expect(page.locator('a.mcard[data-kind="hand"]')).toHaveCount(0);
    await expect(sidebar).toHaveText(String(before.sidebar+1));
@@ -709,11 +708,11 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await expect(pill).toHaveAccessibleName('On the board: Waiting on you');
   await expect(pill).toHaveClass(/\bis-waiting\b/);
 
-  // The draft is on the Card's Log for another Contributor, and on the Activity log for the Viewer.
+  // The draft is on the Card's Activity for another Contributor, and on the Activity log for the Viewer.
   await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
-  await reviewer.locator('.sheet #sh-tab-log').click();
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('delivered the draft');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('خطة المقال');
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('delivered the draft');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('خطة المقال');
   await viewer.goto(`/c/rs-learning/log?card=${card}`);
   await expect(viewer.locator('main')).toContainText('delivered the draft');
 
@@ -729,9 +728,9 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await expect(sidebar).toHaveText(String(before.sidebar));
   expect(stageNow()).toBe(stage);
   await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
-  await reviewer.locator('.sheet #sh-tab-log').click();
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('did it');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText(handTitle);
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('did it');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText(handTitle);
   await viewer.goto(`/c/rs-learning/log?card=${card}`);
   await expect(viewer.locator('main')).toContainText('did it');
  } finally {
@@ -1125,8 +1124,8 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   const shown=page.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
   await expect(shown.locator('a')).toBeFocused();
-  await expect(page.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect(shown.locator('.kcard__foot')).toHaveText('Faye· Marketing');
+  await expect(page.getByRole('button',{name:'Assignee: Everyone'})).toBeVisible();
+  await expect(shown.locator('.kt-face .face')).toHaveCount(1);
  } finally { language('en'); detach(); }
 });
 
@@ -1189,15 +1188,16 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await expect(line).toHaveText('This card was added to the board under “In progress”');
   await expect(pill).toHaveAccessibleName('On the board: In progress');
 
-  // Another Contributor reads the handover's row on the Card's Log.
+  // Another Contributor reads the handover's row on the Card's Activity.
   const reviewer=await member('reviewer@example.com');
   const onCard=(on:typeof page)=>on.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
   await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Salma');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('handed to Salma');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
   await reviewer.goto('/c/rs-learning/work/board');
-  await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Salma');
-  await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Runs the March launch.');
+  // The tile names its assignee (#683: its face, and the name in the tile's name and tooltip).
+  await expect(onCard(reviewer).locator('.kt-face')).toHaveAttribute('data-tip','Salma');
 
   // A second handover in the same chat gives the same Card the other Agent, and its own row on the Card.
   language('en');
@@ -1210,11 +1210,11 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await page.reload();
   await expect(page.locator('.turns > li[data-kind="boarded"]')).toHaveCount(1);
   await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Tarek');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Write the March launch email');
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('handed to Tarek');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('Write the March launch email');
   await reviewer.goto('/c/rs-learning/work/board');
-  await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Tarek');
-  await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Writes the launch email.');
+  await expect(onCard(reviewer).locator('.kt-face')).toHaveAttribute('data-tip','Tarek');
  } finally {
   language('en'); for(const context of opened) await context.close();
   target.detach(); next.detach(); await fake.close();

@@ -22,7 +22,7 @@ const omar = '20000000-0000-0000-0000-000000000001';
 const quietText: Record<string, QuietCheck[]> = {
   home: [['chart subtitle', '.home-charts article h2 + span'], ['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']],
   board: [['toolbar label', '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)']],
-  card: [['comment placeholder', '.modal textarea[name=body]', '::placeholder']],
+  card: [['comment placeholder', '.cw[open] textarea[name=body]', '::placeholder']],
 };
 for (const name of Object.keys(quietText)) if (!screens.some(screen => screen.name === name)) throw new Error(`${name}: quiet text is measured only on a lane screen`);
 
@@ -226,8 +226,8 @@ for (const screen of screens) {
       await signIn(page, 'omar@example.com', '/c/rs-learning/home');
       // The sidebar lists recently opened Cards and the board orders Ideas by last change: opening Card 1 first gives
       // every screen the same list.
-      await page.goto('/c/rs-learning/work/board/1');
-      await expect(page.locator('.modal')).toBeVisible();
+      await page.goto('/c/rs-learning/work/board?card=1');
+      await expect(page.locator('.cw[open]')).toBeVisible();
       await idle(page);
       // The open is recorded once Home lists it, before any picture's sidebar asks for the list (as the old spec waited).
       await page.goto('/c/rs-learning/home');

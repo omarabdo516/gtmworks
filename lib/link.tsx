@@ -5,6 +5,7 @@ import NextLink, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useState, type ComponentProps } from 'react';
+import { openingPage, pageBeingOpened } from './page-opening';
 
 const requests = new Set<{ path: string }>();
 const started = new EventTarget();
@@ -28,17 +29,14 @@ function trackPageRequests() {
   return () => { window.fetch = fetch; requests.clear(); };
 }
 
-// The page a person is opening right now through one of these links (a click or Enter), until it has landed or the
-// link stops waiting for it. Prefetches never count: only a link the person activated.
-let opening: string | null = null;
-/** The page whose navigation the person started and that has not landed yet, if any. */
-export const pageBeingOpened = () => opening;
+// The page a person is opening right now through one of these links (a click or Enter) is kept in lib/page-opening.ts,
+// until it has landed or the link stops waiting for it. Prefetches never count: only a link the person activated.
 
 export function NavigationFeedback() {
   useLayoutEffect(trackPageRequests, []);
   // A page that landed is no longer being opened.
   const pathname = usePathname();
-  useEffect(() => { opening = null; }, [pathname]);
+  useEffect(() => { openingPage(null); }, [pathname]);
   return null;
 }
 
@@ -63,7 +61,7 @@ function Pending({ href }: { href: string }) {
   useEffect(() => {
     if (!pending) return;
     const path = new URL(href, location.href).pathname;
-    return () => { if (opening === path) opening = null; };
+    return () => { if (pageBeingOpened() === path) openingPage(null); };
   }, [pending, href]);
   return pending ? <Feedback href={href} /> : null;
 }
@@ -75,7 +73,7 @@ export default function Link({ children, ...props }: ComponentProps<typeof NextL
   // elsewhere and is not this page being opened.
   const onClick: ComponentProps<typeof NextLink>['onClick'] = event => {
     props.onClick?.(event);
-    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) opening = new URL(href, location.href).pathname;
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) openingPage(href);
   };
   return <NextLink {...props} onClick={onClick} prefetch>{children}<Pending href={href} /></NextLink>;
 }

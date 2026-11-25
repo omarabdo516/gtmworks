@@ -3,7 +3,7 @@
   "first-run": { "path": "/first-run", "anonymous": true, "ready": "input[name=company]" },
   "home": { "path": "/c/rs-learning/home", "state": "agent-details", "ready": ".home-dashboard" },
   "board": { "path": "/c/rs-learning/work/board", "ready": ".board" },
-  "card": { "path": "/c/rs-learning/work/board/1", "ready": ".modal" },
+  "card": { "path": "/c/rs-learning/work/board?card=1", "ready": ".cw[open] .cw-title" },
   "chat": { "path": "/c/rs-learning/chat", "ready": ".chat" },
   "channel": { "path": "/c/rs-learning/channels/69000000-0000-0000-0000-000000000001", "state": "channel", "ready": ".ch-intro" },
   "agents": { "path": "/c/rs-learning/agents", "ready": ".company-hermes-agents" },

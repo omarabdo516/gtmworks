@@ -4,28 +4,54 @@ import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
 
 const company='10000000-0000-0000-0000-000000000001';
+const manager='20000000-0000-0000-0000-000000000002';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 
-test('saving a card unchanged clears a next actor who was removed from the company',async({page})=>{
+// #677: a Card has one assignee. One whose Member leaves the Company is assigned to nobody, stays in its column and says
+// why in its log; "Assign to me" makes it the reader's, and it is then on their list under the bell, in its own column.
+test('a Card whose assignee leaves the Company has no assignee and stays in its column, logged; Assign to me puts it under the bell',async({page})=>{
  const person=randomUUID(); let card:number|undefined;
  try {
   query(`insert into auth.users(id) values ('${person}')`);
-  query(`insert into public.people(id,name) values ('${person}','Removed next actor')`);
+  query(`insert into public.people(id,name) values ('${person}','Removed assignee')`);
   query(`insert into public.members(company_id,person_id,role) values ('${company}','${person}','contributor')`);
+  // The previous release names a Card's person by its next actor; the assignee follows.
   [card]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title,next_actor)
-   select '${company}',id,'Removed next actor regression','${person}' from public.work_stages where company_id='${company}' order by position limit 1 returning id`)).map((row:{id:number})=>row.id);
+   select '${company}',id,'Removed assignee regression','${person}' from public.work_stages where company_id='${company}' and board_column='planned' order by position limit 1 returning id`)).map((row:{id:number})=>row.id);
+  expect(JSON.parse(query(`select assignee_person from public.work_cards where id=${card}`))[0].assignee_person).toBe(person);
   query(`update public.members set removed_at=now() where company_id='${company}' and person_id='${person}'`);
+  expect(JSON.parse(query(`select assignee_person,next_actor,status from public.work_cards where id=${card}`))[0]).toEqual({assignee_person:null,next_actor:null,status:'planned'});
+
   await signIn(page,'manager@example.com',`/c/rs-learning/work/board/${card}`);
-  const actor=page.locator('[data-card-section="next-actor"]');
-  await expect(actor.getByRole('button',{name:'Next actor',exact:true})).toHaveText('Not specified');
-  await expect(actor.locator('input[name="person"]')).toHaveValue('');
-  await actor.getByRole('button',{name:'Save',exact:true}).click();
-  await expect.poll(()=>JSON.parse(query(`select next_actor from public.work_cards where company_id='${company}' and id=${card}`))[0].next_actor).toBeNull();
-  await page.reload();
-  await expect(actor.locator('input[name="person"]')).toHaveValue('');
+  // The Card window's assignee menu (#678; design-reference-card: popHTML 'asg').
+  const win=page.getByRole('dialog');
+  const assignee=win.getByRole('button',{name:/^Assignee:/});
+  await expect(assignee).toHaveAccessibleName('Assignee: No one yet');
+  await win.getByRole('tab',{name:/^Activity \d+$/}).click();
+  await expect(win.locator('#cw-list')).toContainText('left the card with no assignee: the Member left');
+
+  await assignee.click();
+  await win.getByRole('menuitem',{name:'Assign to me',exact:true}).click();
+  await expect.poll(()=>JSON.parse(query(`select assignee_person,status from public.work_cards where id=${card}`))[0]).toEqual({assignee_person:manager,status:'planned'});
+  await expect(assignee).toHaveAccessibleName(/^Assignee: مدير/);
+  await assignee.click();
+  await expect(win.getByRole('menuitem',{name:'Assign to me',exact:true})).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.goto('/c/rs-learning/work/board');
+  await expect(page.locator(`#board-cols [data-column="planned"] .kcard[data-card-id="${card}"]`)).toBeVisible();
+  const bell=page.locator('.waiting-bell > button');
+  const count=Number(await bell.locator('.num').textContent());
+  await expect(bell).toHaveAccessibleName(`Waiting on you: ${count}`);
+  const sidebar=page.locator('.sidebar .sb-count[href$="/approvals"]');
+  if(await sidebar.isVisible()) await expect(sidebar).toHaveText(String(count));
+  await bell.click();
+  const mine=page.getByRole('menu').getByRole('group',{name:'Assigned to you',exact:true}).getByRole('menuitem').filter({hasText:'Removed assignee regression'});
+  await expect(mine).toHaveText('Removed assignee regressionPlanned');
+  await mine.click();
+  await expect(page).toHaveURL(new RegExp(`/work/board\\?card=${card}$`));
  } finally {
   // Cards and removed memberships retain their history under the audit triggers.
-  if(card) query(`update public.work_cards set next_actor=null where company_id='${company}' and id=${card}`);
   query(`update public.members set removed_at=coalesce(removed_at,now()) where company_id='${company}' and person_id='${person}'`);
  }
 });

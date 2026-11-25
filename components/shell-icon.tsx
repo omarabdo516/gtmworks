@@ -47,6 +47,8 @@ const paths = {
  home: <><path d="M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></>,
  clock: <><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></>,
  userPlus: <><circle cx="10" cy="8.5" r="3.5"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0M18.5 8v6M15.5 11h6"/></>,
+ // The bell over the reader's own "Waiting on you" list (#677).
+ bell: <><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></>,
  hand: <><path d="M8 11.5V6a1.5 1.5 0 0 1 3 0v5"/><path d="M11 10.5V4.5a1.5 1.5 0 0 1 3 0v6"/><path d="M14 10.5V6a1.5 1.5 0 0 1 3 0v5.5"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.6a6 6 0 0 1-4.7-2.3l-3.3-4.2a1.6 1.6 0 0 1 2.4-2.1L8 13.8"/></>,
  spark: <><path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z"/><path d="M18.5 15v5M16 17.5h5"/></>,
  at: <><circle cx="12" cy="12" r="3.5"/><path d="M15.5 12v1.5a2.5 2.5 0 0 0 5 0V12a8.5 8.5 0 1 0-3.3 6.7"/></>,
@@ -58,6 +60,32 @@ const paths = {
  link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></>,
  // design-reference-card/app.js ICONS.multiSel: the board's "Select several cards" (#672).
  multiSel: <><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/><rect x="4" y="8" width="12" height="12" rx="1.5"/><path d="M7 14l2 2 3.5-3.5"/></>,
+ // design-reference-card/app.js ICONS: the Card window's symbols and properties (#678).
+ ask: <><path d="M4 5.5h16v10.5H9l-5 4z"/><path d="M10.2 9.1a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.3"/><path d="M12 14.1v.01"/></>,
+ needsReview: <><path d="M11 21H6V3h7l5 5v3"/><path d="M13 3v5h5"/><circle cx="15" cy="16" r="3"/><path d="M17.2 18.2L20 21"/></>,
+ alert: <><path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.5v.01"/></>,
+ approved: <><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></>,
+ hourglass: <><path d="M7 3.5h10M7 20.5h10"/><path d="M8 3.5c0 4.5 8 4.5 8 8.5s-8 4-8 8.5"/><path d="M16 3.5c0 4.5-8 4.5-8 8.5s8 4 8 8.5"/></>,
+ calendar: <><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></>,
+ user: <><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></>,
+ play: <path d="M8 5.5v13l10.5-6.5z"/>,
+ sendBack: <><path d="M15 14l4-4-4-4"/><path d="M19 10h-9a5 5 0 0 0 0 10h2"/></>,
+ todo: <><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></>,
+ // The description's blocks (#680; design-reference-card's editor icons). Indent and outdent are drawn for a left-to-right
+ // line and mirrored in Arabic by the bar.
+ heading: <path d="M6 5v14M18 5v14M6 12h12"/>,
+ list: <><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="M5 6.5h.01M5 12h.01M5 17.5h.01" strokeWidth="3"/></>,
+ listNumbered: <><path d="M10.5 6.5H20M10.5 12H20M10.5 17.5H20"/><path d="M4.5 4.75L6 4v5"/><path d="M4.5 14.2a1.5 1.5 0 0 1 3 .3c0 1.2-3 2-3 3.5h3"/></>,
+ quote: <><path d="M5 6v12"/><path d="M9.5 8H19M9.5 12H19M9.5 16H15"/></>,
+ code: <path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5"/>,
+ table: <><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/></>,
+ divider: <><path d="M4 12h16"/><path d="M8 6.5h8M8 17.5h8" strokeOpacity=".45"/></>,
+ bot: <><rect x="5" y="7.5" width="14" height="11" rx="3"/><path d="M12 4.5v3M9.5 12.5v1M14.5 12.5v1"/></>,
+ indent: <><path d="M4 6h16M4 18h16M11 12h9"/><path d="M4 9l3 3-3 3"/></>,
+ outdent: <><path d="M4 6h16M4 18h16M11 12h9"/><path d="M7 9l-3 3 3 3"/></>,
+ grip: <><circle cx="9" cy="6.5" r="1.1"/><circle cx="15" cy="6.5" r="1.1"/><circle cx="9" cy="12" r="1.1"/><circle cx="15" cy="12" r="1.1"/><circle cx="9" cy="17.5" r="1.1"/><circle cx="15" cy="17.5" r="1.1"/></>,
+ // The phone board's one Filter menu (#683; design-reference-card: filter).
+ filter: <path d="M4 6.5h16M7 12h10M10 17.5h4"/>,
  open: <><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></>,
 };
 export type ShellIconName = keyof typeof paths;

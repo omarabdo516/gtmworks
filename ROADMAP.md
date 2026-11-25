@@ -91,17 +91,19 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 
 ## 4. Work: board, cards, projects, routines
 
-- 🟡 **The board.** Six columns over the stages, drag with undo, Shift plus arrows to reorder, motion as designed. Merged; waiting for the release (#572). [#34, #131, #168, #174, ADR 0013]
-- ✅ **The Card sheet.** A Card opens over the board with its Chat and Log. [#116]
+- 🟡 **The board.** Six columns, each a Card's status, that anyone who may edit moves a Card between, Live and Done included; drag with undo, Shift plus arrows to reorder, motion as designed. Merged; waiting for the release (#572). [#34, #131, #168, #174, #676, ADR 0026]
+- ✅ **The Card window.** A Card opens in one window over the board, full screen on a phone: its status, title, callout, Result with its Versions, Comments the team shares (with @ and files), Activity and Runs, and its properties beside them, each saved as it changes and refused when someone changed it meanwhile; a chat tied to a Card stays its person's own Conversation. It replaces the sheet and the Card page. [#116, #678, ADR 0026]
+- ✅ **A rich description.** A Card's description is Markdown, read drawn with headings, lists, to-do items, quotes, links, tables, pictures and code, each line in its own direction; to-do items are ticked while reading with a count beside the list and on the tile, and a long one folds. It is written where it is read ("/" for blocks, shortcuts, nesting, moving lines, paste, pictures, @, a bar of blocks on a phone), saves by itself, and two writers at once lose nothing. [#679, #680]
 - ✅ **Board, calendar and list views of Cards.** [#34, `work.tsx` has `work/calendar` and `work/list`]
 - ✅ **Versions and Approvals.** Editing makes a new Version, an approval applies to one exact Version, and an Agent never approves. [#16, #137, GLOSSARY.md Version, Approval]
+- ✅ **One review.** A Card in review shows its Version with Approve and Send back with a reason; any Owner or Manager who sees the Card decides it, the first answer closing it. Approved goes to Planned with the approved symbol when its date is ahead, else to Done; sent back goes to In progress with the reason as a comment. Approval steps are gone. [#681, #513]
+- ✅ **A Card waits for other Cards.** Each side names the other, the tile counts the Cards it still waits for, a loop is refused, and a Card Live, Done or archived holds nobody up. [#682]
 - ✅ **"Waiting on you".** One list for approvals, questions, permissions, requests and mentions. [#16, #165, #200]
-- ✅ **Add an idea.** The Ideas column takes a new Card, once even if pressed twice. [#188, #452]
+- ✅ **One New card form.** New card on the toolbar and "+" on Ideas open the same form: a title, a description, an assignee or nobody, and the Project the board is filtered by; it lands in Planned or at the top of Ideas, once even if pressed twice. The board filters by assignee and Project, and its tiles tell their state in one symbol. [#188, #452, #683]
 - ✅ **Alone or with a team.** First run asks one question; "Alone" hides the team parts until the first Member joins. [#9, #10, #186]
 - ✅ **Notes and mentions in the log.** Notes call Members and Agents, editable for five minutes. [#22, #114]
 - ✅ **Activity log.** One log for the Company with paging and filters. [#11]
 - 🟡 **Routines.** Each Agent's recurring work in its details and in Settings, added with one sentence, run now, paused, with the last result. Merged; waiting for the release (#572). [#31, #205, #488, #517]
-- ✅ **Approval steps in Settings, Work.** [`ApprovalSettings` in `approvals.tsx`, decision 0013]
 - 🟡 **Projects.** A project has a name, goal and status and holds Cards; the glossary also gives it an Offering, a Key date, Ad campaigns and Results, which are not built. [`projects.tsx`, `work_projects` table, GLOSSARY.md Project]
 - 🟡 **A Card in review whose Manager cannot see its Agent.** It can wait on a person who cannot open it. [#513]
 - 🟡 **Board polish.** A drop leaves the board where the Card was let go instead of scrolling back to its old place (#556 ✅); a Card hidden by its Agent stays hidden everywhere. [#228, #367]

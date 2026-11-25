@@ -243,11 +243,10 @@ test('integration: a run unknown to Hermes is recorded as lost and the conversat
  } finally { detach(agents); await fake.close(); }
 });
 
-// #145: a Card with an Agent and no chat is where its chat starts. The Contributor who writes from its sheet owns the
-// chat, which is the same in Chats; the Card moves from Ideas to In progress with its log row and stays the only one.
-// The Owner and another Contributor get the lock and the Log, and no message of the chat reaches their page; a Viewer
-// gets no composer and the view-only line.
-test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Contributor and a Viewer get the lock and no message',async({page,browser})=>{
+// #678 (was #145): a Card's comments replace its private chat. A Contributor's own chat with an Agent that made a Card stays
+// that Contributor's Conversation: the Card's window links to it for them alone. The Owner, another Contributor and a
+// Viewer read who made the Card and a lock naming whose chat it is, and no message of the chat reaches their page.
+test('A chat that made a Card stays its person\'s Conversation: the Card links to it for them alone; the others get who made it, a lock and no message',async({page,browser})=>{
  test.setTimeout(240000);
  const fake=await laneHermes(); let agents={};
  const reviewer='20000000-0000-0000-0000-000000000003';
@@ -258,66 +257,37 @@ test('A Contributor starts a Card\'s chat from its sheet; the Owner, another Con
   await ownerSignIn(page); agents=attachAgents();
   const {Nour}=agents as Record<string,{id:string,profile:string}>;
   query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${Nour.id}' from public.members where company_id='${company}' and removed_at is null and role<>'owner' on conflict do nothing`);
-  const [{id:card}]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title,agent_id) select '${company}',id,'Ideas for the June course','${Nour.id}' from public.work_stages where company_id='${company}' and board_column='ideas' order by position,id limit 1 returning id`)) as {id:number}[];
-  const sheetPath=`/c/rs-learning/work/board?card=${card}`;
-  const chatTab=(on:Page)=>on.locator('.sheet').getByRole('tab',{name:'Chat'}), logTab=(on:Page)=>on.locator('.sheet #sh-tab-log');
-
-  const viewer=await member('viewer@example.com',sheetPath);
-  try {
-   const sheet=viewer.page.locator('.sheet[open]');
-   await expect(chatTab(viewer.page)).toHaveAttribute('aria-selected','true');
-   await expect(sheet.getByRole('heading',{name:'No chat on this card yet'})).toBeVisible();
-   await expect(sheet.getByLabel('Message',{exact:true})).toHaveCount(0);
-   await expect(sheet.locator('.ro-line')).toHaveText('Your account is view-only: you can read everything you’re allowed to, without writing, approving or changing anything.');
-  } finally { await viewer.context.close(); }
-
   const text=`Plan three posts for the course ${Date.now()}`;
-  const writer=await member('reviewer@example.com',sheetPath);
-  let conversation='';
+  const conversation=randomUUID();
+  const writer=await member('reviewer@example.com','/c/rs-learning/home');
   try {
-   const sheet=writer.page.locator('.sheet[open]');
-   await expect(chatTab(writer.page)).toHaveAttribute('aria-selected','true');
-   await expect(sheet.getByText('Write to Nour below and it’ll start working on it and keep the card updated.')).toBeVisible();
-   await sheet.getByLabel('Message',{exact:true}).fill(text);
-   await sheet.getByLabel('Message',{exact:true}).press('Enter');
-   await expect(sheet.locator('.msg[data-author=person]')).toContainText(text);
-   await expect(sheet.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
-   const chats=sheet.getByRole('link',{name:'Open in Chats'});
-   await expect(chats).toHaveAttribute('href',/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
-   conversation=(await chats.getAttribute('href'))!.split('/').pop()!;
-   expect(fake.settings.runs.map(run=>run.session)).toEqual([conversation]);
-   expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Nour.profile}/v1/runs`);
-   await chats.click();
+   expect((await writer.page.request.post('/api/conversations',{data:{company,conversation,message:text,sendKey:randomUUID(),agent:Nour.id}})).status()).toBe(200);
+   await expect.poll(()=>JSON.parse(query(`select count(*)::int as n from public.work_cards where conversation_id='${conversation}'`))[0].n,{timeout:60000}).toBe(1);
+   const [{id:card}]=JSON.parse(query(`select id from public.work_cards where conversation_id='${conversation}'`)) as {id:number}[];
+   await writer.page.goto(`/c/rs-learning/work/board?card=${card}`);
+   const window=writer.page.getByRole('dialog');
+   const chat=window.getByRole('link',{name:'Open the conversation'});
+   await expect(chat).toHaveAttribute('href',`/c/rs-learning/conversations/${conversation}`);
+   await expect(window.getByRole('complementary',{name:'Card details'})).toContainText('Made by: مراجع');
+   await chat.click();
    await expect(writer.page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${conversation}$`));
    await expect(writer.page.locator('.chat .msg[data-author=person]')).toContainText(text);
-   await expect(writer.page.locator('.chat .msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
-   await expect(writer.page.locator('.turns > li[data-kind="boarded"]')).toHaveCount(0);
+   const reply=`Reply to: ${text}`;
+   const locked=async(on:Page)=>{
+    await on.goto(`/c/rs-learning/work/board?card=${card}`);
+    const window=on.getByRole('dialog');
+    await expect(window.getByRole('img',{name:'A private chat of مراجع'})).toBeVisible();
+    await expect(window.getByRole('complementary',{name:'Card details'})).toContainText('Made by: مراجع');
+    await expect(window.getByRole('link',{name:'Open the conversation'})).toHaveCount(0);
+    expect(await on.content()).not.toContain(text);
+    expect(await on.content()).not.toContain(reply);
+   };
+   await locked(page);
+   const other=await member('multi@example.com','/c/rs-learning/home');
+   try { await locked(other.page); } finally { await other.context.close(); }
+   const reader=await member('viewer@example.com','/c/rs-learning/home');
+   try { await locked(reader.page); } finally { await reader.context.close(); }
   } finally { await writer.context.close(); }
-  expect(JSON.parse(query(`select (select count(*) from public.conversations where person_id='${reviewer}' and agent_id='${Nour.id}')::int as chats,
-   (select count(*) from public.work_cards where conversation_id='${conversation}')::int as cards,(select count(*) from public.work_cards where title='Ideas for the June course')::int as titled,
-   (select s.board_column from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.id=${card}) as board_column`))).toEqual([{chats:1,cards:1,titled:1,board_column:'progress'}]);
-  expect(JSON.parse(query(`select action,actor_id,details->>'field' as field from public.company_log where card_id=${card} and action<>'card_created' order by id`))).toEqual([{action:'card_changed',actor_id:reviewer,field:'stage_id'}]);
-
-  const reply=`Reply to: ${text}`;
-  const locked=async(on:Page)=>{
-   const sheet=on.locator('.sheet[open]');
-   await expect(logTab(on)).toHaveAttribute('aria-selected','true');
-   await expect(sheet.getByRole('link',{name:'Open in Chats'})).toHaveCount(0);
-   await chatTab(on).click();
-   await expect(sheet.getByRole('heading',{name:'This chat is between مراجع and Nour only'})).toBeVisible();
-   await expect(sheet.getByLabel('Message',{exact:true})).toHaveCount(0);
-   expect(await on.content()).not.toContain(text);
-   expect(await on.content()).not.toContain(reply);
-   await sheet.getByRole('button',{name:'Open the log'}).click();
-   await expect(logTab(on)).toHaveAttribute('aria-selected','true');
-   await expect(logTab(on)).toBeFocused();
-  };
-  await page.goto(sheetPath);
-  await locked(page);
-  const other=await member('multi@example.com',sheetPath);
-  try { await locked(other.page); } finally { await other.context.close(); }
-  const reader=await member('viewer@example.com',sheetPath);
-  try { await locked(reader.page); } finally { await reader.context.close(); }
   expect(fake.settings.runs).toHaveLength(1);
  } finally { detach(agents); await fake.close(); }
 });

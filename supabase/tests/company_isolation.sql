@@ -18,8 +18,8 @@ insert into isolation_matrix(name) values
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('routine_runs_open'),('stopped_runs'),
  ('waiting_items'),
- ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_visits'),('work_cards'),
- ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
+ ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_description_versions'),('work_card_waits'),('work_card_visits'),('work_cards'),
+ ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_reviews'),('work_stages'),('work_versions');
 -- Values a table's own checks need, as SQL (RS Learning is 10000000-...-0001). The member row names a person of no
 -- Company, as naming the caller would make them a member of RS Learning, and a Contributor, so the Owner-only guard
 -- does not answer before the policy does.
@@ -83,6 +83,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('company_fallback_models', $${"provider": "'anthropic'", "model": "'claude-sonnet-4-6'"}$$),
  ('waiting_items', $${"card_id": "1"}$$),
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
+ -- A Card's status is one of the board's six columns (#676).
+ ('work_cards', $${"status": "'ideas'"}$$),
  ('work_stages', $${"board_column": "'ideas'"}$$),
  ('work_versions', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$)
 ) v(name, fixed) where m.name = v.name;

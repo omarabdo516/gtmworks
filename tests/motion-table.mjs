@@ -69,7 +69,7 @@ export const motionTable = [
   // Fields: the reason an Owner gives for a no, the settings fields and the Activity log's filters.
   { built: '.gw .ac-card .set-input', file: 'app/shell.css', html: '<div class="gw"><div class="ac-card"><textarea class="set-input set-textarea"></textarea></div></div>' },
   { built: '.gw .sov .set-input', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><input class="set-input" type="text"></div></div>' },
-  { built: '.gw :is(.log-page, .numbers-page, .sheet) .set-input', file: 'app/log.css', html: '<div class="gw"><main class="log-page"><select class="set-input"></select></main></div>' },
+  { built: '.gw :is(.log-page, .numbers-page, .sheet, .cw) .set-input', file: 'app/log.css', html: '<div class="gw"><main class="log-page"><select class="set-input"></select></main></div>' },
   // The board: a column lights up under a carried card; an item waiting on the reader.
   { built: '.gw .board-view .col', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><section class="col"></section></div></div>' },
   { built: '.gw .board-view .mcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><a class="mcard" href="#"></a></div></div>' },
@@ -77,13 +77,11 @@ export const motionTable = [
   { built: '.gw .corner-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat__corner"><a class="corner-pill" href="#"></a></div></div>', held: 0.96 },
   // A Card that just started waiting on the reader shakes its badge once (#146). Its chat's pill shakes with the same
   // rule, which also carries the pill's own colours and press: tests/components/conversation-card.test.tsx reads it.
-  { built: '.gw .kcard .badge--wait.is-new', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard"><span class="badge badge--wait is-new">Waiting on you</span></div></div></div>' },
-  // The board as built (#131): a Card eases its colours and lift and gives under a press; a bar slides when its figure
-  // changes and grows in when the board opens; the sidebar's count pops when more waits on the reader. The carried
-  // Card's lean, fly-back and landing are set from the page, and the bar's growth on open also carries the bar's own
-  // transition, which a row drawn on its own cannot show: tests/board-motion.spec.ts reads them.
+  { built: '.gw .kt-syms.is-new .sym', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard"><span class="kt-syms is-new"><span class="sym">!</span></span></div></div></div>' },
+  // The board as built (#131): a Card eases its colours and lift and gives under a press; the sidebar's count pops when
+  // more waits on the reader. The carried Card's lean, fly-back and landing are set from the page, which a row drawn on
+  // its own cannot show: tests/board-motion.spec.ts reads them. A tile has no progress bar since #683.
   { built: '.gw .board-view .kcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard card"></div></div></div>', held: 0.985 },
-  { built: '.gw .kcard .bar__fill', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard card"><span class="bar"><span class="bar__fill"></span></span></div></div></div>' },
   { built: '.gw .sb-count.is-pop', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-count is-pop" href="#"><span class="sb-count__n">2</span></a></div></aside></div>' },
   // Everything a person can press fades and gives under the finger (#128), wherever it is drawn. The sidebar:
   { built: '.gw .circle-btn', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-icons"><a class="circle-btn" href="#" aria-label="New chat"></a></div></aside></div>', held: 0.96 },

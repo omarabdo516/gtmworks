@@ -81,12 +81,13 @@ test('a section not built yet says so at its address, and a settings page\'s tra
   await page.goto(`/c/rs-learning/${path}`);
   await expect(page.locator('.content .empty'),path).toHaveText(text);
  }
- await page.goto('/c/rs-learning/work/board/1');
+ // A Card opens in its window over the board (#678): the top bar stays the board's, with no crumb of the Card.
  const cardCrumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
- await expect(cardCrumbs).toHaveCount(2);
- await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
- await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
- await expect(cardCrumbs.last()).not.toHaveText('');
+ await page.goto('/c/rs-learning/work/board');
+ const boardCrumbs=await cardCrumbs.allInnerTexts();
+ await page.goto('/c/rs-learning/work/board/1');
+ await expect(page.locator('.cw[open]')).toBeVisible();
+ expect(await cardCrumbs.allInnerTexts()).toEqual(boardCrumbs);
  for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings']]) {
   await page.goto(`/c/rs-learning/${path}`);
   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
@@ -125,7 +126,7 @@ test('Home has four parts in order and missing sources show unavailable, never z
  // Home lists the Company's real Agents: Aleem has none, so its Agents section stays and is simply empty.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
  await expect(page.locator('.stats .label')).toHaveText(["Awaiting your approval","Published this week","Bookings this week","Stopped cards"]);
- await expect(page.locator('.home-charts h2')).toHaveText(["Delivered work","Cards by stage","First-time acceptance"]);
+ await expect(page.locator('.home-charts h2')).toHaveText(["Delivered work","Cards by status","First-time acceptance"]);
  await expect(page.locator('.home-recent h2')).toHaveText(["Recent activity","Recent cards"]);
  const missing=page.locator('.stats .stat:nth-child(n+2) strong, .acceptance-chart p');
  await expect(missing).toHaveCount(4);
@@ -135,12 +136,12 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await expect(page.locator('.content')).not.toContainText(/Spend|Run count/);
  await chooseCompany(page,'rs-learning');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
- // The seed gives RS Learning no real Agents, so Home has none; the Writer's Card still shows in the work list's
- // Next actor column.
+ // The seed gives RS Learning no real Agents, so Home has none; the Writer's Cards still show in the work list's
+ // Assignee column (#677, the third since #683): its own Card, and the Card in review it sent there.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
  await page.goto('/c/rs-learning/work/list');
- const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
- await expect(assigned).toHaveCount(1);
+ const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:nth-child(3)',{hasText:'وكيل المحتوى'})});
+ await expect(assigned).toHaveCount(2);
  // The Inbox count sits on the Marketing board entry and opens the Inbox.
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
@@ -160,12 +161,13 @@ test('Home has four parts in order and missing sources show unavailable, never z
 
 test('owner assigns a new Contributor agent through settings, the work list follows its rename, and demotion clears the key',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/list');
- const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
+ // The Writer's own Card (seed Card 1), not the Card in review it is also the assignee of (#677).
+ const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:nth-child(3)',{hasText:'وكيل المحتوى'})}).filter({has:page.locator('a[href$="/work/board?card=1"]')});
  await expect(writerRow).toHaveCount(1);
  const current=writerRow.getByRole('link');
  await expect(current).toBeVisible();
  const cardPath=await current.getAttribute('href');
- const card=Number(cardPath!.split('/').pop());
+ const card=Number(cardPath!.split('=').pop());
  const person=randomUUID();
  const initialName=`وكيل اختبار مستقل ${person}`;
  const renamed='كاتب المحتوى بعد تغيير الاسم';
@@ -199,8 +201,8 @@ test('owner assigns a new Contributor agent through settings, the work list foll
   await page.goto('/c/rs-learning/work/list');
   const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
   // The next actor's name, beside its first letter as a person's (#697: a legacy role agent shows its name's first letter).
-  const nextActor=assigned.locator('td').last().locator('span:not(.avatar)');
-  await expect(assigned.locator('td').last().locator('.avatar')).toHaveText(Array.from(initialName)[0]);
+  const nextActor=assigned.locator('td').nth(2).locator('span:not(.avatar)');
+  await expect(assigned.locator('td').nth(2).locator('.avatar')).toHaveText(Array.from(initialName)[0]);
   await expect(nextActor).toHaveText(initialName);
   expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
   await page.reload();
@@ -236,6 +238,9 @@ test('recent cards record actual opens only, newest three per person and company
  await page.goto('/c/rs-learning/work/board/1');
  await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/1');
  expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
+ // The Card's window is modal (#678): it is closed before the sidebar is used.
+ await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
+ await expect(page.locator('.cw[open]')).toHaveCount(0);
  await chooseCompany(page,'aleem');
  await expect(page).toHaveURL(/\/c\/aleem\/work\/board$/);
  await expect(page.locator('.recent-cards')).toHaveCount(0);
@@ -293,10 +298,10 @@ test('mobile recent cards record opens while the drawer stays closed',async({pag
  for(const id of [3,4]) {
   // A Card opens as its sheet over the board (#116), and that open is recorded as one.
   await page.locator(`.card a[href$="/board?card=${id}"]`).click();
-  await expect(page.locator('.sheet[open]')).toBeVisible();
+  await expect(page.locator('.cw[open]')).toBeVisible();
   await idle(page);
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
-  await expect(page.locator('.sheet')).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
+  await expect(page.locator('.cw')).toHaveCount(0);
  }
  await openMoreSection(page,'home');
  await openNavigation(page);
@@ -317,7 +322,7 @@ test('an account menu opened while the next page is still arriving stays open wh
  // stale) the board's data is held back until the menu is open, so the new shell always lands under an open menu.
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
+ await expect(page.locator('.cw[open]')).toBeVisible();
  let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
  const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
@@ -325,12 +330,14 @@ test('an account menu opened while the next page is still arriving stays open wh
  await page.route(board,hold);
  try {
   const comment=`Menu stays ${Date.now()}`;
-  await page.getByLabel('Comment',{exact:true}).fill(comment);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  await page.getByRole('textbox',{name:'Write a comment'}).fill(comment);
+  await page.getByRole('button',{name:'Post the comment'}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:comment})).toBeVisible();
   const shell=await page.locator('.shell').elementHandle();
-  await page.locator('.close-card').click();
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await asked;
+  // The Card's window is modal (#678): the sidebar answers once it has left.
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   // The menu rises once, as it opens; drawn again on the page that lands, it has risen already (#129).
   await page.evaluate(()=>{ const counted=window as unknown as {rises:number}; counted.rises=0; document.addEventListener('animationstart',event=>{ if((event.target as Element).id==='me-menu') counted.rises++; },true); });
   await page.locator('.sidebar #btn-me').click();
@@ -338,7 +345,7 @@ test('an account menu opened while the next page is still arriving stays open wh
   await expect(menu).toBeVisible();
   release();
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   // The page landed with a new shell, and the menu is still open on it.
   await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
   await expect(menu).toBeVisible();
@@ -411,7 +418,7 @@ test('a menu open while its own page lands keeps the item that had focus',async(
  // As above: the board's data is held until the menu is open and focus is on one of its items.
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
+ await expect(page.locator('.cw[open]')).toBeVisible();
  let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
  const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
@@ -419,18 +426,20 @@ test('a menu open while its own page lands keeps the item that had focus',async(
  await page.route(board,hold);
  try {
   const comment=`Focus stays ${Date.now()}`;
-  await page.getByLabel('Comment',{exact:true}).fill(comment);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  await page.getByRole('textbox',{name:'Write a comment'}).fill(comment);
+  await page.getByRole('button',{name:'Post the comment'}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:comment})).toBeVisible();
   const shell=await page.locator('.shell').elementHandle();
-  await page.locator('.close-card').click();
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await asked;
+  // The Card's window is modal (#678): the sidebar answers once it has left.
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   await page.locator('.sidebar #btn-me').click();
   const menu=page.getByRole('menu');
   await menu.getByRole('menuitemradio',{name:'Dark'}).focus();
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
   release();
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();

@@ -24,7 +24,7 @@ select is((select count(*)::int from public.waiting_items),2,'Omar reads none of
 select throws_ok($$select public.add_waiting_item('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','question','Spam','',null,'62000000-0000-0000-0000-0000000000f2')$$,'42501',null,'a Member cannot add an item');
 select throws_ok($$update public.waiting_items set resolved_at=now()$$,'42501',null,'a Member cannot clear an item by hand');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is((select string_agg(kind||':'||title,' | ') from public.waiting_list('10000000-0000-0000-0000-000000000001')),'question:Approve the budget split?','the Manager reads only what is addressed to them');
+select is((select string_agg(kind||':'||title,' | ') from public.waiting_list('10000000-0000-0000-0000-000000000001')),'question:Approve the budget split? | approval:إعلان البرنامج القادم','the Manager reads what is addressed to them, and the review every Owner and Manager who sees its Card decides (#681)');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000001')),0,'a Viewer has nothing waiting');
 

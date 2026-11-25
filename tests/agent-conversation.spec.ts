@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from './fresh-seed';
+import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
@@ -25,34 +25,28 @@ test('people and agents reply inside one card, in order, each labelled and in it
  select card_id from note`)[0].card_id);
 
  await signIn(page,'omar@example.com',`/c/rs-learning/work/board/${card}`);
- const messages=page.locator('.conversation .message');
+ // The Card window's Comments (#678), drawn as the log draws a note: each with its writer's name and face.
+ const messages=page.getByRole('dialog').locator('#cw-list .lg-row');
  await expect(messages).toHaveCount(1);
- // The agent's message carries its name and the agent label; the word tells it apart, as role colours are gone (#697).
  const fromAgent=messages.first();
- await expect(fromAgent).toHaveAttribute('data-author','agent');
- await expect(fromAgent.locator('strong')).toHaveText(writerName);
- await expect(fromAgent.locator('.author-chip')).toHaveText('Agent');
+ await expect(fromAgent.locator('.lg-name')).toHaveText(writerName);
 
  // A person replies below it.
  const reply=`شكرا، نكمل ${stamp} thanks`;
- await page.getByLabel('Comment',{exact:true}).fill(reply);
- await page.getByRole('button',{name:'Send',exact:true}).click();
+ await page.getByRole('textbox',{name:'Write a comment'}).fill(reply);
+ await page.getByRole('button',{name:'Post the comment'}).click();
  await expect(messages).toHaveCount(2);
- await expect(messages.nth(1)).toHaveAttribute('data-author','person');
- await expect(messages.nth(1).locator('.author-chip')).toHaveText('Person');
- // Both labels are drawn alike: an agent's carries no colour of its role.
- const border=(chip:Locator)=>chip.evaluate(element=>[getComputedStyle(element).borderTopColor,!!element.querySelector('i')]);
- expect(await border(fromAgent.locator('.author-chip'))).toEqual(await border(messages.nth(1).locator('.author-chip')));
- await expect(messages.nth(1).locator('strong')).toContainText('عمر');
- expect(await messages.locator('.comment-body').allInnerTexts()).toEqual([first,reply]);
+ await expect(messages.nth(1).locator('.lg-name')).toContainText('عمر');
+ await expect(messages.nth(1).locator('.lg-you')).toBeVisible();
+ expect(await messages.locator('.lg-note').allInnerTexts()).toEqual([first,reply]);
 
  // Each body is a block that picks its own direction from its text, so mixed Arabic and English never shares one.
- for(const body of await messages.locator('.comment-body').all()) {
+ for(const body of await messages.locator('.lg-note').all()) {
   await expect(body).toHaveAttribute('dir','auto');
   expect(await body.evaluate(element=>getComputedStyle(element).display)).toBe('block');
  }
- expect(await messages.nth(0).locator('.comment-body').evaluate(element=>getComputedStyle(element).direction)).toBe('ltr');
- expect(await messages.nth(1).locator('.comment-body').evaluate(element=>getComputedStyle(element).direction)).toBe('rtl');
+ expect(await messages.nth(0).locator('.lg-note').evaluate(element=>getComputedStyle(element).direction)).toBe('ltr');
+ expect(await messages.nth(1).locator('.lg-note').evaluate(element=>getComputedStyle(element).direction)).toBe('rtl');
  // The same conversation in both languages and at phone and desktop width, kept as screenshots of the run.
  try {
   for(const language of ['en','ar'] as const) {
@@ -61,7 +55,7 @@ test('people and agents reply inside one card, in order, each labelled and in it
    await expect(messages).toHaveCount(2);
    for(const width of [1440,390]) {
     await page.setViewportSize({width,height:900});
-    await page.locator('.modal').first().screenshot({path:`test-results/screenshots/conversation-${language}-${width}.png`});
+    await page.locator('.cw[open]').screenshot({path:`test-results/screenshots/conversation-${language}-${width}.png`});
    }
   }
  } finally { await chooseLanguage(page,'en'); }

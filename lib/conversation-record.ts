@@ -193,7 +193,7 @@ const handPickup=(card:ReplyCard|null,queued:QueuedTurn[],messages:{author:strin
 // The chat's Card on the board (#144), the one it put there or was started from (#145), with its column now: "Waiting
 // on you" while the chat waits on its person (#146).
 export async function tiedCard(db:Database,company:string,conversation:string) {
- const {data}=await db.from('work_cards').select('id,created_at,stage_id,wait:card_wait,work_stages(id,board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
- const card=data as {id:number,created_at:string,stage_id:number,wait:CardWait|null,work_stages:{id:number,board_column:BoardColumn}|null}|null;
- return card?.work_stages?{card:card.id,column:columnOf(card,[card.work_stages]) as BoardColumn,created_at:card.created_at}:undefined;
+ const {data}=await db.from('work_cards').select('id,created_at,status,wait:card_wait').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
+ const card=data as {id:number,created_at:string,status:BoardColumn,wait:CardWait|null}|null;
+ return card?{card:card.id,column:columnOf(card) as BoardColumn,created_at:card.created_at}:undefined;
 }

@@ -173,27 +173,22 @@
 .gw .kcard__t { font-size: var(--gw-fs-sm); color: var(--gw-text-2); line-height: 1.6; text-wrap: pretty; }
 .gw .kcard .badge { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; height: 22px; padding: 0 var(--s2, 8px); border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); background: var(--gw-bg-tertiary); color: var(--gw-text-1); --b-icon: 14px; }
 .gw .kcard .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
-.gw .kcard .badge--wait.is-new { animation: gw-nudge 520ms var(--gw-ease-out); }
 .gw .kcard .badge .dot { width: 6px; height: 6px; }
 .gw .kcard .badge--live .dot { background: var(--gw-text-1); }
-.gw .kcard__prog { display: grid; gap: 6px; }
-.gw .kcard .bar { display: block; height: 3px; border-radius: var(--gw-r-full); background: var(--gw-bg-active); overflow: hidden; }
-.gw .kcard .bar__fill { display: block; height: 100%; width: 100%; background: var(--gw-text-1); transform-origin: right center; }
-[dir="ltr"] .gw .kcard .bar__fill { transform-origin: left center; }
-/* A bar slides when its figure changes, and grows in when the board opens (#131; design-reference: .bar__fill, boardEnter). */
-.gw .kcard .bar__fill { transition: transform var(--gw-dur-slow) var(--gw-ease-out); }
-.gw .board--enter .kcard .bar__fill { animation: gw-bar-grow 700ms var(--gw-ease-out) both; }
-@keyframes gw-bar-grow { from { transform: scaleX(0); } }
 .gw .kcard__foot { display: flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); padding-top: 2px; min-width: 0; float: none; }
 .gw .kcard__agent { display: inline-flex; align-items: center; gap: 6px; color: var(--gw-text-2); min-width: 0; float: none; }
 .gw .kcard__agent .avatar { width: 18px !important; height: 18px !important; font-size: 10px; }
 .gw .kcard__agent > span[aria-hidden] { display: inline-flex; flex: none; }
 .gw .kcard__agent--own { flex: none; }
-.gw .kcard__job { min-width: 0; }
 .gw .kcard__crew { display: flex; align-items: flex-start; gap: 6px; min-width: 0; font-size: var(--gw-fs-xs); line-height: 18px; color: var(--gw-text-3); }
 .gw .kcard__crew-t { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
 .gw .kcard__crew-t bdi { white-space: nowrap; }
 .gw .kcard__due { margin-inline-start: auto; flex: none; }
+.gw .kcard__todo { margin-inline-start: auto; flex: none; display: inline-flex; align-items: center; color: var(--gw-text-3); }
+.gw .kcard__todo + .kcard__due { margin-inline-start: 8px; }
+.gw .kcard__todo > span[aria-hidden] { display: inline-flex; align-items: center; gap: 3px; }
+.gw .kcard__todo .gw-icon { width: 14px; height: 14px; }
+.gw .kcard__todo.is-all { color: var(--gw-text-2); }
 .gw .kcard__kind { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .gw .kcard .mode-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 var(--s2, 8px); border: 1px solid; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 600; }
 .gw .kcard .mode-chip { border-color: var(--gw-border-2); }
@@ -241,7 +236,6 @@
   .gw .board-view .kcard, .gw .board-view .col, .gw .board-view .chip { transition: none; }
   .gw .board-view .kcard:hover { transform: none; }
   .gw .kcard--ghost { transform: none; }
-  .gw .board--enter .kcard .bar__fill { animation: none; }
 }
 @media (pointer: coarse) { .gw .kcard[data-card-id] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } .gw .kcard a { -webkit-user-drag: none; } }
 @media (max-width: 1023px) {
@@ -340,6 +334,12 @@
 .gw .board-view .ib[aria-pressed="true"] { background: var(--gw-bg-active); color: var(--gw-text-1); }
 .gw .board-view .ib .num { font-weight: 600; }
 @media (hover: hover) { .gw .board-view .ib:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+/* The reader's own list under the bell (#677; design-reference-card: .ib--bell, popHTML 'wl'): amber while it holds
+   something, and the menu opens below it at the inline end. */
+.gw .board-view .ib--bell.has-n { color: var(--gw-wait-text); padding-inline: 9px 12px; }
+@media (hover: hover) { .gw .board-view .ib--bell.has-n:hover { color: var(--gw-wait-text); } }
+.gw .board-view .waiting-bell { position: relative; flex: none; }
+.gw .board-view .waiting-bell__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; width: min(340px, calc(100vw - 32px)); }
 .gw .board-view .arch { overflow-y: auto; padding: 0 var(--s8) var(--s8); }
 .gw .board-view .arch-list { display: flex; flex-direction: column; max-width: 880px; margin: 0; padding: 4px; list-style: none; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
 .gw .board-view .arch-row { display: flex; align-items: center; gap: var(--s2); min-height: 56px; padding: 4px; }
@@ -391,3 +391,43 @@
   .gw .board-view .col__head .col__act { min-width: 44px; height: 44px; }
   .gw .board-view .link-btn { min-height: 44px; }
 }
+
+/* The tile (#683; design-reference-card: kcardHTML, round 8): its title and one state symbol, then the assignee's face and
+   only the counts above zero. */
+.gw .kcard > .kt-head { display: flex; align-items: flex-start; gap: var(--s2); }
+.gw .kt-head > .kcard__title { flex: 1 1 0; min-width: 0; }
+.gw .kt-syms { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: calc(var(--gw-fs-base) * 1.55); }
+.gw .kt-syms .gw-icon { width: 16px; height: 16px; }
+.gw .kt-syms.is-new .sym { animation: gw-nudge 520ms var(--gw-ease-out); }
+.gw .sym__n { font-size: var(--gw-fs-xs); font-weight: 600; line-height: 1; }
+.gw .kcard > .kcard__foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; padding-top: 2px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .kt-face { display: inline-flex; flex: none; --av: 20px; }
+.gw .kt-metas { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--s3); flex: none; }
+.gw .kt-m { display: inline-flex; align-items: center; gap: 3px; }
+.gw .kt-m .gw-icon { width: 13px; height: 13px; }
+.gw .kt-m.is-all { color: var(--gw-text-2); }
+.gw .kt-date { color: var(--gw-text-2); }
+.gw .kcard.is-sel .kt-head { padding-inline-end: 28px; }
+@media (prefers-reduced-motion: reduce) { .gw .kt-syms.is-new .sym { animation: none; } }
+
+/* One toolbar row (#683; design-reference-card: .bt2, .bt-desk, .bt-filter). On a phone the filters fold into one
+   Filter menu and the search comes first, so the first Card shows near the top. */
+.gw .board-view .board-tools .bt-desk { display: contents; }
+.gw .board-view .board-tools .bt-filter { display: none; }
+.gw .board-view .board-tools .od-fill { flex: 1 1 0; min-width: 0; }
+.gw .board-view .board-tools .ib.is-on { background: var(--gw-bg-active); color: var(--gw-text-1); }
+.gw .board-view .board-tools .cw-menu > .ib { width: auto; min-width: 36px; gap: 6px; padding-inline: 8px; }
+.gw .board-view .board-tools .bt-who { max-width: 140px; font-size: var(--gw-fs-sm); }
+.gw .board-view .board-tools .cw-pop { width: 260px; }
+.gw .board-view .bt-new { display: inline-flex; align-items: center; gap: 6px; }
+.gw .board-view .bt-new .gw-icon { width: 16px; height: 16px; }
+@media (max-width: 767px) {
+  .gw .board-view .board-tools { gap: var(--s2); padding-block-end: var(--s3); }
+  .gw .board-view .board-tools .bt-desk { display: none; }
+  .gw .board-view .board-tools .bt-filter { display: inline-flex; }
+  .gw .board-view .board-tools :is(.bt-search, .bt-search-btn) { order: -2; }
+  .gw .board-view .board-tools .bt-search.is-open { flex: 1 1 100%; }
+  .gw .board-view .bt-new__t { display: none; }
+}
+/* A Card on the calendar names its assignee by face (#683). */
+.gw .calendar .cal-card { display: flex; align-items: center; gap: 4px; min-width: 0; }

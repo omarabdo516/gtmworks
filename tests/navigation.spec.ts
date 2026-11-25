@@ -1,4 +1,4 @@
-import { test, expect, freshSeed } from './fresh-seed';
+import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
 import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
@@ -7,6 +7,9 @@ import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
 import { appOrigin } from './lane.mjs';
+import { makeCard } from './make-card';
+// The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
+const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await card.getByRole('button',{name:/^Status:/}).click(); await card.getByRole('menuitemradio',{name:'Send for review'}).click(); };
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
@@ -23,15 +26,11 @@ test.beforeAll(async ({ browser }, testInfo) => {
     const page = await context.newPage();
     await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
     const title = `بطاقة قياس الوارد ${randomUUID()}`;
-    await page.getByRole('button', { name: "+ New card" }).click();
-    await page.getByLabel('Message', { exact: true }).fill(title);
-    await page.getByRole('button', { name: "Create card" }).click();
-    await expect(page.locator('.modal h2').first()).toHaveText(title);
-    const path = new URL(page.url()).pathname;
+    const { path } = await makeCard(page, title);
     expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
     inboxFixture = { title, path };
-    await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
-    await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+    await sendForReview(page);
+    await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
   } finally { await context.close(); }
 });
 test.afterAll(async ({ browser }) => {
@@ -52,7 +51,7 @@ test.afterAll(async ({ browser }) => {
       // The waiting column lists the card; its decision is taken inside the card (#16).
       await card.getByRole('link', { name: created.title }).click();
       await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-      await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+      await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
       await page.goto('/c/rs-learning/approvals');
       await expect(card).toHaveCount(0);
     }
@@ -195,14 +194,14 @@ test('visible links fully prefetch page data and closing reuses the visited boar
     if (link.endsWith('/work/list')) expect(body).toContain('work/list');
   }
   await page.locator('.card a[href$="/board?card=1"]').click();
-  await expect(page.locator('.sheet[open]')).toBeVisible();
+  await expect(page.locator('.cw[open]')).toBeVisible();
   await idle(page);
   const requests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/c/')) requests.push(request.url());
   });
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.locator('.sheet')).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
+  await expect(page.locator('.cw')).toHaveCount(0);
   await idle(page);
   expect(requests, 'return to the board must make no company server request').toEqual([]);
 });
@@ -219,24 +218,20 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
 test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
   await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
   await idle(page); // Home, board and the inbox are prepared before any write.
-  await page.getByRole('button', { name: "+ New card" }).click();
   const title = `بطاقة تحديث فوري ${Date.now()}`;
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button', { name: "Create card" }).click();
-  await expect(page.locator('.modal h2').first()).toHaveText(title);
-  const cardPath = new URL(page.url()).pathname;
+  const { path: cardPath } = await makeCard(page, title);
   const comment = `تعليق فوري ${Date.now()}`;
-  await page.getByLabel("Comment", { exact: true }).fill(comment);
-  await page.getByRole('button', { name: "Send", exact: true }).click();
-  await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
-  await page.locator('.close-card').click();
+  await page.getByRole('textbox',{name:'Write a comment'}).fill(comment);
+  await page.getByRole('button',{name:'Post the comment'}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({ hasText: comment })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
   await openMoreSection(page, 'home');
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
   await page.locator(`.content a[href="${cardPath}"]`).first().click();
-  await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
-  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
-  await page.locator('.close-card').click();
+  await sendForReview(page);
+  await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
@@ -246,7 +241,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await expect(queued).toBeVisible();
   await queued.getByRole('link', { name: title }).click();
   await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+  await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   await expect(queued).toHaveCount(0);
