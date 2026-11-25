@@ -74,14 +74,17 @@ test('forty notes are read a few at once, in their order', async () => {
  try {
   profileOn(fake,adsProfile);
   fake.settings.memory.set(adsProfile,{memory:Array.from({length:40},(_,at)=>`Note ${at+1}`),profile:[]});
-  fake.settings.memoryDelay=20;
+  // Each read waits long enough that the waits, not a busy machine's request overhead, decide the time: read six at a
+  // time, forty notes take about seven waits; read one after another they would take forty.
+  const wait=150;
+  fake.settings.memoryDelay=wait;
   const started=Date.now();
   const read=await readMemoryNotes(at(fake,adsProfile));
   assert.equal(read.state,'found');
   assert.deepEqual(read.notes.map(note=>note.text),Array.from({length:40},(_,at)=>`Note ${at+1}`),'the notes keep their order');
   assert.ok(fake.settings.memoryAtOnce>1,'more than one note is read at a time');
   assert.ok(fake.settings.memoryAtOnce<=6,`at most six at once, not ${fake.settings.memoryAtOnce}`);
-  assert.ok(Date.now()-started<41*20,'one wait per batch, not one per note');
+  assert.ok(Date.now()-started<40*wait,'one wait per batch, not one per note');
  } finally { await fake.close(); }
 });
 

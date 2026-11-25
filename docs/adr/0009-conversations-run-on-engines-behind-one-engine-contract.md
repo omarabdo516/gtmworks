@@ -31,3 +31,13 @@ Everything about the Hermes driver: encrypted profile keys, the allowed addresse
 ## What changes later
 
 How a Company picks its engine, where a non-Hermes engine keeps its home, sign-in and memory, and isolation between companies on one engine, are decided by the tickets that add those drivers.
+
+## Known limits of the pinned Engine (2026-11-26)
+
+Omar's decision of 2026-11-26 (vault `businesses/gtmworks/decisions/0073`): the three gaps below are recorded as known limits. gtmworks does not patch the Engine or send an upstream change for them. The safeguards named here stay. The pinned Hermes (v0.23.0, and v0.23.4, the latest checked) offers no conditional write on its management routes: no revision, no `If-Match`, no fencing token, and no per-job ordering on its cron API. In an install, the only writers besides gtmworks are the Engine itself and someone running Hermes's CLI on the server. The Engine's dashboard is reachable only with the install's Engine key.
+
+- **A stale approval of a profile change (#486).** A change proposal approved through `PUT /api/config`, the model route or the soul route can still land after a decline was recorded, if the approval stalls for more than five minutes after renewing its lease, or if a request whose client timed out still completes inside the Engine. Safeguard: the claim, token and lease renewed right before the write, and a decline in that window is recorded and shown as "maybe applied".
+- **A revoke against a concurrent native grant (#503).** Revoking a standing permission rewrites the profile's whole `command_allowlist`. An "Always allow" saved outside gtmworks between the revoke's read and its write, or a timed-out revoke the Engine applies more than 60 seconds later, can drop that entry. Safeguard (#499): a revoke writes back the "Always allow" answers gtmworks is delivering or the Engine just took, revokes of one profile run one at a time, and the Agent is held for 60 seconds after a timeout.
+- **A late Routine write (#555).** A cron request the client gave up on can still be applied after a later request to the same job, for example a late resume after a delete or a pause. Safeguard (#506): the per-Company lease renewed before every Engine write, new copies made paused, safety requests sent even after the lease ran out, and the next settle sweeps every known profile.
+
+A limit comes back as work when one happens in an install, or when Hermes offers a conditional write or a remove-one-entry operation. The work is then to switch the driver to it, as ADR 0022 says.
