@@ -1,5 +1,11 @@
 [
  {
+  "issue": 720,
+  "date": "2026-11-25",
+  "en": { "title": "Your account's choices keep the keyboard focus", "body": "Choosing a look or a language in Your account with the keyboard now keeps the focus on that choice while it is saved, and the arrow keys still move between the choices." },
+  "ar": { "title": "اختيارات حسابك بتحافظ على مكان الكيبورد", "body": "لما تختار الشكل أو اللغة في «حسابك» بالكيبورد، التركيز بقى بيفضل على اختيارك وهو بيتحفظ، والأسهم لسه بتنقلك بين الاختيارات." }
+ },
+ {
   "issue": 714,
   "date": "2026-11-25",
   "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },
