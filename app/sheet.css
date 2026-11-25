@@ -33,14 +33,14 @@
 .gw .sheet__top { display: flex; align-items: flex-start; gap: var(--s3); }
 .gw .sheet__top > [aria-hidden] { display: inline-flex; flex: none; }
 /* Placed by the interface (start, beside the face); the title keeps its own direction inside its <bdi>. */
-.gw .sheet__title { text-align: start; overflow-wrap: anywhere; margin: 0; font-size: var(--gw-fs-lg); line-height: 1.5; font-weight: 600; letter-spacing: normal; flex: 1 1 0; min-width: 0; }
+.gw .sheet__title { text-align: start; overflow-wrap: anywhere; margin: 0; font-size: var(--gw-fs-lg); line-height: 1.5; font-weight: var(--gw-fw-semibold); letter-spacing: normal; flex: 1 1 0; min-width: 0; }
 .gw .sheet__meta { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .sheet__meta bdi { white-space: nowrap; }
 .gw .sheet__meta .link-btn { margin-inline-start: auto; }
 .gw .sheet__meta .link-btn + .link-btn { margin-inline-start: 0; }
 .gw .sheet .link-btn .gw-icon { width: 14px; height: 14px; }
 .gw .sheet .badge { align-self: flex-start; }
-.gw .sheet .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
+.gw .sheet .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: var(--gw-fw-semibold); }
 .gw .sheet .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
 .gw .sheet .dot--waiting { background: var(--gw-wait); }
 .gw .sheet .badge .dot { width: 6px; height: 6px; }

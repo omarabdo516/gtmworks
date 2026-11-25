@@ -25,7 +25,7 @@
 .gw .cr .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
 .gw .cr .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; }
 .gw .cr .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
-.gw .cr .ch-you { color: var(--gw-text-3); font-weight: 400; }
+.gw .cr .ch-you { color: var(--gw-text-3); font-weight: var(--gw-fw-regular); }
 .gw .cr .me__av.lg-av { width: var(--av, 28px); height: var(--av, 28px); font-size: var(--gw-fs-xs); line-height: 1; }
 .gw .tm-pick { cursor: pointer; }
 .gw .tm-pick[aria-disabled="true"] { cursor: default; }
