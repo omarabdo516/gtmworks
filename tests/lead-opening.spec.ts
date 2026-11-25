@@ -18,7 +18,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  // Each Company's space and Lead's profile; RS Learning starts with no key, RS Consultations with one.
  for(const [language,{id}] of Object.entries(companies)) for(const name of Object.values(profilesOf(id)))

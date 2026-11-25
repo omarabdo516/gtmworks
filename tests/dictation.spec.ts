@@ -16,7 +16,7 @@ const other = '10000000-0000-0000-0000-000000000002';
 
 let fake: Awaited<ReturnType<typeof laneHermes>>;
 test.beforeAll(async ({}, testInfo) => {
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  fake = await laneHermes();
  fake.settings.transcriptionTranscript = 'Draft the launch note';
  query(`delete from public.hermes_agents where company_id='${company}' and name='Hidden writer'`);

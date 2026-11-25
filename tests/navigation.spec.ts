@@ -17,7 +17,7 @@ const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 
 // starts a new one) cleans the card it created and nothing else.
 let inboxFixture: { title: string, path: string } | undefined;
 test.beforeAll(async ({ browser }, testInfo) => {
-  freshSeed(testInfo.file);
+  freshSeed(testInfo);
   const context = await browser.newContext({ baseURL: appOrigin });
   try {
     const page = await context.newPage();

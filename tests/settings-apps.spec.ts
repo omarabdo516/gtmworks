@@ -28,7 +28,7 @@ const installed=(key:string)=>({url:`https://mcp.${key}.example/mcp`,auth:'oauth
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id in ('${omar}','20000000-0000-0000-0000-000000000002')`);

@@ -22,7 +22,7 @@ test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
  // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
- freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ freshSeed(testInfo);
  // Copy, Lead and SEO are made today, so none of them is asleep (#699: an Agent made over 7 days ago with no work for 7
  // days sleeps): the states below are waiting, working and idle.
  query(`do $$ declare card bigint; begin

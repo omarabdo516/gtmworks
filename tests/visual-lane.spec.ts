@@ -216,7 +216,7 @@ for (const screen of screens) {
       // A visitor's screen draws no Company data: sign-in needs nothing, and first run empties the installation itself.
       if (screen.name === 'first-run') resetFirstRun(baseURL);
       if (!screen.anonymous) {
-        freshSeed(test.info().file, true);
+        freshSeed(test.info(), true);
         fixPublishingDates(baseURL);
         asAdmin(`update public.people set language='ar' where id='${omar}'`);
       }

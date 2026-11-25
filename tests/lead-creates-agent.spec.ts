@@ -15,7 +15,7 @@ const [leadConnection,lead,adsConnection,ads,seoConnection,seo,conversation]=[1,
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  query(`do $$ begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,profile) values
    ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,null,'made-lead'),

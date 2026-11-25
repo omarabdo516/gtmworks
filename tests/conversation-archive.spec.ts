@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fresh-seed';
+import { test, expect, laneRows, type Page } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
@@ -73,10 +73,11 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(toast).toBeVisible();
   await expect(page.locator('.arc-line')).toHaveText('This conversation is archived. Writing in it brings it back to your recent chats.');
   await expect(recent).toHaveCount(0);
-  await expect.poll(()=>fake.settings.runs[1].stopped,{message:'the Run is stopped in the Engine'}).toBe(true);
 
-  // Undo brings it back to the recent chats.
+  // Undo brings it back to the recent chats. It lasts as long as its toast (app/toast.tsx), so it is pressed before the
+  // Engine is asked whether the Run stopped, which the Engine keeps once told (#746).
   await toast.getByRole('button',{name:'Undo'}).click();
+  await expect.poll(()=>fake.settings.runs[1].stopped,{message:'the Run is stopped in the Engine'}).toBe(true);
   await expect(page.locator('.toast').filter({hasText:'Restored'})).toBeVisible();
   await expect(recent).toHaveCount(1);
   await expect(page.locator('.arc-line')).toHaveCount(0);
@@ -130,7 +131,9 @@ test('A person archives several Conversations from All conversations and one fro
  await expect(titled(mark)).toHaveCount(1);
  await expect(page.getByRole('button',{name:`Current ${count-2}`})).toBeVisible();
  await expect(page.getByRole('button',{name:`Archived ${before+2}`})).toBeVisible();
- expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${second}') and archived_by='${owner}'`)[0].n).toBe(2);
+ // Read on the lane's database at once (laneRows): Undo lasts only as long as its toast (app/toast.tsx), and a read
+ // through the Supabase CLI took up to 8 s on a loaded runner, past it (#746).
+ expect(laneRows(`select count(*)::int as n from public.conversations where id in ('${first}','${second}') and archived_by='${owner}'`)[0].n).toBe(2);
  await toast.getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast').filter({hasText:'2 restored'})).toBeVisible();
  await expect(titled(mark)).toHaveCount(3);

@@ -31,7 +31,7 @@ async function bundled(page:Page,company:string,lead:string) {
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const profile of [profileOf(rs),profileOf(aleem),writerProfile]) fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id='${omar}'`);

@@ -219,8 +219,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   if(from==='waiting'&&to==='waiting') return Promise.resolve(false);
   const why=blockReason(from,to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');
   if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return Promise.resolve(false); }
-  if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
-  if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
+  if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand',opensPage:true}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
+  if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand',opensPage:true}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
   const form=new FormData(); form.set('company',p.company); form.set('slug',p.slug); form.set('card',String(id)); form.set('column',to); form.set('before',before==null?'':String(before));
   setPlaceError(null); setMoving(true);
   // The answer, not the request, says whether the Card moved: a place the server took is the one the board animates, and

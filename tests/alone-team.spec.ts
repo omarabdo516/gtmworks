@@ -17,7 +17,7 @@ test.describe.configure({mode:'serial'});
 let before:Record<string,unknown>; let earlierLog:Record<string,unknown>[];
 
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  query(`do $$ begin
   update public.companies set work_mode='alone' where id='${company}';
   if not exists(select 1 from public.conversations where company_id='${company}') then

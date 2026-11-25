@@ -23,7 +23,7 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const name of [profile,own(ads)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  // The Company's shared space, which holds the Company knowledge the link sits beside (#344).

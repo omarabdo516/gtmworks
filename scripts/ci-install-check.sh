@@ -2621,7 +2621,7 @@ done
 if wait "$render_pid"; then cat render-over-limit.log; fail "a render that needs more memory than its Company's limit is stopped"; fi
 cat render-over-limit.log
 kills_after=$(oom_kills "$second_sandbox" 2> /dev/null || true)
-oom_events=$(docker events --since "$since" --until "$(date +%s)" --filter "container=$second_sandbox" --filter event=oom --format '{{.Status}}' | grep -c . || true)
+oom_events=$(docker events --since "$since" --until "$(date +%s)" --filter "container=$second_sandbox" --filter event=oom --format '{{.Action}}' | grep -c . || true)
 (( ${kills_after:-0} > ${kills_before:-0} || oom_events > 0 )) || fail "the render was stopped by its sandbox's memory limit (oom_kill ${kills_before:-?} to ${kills_after:-?}, $oom_events oom events)"
 first_answers || fail "the first Company's sandbox answers after the second Company's render was stopped"
 engine_healthy "$first_sandbox" 10 || fail "the first Company's sandbox is still healthy"

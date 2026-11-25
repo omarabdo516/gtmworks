@@ -27,7 +27,7 @@ const skills={
 };
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  // Lead keeps the Company's own profile; the Writer has one of its own and no Skill yet.
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{skills:{external_dirs:[`/opt/data/profiles/${space}/skills`]}},credentials:{}});

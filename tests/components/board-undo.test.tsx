@@ -110,7 +110,7 @@ test('a move the board refuses is told with no Undo', async () => {
  await showWork(props);
  link(1).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
- await expect.poll(() => toast).toHaveBeenCalledWith('This card is waiting for your decision. Decide in the chat first', { icon: 'hand' });
+ await expect.poll(() => toast).toHaveBeenCalledWith('This card is waiting for your decision. Decide in the chat first', { icon: 'hand', opensPage: true });
  expect(options()?.action).toBeUndefined();
  expect(placed(props)).toEqual([]);
  // Nothing drops into "Waiting on you" either: it fills up by itself.
