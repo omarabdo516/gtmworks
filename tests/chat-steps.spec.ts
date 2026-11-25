@@ -102,6 +102,12 @@ test('a session read held five seconds holds neither the first byte nor the mess
   console.log(`chat open with a slow session, messages visible: ${took} ms, first byte ${firstByte} ms`);
   expect(firstByte,'the first byte is not held by the Engine').toBeLessThan(2000);
   expect(took,'the messages are not held by the Engine').toBeLessThan(4000);
+  // Held five seconds the read passes the server's own five-second limit on it, so those steps never come and nothing
+  // says so; held two, they fill in once it answers.
+  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
+  fake.settings.sessionDelay=2000;
+  await page.reload({waitUntil:'commit'});
+  await expect(page.getByText('Here is the copy.')).toBeVisible();
   await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 39 sec',{timeout:15000});
   // A session read that never answers leaves the messages as they are, with no error line in the Conversation.
   fake.settings.sessionDelay=Infinity;
