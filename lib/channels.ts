@@ -4,6 +4,8 @@ import { agentFaceStates, type AgentFaceState } from './agent-face-states';
 import type { SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
 import { replyShown } from './media-tags.mjs';
+import { calledAgents, mentionedAgent } from './composer-mentions.mjs';
+import type { Sending } from './sending';
 import { handoverEnding, messageFiles, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -35,8 +37,10 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // A file of a channel message (#156), or of an Agent's reply there (#708); an image is drawn as a thumbnail.
 type ChannelFile={id:number,name:string,image?:true};
 type ChannelFace={name:string,face:string};
+// A message its Member just sent is drawn by the page before the channel's record holds it (`sending`, #756,
+// lib/sending.ts), by its send key; no record the server reads has one.
 export type ChannelMessage=
- | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,files:ChannelFile[],mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
+ | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,files:ChannelFile[],mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true,sending?:{key:string,posting:boolean}}
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[],files?:ChannelFile[],missed?:string[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
@@ -295,3 +299,12 @@ export function withMention(body:string,agents:string[]|string|null|undefined):{
  if(end<body.length) parts.push({text:body.slice(end),mention:false});
  return parts.filter(part=>part.text);
 }
+
+// A message the reader just sent, as the channel draws it until its record holds it (#756): each Agent it calls, the
+// first named first, waits on it, so the line under the transcript reads "Thinking" from the moment it is sent.
+export const sentMessage=(sending:Sending,agents:ChannelAgent[],name:string):ChannelMessage=>{
+ const first=mentionedAgent(sending.body,agents);
+ const called=calledAgents(sending.body,agents).sort((a,b)=>Number(b===first)-Number(a===first)).flatMap(id=>agents.filter(agent=>agent.id===id));
+ const mentions=called.map(agent=>({agent:agent.name,face:agent.id,state:'open' as const,permissions:[],questions:[]}));
+ return {id:-1,author:'person',mine:true,name,role:null,body:sending.body,at:sending.at,files:sending.files.map((file,at)=>({id:at,name:file})),mention:mentions[0]??null,mentions,sending:{key:sending.key,posting:sending.posting}};
+};

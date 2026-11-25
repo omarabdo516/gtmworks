@@ -131,7 +131,9 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 // A file a person sent with a message (#155; design-reference: filesHTML), or an Agent handed over in its reply (#708):
 // its name, the id its own route serves it by, and whether it is a raster image the page draws as a thumbnail.
 export type MessageFile={id:number,name:string,image?:true};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
+// A message its person just sent is drawn by the page before its record holds it (`sending`, #756, lib/sending.ts),
+// `posting` until the send is answered; no record the server reads has one.
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn'|'sending',to?:string,failed?:boolean,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
 export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';

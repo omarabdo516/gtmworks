@@ -367,6 +367,8 @@
 .gw .queued { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .queued .gw-icon { width: 13px; height: 13px; }
 .gw .turn--user.is-queued .bubble--user { opacity: .72; }
+/* A message just sent, drawn before the send is answered (#756): as a waiting turn is, until it is in. */
+.gw .turn--user.is-sending .bubble--user, .gw .turn--user.is-sending .msg-files { opacity: .72; }
 /* The images a person sent with their message sit under their bubble, on the start side (#155; design-reference:
    .msg-files, .file-chip), and so do the images chosen for the message above the composer's field. */
 .gw .msg-files, .gw .composer__files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }

@@ -1,5 +1,11 @@
 [
  {
+  "issue": 756,
+  "date": "2026-11-25",
+  "en": { "title": "Your message shows the moment you send it", "body": "A message you send in a Conversation or a channel is on screen as soon as you press Send, with its files, and the Agent's line reads Thinking from then, even while the server is busy; if it can't be sent, its words go back in the box." },
+  "ar": { "title": "رسالتك بتظهر أول ما تبعتها", "body": "الرسالة اللي بتبعتها في محادثة أو قناة بقت بتظهر أول ما تدوس «ابعت»، بملفاتها، وسطر الوكيل بيقول «بيفكر» من ساعتها، حتى لو السيرفر مشغول؛ ولو ما اتبعتتش، كلامها بيرجع في الخانة." }
+ },
+ {
   "issue": 746,
   "date": "2026-11-25",
   "en": { "title": "A Card's note waits for its Card", "body": "When the board can't move a Card and opens it instead, its note now stays its full time on the Card's page, however long the page takes to open." },
