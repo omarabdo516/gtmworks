@@ -62,6 +62,12 @@ function CwMenu({label,button,className,items,radio=false}:{label:string,button:
   document.addEventListener('pointerdown',outside);
   return ()=>document.removeEventListener('pointerdown',outside);
  },[open,role]);
+ // A menu opens below its button, or above it when the scrolling part it sits in has no room below (a property near
+ // the end of the details), so no item is ever clipped out of reach.
+ useLayoutEffect(()=>{ if(!open) return; const pop=box.current?.querySelector<HTMLElement>('.cw-pop'); const button=trigger.current; if(!pop||!button) return;
+  let frame:HTMLElement|null=box.current!.parentElement; while(frame&&!/(auto|scroll|hidden)/.test(getComputedStyle(frame).overflowY)) frame=frame.parentElement;
+  const limit=Math.min(window.innerHeight,frame?frame.getBoundingClientRect().bottom:window.innerHeight); const from=button.getBoundingClientRect();
+  pop.classList.toggle('cw-pop--up',from.bottom+4+pop.offsetHeight>limit&&from.top-4-pop.offsetHeight>=Math.max(0,frame?frame.getBoundingClientRect().top:0)); },[open]);
  const close=()=>{ setOpen(false); trigger.current?.focus(); };
  const keys=(event:KeyboardEvent<HTMLDivElement>)=>{
   if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }

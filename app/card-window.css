@@ -136,8 +136,10 @@
 .gw .cw-menu { position: relative; }
 .gw .cw-head__row > .cw-menu { flex: none; }
 .gw .cw-pop { position: absolute; z-index: 60; top: calc(100% + 4px); bottom: auto; inset-inline-start: 0; width: 260px; max-height: min(420px, 60vh); overflow-y: auto; }
+.gw .cw-pop--up { top: auto; bottom: calc(100% + 4px); }
 .gw .cw-side .cw-pop { inset-inline: auto 0; }
 .gw .cw-pop .menu__item { min-height: 36px; }
+.gw .cw-pop .menu__t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gw .cw-pop .menu__item[aria-disabled="true"] { opacity: .55; cursor: default; }
 .gw .cw-pop .menu__item[aria-checked="true"] { background: var(--gw-bg-active); }
 .gw .cw-pop .menu__item .dot { margin-inline: 7px; }

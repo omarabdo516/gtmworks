@@ -200,7 +200,7 @@ test('a Card waits for another: both sides show it, the tile counts it, a loop i
  const other = JSON.parse(query(`select title from public.work_cards where id=2`))[0].title as string;
  await card.getByRole('button', { name: 'Wait for another card' }).click();
  await card.getByRole('menuitem', { name: other }).click();
- await expect(card.getByRole('link', { name: new RegExp(`^${other} · `) })).toBeVisible();
+ await expect(card.locator(`a.cw-chip__open[href$="?card=2"]`)).toBeVisible();
  await expect.poll(() => JSON.parse(query(`select count(*)::int n from public.work_card_waits where card_id=1 and waits_for=2`))[0].n).toBe(1);
  await expect(card.getByRole('button', { name: /^Status: .* · Waiting for another card$/ })).toBeVisible();
  await page.keyboard.press('Escape');
@@ -209,10 +209,14 @@ test('a Card waits for another: both sides show it, the tile counts it, a loop i
  // Card 2 shows who waits for it, and waiting back is refused.
  await page.goto(`${board}?card=2`);
  const title = JSON.parse(query(`select title from public.work_cards where id=1`))[0].title as string;
- await expect(card.getByRole('link', { name: new RegExp(`^${title} · `) })).toBeVisible();
+ // Card 1's title is long here (an earlier case of this file): its chip is found by where it leads.
+ await expect(card.locator(`a.cw-chip__open[href$="?card=1"]`)).toBeVisible();
  await card.getByRole('button', { name: 'Wait for another card' }).click();
- await card.getByRole('menuitem', { name: title }).click();
- await expect(page.getByRole('alert')).toContainText('Those cards would wait for each other. Pick another one.');
+ // A long title is cut short in the menu, on one line.
+ const item = card.getByRole('menu').locator('.menu__item', { hasText: title.trim().slice(0, 40) }).first();
+ expect((await item.boundingBox())!.height).toBeLessThan(60);
+ await item.click();
+ await expect(page.getByRole('alert').filter({ hasText: 'Those cards would wait for each other. Pick another one.' })).toBeVisible();
  expect(JSON.parse(query(`select count(*)::int n from public.work_card_waits where card_id=2`))[0].n).toBe(0);
 
  // Archiving card 2 releases the wait for good: restored, nobody waits again.
