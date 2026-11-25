@@ -18,10 +18,12 @@ export function failures(report) {
   return failed;
 }
 
+/** `budgets` is null when the run wrote no report it could read. */
 export function regressionIssue({ budgets, sha, runUrl }) {
   const lines = [`The navigation budgets failed on main at ${sha} ([run](${runUrl})).`, ''];
-  if (budgets.length) lines.push('These budgets failed:', ...budgets.map(name => `- ${name}`));
-  else lines.push('No budget was measured: the run failed before or around the tests. Read the run.');
+  if (budgets?.length) lines.push('These budgets failed:', ...budgets.map(name => `- ${name}`));
+  else if (budgets) lines.push('Every budget measured passed: the run failed around the tests. Read the run.');
+  else lines.push('No budget was measured: the run failed before the tests wrote their report. Read the run.');
   lines.push('', 'No pull request waits for this.');
   return { title: 'The navigation budgets failed on main', body: lines.join('\n') };
 }
@@ -31,8 +33,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const titleOnly = args[0] === '--title';
   const [file, sha, runUrl] = titleOnly ? args.slice(1) : args;
   // A run that stopped before its tests (the stack, the build) wrote no report, and still gets its issue.
-  let budgets = [];
-  try { if (existsSync(file)) budgets = failures(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* an unreadable report names nothing */ }
+  let budgets = null;
+  try { if (existsSync(file)) budgets = failures(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* an unreadable report is no report */ }
   const issue = regressionIssue({ budgets, sha, runUrl });
   console.log(titleOnly ? issue.title : issue.body);
 }

@@ -42,10 +42,14 @@ test('the command line reads the report and prints the title on its own when ask
   assert.equal(cli(file, '--title').trim(), 'The navigation budgets failed on main');
 });
 
+test('a report with no failed budget says the run failed around the tests', t => {
+  assert.match(cli(reportFile(t, JSON.stringify({ suites: [] }))), /Every budget measured passed: the run failed around the tests/);
+});
+
 test('a run that wrote no report, or one that cannot be read, still prints the issue', t => {
   for (const file of [reportFile(t), reportFile(t, '{not json')]) {
     const body = cli(file);
-    assert.match(body, /No budget was measured: the run failed before or around the tests/);
+    assert.match(body, /No budget was measured: the run failed before the tests wrote their report/);
     assert.match(body, /actions\/runs\/1\b/);
   }
 });
