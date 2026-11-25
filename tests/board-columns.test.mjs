@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, bellRows, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
+import { boardColumns, cardSymbol, chatWait, columnOf, keyboardTarget, blockReason, bellRows, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -182,4 +182,17 @@ test('an approval on a Card of an Agent hidden from the reader is not counted, n
  const shown = visibleApprovals(cards, items, new Set(['seen']));
  assert.deepEqual(shown.cards.map(card => card.id), [1, 2]);
  assert.deepEqual(shown.items, [{ kind: 'approval', id: 1 }, { kind: 'approval', id: 2 }, { kind: 'mention', id: 3 }]);
+});
+
+// #678 (design-reference-card: stateKey): the one state a Card shows beside its title, as a symbol named in its tooltip.
+test('a Card shows one state: its chat\'s question, a review, an Agent at work, or that it is on the reader', () => {
+ const me = 'p-1';
+ assert.equal(cardSymbol({ status: 'progress', wait: { kind: 'question', person: 'p-2' } }, { me }), 'question');
+ assert.equal(cardSymbol({ status: 'waiting', wait: { kind: 'hand', person: me } }, { me }), 'question');
+ assert.equal(cardSymbol({ status: 'waiting', assignee_person: me }, { me }), 'review');
+ assert.equal(cardSymbol({ status: 'progress', assignee_person: me }, { me, working: true }), 'working');
+ assert.equal(cardSymbol({ status: 'planned', assignee_person: me }, { me }), 'onyou');
+ assert.equal(cardSymbol({ status: 'live', assignee_person: me }, { me }), '');
+ assert.equal(cardSymbol({ status: 'done', assignee_person: me }, { me }), '');
+ assert.equal(cardSymbol({ status: 'planned', assignee_person: 'p-2' }, { me }), '');
 });

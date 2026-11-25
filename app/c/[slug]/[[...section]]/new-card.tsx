@@ -16,7 +16,7 @@ export default function NewCard({slug,company,agents:roster,members,stage,fromRo
  const agents=roleAgents.flatMap(role=>roster.filter(a=>a.granted&&a.role===role.key).map(a=>({person_id:a.person_id,people:{name:members.find(member=>member.person_id===a.person_id)?.people?.name||t(role.name)}})));
  const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="company" value={company}/></>;
  const cancel=fromRoute&&!stage?<Link className="button" href={`/c/${slug}/work/board`}>{t('cancel')}</Link>:<button type="button" onClick={onClose}>{t('cancel')}</button>;
- return <CardDialog creating title={t('newCard')} returnTo={fromRoute?`/c/${slug}/work/board`:undefined} onClose={onClose}>{stage?
+ return <CardDialog title={t('newCard')} returnTo={fromRoute?`/c/${slug}/work/board`:undefined} onClose={onClose}>{stage?
   <form action={workAction}>{hidden('create')}<input type="hidden" name="stage" value={stage}/><label>{t('cardTitle')}<input dir="auto" className="field" required name="title"/></label><label>{t('template')}<select className="field" name="template"><option value="">{t('blankCard')}</option><option value="carosel">{t('carouselTemplate')}</option><option value="static">{t('designTemplate')}</option><option value="reel">{t('reelTemplate')}</option></select></label><Send ready/> {cancel}</form>:
   <form action={form=>{key.current||=crypto.randomUUID(); form.set('key',key.current); return workAction(form);}}>{hidden('request')}
    {!agents.length&&<p role="alert" className="work-error">{t('noAgentsYet')}</p>}

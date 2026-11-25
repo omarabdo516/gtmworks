@@ -10,7 +10,7 @@ import { filesProblem } from '@/lib/attachments.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
-import type { Card, IdeaResult, PlaceResult, UndoResult } from './work';
+import type { Card, IdeaResult, PlaceResult, SaveResult, UndoResult } from './work';
 import { archiveIntents, type ArchiveAnswer, type ArchiveIntent, type ArchiveStopKind } from '@/lib/archive-stops';
 import { archivedCardPage, type ArchivedCursor, type ArchivedPage, type ArchivedWant } from '@/lib/archived-cards';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
@@ -100,6 +100,24 @@ export const placeMove=withActionLog('placeMove',async function placeMove(form: 
  const reason=String(error.message||'');
  return {error:reason.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):reason.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):t('couldNotSaveTheChangeCheckPermissionsAnd')};
 });
+// One property of a Card saved in its window as it changes (#678): the title, the publishing date, the Project or the
+// assignee, over the value the window read. save_card refuses a save over a value someone changed meanwhile and answers
+// the newer one, which the window shows in its place; it decides every other refusal too.
+export const saveCard=withActionLog('saveCard',async function saveCard(form: FormData): Promise<SaveResult> {
+ const {t}=await getI18n();
+ const db=await supabase(); const company=String(form.get('company')); const field=String(form.get('field')||'');
+ if(!await actionAllowed(db,'saveCard',company)) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ const {data,error}=await db.rpc('save_card',{c:company,card:Number(form.get('card')),field,value:String(form.get('value')??''),seen:String(form.get('seen')??'')});
+ if(error) {
+  const reason=String(error.message||'');
+  if(reason.includes('title required')) return {error:t('cardTitleRequired')};
+  logActionFailure('saveCard',error,{form});
+  return {error:field==='assignee'&&/agent not found|assignee not a member|one assignee/.test(reason)?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ }
+ const answer=data as {saved:boolean,value:string};
+ revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
+ return answer.saved?{saved:answer.value}:{stale:answer.value};
+});
 // An idea from the Ideas column (#188): made once per request key, so Add pressed twice or a retry is one Card (#452). It
 // answers the form with its Card instead of redirecting, since a redirect rejects the promise the form waits on.
 export const addIdea=withActionLog('addIdea',async function addIdea(form: FormData): Promise<IdeaResult> {
@@ -146,6 +164,11 @@ export const workAction=withActionLog('workAction',async function workAction(for
    if(!error && stored.files.length) error=(await db.rpc('attach_files',{c:company,card,message:sent.data,files:stored.files})).error;
    if(!error && body.includes('@')) await startNoteRun(sent.data);
   }
+ }
+ // Files added to the Card itself in its window (#678), stored in the Card's folder first, as a comment's are.
+ else if(op==='files') {
+  const stored=await storeFiles(db,company,form,`${card}/files/${crypto.randomUUID()}`); error=stored.error;
+  if(!error) error=stored.files.length?(await db.rpc('attach_card_files',{c:company,card,files:stored.files})).error:{message:'missing file'};
  }
  // A Card's one assignee (#677): an Agent ("a:<id>"), a Member ("p:<id>", the caller's own for "Assign to me") or nobody
  // (""); assign_card checks the Role, the Agent the caller sees and the Member who may be one. It starts nothing.

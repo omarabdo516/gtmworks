@@ -9,6 +9,9 @@ const omar = '20000000-0000-0000-0000-000000000001', writer = '30000000-0000-000
 test('Card, Member and Agent rows say who changed what', () => {
  const moved = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'stage_id', old_name: 'أفكار', new_name: 'كتابة' } });
  assert.deepEqual([moved.act, moved.from, moved.to], [['logActMoved'], { text: 'أفكار' }, { text: 'كتابة' }]);
+ // Files added to the Card itself in its window (#678) name the files.
+ const files = describeEntry({ subject: 'card', action: 'files_added', details: { names: ['brief.pdf', 'logo.png'] } });
+ assert.deepEqual([files.act, files.to], [['logActFilesAdded'], { text: 'brief.pdf, logo.png' }]);
  const note = describeEntry({ subject: 'card', action: 'note', body: 'ملاحظة' });
  assert.deepEqual([note.act, note.note], [['logActNote'], 'ملاحظة']);
  // An idea added in the Ideas column (#188) says so, in both languages.
