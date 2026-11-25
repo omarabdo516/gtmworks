@@ -7,6 +7,7 @@ import { leave } from '@/lib/motion';
 import { toast } from '@/app/toast';
 import type { AgentScreen as Screen } from '@/lib/agent-screen.mjs';
 import { useScreenLive } from '@/app/screen-live';
+import type { ScreenHand } from '@/app/screen-hands';
 
 // The "Agent's screen" card at the top of an Agent's details' Activity tab, and its large view (#712; design-reference:
 // screenSecHTML, scrStatusHTML, scrLine, scrScreenHTML, renderViewer, openViewer, scrWake, closeDlg, the viewer's close
@@ -235,4 +236,22 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
    <footer className="vw__foot">{foot}</footer>
   </div>
  </dialog>;
+}
+
+// A step handed over on this Screen (#714; design-reference: renderViewer's banner, .vw-hand): the "Handed to you" badge,
+// the step's title, one line that the Agent stopped there, and "Done it", which is the chat card's own press. While the
+// person holds control the line says to press the step on the Screen themselves, then "Done it". The names in the line
+// keep their own direction.
+export function HandBanner({hand,agent,control,busy,onDone,doneRef}:{hand:Pick<ScreenHand,'title'|'app'>,agent:string,control:boolean,busy:boolean,onDone:()=>void,doneRef?:RefObject<HTMLButtonElement|null>}) {
+ const {t}=useI18n();
+ const line=control?isolated(t('screenHandControl','{0}'),[hand.title]):isolated(t('screenHandStopped','{0}','{1}','{2}'),[agent,hand.title,hand.app]);
+ return <div className="vw-hand" role="group" aria-labelledby="vw-hand-t">
+  <span className="badge ck-badge"><ShellIcon name="hand"/>{t('handBadge')}</span>
+  <span className="vw-hand__t"><b id="vw-hand-t"><bdi>{hand.title}</bdi></b><span>{line}</span></span>
+  <button ref={doneRef} type="button" className="btn btn--primary" disabled={busy} onClick={onDone}>{t('handDone')}</button>
+ </div>;
+}
+// A sentence with its {n} places filled by names, each in its own direction.
+function isolated(sentence:string,values:string[]):ReactNode[] {
+ return sentence.split(/\{(\d)\}/).map((part,at)=>at%2?<bdi key={at}>{values[Number(part)]}</bdi>:part);
 }

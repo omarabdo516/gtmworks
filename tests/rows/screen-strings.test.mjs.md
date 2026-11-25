@@ -1,0 +1,1 @@
+| `screen-strings.test.mjs` | No catalogue, English or Arabic, holds the reference's line that any "Publish" or payment on the Screen stops and the Agent never presses it on its own (#714, ADR 0020); the terms find that line in the reference itself. | 0.1 s | — | new |

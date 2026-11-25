@@ -780,6 +780,28 @@
 .gw .vw-off .btn .gw-icon { width: 16px; height: 16px; }
 @media (hover: hover) { .gw .vw-off .btn:hover { background: var(--gw-primary-hover); } }
 .gw .vw__stage > .scr-err { margin: 0; padding: 0; }
+/* A step handed over on the Screen (#714; design-reference: .vw-hand, .vw-hand .badge, .vw-hand__t, .ck-badge,
+   .scr-st--wait): the banner under the Screen in the view, and the card's waiting state. */
+.gw .vw-hand {
+  width: 100%; max-width: min(100%, calc((100dvh - 380px) * 1.6));
+  display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md);
+  background: var(--gw-bg-pane); box-shadow: var(--gw-shadow-card); flex-wrap: wrap;
+}
+.gw .vw-hand .badge { align-self: center; }
+.gw .vw-hand .ck-badge .gw-icon { width: 13px; height: 13px; }
+.gw .vw-hand__t { flex: 1 1 240px; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.gw .vw-hand__t b { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw .vw-hand__t span { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .vw-hand .btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; height: 36px; padding: 0 var(--s4); border-radius: var(--gw-r-full);
+  font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; cursor: pointer; background: var(--gw-primary); color: var(--gw-on-primary);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .vw-hand .btn:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); cursor: default; }
+@media (hover: hover) { .gw .vw-hand .btn:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+@media (prefers-reduced-motion: reduce) { .gw .vw-hand .btn { transition: none; } }
+@media (max-width: 599px) { .gw .vw-hand { max-width: 100%; } }
+.gw .details .scr-st--wait { color: var(--gw-wait-text); font-weight: 600; }
 .gw .vw__foot { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--s5); border-top: 0.5px solid var(--gw-border-3); background: var(--gw-bg-chrome); flex-wrap: wrap; }
 .gw .vw-mode { flex: 1 1 320px; min-width: 0; display: grid; gap: 2px; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
 .gw .vw-mode b { color: var(--gw-text-1); font-size: var(--gw-fs-base); font-weight: 600; }
