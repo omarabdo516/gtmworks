@@ -27,6 +27,7 @@ insert into decisions
   'public.post_channel_message(uuid,uuid,text)','public.reserve_channel_files(uuid,uuid,uuid,jsonb)','public.reserve_channel_files(uuid,uuid,uuid,jsonb,uuid)','public.discard_channel_files(uuid,uuid,uuid)']) fn
  union all select fn,'exempt','an Owner or a Manager in the one channel named changes which Agents or invitees it has; its details offer no change while it is archived, and a change starts no work there' from unnest(array[
   'public.set_channel_agent(uuid,uuid,boolean)','public.set_channel_invitee(uuid,uuid,boolean)']) fn
+ union all select 'public.agent_work(uuid)','exempt','asks which channels the reader is in, to tell whether a Run there is theirs to see: an archived channel''s Members still read it, so its Runs still count; it lists no channels'
  union all select 'public.card_archive_stops(uuid,bigint[])','exempt','names what stops in the one team channel of a current Card it is asked about; an archived channel''s work stopped when it was archived, so it names nothing there'
  union all select 'public.create_channel_inviting(uuid,uuid,text,uuid[],uuid[],uuid[])','exempt','makes a new channel, which is current; the same request key answers the channel it made'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
