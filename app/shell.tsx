@@ -7,9 +7,12 @@ import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
+import { Birth } from '@/components/face-moments';
 import ApprovalsCount from './approvals-count';
-import { AgentFaceDot } from './agent-face-dot';
-import { agentStates, statusKeys } from '@/lib/agent-details.mjs';
+import { companyLooks } from '@/lib/agent-looks';
+import { LooksProvider } from '@/lib/agent-looks-client';
+import { changeAgentLook, resetAgentLook } from './agent-look-actions';
+import { agentFaceStates, type AgentFaceState } from '@/lib/agent-face-states';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
 import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
@@ -18,6 +21,7 @@ import Switcher from '@/app/c/[slug]/[[...section]]/switcher';
 import RecentCards, { RecentCardsProvider } from './recent-cards';
 import RecentChats from './recent-chats';
 import ChannelList from './channel-list';
+import { AgentTile, SidebarLive } from './sidebar-live';
 import { channelSidebar } from '@/lib/channels';
 import FirstRunChoice from './first-run-choice';
 import AgentGrid from './agent-grid';
@@ -35,12 +39,13 @@ import { Fragment, cache } from 'react';
 type Crumb={label:string,href?:string};
 
 // The sidebar's reads, once per request: they go out together, as a page's own do, each one round trip (decision 0042).
-// Every Agent's state for this reader (#184) is read in one call beside the Agents themselves; a failed read leaves them
-// idle. A page may start them before it draws the Shell (the chat does), so they wait beside its own reads.
+// Every Agent's state for this reader (#699) is read in one call beside the Agents themselves; a failed read leaves them
+// idle, and the sidebar's poll (app/sidebar-live) follows it from there. The Company's looks are read here once for every face under the Shell (#697). A page may start them before it
+// draws the Shell (the chat does), so they wait beside its own reads.
 export const sidebarReads=cache(async(id:string|undefined)=>{
  const db=await supabase();
  return Promise.all([
-  id?Promise.all([companyAgents(db,id),db.rpc('agent_states',{c:id}).then(({data})=>agentStates(data))]):[[],agentStates(null)] as const,
+  id?Promise.all([companyAgents(db,id),agentFaceStates(db,id).then(({states})=>states)]):[[],{} as Record<string,AgentFaceState>] as const,
   // Each listed chat with its own first message (a limit per chat), so a long chat never crowds another out of the titles.
   // The twenty current ones with the newest messages (#673); All conversations holds the rest, and the archived (#674).
   id?db.from('conversations').select('id,agent_name,last_message_at,good_morning_day,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).is('archived_at',null).eq('conversation_messages.author','person')
@@ -52,6 +57,7 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
   // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
   !!id&&db.rpc('conversation_can_write',{c:id}).then(({data})=>data===true),
   agentIdentities(),
+  companyLooks(db,id),
  ]);
 });
 type Company = {id:string,slug:string,name:string};
@@ -68,7 +74,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations'||section==='channels';
  const id=company?.id;
- const [[agents,stateOf],conversations,workMode,channels,manage,canWrite,ids]=await sidebarReads(id);
+ const [[agents,states],conversations,workMode,channels,manage,canWrite,ids,looks]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
  // A chat is named as everywhere else (lib/conversation-title.mjs).
@@ -98,18 +104,18 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
     {/* A tile that arrives during the visit flashes once (#134). */}
-    <AgentGrid company={id||''} agents={agents.map(agent=>agent.id)}>{agents.map(agent=>{const fresh=isNewFor(agent,personId); const status=stateOf(agent.id); return <li key={agent.id}>
-     <Link className="agent-tile" data-agent={agent.id} href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality,t(statusKeys[status])].filter(Boolean).join(' · ')} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
-      <AgentFaceDot live agent={{id:agent.id,connection_id:agent.connection_id,name:agent.name}} size={52} status={status}/><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
-      {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
-     </Link>
+    <AgentGrid company={id||''} agents={agents.map(agent=>agent.id)}>{agents.map(agent=>{const fresh=isNewFor(agent,personId); return <li key={agent.id}>
+     <AgentTile agent={agent.id} href={`/c/${slug}/chat/${agent.id}`} current={chat&&agentId===agent.id} named={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality].filter((part):part is string=>!!part)} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
+      <bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
+      {fresh&&<><span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span><Birth agent={agent.id}/></>}
+     </AgentTile>
     </li>;})}
     {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</AgentGrid>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
     {/* design-reference-card: the sidebar's "All conversations" row, over the channels and the recent chats (#673). */}
     <Link className="sb-item sb-all" href={`/c/${slug}/conversations`} aria-current={section==='all-conversations'?'page':undefined}><ShellIcon name="archive"/><span className="od-fill">{t('allConversations')}</span><ShellIcon name="chevron"/></Link>
-    {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} initial={channels} current={channelId} manage={manage}/>}
+    {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} current={channelId} manage={manage}/>}
     <RecentChats slug={slug} company={company?.id||''} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
@@ -126,7 +132,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const asking=!!company?.id&&owner&&workMode===null;
  const mark=<svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
  const main=agents.find(agent=>agent.is_default);
- const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>} finish={chooseWorkMode}/>:null;
+ const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{id:main.id,name:main.name}:null} mark={mark} brand={<>gtm<span>works</span></>} finish={chooseWorkMode}/>:null;
  const frame=<Frame sidebar={sidebar} title={chat?t('chats'):title} breadcrumb={chat?undefined:breadcrumb} chat={chat}>{children}</Frame>;
  // The apps sheet sits around the whole frame, so the sidebar, the account menu and every composer's "+" open it (#202).
  const framed=company?.id?<AppsSheetProvider company={company.id} person={personId} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
@@ -134,8 +140,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153); the "@" list offers the
  // same Agents with the line under each name, their state and role (#154; design-reference: mentionMenu). Each Agent
  // carries the ready-made role it was made from, so the Commands can name it (#159).
- const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:stateOf(id)}));
+ const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:states[id]??'idle'}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider>;
+ return <LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} channels={channels} states={states}><RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
 }

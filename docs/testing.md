@@ -92,14 +92,16 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
-  The order is functional, then first run; the chat's open time (project `alone`, `chat-steps.spec.ts`, one worker and
-  no other browser beside it, #346) and the navigation time budgets (project `measured`) are empty here: they run in
+  The order is functional, then first run; the chat's open time and the faces' frame rate (project `alone`,
+  `chat-steps.spec.ts` and `face-frames.spec.ts`, one worker and no other browser beside it, #346, #697) and the navigation time budgets (project `measured`) are empty here: they run in
   their own jobs with the machine to themselves (`chat-open`, #421, and `visual`), and a failure in one group skips none
   of the next.
 - `chat-open` is the chat's open time (#346, #421) with a machine to itself, on a pull request too: `./ci.sh chat-open`
-  starts one lane's stack, builds the app, and runs `npx playwright test --project=alone --no-deps`, so the one test in
+  starts one lane's stack, builds the app, and runs `npx playwright test --project=alone --no-deps`, so the test in
   `tests/chat-steps.spec.ts` measures the click-to-steps time with no other browser, stack or worker beside it. The
-  budget is one second (decision 0042) and is never raised. A change to it runs it with the browser suite's own area,
+  budget is one second (decision 0042) and is never raised. On the same quiet machine `tests/face-frames.spec.ts`
+  measures sixteen moving faces on a CPU slowed four times: 50 frames a second or more, and no long task of their own
+  (#697). A change to it runs it with the browser suite's own area,
   on a draft as on a ready pull request, and `check` is red when its job failed or was cancelled or was skipped while
   the browser suite was asked for (`scripts/ci-verdict.mjs`).
 - `visual` is the visual lane (#257), on `main` and on a manual run only: the fourteen key screens in
@@ -128,7 +130,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   sandbox, #553), `install-open-design` (the Open Design app, #544), `install-backup` (backup and restore, #409), `install-backup-engines` (every Company's Engine backed up
   and restored, #553),
   `install-proxy` (the public address behind a proxy), `install-rollback` (a failed update rolled back, #389),
-  `install-update` (the update between releases), `install-previous-archive` (the previous release's own archive restored, #389), `install-release-update` (the latest published release, read from the releases list on every run, installed from its own two files and updated to this one, #483), `install-sandbox-update` (an install the release before the work sandbox made, with two Companies, updated to this one, #397), `install-staged-update` (the staged removal of Agent levels, ADR 0023), `install-sandbox-rollback` (a failed update of an install with two sandbox-enabled Companies rolled back, each Engine reaching its own sandbox over SSH again, #504), `install-sizes` (the measured sizes: idle memory, one short render at the default sandbox limits, and a render stopped at a low limit while the other Company's sandbox answers, #400), `install-engines-update` (a release that pins another Engine
+  `install-update` (the update between releases), `install-previous-archive` (the previous release's own archive restored, #389), `install-release-update` (the latest published release, read from the releases list on every run, installed from its own two files and updated to this one, #483), `install-sandbox-update` (an install the release before the work sandbox made, with two Companies, updated to this one, #397), `install-staged-update` (the staged removal of Agent levels, ADR 0023), `install-sandbox-rollback` (a failed update of an install with two sandbox-enabled Companies rolled back, each Engine reaching its own sandbox over SSH again, #504, and the install recording the release that keeps serving, so backup runs with that release's files, #583), `install-sizes` (the measured sizes: idle memory, one short render at the default sandbox limits, and a render stopped at a low limit while the other Company's sandbox answers, #400), `install-engines-update` (a release that pins another Engine
   image, #389) and
   `install-one-line` (the one-line install). Each entry is one command of the repo, `bash scripts/ci-install-check.sh
   <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`, `./ci.sh install agents-sandbox`, `./ci.sh install open-design`,

@@ -180,7 +180,10 @@ test('the route never answers the key back, and the key is removable', async () 
   const set=await post(route,{company,provider:'deepgram',intent:'set',value:key});
   assert.equal(set.status,200);
   const setText=await set.text();
-  assert.deepEqual(JSON.parse(setText),{provider:'deepgram',missing:[],failed:[]});
+  // `savedAt` is the server's time the save finished, which the page holds the provider until (#663).
+  const {savedAt,...setBody}=JSON.parse(setText);
+  assert.deepEqual(setBody,{provider:'deepgram',missing:[],failed:[]});
+  assert.equal(typeof savedAt,'number');
   const got=await route.GET(new NextRequest(`http://app.test/api/speech-provider?company=${company}`));
   const gotText=await got.text();
   assert.deepEqual(JSON.parse(gotText),{provider:'deepgram',missing:[]});
@@ -188,7 +191,9 @@ test('the route never answers the key back, and the key is removable', async () 
   assert.equal(set.headers.get('cache-control'),'no-store');
   const removed=await post(route,{company,intent:'remove'});
   assert.equal(removed.status,200);
-  assert.deepEqual(await removed.json(),{provider:null,missing:[],failed:[]});
+  const {savedAt:removedAt,...removedBody}=await removed.json();
+  assert.deepEqual(removedBody,{provider:null,missing:[],failed:[]});
+  assert.ok(removedAt>=savedAt);
   for(const name of all) assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,undefined,name);
   const member=await loadRoute(fake,false);
   assert.equal((await post(member,{company,provider:'deepgram',intent:'set',value:key})).status,403);

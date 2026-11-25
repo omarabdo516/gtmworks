@@ -15,9 +15,9 @@ registerHooks({ resolve(specifier, context, next) {
 const { channelRecord } = await import('../lib/channels.ts');
 
 // The channel's reads as the page makes them. `runs` are the channel's closed Runs, newest first; `open` are the Runs
-// still open, and `states` is the one agent_states call. `states` rows carry more than the record may keep: the state is
-// all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
-function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], handovers = [], board = null, stoppable = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
+// still open, and `states` is the one agent_face_states call, each Agent's state by id; its rows carry more than the
+// record may keep: the state is all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
+function database({ agents, runs = [], open = [], states = {}, messages = [], notes = [], cards = [], handovers = [], board = null, stoppable = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
  const rows = select => select === 'message_id,ordinal,agent_id' ? open : String(select).includes('agent_name') ? runs : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
@@ -40,7 +40,8 @@ function database({ agents, runs = [], open = [], states = [], messages = [], no
   if (name === 'conversation_can_write') return { data: false, error: null };
   if (name === 'can_manage_company') return { data: false, error: null };
   if (name === 'permission_choices') return { data: [], error: null };
-  if (name === 'agent_states') return { data: states, error: null };
+  if (name === 'agent_face_states') return { data: Object.entries(states).map(([agent, state]) => ({ agent, state, working: state === 'working', waiting: state === 'waiting',
+   failed_at: null, failed_conversation: 'cv-private', failed_channel: null, failed_card: null, last_work_at: '2026-06-10T10:00:00Z', created_at: '2026-06-01T00:00:00Z', woken_at: null })), error: null };
   if (name === 'channel_handovers') return { data: handovers, error: null };
   if (name === 'channel_board_card') return { data: board, error: null };
   // Nothing the reader may stop (#478).
@@ -61,11 +62,7 @@ test('an Agent working in the channel, one waiting on the reader and one idle, e
  const record = await channelRecord(database({
   agents: [agent('a-1', 'Ads'), agent('a-2', 'SEO'), agent('a-3', 'Critic')],
   open: [{ agent_id: 'a-1' }],
-  states: [
-   { agent: 'a-1', running: false, waiting_mine: false, waiting_person: 'Sara Adel', waiting_title: 'Approve the launch post' },
-   { agent: 'a-2', running: false, waiting_mine: true, waiting_person: 'Sara Adel', waiting_title: 'Approve the launch post' },
-   { agent: 'a-3', running: false, waiting_mine: false, waiting_person: 'Sara Adel', waiting_title: 'Approve the launch post' },
-  ],
+  states: { 'a-1': 'working', 'a-2': 'waiting', 'a-3': 'idle' },
  }), 'p-1', 'co-1', 'ch-1');
  assert.deepEqual(record?.agents, [
   { id: 'a-1', connection_id: 'c-a-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false, state: 'working' },
@@ -73,18 +70,17 @@ test('an Agent working in the channel, one waiting on the reader and one idle, e
   { id: 'a-3', connection_id: 'c-a-3', name: 'Critic', speciality: 'Runs the ads.', main: false, only: false, state: 'idle' },
  ]);
  assert.equal(record?.open, true);
- // Whom it works for and on what stays out of the Agents the channel's reader gets.
+ // Where it works or failed, and when, stays out of the Agents the channel's reader gets.
  const kept = JSON.stringify(record?.agents);
- assert.ok(!kept.includes('Sara Adel'), 'no person the Agent works for');
- assert.ok(!kept.includes('Approve the launch post'), 'no text of that work');
+ assert.ok(!kept.includes('cv-private'), 'no place of its work');
+ assert.ok(!kept.includes('2026-06-10'), 'no time of its work');
 });
 
-test('an Agent waiting on the reader stays waiting while it also has a Run open, and an idle Agent is working once a call starts, idle again when its reply is in', async () => {
- const states = [{ agent: 'a-1', running: false, waiting_mine: false }, { agent: 'a-2', running: false, waiting_mine: true }];
- const agents = [agent('a-1', 'Ads'), agent('a-2', 'SEO')];
- const called = await channelRecord(database({ agents, open: [{ agent_id: 'a-1' }, { agent_id: 'a-2' }], states }), 'p-1', 'co-1', 'ch-1');
- assert.deepEqual(called?.agents.map(row => row.state), ['working', 'waiting']);
- const answered = await channelRecord(database({ agents, states }), 'p-1', 'co-1', 'ch-1');
+test('each Agent carries the state the one read gives it, stuck and asleep too, and one the read left out is idle', async () => {
+ const agents = [agent('a-1', 'Ads'), agent('a-2', 'SEO'), agent('a-3', 'Critic'), agent('a-4', 'Lead')];
+ const called = await channelRecord(database({ agents, open: [{ agent_id: 'a-1' }, { agent_id: 'a-2' }], states: { 'a-1': 'working', 'a-2': 'waiting', 'a-3': 'stuck', 'a-4': 'asleep' } }), 'p-1', 'co-1', 'ch-1');
+ assert.deepEqual(called?.agents.map(row => row.state), ['working', 'waiting', 'stuck', 'asleep']);
+ const answered = await channelRecord(database({ agents: agents.slice(0, 2), states: { 'a-2': 'waiting' } }), 'p-1', 'co-1', 'ch-1');
  assert.deepEqual(answered?.agents.map(row => row.state), ['idle', 'waiting']);
  assert.equal(answered?.open, false);
 });
@@ -125,6 +121,7 @@ test('a message that called two Agents carries both turns in the order named, ea
  const record = await channelRecord(database({
   agents: [agent('a-1', 'Ads'), agent('a-2', 'SEO')],
   open: [{ agent_id: 'a-2' }],
+  states: { 'a-2': 'working' },
   runs: [
    { message_id: 2, ordinal: 2, agent_id: 'a-2', agent_name: 'SEO', outcome: null },
    { message_id: 2, ordinal: 1, agent_id: 'a-1', agent_name: 'Ads', outcome: 'completed' },
@@ -138,24 +135,6 @@ test('a message that called two Agents carries both turns in the order named, ea
  assert.equal(said?.author === 'person' ? said.mention?.agent : null, 'Ads', 'the first Agent is still the message\'s one mention');
  assert.equal(record?.open, true, 'the second Agent is still working');
  assert.deepEqual(record?.agents.map(row => row.state), ['idle', 'working'], 'the Agent answering is working, the one that answered is idle');
-});
-
-// #152: Runs go one after another, so only the Run being worked on now is working: the lowest open place of each
-// message. A second or third Agent still waiting its turn reads idle, never "Working", and does not count in the dots.
-test('only the lowest open Run of a message counts as working, a later Agent waiting its turn is idle', async () => {
- const agents = [agent('a-1', 'Ads'), agent('a-2', 'SEO'), agent('a-3', 'Critic')];
- const states = agents.map(row => ({ agent: row.id, running: false, waiting_mine: false }));
- const record = await channelRecord(database({
-  agents,
-  open: [
-   { message_id: 2, ordinal: 1, agent_id: 'a-1' },
-   { message_id: 2, ordinal: 2, agent_id: 'a-2' },
-   { message_id: 4, ordinal: 1, agent_id: 'a-3' },
-  ],
-  states,
- }), 'p-1', 'co-1', 'ch-1');
- assert.deepEqual(record?.agents.map(row => [row.name, row.state]), [['Ads', 'working'], ['SEO', 'idle'], ['Critic', 'working']], 'the message\'s first open place works, the later one waits its turn');
- assert.equal(record?.open, true, 'the channel still asks while a message\'s Run is open');
 });
 
 test('a message that called two Agents draws each one\'s card under that Agent\'s own reply', async () => {
@@ -207,9 +186,9 @@ test('a channel handover is drawn as the row, the other Agent\'s answer marked w
   'Lead: Ads planned the March intake.',
  ]);
  const row = record?.messages.find(message => message.author === 'handoff');
- assert.deepEqual(row, { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-a-1' }, to: { name: 'Ads', face: 'c-a-2' },
+ assert.deepEqual(row, { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'a-1' }, to: { name: 'Ads', face: 'a-2' },
   goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T10:01:00Z' });
- assert.deepEqual(record?.handoffs, [{ id: 7, from: { name: 'Lead', face: 'c-a-1' }, to: { name: 'Ads', face: 'c-a-2' },
+ assert.deepEqual(record?.handoffs, [{ id: 7, from: { name: 'Lead', face: 'a-1' }, to: { name: 'Ads', face: 'a-2' },
   goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T10:01:00Z' }]);
  assert.equal(record?.handover, false, 'a finished handover is not still moving');
 });

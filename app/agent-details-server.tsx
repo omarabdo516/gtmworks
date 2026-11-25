@@ -6,7 +6,8 @@ import { approvalQueue } from '@/lib/approval-queue';
 import { feedSince } from '@/lib/numbers.mjs';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { columnLabel, type CardWait } from '@/lib/board-columns.mjs';
-import { agentFiles, agentLogFilter, agentStatus, agentTasks, fileSize, latestActivity, pickTab, type AgentStatus, type DetailsTab } from '@/lib/agent-details.mjs';
+import { agentFiles, agentLogFilter, agentTasks, fileSize, latestActivity, pickTab, type DetailsTab } from '@/lib/agent-details.mjs';
+import { agentFaceStates, type AgentFaceState } from '@/lib/agent-face-states';
 import { ShellIcon } from '@/components/shell-icon';
 import { drawnAt, type LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
@@ -22,7 +23,7 @@ import { readAgentPermissions } from '@/lib/standing-permissions.mjs';
 import { StandingPermissions } from '@/app/standing-permissions';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
-export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
+export type AgentDetailsView={status:AgentFaceState,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
 const logShown=50;
 
 // The Agent's name and the reader's role may still be on their way: a page can start the details' reads beside its own
@@ -32,6 +33,8 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  // What waits on the reader is two reads deep and needed only to draw: the reads that depend on the first ones go out
  // without waiting for it.
  const waitingRead=approvalQueue(db,company,me);
+ // The Agent's state for the reader (#699), the sidebar's own read; the open Run above says only what it is doing.
+ const stateRead=agentFaceStates(db,company);
  const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount}]=await Promise.all([getI18n(),named,roled,
   db.from('work_cards').select('id,title,stage_id,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
@@ -46,7 +49,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
  const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory,standing]=await Promise.all([waitingRead,
+ const [{of:faceOf},{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory,standing]=await Promise.all([stateRead,waitingRead,
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
   run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
@@ -97,7 +100,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  // read in the browser after the panel is drawn, so no page waits on the Engine.
  const library=role==='owner'||role==='manager'?<AgentLibrary company={company} slug={slug} agent={agent} name={name}/>:undefined;
 
- return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
+ return {status:faceOf(agent).state,tab:pickTab(tab),
   tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
    // The Agent's Routines (#205): read in the browser too; the Owner and Managers change them, as in Settings (#31).
    routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,

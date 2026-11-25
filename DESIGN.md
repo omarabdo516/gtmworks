@@ -22,11 +22,14 @@ colors:
   focus-ring: oklch(0.708 0 0)
   destructive: oklch(0.577 0.245 27.325)
   scrollbar-thumb: oklch(0.7 0 0)
-  role-account-manager: '#a9c7dc'
-  role-writer: '#b5d9cf'
-  role-designer: '#d8baa9'
-  role-critic: '#c5b8dc'
-  role-arrow-agent: '#e5cb8d'
+  agent-indigo: '#5A58DE'
+  agent-violet: '#8443D0'
+  agent-sky: '#2A6AD8'
+  agent-teal: '#117A80'
+  agent-jade: '#1B8253'
+  agent-rose: '#C23C86'
+  agent-dusk: '#8F52DC'
+  agent-slate: '#4D586B'
   stage-amber: oklch(55.5% 0.163 48.998)
   stage-blue: oklch(48.8% 0.243 264.376)
   stage-violet: oklch(49.1% 0.27 292.581)
@@ -216,6 +219,8 @@ components:
     textColor: '{colors.ink}'
     rounded: '{rounded.full}'
     size: 24px
+  agent-face:
+    size: 24px
   stat:
     typography: '{typography.stat-figure}'
     rounded: '{rounded.lg}'
@@ -241,7 +246,7 @@ Only existing screens are ported: sign-in, company shell, Home, Work board/list/
 **Key Characteristics:**
 
 - Paperclip at the pinned commit is the stated source of the look: its code, colours, spacing, radius, fonts, Tailwind stack, Radix/shadcn primitives, shell, controls, menus, dialogs and motion are copied, not re-drawn.
-- Neutral greys carry the whole interface; the only hues are the four board-stage tones, the agents' role identity colours, the user-chosen label colours and the destructive red.
+- Neutral greys carry the whole interface; the only hues are the four board-stage tones, the eight colours of Agents' faces, the user-chosen label colours and the destructive red.
 - One radius knob (8px) sets the corner ladder; Tailwind's 4px unit underlies the spacing, with a few product gaps between its steps (see Layout).
 - English-first with a complete Egyptian Arabic mirror: the layout flips at the inline axis, authored content keeps its own direction.
 - Every interactive target is at least 44px on mobile, contrast meets WCAG AA, and reduced motion is respected.
@@ -265,7 +270,7 @@ A neutral palette with no brand accent. The shell (the signed-in app layout) run
 
 ### Secondary
 
-- **Role identity colours** (`role-account-manager`, `role-writer`, `role-designer`, `role-critic`, `role-arrow-agent`): soft pastel identifiers for the account manager, writer, designer and critic roles and the fifth seeded agent (symbol `↗`). They tint avatars, role glyphs and mode chips so the same role is recognisable in navigation, Home and cards.
+- **Agent face colours** (`agent-indigo`, `agent-violet`, `agent-sky`, `agent-teal`, `agent-jade`, `agent-rose`, `agent-dusk`, `agent-slate`; ADR 0027, #697): the eight fixed colours an Agent's face, the orb, is drawn in, each a gradient of four stops light to deep (`lib/agent-look.ts`, from `design-reference-orb/`); the token is its second stop. None is orange, which means "waiting on you", and each one's lightest stop keeps the white eyes at 3.4:1 or more. They colour Agents' faces only, never a message or a chip. The legacy role agents' pastel role colours are gone: they show their name's first letter, as a person does, and a Card's mode chip is ink.
 - **Board stage tones** (`stage-amber`, `stage-blue`, `stage-violet`, `stage-green`): Paperclip's neutral, amber, blue, violet and green column recipes, mapped onto the company's nine stages in order (neutral, amber, blue, violet, violet, green, blue, green, neutral). The frontmatter lists each hue's text tone (Tailwind 4.3.3 palette, `-700`); the column body uses the same hue at 45% of its `-50` tint with a `-500` ring at 15% (`components/paperclip/KanbanBoard.tsx:11-22`).
 - Label colours on cards are data chosen by each company in settings, not design tokens.
 
@@ -275,7 +280,7 @@ A neutral palette with no brand accent. The shell (the signed-in app layout) run
 
 **The Two Scopes Rule.** Shell surfaces use the Coordinator tokens; anything rendered in a portal uses the root tokens, exactly as upstream does. Do not copy a shell colour into a portal or the reverse.
 
-**The Device-First Theme Rule (#186).** The server renders `data-theme="device"` unless the person saved Light or Dark (or explicitly Device). CSS `color-scheme` and `light-dark()` choose tokens before first paint, including portals, without hydration or local storage. The approved #185 prototype supplies the dark shell: canvas `oklch(0.185 0 0)`, ink `oklch(0.96 0 0)`, cards `oklch(0.235 0 0)`, sidebar `oklch(0.215 0 0)`, muted/accent `oklch(0.29 0 0)` and muted ink `oklch(0.74 0 0)`. Portals use the prototype's `0.235` surface and `0.985` ink. Light values stay unchanged. The profile opens an account menu with Light, Dark and Device radio choices; the choice is saved on the person like language. Anonymous sign-in follows the device. Pastel agent avatars keep dark ink for contrast. The chart tokens remain unassigned; bars use foreground.
+**The Device-First Theme Rule (#186).** The server renders `data-theme="device"` unless the person saved Light or Dark (or explicitly Device). CSS `color-scheme` and `light-dark()` choose tokens before first paint, including portals, without hydration or local storage. The approved #185 prototype supplies the dark shell: canvas `oklch(0.185 0 0)`, ink `oklch(0.96 0 0)`, cards `oklch(0.235 0 0)`, sidebar `oklch(0.215 0 0)`, muted/accent `oklch(0.29 0 0)` and muted ink `oklch(0.74 0 0)`. Portals use the prototype's `0.235` surface and `0.985` ink. Light values stay unchanged. The profile opens an account menu with Light, Dark and Device radio choices; the choice is saved on the person like language. Anonymous sign-in follows the device. An Agent's face keeps its colours in both themes; the dark theme gives its glow more light, a bright hairline rim and a coloured pool under it instead of a shadow (`--gw-glow-k`, `--gw-rim-k`, `--gw-sh-l`, `--gw-sh-d` in `app/tokens.css`). The chart tokens remain unassigned; bars use foreground.
 
 ## Typography
 
@@ -337,7 +342,7 @@ One radius knob, `--radius: 0.5rem` (8px), drives a multiplicative ladder: `sm` 
 - **Cards, panels, navigation items and dialogs:** `lg` (8px).
 - **Buttons, inputs, selects, table-adjacent controls and column bodies:** `md` (6.4px).
 - **Chips, calendar entries and bar tracks:** `sm` (4.8px).
-- **Avatars, dots, label bars and badges:** fully round.
+- **Avatars, dots, label bars and badges:** fully round. An Agent's face takes its own shape: a circle, a squircle or a soft blob.
 - Borders are 1px hairlines. A board column body is a tinted rounded area with an inset ring, not a bordered box.
 
 ## Components
@@ -386,7 +391,7 @@ Settings shows names and controls, not a manual above each one (#614, spec #610)
 ### Chips, Avatars and Stats
 
 - **Label chip:** 1px border in the label's own colour, `sm` radius, 2px 8px padding, 12px text. **Mode chip:** the same, with 1px 8px padding and an 8px dot in the assigned role's colour. **Author chip:** muted 11px text with a role dot.
-- **Avatar:** people keep a 24px circle on `muted-fill` with an initial. Agents use the generated face from `design/prototypes/conversation/assets/proto.js`: role-coloured head, two eyes, mouth and identity-derived shape/accessories. The shared global agent id seeds the face; it never changes with company or language. Faces are still (no blinking or eye-following) and have the agent's name as their text alternative.
+- **Avatar:** people, and the four legacy role agents, keep a 24px circle on `muted-fill` with the first letter of their name. A Company's Agent wears its face, the approved orb (`design-reference-orb/`, decision 0067, ADR 0027): one component, `components/agent-face.tsx`, draws it in the Agent's own look, the shape, colour and temperament kept on the Agent (`public.agent_looks`), asked for by the Agent's id from the Company's looks read once per page; it never changes unless the Owner changes it, in its look window (`app/agent-look-window.tsx`, `agent-look.html`), opened from the pencil on the details' face, "Change its look" on a made Agent's card and the Look row in Settings, where every press saves at once and a save that fails goes back with a toast. Sizes: the sidebar 56px, the chat head 32px, an empty chat 96px, the @ list 24px, the reply being worked on 24px, past replies 20px, the board 18 to 22px, the details head 72px with a 12px dot; elsewhere as before. Its expression follows its state (idle, listening, thinking, working, done, waiting, stuck, asleep), and the state dot beside it keeps one look per state. The face is hidden from assistive technology: the Agent's name and its state in words beside it say who and how.
 - **Stat:** the figure (30px semibold) above its 14px muted label; an unavailable figure is shown at 20px in muted ink.
 
 ### Dialog
@@ -400,6 +405,8 @@ The screens ported from the approved reference move on its six tokens, set on `.
 **The Listed Transition Rule.** A transition names the properties it moves. No stylesheet under `app/` gives a part `transition: all`, a `transition` shorthand with no property, or `transition-property: all`, and our own components do not use Tailwind's `transition-all`; `transition: none` is allowed. A broad transition would fade whatever a later rule changes on every part it reaches under `.gw`. The scoped Paperclip copies in `components/paperclip/` keep their upstream classes (the sidebar section caret's `transition-all`). `tests/motion-tokens.test.mjs` holds the rule (#566).
 
 Paperclip's own motion stays on the screens the reference does not have. The work list and calendar, the older section pages and the global button and card fallbacks in `app/globals.css` use its 160ms. Its tokens in `components/paperclip/theme.css` also hold 80ms, 240ms, 360ms and 520ms: the mobile bar enters in 360ms on an ease-out-expo curve and leaves in 240ms on a standard ease. The sign-in screen's ASCII animation (`components/paperclip/AsciiArtAnimation.tsx`) runs continuously and shows a static frame under reduced motion. Both sets of values are in the sidecar.
+
+An Agent's face lives by itself from 24px (`components/face-life.ts`, one module for the page; `app/face.css`): it breathes as its temperament does, it blinks and glances, its eyes and highlight lean toward the pointer (never for a touch), a pressed face hops and the same Agent's face on the page the press opened hops once too, and its states and moments play as short Web Animations. Only transform and opacity move. A face under 24px, off screen or in a hidden tab moves nothing. Its endless motion (`gw-face-breath`, `gw-face-bounce`, `gw-face-sway`, `gw-face-drift`, `gw-face-tick`, `gw-face-settle`, `gw-face-glow`, `gw-face-gaze`, `gw-face-swirl`, `gw-face-nudge`, `gw-dot-ping`) is left out of the measured navigation by name (`tests/navigation-measure.ts`). With 16 faces of 56px moving, two working, on a CPU slowed four times, the page keeps 50 frames a second or more (`tests/face-frames.spec.ts`); to keep it, the colour inside the orb is held still instead of turning, the spec's first fallback, and each temperament's breath is written out as its own keyframes, since keyframes that read custom properties do not run on the compositor (#697).
 
 Under `prefers-reduced-motion` every transition and animation is cut to zero and runs once, and nothing scrolls smoothly (`app/globals.css`). The reference cuts them to 1ms. Scripts ask one helper, `lib/motion.ts`: `prefersReducedMotion()` picks a scroll's behaviour, and `later()` waits at most 120ms when the person wants less motion. Navigation feedback is a 3px bar at the top of the page.
 
@@ -426,11 +433,11 @@ Under `prefers-reduced-motion` every transition and animation is cut to zero and
 
 ## Deviations and their reasons
 
-- **Agent faces (#188):** the approved conversation prototype replaces role glyphs with generated faces in the sidebar, Home, work, threads, pickers, agent/skill settings and activity. Existing role colours and people’s initials stay. Pickers use the copied Paperclip menu so each option can show a face; native select options cannot render SVG.
+- **Agent faces (#188, #697):** every Company Agent wears the approved orb (`design-reference-orb/`) in the sidebar, Home, work, threads, pickers, Settings and activity, in place of Paperclip's glyphs; the generated faces of #188 and the role colours are gone, and the legacy role agents and people show their initials. Pickers use the copied Paperclip menu so each option can show a face; native select options cannot render one.
 - **Shared agent names:** `agent_identities()` exposes only global agent id, role and name to signed-in people, independently of company grants. It keeps historical faces named after revocation without widening access to people or company data.
 - **Arabic/RTL:** the same layout mirrors at the inline axis, including sidebar placement, drawer side, board flow, menus and controls. Authored titles, company/person names and other content keep automatic direction; digits retain Western order. The full Arabic catalogue (Egyptian, as in the approved reference) ships alongside English. Interface strings come from both catalogues.
 - **Nine stages:** retain the company's existing stage names and order. Paperclip's neutral, amber, blue, violet and green column recipes map onto these stages; no Paperclip status is added to the database.
-- **Sidebar items:** retain gtmworks navigation groups, item order, account manager/writer/designer/critic and recent cards. Existing role glyphs, identity colours and member avatars identify the same roles and people across navigation, Home and cards. The mobile bar uses Home, Work, New card (when permitted), Agents and Inbox. The company chooser uses existing memberships and routes. Search opens the existing localized unavailable screen because this product has no search backend yet. Unbuilt routes use the copied generic EmptyState inside a neutral panel, without Paperclip's route-specific illustrations, search or create controls whose operations are unavailable here. No out-of-scope navigation is added.
+- **Sidebar items:** retain gtmworks navigation groups, item order, account manager/writer/designer/critic and recent cards. Agents' faces and member avatars identify the same Agents and people across navigation, Home and cards. The mobile bar uses Home, Work, New card (when permitted), Agents and Inbox. The company chooser uses existing memberships and routes. Search opens the existing localized unavailable screen because this product has no search backend yet. Unbuilt routes use the copied generic EmptyState inside a neutral panel, without Paperclip's route-specific illustrations, search or create controls whose operations are unavailable here. No out-of-scope navigation is added.
 - **Vazirmatn:** used for Arabic only, including Arabic navigation headings. English uses Paperclip's bundled Inter, with Paper Mono for identifiers and English navigation group labels. Both font licences ship beside the copied fonts.
 - **Product identity and authentication:** gtmworks wordmark and catalogue copy replace Paperclip's identity. Supabase email-link sign-in replaces its email/password inputs; its split form/animation layout remains. A public language selector replaces the theme-toggle slot so anonymous sign-in and confirmation messages can be inspected in both languages; this preview does not replace the saved account preference. Existing invitations and MFA stay functional.
 - **Home content:** retain four role tiles, four work figures, the three existing charts and recent activity/cards. Pending approvals, ownership and audited transitions supply the same numbers as before. Delivered work is an audited transition to stable key `approved`; first-time acceptance excludes earlier rejections. Charts cover the last 14 UTC calendar days. Publishing, bookings and stopped-card status remain Unavailable; acceptance without deliveries remains Unavailable. These content-specific charts use the copied neutral card and metric surfaces.

@@ -27,10 +27,10 @@ where s.definer and (s.body ~ pattern.tables
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('checks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
-  'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
+  'public.agent_run_facts(uuid,uuid)','public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)',
-  'public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)','public.card_archive_stops(uuid,bigint[])']) fn
+  'public.archived_cards(uuid)','public.archived_card_list(uuid,text,uuid,bigint,timestamptz,bigint,integer)','public.archived_card_count(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)','public.card_archive_stops(uuid,bigint[])']) fn
  union all select 'public.stop_card_work(uuid,bigint)','exempt','callable inside the database only, by archive_cards, which asks can_see_card for the Card first (#671); it answers nothing'
  union all select 'public.log_conversation_archive(uuid,boolean,uuid)','exempt','callable inside the database only: it writes the log row of a Conversation its own person archived or restored (#674) through log_chat_event, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers nothing'
  union all select 'public.stop_named_channel_run(public.channel_runs,text)','exempt','callable inside the database only, by the worker''s answer_channel_start: it reads the channel''s Card only to ask whether it is archived, and answers nothing'
@@ -44,6 +44,7 @@ insert into decisions
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_card_place()','public.work_guard()',
   'public.channel_run_card()','public.channel_reply_card()']) fn
+ union all select 'public.keep_record_agent()','exempt','a trigger: it keeps the Agent a Card, a Conversation or a channel call was made with when that Agent is removed (#702), reading only whether the Agent still exists; it answers no caller'
  union all select 'public.work_card_moved()','exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller; the move it writes is read by its own mover alone, on a Card that mover can see (work_card_moves_read)'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
@@ -67,6 +68,7 @@ insert into decisions
  union all select 'public.log_routine_change(uuid,uuid,text,text,text,uuid)','exempt','it answers nothing: it reads only whether this Agent''s own Routine change is already in the Company log by its key (#31), a row that names no Card'
  union all select fn,'exempt','an Owner or a Manager saves a field of an Agent''s settings page and writes that Agent''s log row, which names no Card; the caller is checked by check_agent_setting or check_agent_owner_setting' from unnest(array[
   'public.log_agent_setting(uuid,uuid,text,text,text)','public.log_agent_instructions(uuid,uuid)','public.log_agent_morning(uuid,uuid,text,text,uuid)']) fn
+ union all select 'public.change_agent_look(uuid,uuid,text,text)','exempt','an Owner changes a part of an Agent''s look (#696) and writes that Agent''s log row, which names no Card; it answers the look alone'
  union all select 'public.log_permission_revoked(uuid,uuid,text,text)','exempt','an Owner or a Manager who sees the Agent revokes one of its standing permissions and writes that Agent''s log row, which names no Card; the caller is checked by check_permission_revoke (#166)'
  union all select 'public.pin_run_history(uuid,uuid)','exempt','the worker''s, callable by the service role only: it reads when an Agent last moved from that Agent''s log rows, which name no Card, and answers the Conversation''s own messages'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'

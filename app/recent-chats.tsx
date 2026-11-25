@@ -34,7 +34,7 @@ export default function RecentChats({slug,company,chats,current,lead}:{slug:stri
     <span className="od-truncate" dir="auto">{chat.title}</span><time className="thread-item__time" dateTime={chat.at}>{time(chat.at,group.day)}</time>
    </Link>
    <MoreMenu label={t('conversationMoreOf',chat.title)} look="thread-more" className="more-menu thread-menu"
-    items={[{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([{id:chat.id,title:chat.title,face:null}])}]}/>
+    items={[{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([{id:chat.id,title:chat.title}])}]}/>
   </li>)}</ul>
  </div>)}{confirm}</>;
 }

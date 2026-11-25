@@ -1,6 +1,7 @@
 import { markOf } from './app-mark.mjs';
 import { roleApps, roleTemplates, type RoleId } from './role-templates.mjs';
 import type { Language } from './i18n.mjs';
+import { plainLook, type AgentLook } from './agent-look';
 import en from './messages/ready-made.en.json';
 import ar from './messages/ready-made.ar.json';
 
@@ -8,12 +9,13 @@ type Text=Record<string,string>;
 const catalogues:Record<Language,Text>={en,ar};
 const fill=(text:string,value:string)=>text.replace('{0}',()=>value);
 
-export type ReadyRole={id:RoleId,category:(typeof roleTemplates)[RoleId]['category'],name:string,role:string,line:string,handoff:string|null,apps:{key:string,name:string,mark:string}[],ask:string,search:string};
+export type ReadyRole={id:RoleId,category:(typeof roleTemplates)[RoleId]['category'],name:string,role:string,line:string,handoff:string|null,apps:{key:string,name:string,mark:string}[],ask:string,search:string,look:AgentLook};
 
 // The cards of the ready-made gallery (#14), built on the server so the roles' instructions never reach the browser:
 // each role's words in the reader's language, the line saying what it hands to a person (the alone wording when the
-// Company is worked alone), its apps, the message that asks Lead for it, and what a search finds it by in either language.
-export function readyRoles(language:Language,alone:boolean):ReadyRole[] {
+// Company is worked alone), its apps, the message that asks Lead for it, what a search finds it by in either language,
+// and the face the Agent made from it will have (readyRoleLooks).
+export function readyRoles(language:Language,alone:boolean,looks:Partial<Record<string,AgentLook>>={}):ReadyRole[] {
  const text=catalogues[language];
  return (Object.keys(roleTemplates) as RoleId[]).map(id=>{
   const {category,name}=roleTemplates[id];
@@ -23,8 +25,17 @@ export function readyRoles(language:Language,alone:boolean):ReadyRole[] {
   return {id,category,name,role,line:text[`line.${id}`],handoff:(alone&&text[`handAlone.${id}`])||text[`hand.${id}`]||null,apps,
    // Lead hears the role in the reader's words and, when those are not English, also as create_agent's template names it.
    ask:role===english?fill(text.ask,role):`${fill(text.ask,role)} (${english})`,
-   search:[...words,name,...apps.map(app=>app.name)].filter(Boolean).join(' ').toLowerCase()};
+   search:[...words,name,...apps.map(app=>app.name)].filter(Boolean).join(' ').toLowerCase(),look:looks[id]??plainLook};
  });
+}
+
+// The look each role's Agent would be made with now (public.ready_made_looks, #697): its role's temperament and the
+// colour its Company uses least, so the gallery's face is the made Agent's. A failed read draws the faces plain.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function readyRoleLooks(db:any,company:string):Promise<Partial<Record<string,AgentLook>>> {
+ const {data,error}=await db.rpc('ready_made_looks',{c:company,templates:Object.keys(roleTemplates)});
+ if(error||!data) return {};
+ return Object.fromEntries((data as ({template:string}&AgentLook)[]).map(row=>[row.template,{shape:row.shape,colour:row.colour,temperament:row.temperament}]));
 }
 
 // What a new Agent's empty chat says it does and hands back, and its sentence to try (#170; design-reference:

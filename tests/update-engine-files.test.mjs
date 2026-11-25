@@ -163,3 +163,26 @@ for (const mode of ['source', 'release']) {
     assert.match(readFileSync(join(install.directory, '.env.install'), 'utf8'), /^HERMES_API_KEY=k{64}$/m);
   });
 }
+
+// #583: a release update removes the record of the release the install runs while the files on disk are its own. A
+// rollback of its Engines records the previous release again, so that release's own installer backs up and restores
+// without the update that just failed; a run that failed before its Engines started records none.
+for (const before of ['engines', 'hermes']) {
+  test(`a release update of ${before === 'hermes' ? 'the release before one Engine per Company' : 'this release'} whose Engine does not start records the previous release again`, t => {
+    const install = installFolder(t, 'release', { before });
+    const serving = `ghcr.io/omarabdo516/gtmworks:1.2.2@sha256:${'d'.repeat(64)}\n`;
+    writeFileSync(join(install.directory, '.install-release'), serving);
+    const failed = install.run({ ENGINE_EXIT: '1', GTMWORKS_ENGINE_WAIT: '1', OLD_HERMES: before === 'hermes' ? 'old-hermes-1' : '' });
+    assert.notEqual(failed.status, 0);
+    assert.match(failed.stderr, /the previous release keeps serving, with its own Engines again/);
+    assert.equal(readFileSync(join(install.directory, '.install-release'), 'utf8'), serving);
+  });
+}
+
+test('a release update that fails before its Engines start records no release', t => {
+  const install = installFolder(t, 'release');
+  writeFileSync(join(install.directory, '.install-release'), `ghcr.io/omarabdo516/gtmworks:1.2.2@sha256:${'d'.repeat(64)}\n`);
+  const failed = install.run({ MIGRATION_EXIT: '3' });
+  assert.equal(failed.status, 3, failed.stderr);
+  assert.equal(existsSync(join(install.directory, '.install-release')), false);
+});

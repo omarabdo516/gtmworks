@@ -1,13 +1,18 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { act, type ComponentProps } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
-import { userEvent } from 'vitest/browser';
+import { cdp, userEvent } from 'vitest/browser';
+// Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
+import type {} from '@vitest/browser-playwright';
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { ChannelMention, ChannelMessage, ChannelRecord } from '@/lib/channels';
+import type { ChannelHandoff, ChannelMention, ChannelMessage, ChannelRecord } from '@/lib/channels';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 import '@/app/tokens.css';
 import '@/app/shell.css';
+import '@/app/globals.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
@@ -209,9 +214,10 @@ test('each Agent in the channel\'s details shows its state on its face and under
  const head = details.element().querySelector('.dp-id__role');
  expect(head?.textContent).toBe('3 members · 3 agents · 1 working');
  expect(head?.querySelector('.dot--working')).not.toBeNull();
- const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
+ const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.fw'));
  expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent)).toEqual(['Runs the ads. · Working', 'Waiting on you', 'Reads the copy. · Idle']);
- expect(rows.map(row => row.querySelector('.face-wrap .dot')?.className)).toEqual(['dot dot--working', 'dot dot--waiting', 'dot dot--idle']);
+ expect(rows.map(row => row.querySelector('.fw .dot')?.className)).toEqual(['dot dot--working', 'dot dot--waiting', 'dot dot--idle']);
+ expect(rows.map(row => row.querySelector<HTMLElement>('.fw .face')?.dataset.state)).toEqual(['working', 'waiting', 'idle']);
 });
 
 test('in Arabic the details name each Agent\'s state and count the working ones', async () => {
@@ -219,7 +225,7 @@ test('in Arabic the details name each Agent\'s state and count the working ones'
  const screen = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-3" initial={team({ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'بيظبط الإعلانات.', main: false, only: false, state: 'working' }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: '', main: false, only: false, state: 'waiting' }] })}/></LanguageProvider>);
  const details = screen.getByRole('complementary', { name: 'تفاصيل القناة' });
  expect(details.element().querySelector('.dp-id__role')?.textContent).toBe('3 أعضاء · 2 وكلاء · 1 شغال');
- const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
+ const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.fw'));
  expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent)).toEqual(['بيظبط الإعلانات. · شغال', 'مستنيك']);
 });
 
@@ -530,4 +536,31 @@ test('a question the called Agent asks while the channel is open rises in its ow
  await expect.element(screen.getByText('Which angle first?').first(), { timeout: 5000 }).toBeVisible();
  const turn = screen.getByText('Which angle first?').first().element().closest('.turns > li')!;
  expect(turn.classList.contains('msg-in')).toBe(true);
+});
+
+// #586: the server draws the page in UTC and the reader is in Cairo, two hours ahead in November. Each message's time, and
+// each Handover's in the details, is drawn in UTC, hidden, until the page hydrates, then in the reader's own zone, with no
+// hydration mismatch (as the Conversation page does since #520).
+test('a message\'s time the server drew in UTC shows in the reader\'s own zone once the channel hydrates, with no hydration error', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const zone = (timezoneId: string) => cdp().send('Emulation.setTimezoneOverride', { timezoneId });
+ onTestFinished(async () => { await zone(''); });
+ const late = '2026-11-12T22:30:00Z';
+ const handed: ChannelHandoff = { id: 1, from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Plan the ads', at: late };
+ const chat = record([{ ...peer, at: late }, { ...called('answered'), at: late }, { ...reply, at: late }], { handoffs: [handed] });
+ const view = <LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={chat}/></LanguageProvider>;
+ await zone('UTC');
+ const host = document.body.appendChild(document.createElement('div'));
+ host.innerHTML = renderToString(view);
+ const times = () => [...host.querySelectorAll('.turns time:not(.divider time), .panel-row__d time')];
+ expect(times().map(time => time.textContent)).toEqual(['10:30 PM', '10:30 PM', '10:30 PM', '10:30 PM']);
+ expect(times().map(time => getComputedStyle(time).visibility), 'hidden until the reader\'s zone is known').toEqual(['hidden', 'hidden', 'hidden', 'hidden']);
+ await zone('Africa/Cairo');
+ const recoverable = vi.fn();
+ const root = await act(async () => hydrateRoot(host, view, { onRecoverableError: recoverable }));
+ try {
+  await expect.poll(() => times().map(time => time.textContent)).toEqual(['12:30 AM', '12:30 AM', '12:30 AM', '12:30 AM']);
+  expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible', 'visible', 'visible']);
+  expect(recoverable).not.toHaveBeenCalled();
+ } finally { act(() => root.unmount()); host.remove(); }
 });

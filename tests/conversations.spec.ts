@@ -64,13 +64,13 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
-  // While the Run is open its Agent's tile thinks; when it ends a check shows for a moment, then the idle dot (#184).
-  const face=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'}).locator('.face-wrap');
-  await expect(face.locator('.think')).toBeVisible();
-  await expect(face).toHaveClass(/\bis-thinking\b/);
-  await expect(face.locator('.done-ck')).toBeVisible();
-  await expect(face.locator('.think')).toHaveCount(0);
-  await expect(face.locator('.done-ck')).toHaveCount(0);
+  // While the Run is open its Agent's tile thinks; when it ends the face is done for a moment, then idle, its dot too
+  // (#184, #697).
+  const face=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'}).locator('.fw');
+  await expect(face.locator('.face')).toHaveAttribute('data-state','thinking');
+  await expect(face.locator('.dot')).toHaveClass('dot dot--thinking');
+  await expect(face.locator('.face')).toHaveAttribute('data-state','done');
+  await expect(face.locator('.face')).toHaveAttribute('data-state','idle');
   await expect(face.locator('.dot')).toHaveClass('dot dot--idle');
   await expect(page.locator('.msg[data-author=person]')).toHaveText(new RegExp(text));
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
@@ -346,7 +346,8 @@ const where=async(page:Page,selector:string)=>{ const box=(await page.locator(se
 
 test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
  const placeholders=await watchPlaceholders(page);
- // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do.
+ // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do. Only this
+ // chat's record waits: the other chats the sidebar prefetches read theirs at once (tests/slow-reads.ts).
  const held=await holdPages(page,url=>url.pathname===slowChatPath);
  asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
  try {
@@ -372,14 +373,14 @@ test('a Conversation whose record is slow shows the placeholder in its transcrip
    expect(await transcript.evaluate(box=>box.scrollHeight>box.clientHeight),'the messages are taller than the transcript').toBe(true);
    await expect.poll(()=>transcript.evaluate(box=>box.scrollHeight-box.scrollTop-box.clientHeight)).toBeLessThan(2);
    await expect(messages.last()).toBeInViewport();
-  });
+  },`conversation_id='${slowChat(3)}'`);
   expect(placeholders.seen()).toEqual(['Loading the chat']);
  } finally { held.letGo(); await held.stop(); asAdmin(slowChatRows.unset); }
 });
 
-// An Agent's face is alive (#133): a pressed tile's face hops on the page it opens, a hovered tile and title pill lift
-// their face, and while the Run is held open the details panel and the title pill show the Agent at work.
-test('An Agent face hops when its tile is pressed, lifts on hover, and shows its Run at work and done',async({page})=>{
+// An Agent's face is alive (#133, #697): a pressed tile's face hops on the page it opens, a hovered tile and the chat
+// head lift their face, and while the Run is held open the chat head's face and the details' face think, then are done.
+test('An Agent face hops when its tile is pressed, lifts on hover, and shows its Run thinking and then done',async({page})=>{
  test.setTimeout(120000);
  const fake=await laneHermes();
  let agents={};
@@ -387,69 +388,64 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
   await ownerSignIn(page); agents=attachAgents();
   await page.goto('/c/rs-learning/work/board');
   const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'});
-  const tileFace=tile.locator('svg.face');
-  const motion=(face:typeof tileFace)=>face.evaluate(element=>{ const style=getComputedStyle(element); return [style.animationName,style.animationDuration]; });
+  const tileFace=tile.locator('.face');
   // The chat a hovered tile leads to is prepared before the press, as navigation.spec.ts opens its pages. The hop carries
   // to that page however long it takes to draw (#529), so a busy runner changes nothing here.
   await tile.hover(); await idle(page);
-  // Each hop as it starts, with the computed animation of the face it starts on and where that face is.
-  await page.evaluate(()=>{ const hops:string[][]=[]; (window as unknown as {hops:string[][]}).hops=hops;
+  // Each hop as it starts, with where its face is; a face that hops twice for one press is counted. A batch of records
+  // can hold several changes of one face (a greeting the hop then replaces, #700): each record's new value is the next
+  // record's old value for that face, and the face's own value after its last.
+  await page.evaluate(()=>{ const hops:string[]=[]; (window as unknown as {hops:string[]}).hops=hops;
    const seen=new Map<Element,number>(); (window as unknown as {twice:()=>number}).twice=()=>[...seen.values()].filter(count=>count>1).length;
-   document.addEventListener('animationstart',event=>{ const face=event.target as Element; if(event.animationName!=='gw-face-hop') return; const style=getComputedStyle(face);
+   new MutationObserver(records=>{ for(const [index,record] of records.entries()) { const face=record.target as HTMLElement;
+    const next=records.slice(index+1).find(later=>later.target===face), value=next?next.oldValue:face.getAttribute('data-moment');
+    if(value!=='press'||record.oldValue==='press') continue;
     seen.set(face,(seen.get(face)??0)+1);
-    hops.push([face.closest('.agent-tile')?'tile':face.closest('.empty-chat')?'chat':face.closest('.head-pill')?'pill':'other',style.animationName,style.animationDuration,location.pathname.split('/')[3]]); },true); });
+    hops.push(face.closest('.agent-tile')?'tile':face.closest('.empty-chat')?'chat':face.closest('.head-pill')?'pill':'other'); } })
+    .observe(document.body,{subtree:true,attributes:true,attributeFilter:['data-moment'],attributeOldValue:true}); });
   await tile.click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/chat\/[0-9a-f-]{36}$/);
   // The tile's face hops as the press opens its chat, and every copy of the same Agent's face drawn on that page (its
-  // tile, the empty chat's face, the title pill's) hops once too; each mark is gone after 520ms.
-  const hops=()=>page.evaluate(()=>(window as unknown as {hops:string[][]}).hops.map(hop=>hop.slice(0,3).join(' ')));
-  await expect.poll(async()=>(await hops()).includes('chat gw-face-hop 0.46s')).toBe(true);
-  const all=await hops();
-  expect(all[0]).toBe('tile gw-face-hop 0.46s');
-  expect(all.every(hop=>hop.endsWith(' gw-face-hop 0.46s'))).toBe(true);
+  // tile, the empty chat's face, the chat head's) hops once too; each hop is over after 620ms.
+  const hops=()=>page.evaluate(()=>(window as unknown as {hops:string[]}).hops);
+  await expect.poll(async()=>(await hops()).includes('chat')).toBe(true);
+  expect((await hops())[0]).toBe('tile');
   expect(await page.evaluate(()=>(window as unknown as {twice:()=>number}).twice())).toBe(0);
-  await expect(page.locator('svg.face.is-happy')).toHaveCount(0);
-  expect(await motion(tileFace)).toEqual(['none','0s']);
+  await expect(page.locator('.face[data-moment]')).toHaveCount(0);
   // Hovering a tile lifts its face 2px, after its 200ms transition.
   expect(await tileFace.evaluate(element=>getComputedStyle(element).transition)).toContain('transform 0.2s cubic-bezier(0.2, 0, 0, 1)');
   await page.locator('.sidebar .agent-tile').filter({hasText:'Mona'}).hover();
-  await expect.poll(()=>page.locator('.sidebar .agent-tile').filter({hasText:'Mona'}).locator('svg.face').evaluate(element=>getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, -2)');
-  // The Run held open: the title pill's face and the details panel's face scan, its dots think and its dot sends a ring.
+  await expect.poll(()=>page.locator('.sidebar .agent-tile').filter({hasText:'Mona'}).locator('.face').evaluate(element=>getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, -2)');
+  // The Run held open: the chat head's face and the details' face think, their light swirling.
   fake.settings.pendingReads=1_000_000;
   const text=`Alive ${Date.now()}`;
   await page.getByLabel('Message',{exact:true}).fill(text);
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const pill=page.locator('#btn-details');
-  await expect(pill.locator('svg.face')).toHaveClass(/\bis-thinking\b/);
+  await expect(pill.locator('.face')).toHaveAttribute('data-state','thinking');
   await pill.hover();
-  await expect.poll(()=>pill.locator('svg.face').evaluate(element=>getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, -1)');
+  await expect.poll(()=>pill.locator('.face').evaluate(element=>getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, -1)');
   if(await pill.getAttribute('aria-expanded')!=='true') await pill.click();
-  const wrap=page.locator('#details .face-wrap--lg');
-  await expect(wrap).toHaveClass(/\bis-thinking\b/);
-  const timing=(selector:string,pseudo?:string)=>wrap.locator(selector).first().evaluate((element,pseudo)=>{ const style=getComputedStyle(element,pseudo); return [style.animationName,style.animationDuration,style.animationDelay,style.animationIterationCount].join(' '); },pseudo);
-  expect(await timing('.face__f')).toBe('gw-face-scan 2.4s 0s infinite');
-  expect(await timing('.think')).toBe('gw-think-in 0.2s 0s 1');
-  expect(await wrap.locator('.think i').evaluateAll(dots=>dots.map(dot=>getComputedStyle(dot).animationDelay))).toEqual(['0s','0.15s','0.3s']);
-  expect(await timing('.think i')).toBe('gw-think-dot 1.2s 0s infinite');
-  expect(await timing('.dot','::after')).toBe('gw-dot-ping 1.6s 0s infinite');
+  const face=page.locator('#details .fw--lg .face');
+  await expect(face).toHaveAttribute('data-state','thinking');
+  await expect(page.locator('#details .fw--lg > .dot')).toHaveClass(/\bdot--thinking\b/);
+  expect(await face.locator('.f-swirl').evaluate(element=>{ const style=getComputedStyle(element); return [style.animationName,style.animationDuration,style.animationIterationCount].join(' '); })).toBe('gw-face-swirl 3.4s infinite');
   expect(await page.locator('#details .dp-id__state').textContent()).toBeTruthy();
-  // The Run ends: a check pops in and draws itself for 1600ms, then goes, timed in the page as it is added and removed.
-  await page.evaluate(()=>{ const times:number[]=[]; (window as unknown as {check:number[]}).check=times; const wrap=document.querySelector('#details .face-wrap--lg')!;
-   new MutationObserver(()=>{ const shown=!!wrap.querySelector('.done-ck'); if(shown!==(times.length%2===1)) times.push(performance.now()); }).observe(wrap,{childList:true}); });
+  // The Run ends: the face is done for 1600ms, its eyes smiling and a hop, timed in the page as it starts and ends.
+  await page.evaluate(()=>{ const times:number[]=[]; (window as unknown as {done:number[]}).done=times; const face=document.querySelector<HTMLElement>('#details .fw--lg .face')!;
+   new MutationObserver(()=>{ const shown=face.dataset.state==='done'; if(shown!==(times.length%2===1)) times.push(performance.now()); }).observe(face,{attributes:true,attributeFilter:['data-state']}); });
   fake.settings.pendingReads=0;
-  await expect(wrap.locator('.done-ck')).toBeVisible({timeout:20000});
-  expect(await timing('.done-ck')).toBe('gw-ck-pop 0.32s 0s 1');
-  expect(await timing('.done-ck path')).toBe('gw-draw-check 0.36s 0.14s 1');
-  await expect(wrap).not.toHaveClass(/\bis-thinking\b/);
-  await expect(wrap.locator('.done-ck')).toHaveCount(0);
-  const [added,removed]=await page.evaluate(()=>(window as unknown as {check:number[]}).check);
+  await expect(face).toHaveAttribute('data-state','done',{timeout:20000});
+  await expect(face).toHaveAttribute('data-moment','done');
+  await expect(face).not.toHaveAttribute('data-state','done');
+  const [added,removed]=await page.evaluate(()=>(window as unknown as {done:number[]}).done);
   expect(removed-added).toBeGreaterThanOrEqual(1550); expect(removed-added).toBeLessThan(1800);
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
  } finally { fake.settings.pendingReads=0; detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
 });
 
-test('With reduced motion an Agent at work still shows its dots and its check, and no face moves',async({page})=>{
+test('With reduced motion an Agent at work still shows its state and its end, and no face moves',async({page})=>{
  test.setTimeout(120000);
  const fake=await laneHermes();
  let agents={};
@@ -460,22 +456,21 @@ test('With reduced motion an Agent at work still shows its dots and its check, a
   const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'});
   await tile.click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/chat\/[0-9a-f-]{36}$/);
-  await expect(page.locator('svg.face.is-happy')).toHaveCount(0);
   await tile.hover();
-  expect(await tile.locator('svg.face').evaluate(element=>getComputedStyle(element).transform)).toBe('none');
+  expect(await tile.locator('.face').evaluate(element=>getComputedStyle(element).transform)).toBe('none');
   fake.settings.pendingReads=1_000_000;
   await page.getByLabel('Message',{exact:true}).fill(`Still ${Date.now()}`);
   await page.getByRole('button',{name:'Send',exact:true}).click();
   const pill=page.locator('#btn-details');
-  await expect(pill.locator('svg.face')).toHaveClass(/\bis-thinking\b/);
+  await expect(pill.locator('.face')).toHaveAttribute('data-state','thinking');
   if(await pill.getAttribute('aria-expanded')!=='true') await pill.click();
-  const wrap=page.locator('#details .face-wrap--lg');
-  await expect(wrap.locator('.think')).toBeVisible();
-  const still=await page.evaluate(()=>[...document.querySelectorAll('#details .face-wrap--lg .face__f, #details .face-wrap--lg .think i, #btn-details .face__f')].map(element=>getComputedStyle(element))
-   .concat(getComputedStyle(document.querySelector('#details .face-wrap--lg .dot')!,'::after')).every(style=>style.animationName==='none'||parseFloat(style.animationDuration)<=0.001)
-   &&[...document.querySelectorAll('.face__f')].every(element=>['none','matrix(1, 0, 0, 1, 0, 0)'].includes(getComputedStyle(element).transform)));
+  const face=page.locator('#details .fw--lg .face');
+  await expect(face).toHaveAttribute('data-state','thinking');
+  // Nothing of any face moves: no animation runs on it, and the dot sends no ring.
+  const still=await page.evaluate(()=>[...document.querySelectorAll('.face')].every(face=>face.getAnimations({subtree:true}).every(animation=>animation.playState!=='running'))
+   &&[...document.querySelectorAll('.face *')].every(element=>getComputedStyle(element).animationName==='none'));
   expect(still).toBe(true);
   fake.settings.pendingReads=0;
-  await expect(wrap.locator('.done-ck')).toBeAttached({timeout:20000});
+  await expect(face).toHaveAttribute('data-state','done',{timeout:20000});
  } finally { fake.settings.pendingReads=0; detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
 });

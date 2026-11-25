@@ -64,8 +64,10 @@ test('the Hermes driver offers tools in the run\'s instructions and reads the ca
   assert.equal(await engine.start({...offered,retry:true}),run);
   assert.deepEqual(await engine.read(run),{state:'completed',reply:'Meta Ads is on the team now.',session:'conversation-1',usage:{input:14000,output:12},
    toolCalls:[{id:'call-0',name:'create_agent',arguments:{name:'Meta Ads'}}]});
+  // #708: a Run with no tools and no words of its own still carries how the Agent hands a file in its reply.
   await engine.start({...message,idempotencyKey:'no-tools'});
-  assert.equal(fake.settings.runs[1].instructions,undefined);
+  assert.equal(fake.settings.runs[1].instructions,`To give the person a file you made (a PDF, an image, a spreadsheet, a page, any kind of file), save it in your work folder (/work/writer) and put its full path on a line of its own in your reply, as MEDIA:/work/writer/<path to the file>. gtmworks attaches that file to your reply for the person to open and download, whatever its kind, up to 25 MB; this replaces any other note you have on which files come through. Never convert a file into images to send it, and write no other path to it in your reply. Only files inside your own work folder can be attached.`);
+  assert.ok(sent.endsWith(fake.settings.runs[1].instructions),'and so does one with tools, last');
  } finally { await fake.close(); }
 });
 

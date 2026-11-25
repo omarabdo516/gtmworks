@@ -5,7 +5,8 @@
 // Run's tool calls as the Engine streams them (app/api/run-steps). A Conversation and a channel draw them alike, each
 // with the words of its own catalogue. When the stream cannot be read, the page keeps its "is working on a reply" line.
 import { useEffect, useState } from 'react';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
+import { useAgentState } from '@/app/sidebar-live';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import type { LiveLine, LiveView } from '@/lib/live-steps.mjs';
 
@@ -81,17 +82,20 @@ export function ActivityLine({view,agent,face,c,cb}:{view:LiveView,agent:string,
  const key=now?`${view.steps.length}:${now.tool}:${now.preview??''}`:`${view.steps.length}:none`;
  const [first]=useState(key);
  return <p className="activity convo-status" role="status" aria-live="polite" data-live>
-  <span className="dot dot--working" aria-hidden="true"/><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:face,name:agent}} size={16}/></span>
+  <span className="dot dot--working" aria-hidden="true"/><span aria-hidden="true"><AgentFace agent={face} size={16}/></span>
   <bdi className="activity__who">{agent}</bdi><span key={key} className={`activity__t shimmer${key!==first?' is-swap':''}`}>{said}…</span>
  </p>;
 }
 
-// The Agent's turn while it works: its sender line and the steps it finished so far, in the list the reply will carry,
-// open as the person left it for this Run (`open`, `toggled`).
-export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
- if(!view.steps.length) return null;
+// The Agent's turn while it works, from the moment the person sent (#694): its sender line, and once a step ended the
+// steps it finished so far (`view`, null until the Run's live read answers), in the list the reply will carry, open as
+// the person left it for this Run (`open`, `toggled`).
+export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView|null,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
+ // Its face is 24px and alive, in the state the chat's head and the sidebar show (#700): thinking until the Run's first
+ // step, working after it. Past replies are 20px and still.
+ const state=useAgentState(face,'working');
  return <li className="turn turn--agent msg" data-author="agent" data-live>
-  <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:face,name:agent}} size={20}/></span><bdi>{agent}</bdi></div>
-  <StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>
+  <div className="sender"><span aria-hidden="true"><AgentFace agent={face} size={24} state={state} live/></span><bdi>{agent}</bdi></div>
+  {!!view?.steps.length&&<StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>}
  </li>;
 }

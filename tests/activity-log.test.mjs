@@ -359,6 +359,14 @@ test('a request moved to the next account names its kind and the two accounts, b
  assert.equal(describeEntry({ subject: 'company', action: 'provider_switched', details: { provider: 'anthropic' } }).obj, 'Claude');
 });
 
+// #644: the Engine moved a request to the Company's Fallback model; the row names the model it was to run on and the
+// one that answered, by the Engine's model ids.
+test('a request moved to the Fallback model names the model it was to run on and the one that answered', () => {
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'fallback_model_used', details: { from_provider: 'openai-codex', from_model: 'gpt-5.5', to_provider: 'anthropic', to_model: 'claude-sonnet-4-6' } }),
+  { act: ['logActFallbackModelUsed'], obj: undefined, from: { text: 'gpt-5.5' }, to: { text: 'claude-sonnet-4-6' }, note: undefined });
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'fallback_model_used', details: {} }).act, ['logActFallbackModelUsed']);
+});
+
 test('a day with no zone given follows the runtime zone, also after it changes', () => {
  const before = process.env.TZ;
  try {
@@ -410,4 +418,19 @@ test('a memory or skill change nobody confirmed reads as asked for and not confi
  }
  assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActMemoryEditAsked', 'Ads'), i18n(language).t('logUnconfirmed')]),
   [['asked to edit a note in the memory of Ads', 'Not confirmed'], ['طلب يعدّل ملاحظة في ذاكرة Ads', 'مش متأكد إنه حصل']]);
+});
+
+test('a change of an Agent\'s look says which part changed, from what to what, and a reset says it is automatic again (#698)', () => {
+ const words = (entry, language) => { const { t } = i18n(language); const say = value => value && ('key' in value ? t(value.key) : value.text); const [key, ...args] = entry.act; return [t(key, ...args.map(say)), say(entry.from), say(entry.to)]; };
+ const colour = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'colour', from: 'violet', to: 'rose', automatic: false } });
+ assert.deepEqual(['en', 'ar'].map(language => words(colour, language)), [['changed the colour of Reach', 'Violet', 'Rose'], ['غيّر لون Reach', 'بنفسجي', 'وردي']]);
+ const shape = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'shape', from: 'circle', to: 'blob', automatic: false } });
+ assert.deepEqual(['en', 'ar'].map(language => words(shape, language)), [['changed the shape of Reach', 'Circle', 'Soft blob'], ['غيّر شكل Reach', 'دايرة', 'فقاعة']]);
+ const back = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'temperament', from: 'dreamy', to: 'energetic', automatic: true } });
+ assert.deepEqual(['en', 'ar'].map(language => words(back, language)), [['set the temperament of Reach back to automatic', 'Dreamy', 'Energetic'], ['رجّع طبع Reach تلقائي', 'حالم', 'نشيط']]);
+ // A value this version has no words for reads as it was kept, never guessed; a part it does not know reads as a change to the Agent.
+ const unknown = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'colour', from: 'violet', to: 'amber' } });
+ assert.deepEqual(unknown.to, { text: 'amber' });
+ const part = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'size' } });
+ assert.deepEqual([part.act, part.obj], [['logActAgentChanged'], 'Reach']);
 });

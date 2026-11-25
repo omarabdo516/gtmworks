@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chainFor, changeFallbackModel, fallbackPair, keepFallbackModels } from '../lib/fallback-model.mjs';
+import { chainFor, changeFallbackModel, fallbackPair, keepFallbackModels, logFallbackMove } from '../lib/fallback-model.mjs';
 import { readFallbackChain, writeFallbackChain } from '../lib/hermes.mjs';
 import { endOf } from '../lib/engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -145,4 +145,46 @@ test('the driver reads both of the Engine\'s chain keys and replaces the chain w
 test('a Run that ran out of every account ends as no_access, a failure a send again cannot fix yet', () => {
  assert.equal(endOf({state:'failed',reply:null,modelRefused:'access'}),'no_access');
  assert.equal(endOf({state:'failed',reply:null}),'failed');
+});
+
+// #644: a request the Engine moved to the Company's Fallback model is logged once, as gtmworks's own entry naming the
+// model the Run was to run on and the one that answered. The database is a stub (supabase/tests/fallback_model_moves.sql
+// proves the entry), and so is the Engine, whose profile's own model is read only when the Run named none.
+function closer({kept=claude,error=null}={}) {
+ const asked=[];
+ return {asked,
+  from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:kept,error:null})})})}),
+  rpc:async(name,args)=>{ asked.push({name,args}); return error?{data:null,error}:{data:true,error:null}; }};
+}
+const gpt={provider:'openai-codex',model:'gpt-5.5'};
+const profileOn=current=>{ const reads=[]; return {reads,models:async()=>{ reads.push('models'); return {state:'found',current,models:[]}; }}; };
+const done=(served,chosen)=>({state:'completed',reply:'Done',session:null,usage:null,toolCalls:[],...(served?{served}:{}),...(chosen?{chosen}:{})});
+
+test('a Run the Fallback model answered instead of the chosen one is logged once, naming both models', async () => {
+ const db=closer(); const engine=profileOn(gpt);
+ assert.equal(await logFallbackMove(db,{company,run:'run_1',result:done(claude,gpt),engine}),true);
+ assert.deepEqual(db.asked,[{name:'record_fallback_move',args:{c:company,run:'run_1',from_provider:'openai-codex',from_model:'gpt-5.5',to_provider:'anthropic',to_model:'claude-sonnet-4-6'}}]);
+ assert.deepEqual(engine.reads,[],'a Run that named its model needs no read of the profile');
+ // A Run on the Agent's own model: the profile says what that was.
+ const own=closer();
+ assert.equal(await logFallbackMove(own,{company,run:'run_2',result:done(claude,null),engine:profileOn(gpt)}),true);
+ assert.equal(own.asked[0].args.from_model,'gpt-5.5');
+});
+
+test('a Run answered by the model it was to run on, or by one that is not the Fallback model, logs nothing', async () => {
+ const cases=[
+  ['the chosen model answered',done(gpt,gpt),closer(),gpt],
+  ['the Agent\'s own model answered',done(gpt,null),closer(),gpt],
+  ['the Agent\'s own model is the Fallback model',done(claude,null),closer(),claude],
+  ['the Company has None',done(claude,gpt),closer({kept:null}),gpt],
+  ['another model answered',done({provider:'openrouter',model:'x'},gpt),closer(),gpt],
+  ['the profile cannot be read',done(claude,null),closer(),null],
+  ['the Run failed',{...done(claude,gpt),state:'failed'},closer(),gpt],
+  ['the Run names no model that answered',done(null,gpt),closer(),gpt]];
+ for(const [why,result,db,current] of cases) {
+  assert.equal(await logFallbackMove(db,{company,run:'run_1',result,engine:profileOn(current)}),false,why);
+  assert.deepEqual(db.asked,[],why);
+ }
+ // A database that refuses leaves the Run's close as it is.
+ assert.equal(await logFallbackMove(closer({error:{code:'XX000'}}),{company,run:'run_1',result:done(claude,gpt),engine:profileOn(gpt)}),false);
 });

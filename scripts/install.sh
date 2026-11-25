@@ -473,7 +473,19 @@ keep_previous_engine() {
     [ -f "$file" ] || continue
     cp "$file" .install-lock/previous-engine/ || return 1
   done
+  keep_previous_release || return 1
   keep_sandbox_parts
+}
+# The release the install records it runs, kept beside the previous Engine files (#583; its name is no engine-* file, so
+# it never goes to scripts/): a release update removes the record while its files are on disk, and an update whose Engines
+# go back records that release again once they all run, so its own installer backs up and restores without the update
+# that just failed. A run that fails before its Engines start, or whose Engines do not all come back, records none: the
+# files on disk stay the failed release's until an update with either release's files runs.
+keep_previous_release() {
+  [ ! -f .install-release ] || cp .install-release .install-lock/previous-engine/install-release
+}
+previous_release_recorded_again() {
+  [ ! -f .install-lock/previous-engine/install-release ] || cp .install-lock/previous-engine/install-release .install-release
 }
 # The previous release's own Engine files back on disk, exactly as keep_previous_engine kept them (#554): each one kept
 # comes back and every other scripts/engine-* the update brought goes, so that release's Engines, its `company add`, its
@@ -1353,7 +1365,8 @@ fi
 if [ "$operation" = install ] && previous_release_engine; then refuse_several_companies || exit 1; fi
 if [ -n "$release_image" ]; then
   docker pull "$release_image"
-  # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that.
+  # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that. An
+  # update whose Engines go back records the previous release again (keep_previous_release, #583).
   rm -f .install-release
   # The image carries what a checkout holds for the install: migrations, database and gateway files, lib/install-env.mjs.
   # The migrations are replaced, not merged, so a rolled-back release leaves none of its own to apply again. The folder is
@@ -1419,6 +1432,8 @@ if ! engines_up; then
   # A plain install run on the release before ADR 0018 moves its Engine as an update does, and puts it back the same way.
   if [ "$operation" = update ] || [ -f .install-lock/old-engine ]; then
     if restore_previous_engine; then
+      # The release that serves again is the one the install records (#583).
+      previous_release_recorded_again || echo 'The install could not record the previous release again: run the install command with its files.' >&2
       echo 'An Engine or a work sandbox did not start, so this update stopped: the previous release keeps serving, with its own Engines again. Nothing of this release serves.' >&2
     else
       echo 'An Engine or a work sandbox did not start, and the previous release could not get its own Engines back: run the install command again.' >&2

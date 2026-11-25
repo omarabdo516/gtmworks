@@ -1,40 +1,24 @@
 'use client';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { ShellIcon } from '@/components/shell-icon';
-import { channelTitle, type ChannelSummary } from '@/lib/channels';
+import { channelTitle } from '@/lib/channels';
+import { useSidebarChannels } from './sidebar-live';
 
 const NewChannel=lazy(()=>import('./new-channel-dialog'));
-const pollEvery=5000;
 
-// design-reference: renderThreadList. The open channel is being read, so it shows no count; ?new=channel opens New
-// channel from any page, which is how its compared screen reaches it.
-export default function ChannelList({slug,company,person,initial,current,manage}:{slug:string,company:string,person:string,initial:ChannelSummary[],current?:string,manage:boolean}) {
+// design-reference: renderThreadList. The channels and their counts follow the sidebar's poll (app/sidebar-live). The
+// open channel is being read, so it shows no count; ?new=channel opens New channel from any page, which is how its
+// compared screen reaches it.
+export default function ChannelList({slug,company,person,current,manage}:{slug:string,company:string,person:string,current?:string,manage:boolean}) {
  const {t,language}=useI18n();
  const router=useRouter(); const path=usePathname(); const search=useSearchParams();
- // A newer page brings its own list; one asked for since then is kept only while it answers that page's list.
- const [polled,setPolled]=useState<{basis:ChannelSummary[],list:ChannelSummary[]}|null>(null);
- const channels=polled?.basis===initial?polled.list:initial;
+ const channels=useSidebarChannels();
  const [opened,setOpened]=useState(false);
  const asked=search.get('new')==='channel';
- useEffect(()=>{
-  if(!initial.length) return;
-  let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined;
-  const poll=async()=>{
-   if(document.visibilityState==='visible') {
-    try {
-     const response=await fetch(`/api/channel-list?company=${company}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { const list=await response.json() as ChannelSummary[]; setPolled({basis:initial,list}); }
-    } catch {}
-   }
-   if(!stopped) timer=setTimeout(poll,pollEvery);
-  };
-  timer=setTimeout(poll,pollEvery);
-  return ()=>{stopped=true;clearTimeout(timer);};
- },[company,initial]);
  if(!channels.length) return null;
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const close=()=>{

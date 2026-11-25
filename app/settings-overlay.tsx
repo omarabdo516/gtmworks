@@ -7,14 +7,15 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { createClient } from '@supabase/supabase-js';
-import { AgentFaceDot } from './agent-face-dot';
-import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
+import { AgentFace } from '@/components/agent-face';
+import { agentFaceStates, faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
 import { pickSection, pageReadAt, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
+import { LookRow } from './agent-look-window';
 import { InfoTip } from './settings-info';
 import PasswordSettings from './password-settings';
 import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
@@ -142,8 +143,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // Agent the reader is not shown is not found above, so the page shows the Agents list instead. An Engine that cannot be
  // read leaves the tab unread rather than empty.
  const memory=agent&&tab==='memory'?await readAgentMemory(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed' as const,main:false,notes:null})):null;
- // Each Agent's state for this reader, read in one call as the sidebar reads it (#184).
- const stateOf=agentStates(section==='agents'?(await db.rpc('agent_states',{c:company.id})).data:null);
+ // Each Agent's state for this reader, read in one call as the sidebar reads it (#699).
+ const stateOf=section==='agents'?(await agentFaceStates(db,company.id)).of:()=>({state:'idle' as const});
  // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
  // approved (#25).
  // Learning suggestions waiting for this Owner's or Manager's OK (#25): their open items in "Waiting on you".
@@ -164,10 +165,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} count={memberCount} owner={owner} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
   :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id).state} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
-  :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
+  :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning} readAt={readAt}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
@@ -177,9 +178,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
   :<SoonSection t={t} section={section} ro={ro} providers={<CompanyProviders company={company.id} companyName={company.name} owner={owner} keys={keys} models={providerModels} names={names} order={order}
      subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,accounts:subscriptions&&'accounts' in subscriptions?subscriptions.accounts:null,noEngine:subscriptions?.noEngine===true}}/>}
-    speech={<SpeechToText company={company.id} owner={owner} data={speech}/>}
+    speech={<SpeechToText company={company.id} owner={owner} data={speech} readAt={readAt}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default} readAt={readAt}/>:null}
-    fallbackModel={models?.models&&fallback!==undefined?<FallbackModel company={company.id} owner={owner} model={fallback} options={models.models.default.options}/>:null}
+    fallbackModel={models?.models&&fallback!==undefined?<FallbackModel company={company.id} owner={owner} model={fallback} options={models.models.default.options} readAt={readAt}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models} readAt={readAt}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
  // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
@@ -228,8 +229,6 @@ function MembersSection({t,company,solo,members,invitations,agents,allowed,invit
  return <><Head title={t('members')}/>{ro}{solo?invite:canManage?table:list}</>;
 }
 
-// What a face needs of an Agent: the client component is handed no more of the row than it draws.
-const face=({id,connection_id,name}:Agent)=>({id,connection_id,name});
 
 // The simplest way to change an Agent is to tell it in its chat (#18): that sentence is optional help (#614), and the
 // link to the chat stays on the page as an action.
@@ -238,7 +237,7 @@ function TalkTip({t,talk}:{t:T,talk?:{href:string,name:string}}) {
  return talk?<p className="talk-tip"><SettingsIcon name="chat"/><Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link></p>:null;
 }
 
-function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiting}:{t:T,rtl:boolean,slug:string,agents:Agent[],stateOf:(agent:string)=>AgentStatus,canManage:boolean,canWrite:boolean,owner:boolean,waiting:Set<string>}) {
+function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiting}:{t:T,rtl:boolean,slug:string,agents:Agent[],stateOf:(agent:string)=>AgentFaceState,canManage:boolean,canWrite:boolean,owner:boolean,waiting:Set<string>}) {
  const main=agents.find(agent=>agent.is_default); const other=agents.find(agent=>!agent.is_default);
  const add=canWrite&&main?<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat?new=agent`}><SettingsIcon name="chat"/><span>{owner?t('settingsAskLead',main.name):t('settingsAskAgent')}</span></Link>
   :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
@@ -246,16 +245,16 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiti
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
   <TalkTip t={t} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
   <div className="panel-card sov-ags">{agents.length?agents.map(agent=><Link key={agent.id} className="panel-row sov-ag" id={`sov-ag-${agent.id}`} href={overlayHref(slug,'agents',{agent:agent.id})}>
-   <AgentFaceDot agent={face(agent)} size={36} status={stateOf(agent.id)}/>
+   <AgentFace agent={agent.id} size={36} state={stateOf(agent.id)} dot/>
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi>{agent.is_default&&<> <span className="badge sov-badge">{t('mainAgent')}</span></>}</span>
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
    {/* An Agent with a change waiting for this Owner ends its row with it in place of its state (#178). */}
-   {waiting.has(agent.id)?<ProposalMark/>:<span className="panel-row__meta">{t(statusKeys[stateOf(agent.id)])}</span>}
+   {waiting.has(agent.id)?<ProposalMark/>:<span className="panel-row__meta">{t(faceStateWords[stateOf(agent.id)])}</span>}
    <span className="panel-row__icon sov-chev"><SettingsIcon name="forward" rtl={rtl}/></span></Link>)
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,readAt,permissions,morning,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],readAt:number,agentModel:{models:{agents:{model:string|null,choice:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,permissions:StandingPermission[],morning:MorningRead|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,readAt,permissions,morning,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentFaceState,main?:Agent,rules:Rule[],readAt:number,agentModel:{models:{agents:{model:string|null,choice:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,permissions:StandingPermission[],morning:MorningRead|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -286,9 +285,9 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  return <>
   {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
   <BackLink className="link-btn sov-back" id="sov-back" slug={slug} agent={agent.id}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></BackLink>
-  <div className="sov-agent-id"><AgentFaceDot agent={face(agent)} size={48} status={status} lg/><div className="od-fill">
+  <div className="sov-agent-id"><AgentFace agent={agent.id} size={48} state={status} dot/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-   <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
+   <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(faceStateWords[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
   <AgentTabs slug={slug} agent={agent.id} tab={tab} label={agent.name}/>
   {/* design-reference: sovAgentHTML's ${pend}, under the tabs on either tab, while a proposed change waits. */}
   {pend}
@@ -307,6 +306,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
          both are the reference's read-only rows, for every Role. */}
      <ul className="panel-card">
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsName')}</span><span className="panel-row__d ro-val" id="set-name-val"><bdi>{agent.name}</bdi> · <bdi dir="ltr">{handle}</bdi></span></span></li>
+      <LookRow agent={{id:agent.id,name:agent.name}}/>
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsRole')}</span><span className="panel-row__d ro-val" id="set-role-val">{agent.speciality?<bdi>{agent.speciality}</bdi>:'—'}</span></span></li>
       {mainRow}
      </ul>

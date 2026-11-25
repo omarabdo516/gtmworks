@@ -1,0 +1,183 @@
+/* An Agent's face: the approved orb (design-reference-orb/agent-orb-v2.html, "THE FACE"; decision 0067, ADR 0027),
+   drawn by components/agent-face and kept alive by components/face-life. Layers, outside in: floor shadow, act (the
+   moments), pose (the state's posture), breath (the temperament's loop), glow, the glass body (gradient, flowing colour,
+   inner light, shade, swirl, veil, highlight, rim), eyes. Only transform and opacity move. Under 24px a still orb with
+   eyes; a face off screen, in a hidden tab or with reduced motion moves nothing, and its expression still changes.
+   The look's numbers come in as custom properties (lib/agent-look: lookStyle); the theme's knobs are app/tokens.css's. */
+.gw .face-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.gw .fw { position: relative; display: inline-flex; flex: none; vertical-align: middle; }
+.gw .face {
+  --ew: max(2px, calc(var(--s) * var(--eW, .088)));
+  --eh: max(4px, calc(var(--s) * var(--eH, .2)));
+  /* expression knobs: states and moments change only these */
+  --lk: .6; --sx: 0; --sy: var(--sy0, 0);
+  --eSX: 1; --eSY: 1; --eOpen: 1; --eHappy: 0; --eSleep: 0;
+  --clL: var(--clL0, polygon(-40% -40%, 140% -40%, 140% 140%, -40% 140%));
+  --clR: var(--clR0, polygon(-40% -40%, 140% -40%, 140% 140%, -40% 140%));
+  --core: 1; --gs: 1; --swk: 0; --veil: 0; --veilc: #2B2E3A;
+  position: relative; display: block; flex: none; width: var(--s); height: var(--s);
+  direction: ltr; transition: transform var(--gw-dur) var(--gw-ease-out);
+}
+.gw .face .l, .gw .face i { position: absolute; display: block; pointer-events: none; }
+.gw .f-act, .gw .f-pose, .gw .f-breath { position: absolute; inset: 0; }
+.gw .f-pose { transform-origin: 50% 90%; transition: transform 360ms var(--gw-ease-out); }
+.gw .f-breath { transform-origin: 50% 92%; animation: gw-face-breath var(--br, 5s) ease-in-out var(--d, 0s) infinite; }
+/* Each temperament's breath (agent-orb-v2 fBreath and fBounce with its numbers: lift, swell, sway), written out, as
+   keyframes that read custom properties are not run by the compositor and cost every face a frame of the main thread
+   (tests/face-frames.spec.ts, #697). */
+.gw .face[data-temperament="energetic"] .f-breath { animation-name: gw-face-bounce; }
+.gw .face[data-temperament="warm"] .f-breath { animation-name: gw-face-sway; }
+.gw .face[data-temperament="dreamy"] .f-breath { animation-name: gw-face-drift; }
+.gw .face[data-temperament="neat"] .f-breath { animation-name: gw-face-tick; }
+.gw .face[data-temperament="caring"] .f-breath { animation-name: gw-face-settle; }
+@keyframes gw-face-breath { 0%, 100% { transform: none; } 50% { transform: translateY(-1.2%) scale(1.009, 1.018); } }
+@keyframes gw-face-sway { 0%, 100% { transform: rotate(-3.5deg); } 50% { transform: translateY(-1.6%) rotate(3.5deg) scale(1.012, 1.024); } }
+@keyframes gw-face-drift { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: translateY(-2.2%) rotate(1.5deg) scale(1.01, 1.02); } }
+@keyframes gw-face-tick { 0%, 100% { transform: none; } 50% { transform: translateY(-.6%) scale(1.005, 1.01); } }
+@keyframes gw-face-settle { 0%, 100% { transform: none; } 50% { transform: translateY(-1.2%) scale(1.01, 1.02); } }
+@keyframes gw-face-bounce {
+  0%, 100% { transform: translateY(0) scale(1.025, .975); }
+  14% { transform: none; }
+  46% { transform: translateY(-4.5%) scale(.99, 1.02); }
+  78% { transform: none; }
+  88% { transform: translateY(0) scale(1.03, .97); }
+}
+/* the floor: a dark contact shadow on light, a coloured pool of light on dark */
+.gw .f-shadow { left: 17%; right: 17%; top: 97%; height: 15%; }
+.gw .f-shadow::before, .gw .f-shadow::after { content: ""; position: absolute; border-radius: 50%; }
+.gw .f-shadow::before { inset: 0; background: radial-gradient(closest-side, color-mix(in srgb, var(--c4) 55%, #000) 0%, color-mix(in srgb, var(--c4) 20%, transparent) 60%, transparent 100%); opacity: var(--gw-sh-l); }
+.gw .f-shadow::after { inset: -40% -18%; background: radial-gradient(closest-side, var(--c2) 0%, color-mix(in srgb, var(--c2) 30%, transparent) 55%, transparent 100%); opacity: var(--gw-sh-d); }
+.gw .f-glow {
+  inset: calc(-30% * var(--pres, 1)); border-radius: 50%;
+  background: radial-gradient(closest-side, var(--c2) 50%, color-mix(in srgb, var(--c2) 45%, transparent) 64%, transparent 100%);
+  opacity: calc(var(--gw-glow-k) * var(--gs) * var(--pres, 1));
+  transition: opacity 500ms var(--gw-ease-out);
+}
+@keyframes gw-face-glow { from { transform: scale(.94); } to { transform: scale(1.1); } }
+.gw .f-body { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; background: var(--c3); isolation: isolate; }
+.gw .face:not([data-shape="circle"]) .f-body { border-radius: 0; -webkit-mask: var(--mask) center / 100% 100% no-repeat; mask: var(--mask) center / 100% 100% no-repeat; }
+.gw .f-base { inset: 0; background: linear-gradient(158deg, var(--c1) 8%, var(--c2) 42%, var(--c3) 72%, var(--c4) 100%); }
+/* the colour inside the glass: one oversized layer with a light blob and a deep one. The approved orb turns it slowly;
+   the build holds it still, the spec's first fallback, as sixteen turning faces kept a CPU slowed four times under 50
+   frames a second (tests/face-frames.spec.ts, #697). */
+.gw .f-flows { inset: -25%; border-radius: 50%;
+  background:
+    radial-gradient(30% 30% at 24% 20%, color-mix(in srgb, var(--c1) 86%, #fff) 0%, color-mix(in srgb, var(--c1) 60%, transparent) 45%, transparent 100%),
+    radial-gradient(34% 34% at 76% 80%, var(--c4) 0%, color-mix(in srgb, var(--c4) 55%, transparent) 45%, transparent 100%),
+    radial-gradient(26% 26% at 82% 30%, color-mix(in srgb, var(--c2) 80%, var(--c1)) 0%, transparent 100%);
+  opacity: calc(.55 + var(--flk, .55) * .45); }
+/* inner light, rising from the lower core like light caught in glass */
+.gw .f-core { inset: 0; background: radial-gradient(62% 34% at 50% 98%, color-mix(in srgb, var(--c1) 55%, #fff) 0%, color-mix(in srgb, var(--c1) 70%, transparent) 38%, transparent 100%), radial-gradient(46% 40% at 50% 62%, color-mix(in srgb, var(--c1) 50%, transparent) 0%, transparent 100%); opacity: calc(.62 * var(--core) * var(--pres, 1)); transition: opacity 500ms var(--gw-ease-out); }
+.gw .f-shade { inset: 0; background: radial-gradient(circle at 40% 30%, transparent 58%, color-mix(in srgb, var(--c4) 32%, transparent) 84%, color-mix(in srgb, var(--c4) 62%, transparent) 100%); }
+.gw .f-swirl { inset: 5%; border-radius: 50%; opacity: var(--swk); transition: opacity .42s var(--gw-ease-out);
+  background: conic-gradient(from 0deg, transparent 0 8%, color-mix(in srgb, var(--c1) 70%, #fff) 24%, transparent 40% 58%, var(--c1) 76%, transparent 92%);
+  -webkit-mask: radial-gradient(closest-side, transparent 30%, #000 54%, #000 68%, transparent 94%); mask: radial-gradient(closest-side, transparent 30%, #000 54%, #000 68%, transparent 94%); }
+.gw .f-veil { inset: 0; background: var(--veilc); opacity: var(--veil); transition: opacity 500ms var(--gw-ease-out); }
+/* the highlight leans a little toward the pointer, like a light */
+.gw .f-specs { position: absolute; inset: 0; transform: translate(calc(var(--lx, 0) * var(--s) * .07), calc(var(--ly, 0) * var(--s) * .05)); transition: transform .42s var(--gw-ease-out); }
+.gw .f-spec { top: 3%; left: 12%; width: 62%; height: 30%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.34), rgba(255,255,255,.1) 60%, rgba(255,255,255,0)); transform: rotate(-16deg); }
+.gw .f-spec2 { top: 11%; left: 27%; width: 13%; height: 7%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.95), rgba(255,255,255,0)); transform: rotate(-24deg); }
+.gw .f-rim { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.gw .f-rim use { fill: none; stroke: url(#gw-rim-light); stroke-width: 2; opacity: var(--gw-rim-k); }
+.gw .face--big .f-rim use { stroke-width: 3; }
+/* the eyes: all feeling lives here */
+.gw .f-eyes {
+  position: absolute; left: var(--eX, 50%); top: var(--eYp, 41%); width: 0; height: 0; z-index: 2;
+  transform: translate(
+    calc((var(--lx, 0) * var(--lk) + var(--sx)) * var(--s) * .065),
+    calc((var(--ly, 0) * var(--lk) + var(--sy)) * var(--s) * .06));
+  transition: transform var(--gd, 300ms) var(--gw-ease-out);
+}
+/* the state's own eye motion (thinking looks around) is the gaze's; a glance is the look's (components/face-life) */
+.gw .f-gaze, .gw .f-look { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gw .f-eye { position: absolute; top: calc(var(--eh) / -2); width: var(--ew); height: var(--eh); }
+.gw .f-eye--l { left: calc(var(--s) * var(--eG, .185) * -1 - var(--ew) / 2); }
+.gw .f-eye--r { left: calc(var(--s) * var(--eG, .185) - var(--ew) / 2); }
+.gw .e-open {
+  position: absolute; inset: 0; border-radius: var(--eR, 999px); background: #FFFFFF; opacity: var(--eOpen);
+  box-shadow: 0 0 calc(var(--s) * .05) color-mix(in srgb, var(--c4) 45%, transparent);
+  transition: transform 260ms var(--gw-ease-out), clip-path 260ms var(--gw-ease-out), opacity 140ms linear;
+}
+.gw .f-eye--l .e-open { transform: rotate(var(--eT, 0deg)) scale(var(--eSX), var(--eSY)); clip-path: var(--clL); }
+.gw .f-eye--r .e-open { transform: rotate(calc(var(--eT, 0deg) * -1)) scale(var(--eSX), var(--eSY)); clip-path: var(--clR); }
+.gw .e-arc { position: absolute; left: 50%; top: 50%; width: max(5px, calc(var(--ew) * 2.1)); height: max(5px, calc(var(--ew) * 2.1)); transform: translate(-50%, -50%); overflow: visible; }
+.gw .e-arc path { fill: none; stroke: #FFFFFF; stroke-width: 5; stroke-linecap: round; transition: opacity 140ms linear; }
+.gw .e-happy { opacity: var(--eHappy); }
+.gw .e-sleep { opacity: var(--eSleep); }
+/* the moments' light: birth gathers it, done sparkles */
+.gw .f-gather { display: none !important; inset: -46%; border-radius: 50%; opacity: 0; background: radial-gradient(closest-side, transparent 50%, color-mix(in srgb, var(--c1) 70%, #fff) 63%, color-mix(in srgb, var(--c2) 40%, transparent) 72%, transparent 86%); }
+.gw .face.is-birth .f-gather { display: block !important; }
+.gw .f-spark { position: absolute; inset: -20%; pointer-events: none; }
+.gw .f-spark i { width: 16%; height: 16%; opacity: 0; background: linear-gradient(135deg, #FFFFFF 10%, var(--c1) 90%); clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); }
+.gw .f-spark i:nth-child(1) { top: 2%; right: 8%; }
+.gw .f-spark i:nth-child(2) { top: 26%; right: -4%; width: 10%; height: 10%; }
+.gw .f-spark i:nth-child(3) { top: 0; left: 14%; width: 11%; height: 11%; }
+
+/* the expressions, one per state: a set of knob values and a posture */
+.gw .face[data-state="listening"] { --lk: .15; --sy: .62; --eSX: 1.14; --eSY: 1.16; --core: 1.2; --gs: 1.25; }
+.gw .face[data-state="listening"] .f-pose { transform: translateY(4%) scale(1.06); }
+.gw .face[data-state="thinking"] { --lk: 0; --sy: -.78; --eSX: .92; --eSY: .92; --swk: .55; --core: 1.25; --gs: 1.4; }
+.gw .face[data-state="thinking"] .f-gaze { animation: gw-face-gaze 2.6s ease-in-out infinite alternate; }
+.gw .face[data-state="thinking"] .f-swirl { animation: gw-face-swirl 3.4s linear infinite; }
+.gw .face[data-state="working"] { --lk: 0; --sy: .22; --eSX: 1.06; --eSY: .86; --swk: .8; --core: 1.5; --gs: 2.1;
+  --clL: polygon(-40% 20%, 140% 24%, 140% 140%, -40% 140%); --clR: polygon(-40% 24%, 140% 20%, 140% 140%, -40% 140%); }
+.gw .face[data-state="working"] .f-swirl { animation: gw-face-swirl 1.5s linear infinite; }
+.gw .face[data-state="working"] .f-glow { animation: gw-face-glow 1.3s ease-in-out infinite alternate; }
+.gw .face[data-state="done"] { --lk: .4; --eOpen: 0; --eHappy: 1; --core: 1.3; --gs: 1.6; }
+.gw .face[data-state="waiting"] { --lk: 0; --sx: 0; --sy: 0; --eSX: 1.08; --eSY: 1.08; --gs: 1.2; }
+.gw .face[data-state="waiting"] .f-pose { animation: gw-face-nudge 3.6s ease-in-out infinite; }
+.gw .face[data-state="stuck"] { --lk: 0; --sy: .32; --eSX: .96; --eSY: .94; --veil: .34; --veilc: #2B2E3A; --core: .55; --gs: .45;
+  --clL: polygon(-40% 46%, 140% 0%, 140% 140%, -40% 140%); --clR: polygon(-40% 0%, 140% 46%, 140% 140%, -40% 140%); }
+.gw .face[data-state="stuck"] .f-pose { transform: rotate(-6deg) translateY(3%); }
+.gw .face[data-state="asleep"] { --lk: 0; --sy: .22; --eOpen: 0; --eSleep: 1; --veil: .26; --veilc: #8E93A8; --core: .5; --gs: .3; }
+.gw .face[data-state="asleep"] .f-pose { transform: translateY(5%) scale(.985, .96); }
+@keyframes gw-face-gaze { from { transform: translate(calc(var(--s) * -.035), 0); } to { transform: translate(calc(var(--s) * .035), calc(var(--s) * -.014)); } }
+@keyframes gw-face-swirl { to { transform: rotate(1turn); } }
+@keyframes gw-face-nudge {
+  0%, 72%, 100% { transform: none; }
+  78% { transform: translateY(-9%) scale(.97, 1.04); }
+  84% { transform: translateY(0) scale(1.05, .95); }
+  90% { transform: translateY(-3%) scale(1, 1); }
+  95% { transform: none; }
+}
+/* a moment's eyes, set briefly by components/face-life over the state's */
+.gw .face.is-wide { --eSX: 1.22; --eSY: 1.24; }
+.gw .face.is-look { --lk: 0; --sx: 0; --sy: 0; }
+.gw .face.is-up { --sy: -.32; }
+.gw .face.is-squint { --eOpen: 0; --eHappy: 1; --eSleep: 0; }
+.gw .face.is-shut { --eOpen: 0; --eHappy: 0; --eSleep: 1; }
+/* under 24px a still orb with eyes; off screen and in a hidden tab nothing moves */
+.gw .face--still, .gw .face--still * { animation: none !important; }
+.gw .face--still .f-eyes { transition: none; }
+.gw .face--live:not(.is-vis) * { animation-play-state: paused !important; }
+
+/* The state dot (gtmworks 6.2), one look per state; its ring is the colour behind the face (--ring). */
+.gw .dot { position: relative; display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--gw-idle-dot); }
+.gw .dot--thinking, .gw .dot--working { background: var(--gw-accent); }
+.gw .dot--working::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
+@keyframes gw-dot-ping { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
+.gw .dot--done { background: var(--gw-text-1); }
+.gw .dot--waiting { background: var(--gw-wait); }
+.gw .dot--stuck { background: var(--ring, var(--gw-bg-chrome)); box-shadow: inset 0 0 0 2px var(--gw-text-1); }
+.gw .dot--asleep { background: var(--ring, var(--gw-bg-chrome)); box-shadow: inset 0 0 0 2px var(--gw-idle-dot); }
+.gw .fw > .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; z-index: 4; box-shadow: 0 0 0 2.5px var(--ring, var(--gw-bg-chrome)); }
+.gw .fw > .dot--stuck { box-shadow: inset 0 0 0 2px var(--gw-text-1), 0 0 0 2.5px var(--ring, var(--gw-bg-chrome)); }
+.gw .fw > .dot--asleep { box-shadow: inset 0 0 0 2px var(--gw-idle-dot), 0 0 0 2.5px var(--ring, var(--gw-bg-chrome)); }
+.gw .fw--lg > .dot { width: 12px; height: 12px; bottom: 4px; inset-inline-end: 4px; box-shadow: 0 0 0 3px var(--ring, var(--gw-bg-chrome)); }
+.gw .fw--lg > .dot--stuck { box-shadow: inset 0 0 0 2.5px var(--gw-text-1), 0 0 0 3px var(--ring, var(--gw-bg-chrome)); }
+.gw .fw--lg > .dot--asleep { box-shadow: inset 0 0 0 2.5px var(--gw-idle-dot), 0 0 0 3px var(--ring, var(--gw-bg-chrome)); }
+
+/* A tile's and the chat head's face lifts under the pointer (agent-orb-v2: .agent-tile:hover .face). */
+@media (hover: hover) {
+  .gw .agent-tile:hover .face { transform: translateY(-2px); }
+  .gw .head-pill:hover .face { transform: translateY(-1px); }
+}
+/* Reduced motion: nothing moves, a moment shows as still frames, and the expressions still change. */
+@media (prefers-reduced-motion: reduce) {
+  .gw .face, .gw .face * { animation: none !important; transition: none !important; }
+  .gw .dot--working::after { animation: none; display: none; }
+  .gw .agent-tile .face, .gw .head-pill .face { transform: none !important; }
+}
+/* the squircle's and the blob's outlines mask the body (lib/agent-look: shapePaths) */
+.gw .face[data-shape="squircle"] { --mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20100%20100'%20preserveAspectRatio%3D'none'%3E%3Cpath%20d%3D'M99.50%2050.00C99.50%2056.81%2099.44%2065.84%2099.32%2070.42C99.19%2075.01%2099.01%2075.47%2098.76%2077.50C98.51%2079.53%2098.20%2081.08%2097.83%2082.60C97.45%2084.12%2097.01%2085.41%2096.50%2086.62C95.99%2087.84%2095.41%2088.90%2094.76%2089.89C94.11%2090.88%2093.39%2091.76%2092.58%2092.58C91.76%2093.39%2090.88%2094.11%2089.89%2094.76C88.90%2095.41%2087.84%2095.99%2086.62%2096.50C85.41%2097.01%2084.12%2097.45%2082.60%2097.83C81.08%2098.20%2079.53%2098.51%2077.50%2098.76C75.47%2099.01%2075.01%2099.19%2070.42%2099.32C65.84%2099.44%2056.81%2099.50%2050.00%2099.50C43.19%2099.50%2034.16%2099.44%2029.58%2099.32C24.99%2099.19%2024.53%2099.01%2022.50%2098.76C20.47%2098.51%2018.92%2098.20%2017.40%2097.83C15.88%2097.45%2014.59%2097.01%2013.38%2096.50C12.16%2095.99%2011.10%2095.41%2010.11%2094.76C9.12%2094.11%208.24%2093.39%207.42%2092.58C6.61%2091.76%205.89%2090.88%205.24%2089.89C4.59%2088.90%204.01%2087.84%203.50%2086.62C2.99%2085.41%202.55%2084.12%202.17%2082.60C1.80%2081.08%201.49%2079.53%201.24%2077.50C0.99%2075.47%200.81%2075.01%200.68%2070.42C0.56%2065.84%200.50%2056.81%200.50%2050.00C0.50%2043.19%200.56%2034.16%200.68%2029.58C0.81%2024.99%200.99%2024.53%201.24%2022.50C1.49%2020.47%201.80%2018.92%202.17%2017.40C2.55%2015.88%202.99%2014.59%203.50%2013.38C4.01%2012.16%204.59%2011.10%205.24%2010.11C5.89%209.12%206.61%208.24%207.42%207.42C8.24%206.61%209.12%205.89%2010.11%205.24C11.10%204.59%2012.16%204.01%2013.38%203.50C14.59%202.99%2015.88%202.55%2017.40%202.17C18.92%201.80%2020.47%201.49%2022.50%201.24C24.53%200.99%2024.99%200.81%2029.58%200.68C34.16%200.56%2043.19%200.50%2050.00%200.50C56.81%200.50%2065.84%200.56%2070.42%200.68C75.01%200.81%2075.47%200.99%2077.50%201.24C79.53%201.49%2081.08%201.80%2082.60%202.17C84.12%202.55%2085.41%202.99%2086.62%203.50C87.84%204.01%2088.90%204.59%2089.89%205.24C90.88%205.89%2091.76%206.61%2092.58%207.42C93.39%208.24%2094.11%209.12%2094.76%2010.11C95.41%2011.10%2095.99%2012.16%2096.50%2013.38C97.01%2014.59%2097.45%2015.88%2097.83%2017.40C98.20%2018.92%2098.51%2020.47%2098.76%2022.50C99.01%2024.53%2099.19%2024.99%2099.32%2029.58C99.44%2034.16%2099.50%2043.19%2099.50%2050.00Z'%2F%3E%3C%2Fsvg%3E"); }
+.gw .face[data-shape="blob"] { --mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20100%20100'%20preserveAspectRatio%3D'none'%3E%3Cpath%20d%3D'M98.45%2051.95C98.81%2053.70%2099.01%2055.53%2099.00%2057.32C98.99%2059.11%2098.78%2060.94%2098.40%2062.69C98.01%2064.43%2097.41%2066.17%2096.68%2067.81C95.95%2069.44%2095.02%2071.02%2094.02%2072.49C93.02%2073.97%2091.86%2075.36%2090.67%2076.66C89.48%2077.95%2088.18%2079.15%2086.87%2080.28C85.57%2081.41%2084.20%2082.45%2082.84%2083.43C81.47%2084.41%2080.08%2085.31%2078.68%2086.16C77.28%2087.01%2075.88%2087.80%2074.46%2088.53C73.04%2089.26%2071.61%2089.94%2070.16%2090.55C68.71%2091.15%2067.25%2091.70%2065.78%2092.16C64.31%2092.62%2062.81%2093.02%2061.32%2093.33C59.83%2093.64%2058.32%2093.86%2056.82%2094.02C55.32%2094.17%2053.81%2094.24%2052.32%2094.26C50.83%2094.28%2049.35%2094.22%2047.88%2094.13C46.40%2094.05%2044.94%2093.90%2043.48%2093.75C42.02%2093.60%2040.57%2093.42%2039.10%2093.23C37.63%2093.05%2036.16%2092.85%2034.66%2092.64C33.15%2092.42%2031.63%2092.21%2030.07%2091.93C28.52%2091.66%2026.93%2091.38%2025.33%2090.99C23.74%2090.61%2022.10%2090.19%2020.50%2089.63C18.90%2089.08%2017.27%2088.44%2015.73%2087.65C14.19%2086.86%2012.66%2085.95%2011.28%2084.90C9.89%2083.85%208.57%2082.65%207.42%2081.34C6.27%2080.04%205.24%2078.58%204.39%2077.06C3.54%2075.54%202.86%2073.89%202.33%2072.23C1.81%2070.57%201.47%2068.82%201.25%2067.10C1.02%2065.38%200.98%2063.62%201.00%2061.91C1.02%2060.20%201.19%2058.50%201.37%2056.84C1.56%2055.18%201.84%2053.55%202.11%2051.95C2.39%2050.35%202.71%2048.79%203.03%2047.24C3.35%2045.68%203.67%2044.16%204.02%2042.63C4.36%2041.10%204.70%2039.57%205.10%2038.05C5.49%2036.52%205.89%2034.99%206.38%2033.48C6.88%2031.96%207.40%2030.43%208.04%2028.95C8.68%2027.47%209.39%2025.99%2010.21%2024.59C11.04%2023.18%2011.96%2021.81%2012.98%2020.53C14.00%2019.25%2015.14%2018.04%2016.34%2016.93C17.54%2015.81%2018.85%2014.79%2020.20%2013.86C21.55%2012.93%2022.99%2012.10%2024.44%2011.36C25.89%2010.61%2027.40%209.96%2028.92%209.38C30.44%208.79%2031.99%208.30%2033.55%207.86C35.11%207.41%2036.68%207.04%2038.27%206.74C39.85%206.43%2041.45%206.18%2043.05%206.01C44.65%205.85%2046.27%205.74%2047.88%205.74C49.49%205.74%2051.11%205.82%2052.70%206.01C54.30%206.21%2055.90%206.51%2057.45%206.93C58.99%207.35%2060.52%207.89%2061.98%208.54C63.44%209.19%2064.85%209.97%2066.19%2010.82C67.52%2011.67%2068.79%2012.64%2069.99%2013.65C71.19%2014.65%2072.30%2015.75%2073.38%2016.85C74.45%2017.95%2075.45%2019.10%2076.44%2020.23C77.43%2021.36%2078.36%2022.51%2079.32%2023.64C80.27%2024.77%2081.21%2025.89%2082.19%2027.02C83.16%2028.15%2084.16%2029.26%2085.17%2030.41C86.19%2031.57%2087.25%2032.72%2088.30%2033.95C89.35%2035.18%2090.44%2036.44%2091.45%2037.79C92.47%2039.14%2093.50%2040.56%2094.40%2042.06C95.30%2043.56%2096.16%2045.15%2096.84%2046.80C97.51%2048.45%2098.09%2050.20%2098.45%2051.95Z'%2F%3E%3C%2Fsvg%3E"); }

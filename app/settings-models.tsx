@@ -1,6 +1,5 @@
 'use client';
 import { useState, type KeyboardEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { effortDefault, effortHintKey, effortLabelKey } from '@/lib/engine-effort.mjs';
 import { toast } from './toast';
@@ -49,41 +48,49 @@ function reasonKey(code:string) {
 // back: the field starts empty and is cleared after it is sent. Provider names are their own brands, in either language.
 export type SpeechData={provider:string|null,missing:Named[]|null};
 const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram'],['elevenlabs','ElevenLabs',''],['openai','OpenAI',''],['groq','Groq','settingsSpeechGroq']] as const;
-export function SpeechToText({company,owner,data}:{company:string,owner:boolean,data:SpeechData|null}) {
- const {t}=useI18n(); const router=useRouter();
- const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+export function SpeechToText({company,owner,data,readAt}:{company:string,owner:boolean,data:SpeechData|null,readAt:number}) {
+ const {t}=useI18n();
+ // The provider in use and the Agents still waiting for it, as the save's answer read them back (#663).
+ const saved=useSave<SpeechData>(`speech:${company}`,{provider:data?.provider??null,missing:data?.missing??null},readAt);
+ const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [invalid,setInvalid]=useState(false);
+ // The provider whose row says "Saving": the one being set, or the one being removed.
+ const [sending,setSending]=useState('');
  const [missed,setMissed]=useState<string[]>([]);
  const act=async(provider:string,intent:'set'|'remove')=>{
-  if(busy) return;
-  if(intent==='set'&&value.trim().length<8) { setError('speechInvalid'); return; }
-  setBusy(true); setError('');
-  const answer=await send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:value.trim()}:{})});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'speechFailed'); return; }
-  setOpen(''); setValue('');
+  if(intent==='set'&&value.trim().length<8) { setInvalid(true); return; }
+  // The key leaves the page as it is sent: the form closes and the row says "Saving" while the Engine takes it.
+  const key=value.trim();
+  setInvalid(false); setOpen(''); setValue(''); setSending(provider);
+  const answer=await saved.save({provider:intent==='set'?provider:null,missing:saved.value.missing??[]},
+   ()=>send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:key}:{})}),
+   found=>({provider:typeof found.data?.provider==='string'?found.data.provider:null,missing:Array.isArray(found.data?.missing)?found.data.missing as Named[]:null}));
+  // A failed key opens its form again, unless the Owner already opened another one, whose key stays with it.
+  if(!answer.ok) { if(answer.newest&&intent==='set') setOpen(current=>current||provider); return; }
   // Agents a write did not reach are named, with no success toast, so the Owner tries again.
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as Named[]).map(item=>item.name||t('settingsModelsAnAgent')):[];
   setMissed(failed);
-  if(!failed.length) toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
-  router.refresh();
+  if(!failed.length&&answer.newest) toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
  };
- const missing=data?.provider&&data.missing?.length?data.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
+ const current=saved.value;
+ const error=invalid?'speechInvalid':saved.error;
+ const missing=!saved.saving&&current.provider&&current.missing?.length?current.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
  return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><Label id="md-h-stt" info={t('settingsSpeechHint')}>{t('settingsSpeech')}</Label>
-  {data?.missing?<div className="panel-card md-keys">{speechRows.map(([id,label,note])=>{ const on=data.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
+  {data&&current.missing?<div className="panel-card md-keys" aria-busy={saved.saving||undefined}>{speechRows.map(([id,label,note])=>{ const on=current.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
    <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
-    <span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span></span>
-    {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
-    {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setError(''); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
+    {saved.saving&&sending===id?<span className="panel-row__d is-saving" id={`mdl-stt-${id}-state`} role="status">{t('settingsSaving')}</span>
+     :<span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span>}</span>
+    {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
+    {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setInvalid(false); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
    </div>
    {owner&&open===id&&<div className="sub-step" id={`mdl-stt-${id}-form`}>
     <label className="set-label" htmlFor={`mdl-stt-${id}-value`}>{t('settingsModelsKeyValue')}</label>
-    <input className="set-input" id={`mdl-stt-${id}-value`} type="password" dir="ltr" autoComplete="new-password" spellCheck={false} value={value} disabled={busy}
+    <input className="set-input" id={`mdl-stt-${id}-value`} type="password" dir="ltr" autoComplete="new-password" spellCheck={false} value={value}
      onChange={event=>setValue(event.target.value)} onKeyDown={event=>{ if(event.key==='Enter') act(id,'set'); }}/>
-    <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={()=>act(id,'set')}>{t('settingsModelsKeySave')}</button></div>
+    <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--primary btn--sm" onClick={()=>act(id,'set')}>{t('settingsModelsKeySave')}</button></div>
    </div>}
   </div>; })}</div>
   :<div className="panel-card"><p className="panel-empty">{t(data?'settingsSpeechUnread':'settingsModelsKeyNoEngine')}</p></div>}
-  {data?.missing&&!data.provider&&<p className="set-hint" id="mdl-stt-none">{t('settingsSpeechNone')}</p>}
+  {data&&current.missing&&!current.provider&&!saved.saving&&<p className="set-hint" id="mdl-stt-none">{t('settingsSpeechNone')}</p>}
   {error&&<p className="set-err" role="alert">{t(error==='speechNotAllowed'?'settingsSpeechOwnerOnly':'settingsModelsKeyError')}</p>}
   {missed.length>0&&<p className="set-err" role="alert">{t('settingsSpeechNotReached',missed.join(', '))}</p>}
   {!owner&&<p className="set-hint">{t('settingsSpeechOwnerOnly')}</p>}
@@ -149,21 +156,20 @@ export function DefaultModel({company,owner,models,readAt}:{company:string,owner
 // default model, which are the models some Provider has switched on. The Owner picks one; every other Member reads the
 // choice (they get no list of choices, so theirs names the provider by its id). For the Owner, a choice no Provider
 // offers any more stays drawn, with a line saying Agents cannot move to it.
-export function FallbackModel({company,owner,model,options}:{company:string,owner:boolean,model:string|null,options:ModelOption[]}) {
- const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
- const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [missed,setMissed]=useState<string[]>([]);
+export function FallbackModel({company,owner,model:server,options,readAt}:{company:string,owner:boolean,model:string|null,options:ModelOption[],readAt:number}) {
+ const {t,language}=useI18n(); const rtl=language==='ar';
+ // The choice is marked at once and says "Saving" until the Company keeps it, then held on the page (#663).
+ const saved=useSave<string|null>(`fallback:${company}`,server,readAt);
+ const [missed,setMissed]=useState<string[]>([]);
  const choose=async(value:string|null)=>{
-  if(busy) return;
-  setBusy(true); setError('');
-  const answer=await send('/api/fallback-model',{company,value});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'fallbackFailed'); return; }
+  const answer=await saved.save(value,()=>send('/api/fallback-model',{company,value}),found=>typeof found.data?.model==='string'?found.data.model:null);
+  if(!answer.ok) return;
   // Agents whose profile did not take it now are named; the worker gives it to them later, so no retry is offered.
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as {name?:unknown}[]).map(entry=>String(entry?.name||'')).filter(Boolean):[];
   setMissed(failed);
-  if(!failed.length) toast(t('settingsFallbackSaved'));
-  router.refresh();
+  if(!failed.length&&answer.newest) toast(t('settingsFallbackSaved'));
  };
+ const model=saved.value; const error=saved.error;
  const held=model&&model.includes('/')&&!options.some(option=>modelOf(option)===model)?(()=>{ const at=model.indexOf('/'); return {provider:model.slice(0,at),providerName:model.slice(0,at),model:model.slice(at+1)}; })():null;
  const rows:(ModelOption|null)[]=[null,...options,...(held?[held]:[])];
  const valueOf=(option:ModelOption|null)=>option?modelOf(option):null;
@@ -181,14 +187,14 @@ export function FallbackModel({company,owner,model,options}:{company:string,owne
    ?<><ProviderLogo provider={option.provider} name={option.providerName}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span>
      <span className="panel-row__d">{option===held&&owner?t('settingsFallbackOff'):<bdi>{option.providerName}</bdi>}</span></span></>
    :<span className="panel-row__text"><span className="panel-row__t">{t('settingsFallbackNone')}</span><span className="panel-row__d">{t('settingsFallbackNoneHint')}</span></span>;
-  const meta=on?<span className="panel-row__meta"><span aria-hidden="true">✓</span>{option?t('settingsFallbackMark'):null}</span>:null;
+  const meta=on?(saved.saving?<Saving/>:<span className="panel-row__meta"><span aria-hidden="true">✓</span>{option?t('settingsFallbackMark'):null}</span>):null;
   return owner
-   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={value??'none'} aria-checked={on} tabIndex={on?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(value); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
+   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={value??'none'} aria-checked={on} tabIndex={on?0:-1} onClick={()=>{ if(!on) choose(value); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
    : on?<div className="panel-row" id={idOf(option)} key={value??'none'} aria-current="true">{text}{meta}</div>:null;
  };
  return <section className="dp-sec" aria-labelledby="md-h-fallback" id="md-fallback"><Label id="md-h-fallback" info={t('settingsFallbackHint')}>{t('settingsFallback')}</Label>
-  <div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-fallback">{rows.map(row)}</div>
-  {error&&<p className="set-err" role="alert">{t(error==='settingModelNotEnabled'?'settingsModelsNotEnabled':error==='fallbackNotAllowed'?'settingsModelsOwnerOnly':'settingsFallbackError')}</p>}
+  <div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-fallback" aria-busy={saved.saving||undefined}>{rows.map(row)}</div>
+  {error&&<p className="set-err" role="alert">{t(error==='settingModelNotEnabled'?'settingsModelsNotEnabled':error==='fallbackNotAllowed'||error==='settingNotAllowed'?'settingsModelsOwnerOnly':'settingsFallbackError')}</p>}
   {missed.length>0&&<p className="set-err" role="alert">{t('settingsFallbackNotReached',missed.join(', '))}</p>}
   {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
  </section>;
