@@ -974,6 +974,12 @@ engine_node "$engine_key" - screen-wake "$screen_marker" < scripts/check-install
   || { screen_logs; fail "the Agent's next use wakes the Screen"; }
 grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-wake.log || fail 'display.status reads the Screen awake again'
 screen_xvnc "$sandbox" || fail "the woken Screen's X server runs in the sandbox again"
+# #713 (ADR 0029): a browser holds the awake Screen's live stream through gtmworks's own address, the gateway, and never
+# the Engine's: the RFB handshake from the sandbox's Xvnc, a full picture held for ten seconds, a take and a give-back
+# that move the Engine's lease and write the Owner's log rows, and a socket ended in control that gives it back.
+engine_node "$engine_key" - screen-live "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-live.log \
+  || { screen_logs; fail "a browser holds the Screen's live stream through gtmworks and takes and gives back control"; }
+grep -q '"screen":{"width":1440,"height":900}' screen-live.log || fail 'the live stream is the Screen at 1440 by 900'
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.

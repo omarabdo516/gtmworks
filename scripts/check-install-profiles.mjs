@@ -918,7 +918,7 @@ try {
  assert.ok(!said.includes(`${marker}-leak`)&&!said.includes('theirs'),'no byte of the other profile comes back');
  writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
 } finally { model.close(); model.closeAllConnections(); }
-} else if(step==='screen-open'||step==='screen-sleep'||step==='screen-wake') {
+} else if(step==='screen-open'||step==='screen-sleep'||step==='screen-wake'||step==='screen-live') {
 // The Company's Screen (#711, vault decision 0068): one display and one browser profile in the Company's sandbox, shared
 // by its Agents. screen-open: the first Company's main Agent is asked to open a page on its Screen. Its Run is offered
 // computer_use (the Engine finds the sandbox image's driver the install copied in), so it captures the Screen, which
@@ -955,6 +955,81 @@ if(step==='screen-sleep') {
  const asleep=await until('the idle Screen asleep',async()=>{ const status=await display('display.status'); return status.running?null:status; },300);
  assert.equal(asleep.blocker,null,'an asleep Screen can wake again');
  writeProof({step,marker,profile:first.profile,screen:shownStatus(asleep)});
+} else if(step==='screen-live') {
+ // screen-live (#713, ADR 0029): the awake Screen's live stream through gtmworks's own address only. The Owner signs in
+ // as a browser does (the session cookie the app reads), opens /api/display/ws on the gateway, the install's one public
+ // address, and holds the stream: the real Xvnc's RFB handshake to its framebuffer of 1440 by 900, then a full picture.
+ // Taking control leaves the Engine's lease with a person, a pointer move goes through, and "Done" gives it back; both
+ // are one Company log row with the Owner. Then the socket closes while in control, as a lost connection, and the lease
+ // is back with the Agent.
+ const {createServerClient}=await import('@supabase/ssr');
+ const {supabaseSettings}=await import(`${process.cwd()}/lib/supabase-settings.mjs`);
+ const {default:WebSocketClient}=await import('ws');
+ const settings=supabaseSettings();
+ const jar=new Map();
+ const browser=createServerClient(settings.url,settings.anonKey,{cookieOptions:settings.cookieOptions,cookies:{getAll:()=>[...jar].map(([name,value])=>({name,value})),setAll:items=>{ for(const {name,value} of items) { if(value) jar.set(name,value); else jar.delete(name); } }}});
+ const signedIn=await browser.auth.signInWithPassword(credentials);
+ assert.equal(signedIn.error,null,'the Owner signs in');
+ const owner=signedIn.data.user.id;
+ const cookie=[...jar].map(([name,value])=>`${name}=${value}`).join('; ');
+ const open=()=>{
+  const socket=new WebSocketClient(`${origin.replace(/^http/,'ws')}/api/display/ws?company=${first.company}&agent=${first.agent}`,{headers:{cookie}});
+  const said=[]; let bytes=Buffer.alloc(0); let wake=()=>{};
+  socket.on('message',(data,binary)=>{ if(binary) bytes=Buffer.concat([bytes,data]); else said.push(JSON.parse(String(data))); wake(); });
+  const closed=new Promise(resolve=>socket.on('close',code=>{ wake(); resolve(code); }));
+  socket.on('error',()=>{});
+  const wait=async(what,ready,seconds=30)=>{
+   const end=Date.now()+seconds*1000;
+   for(;;) { const found=ready(); if(found) return found; if(Date.now()>end) throw new Error(`${what} within ${seconds}s: ${JSON.stringify(said)}`); await new Promise(resolve=>{ wake=resolve; setTimeout(resolve,500); }); }
+  };
+  const heard=(what,match)=>wait(what,()=>said.find(message=>Object.entries(match).every(([key,value])=>message[key]===value)));
+  const take=async count=>{ await wait('RFB bytes',()=>bytes.length>=count); const out=bytes.subarray(0,count); bytes=bytes.subarray(count); return out; };
+  return {socket,said,closed,heard,take,available:()=>bytes.length,drop:()=>{ bytes=Buffer.alloc(0); }};
+ };
+ const live=open();
+ await live.heard('the Screen controlled by its Agent',{control:'agent'});
+ await live.heard('a live stream',{stream:'open'});
+ const version=String(await live.take(12));
+ assert.match(version,/^RFB 003\.00[378]\n$/,'the stream is the Screen\'s RFB');
+ live.socket.send(Buffer.from('RFB 003.008\n'));
+ const [count]=await live.take(1);
+ assert.ok(count>0,'the Screen offers a security type');
+ const types=[...await live.take(count)];
+ assert.ok(types.includes(1),`the Screen's stream needs no password inside the Engine (offered ${types})`);
+ live.socket.send(Buffer.from([1]));
+ assert.equal((await live.take(4)).readUInt32BE(0),0,'the handshake is accepted');
+ live.socket.send(Buffer.from([1]));
+ const init=await live.take(24);
+ const width=init.readUInt16BE(0), height=init.readUInt16BE(2);
+ await live.take(init.readUInt32BE(20));
+ assert.deepEqual([width,height],[1440,900],'the stream is the Screen at the Engine\'s size');
+ // A full picture, asked in the Screen's own pixel format: held for ten seconds through the gateway.
+ const ask=Buffer.alloc(10); ask[0]=3; ask.writeUInt16BE(width,6); ask.writeUInt16BE(height,8);
+ live.socket.send(ask);
+ const held=Date.now();
+ let received=0;
+ while(Date.now()-held<10000) { await new Promise(resolve=>setTimeout(resolve,500)); received+=live.available(); live.drop(); }
+ assert.ok(received>100000,`a full picture came through gtmworks (${received} bytes)`);
+ assert.equal(live.socket.readyState,live.socket.OPEN,'the stream is still open after ten seconds');
+ // Take control, a pointer move, then Done.
+ live.socket.send(JSON.stringify({take:true}));
+ await live.heard('control for the Owner',{control:'mine'});
+ assert.equal((await display('display.status')).lease?.holder,'human','the Engine\'s lease is with a person');
+ const pointer=Buffer.alloc(6); pointer[0]=5; pointer.writeUInt16BE(100,2); pointer.writeUInt16BE(100,4);
+ live.socket.send(pointer);
+ live.socket.send(JSON.stringify({giveBack:true}));
+ await live.heard('control given back',{given:true});
+ assert.equal((await display('display.status')).lease?.holder,'agent','the Engine\'s lease is back with the Agent');
+ // A socket ended while in control gives it back.
+ live.socket.send(JSON.stringify({take:true}));
+ await until('control taken again',async()=>live.said.filter(message=>message.control==='mine').length>=2,30);
+ live.socket.terminate();
+ await until('the lease back with the Agent after the socket ended',async()=>(await display('display.status')).lease?.holder==='agent',30);
+ const rows=await checked(service.from('company_log').select('action,actor_id').eq('agent_id',first.agent).in('action',['agent_screen_taken','agent_screen_given_back']));
+ const by=action=>rows.filter(row=>row.action===action&&row.actor_id===owner).length;
+ await until('the give-back rows',async()=>{ const again=await checked(service.from('company_log').select('action,actor_id').eq('agent_id',first.agent).eq('action','agent_screen_given_back')); return again.filter(row=>row.actor_id===owner).length>=2; },30);
+ assert.equal(by('agent_screen_taken'),2,'each take is one log row with the Owner');
+ writeProof({step,marker,profile:first.profile,screen:{width,height},bytes:received});
 } else {
 await pointAtFakeModel(firstEngine,first.profile);
 const idle=step==='screen-open'?0.5:30;
@@ -1028,4 +1103,4 @@ try {
  writeProof({step,marker,profile:first.profile,screen:shownStatus(status),window:step==='screen-open'?title:undefined});
 } finally { model.close(); model.closeAllConnections(); }
 }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker> | screen-open <marker> | screen-sleep <marker> | screen-wake <marker>');
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker> | screen-open <marker> | screen-sleep <marker> | screen-wake <marker> | screen-live <marker>');
