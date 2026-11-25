@@ -130,12 +130,15 @@ test('a selected Card that changed meanwhile is left and named; the others are a
  await toggle(page).click();
  await pick(page,1).click();
  await pick(page,2).click();
+ // Read before Archive: Undo lasts only as long as its toast (app/toast.tsx), and a Supabase CLI read between the toast
+ // and Undo took its time on a busy runner (#755).
+ const second=titleOf(2);
  // Someone else archives card 2 before this person presses Archive.
  query(`update public.work_cards set archived_at=now(),archived_by='20000000-0000-0000-0000-000000000001' where id=2`);
  try {
   await bar(page).getByRole('button',{name:'Archive'}).click();
   await expect(toast(page)).toContainText('Archived');
-  await expect(page.getByRole('alert').filter({hasText:'Not archived'})).toContainText(`Not archived: “${titleOf(2)}”`);
+  await expect(page.getByRole('alert').filter({hasText:'Not archived'})).toContainText(`Not archived: “${second}”`);
   await expect(onBoard(page,1)).toHaveCount(0);
   await toast(page).getByRole('button',{name:'Undo'}).click();
   await expect(inColumn(page,'ideas',1)).toBeVisible();
