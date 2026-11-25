@@ -169,6 +169,10 @@ const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='
 // still in its text (a reply kept before) is taken out and named the same way, so no path is ever shown.
 export type StoredFile={id:number,name:string,message_id:number|null,send_key:string|null,position:number,content_type?:string};
 export const messageFiles=(rows:{id:number,name:string,content_type?:string}[]):MessageFile[]=>rows.map(({id,name,content_type})=>({id,name,...(content_type&&isThumbnail(content_type)?{image:true as const}:{})}));
+// A Run's cards with no reply yet follow its questions, as they would its reply; a job command's handover row (#358) is
+// the Run's whole record of the command, made when it was sent, so it comes before the question its Agent then asked (#470).
+const handedFirst=(cards:LeadCard[],own:ConversationMessage[],asked:ConversationMessage[],made:ConversationMessage):ConversationMessage[]=>
+ cards.every(card=>card.kind==='handed')?[...own,made,...asked]:[...own,...asked,made];
 export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],files:StoredFile[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const sent=messageFiles(files.filter(row=>row.message_id===message.id));
  const text=message.author==='agent'?replyShown(message.body,message.missed_files):{body:message.body};
@@ -186,7 +190,7 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const steps=message.author==='agent'?runSteps.find(row=>row.run_id===message.run_id):undefined;
  const reply={...plain,...(cards.length?{cards}:{}),...(steps?{steps:{list:steps.steps.map(({tool,preview,state,sandbox,routine})=>({tool,preview,state,...(sandbox?{sandbox}:{}),...(routine?{routine}:{})})),seconds:steps.seconds}}:{})};
  const turn:ConversationMessage[]=message.author==='agent'?[reply]
-  :replied||!cards.length?[...own,...asked]:[...own,...asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards}];
+  :replied||!cards.length?[...own,...asked]:handedFirst(cards,own,asked,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:ofRun[0].at,kind:'made',cards});
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });

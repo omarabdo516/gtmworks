@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(21);
 -- #470. RS Learning: Lead on the Company's own profile and Reach (made from the meta role) on a profile of its own. The
 -- Owner sends /campaign in Lead's chat; Reach's Run asks a question, then waits to be allowed to act.
 insert into public.agent_profiles(agent_id,company_id,tools_confirmed,skills_shared) values
@@ -87,6 +87,12 @@ select is((public.track_handover_permission((select command from handed),'run-47
  '{"id":"p1","description":"Publish the ad set","command":"ads publish","choices":["once","always","deny"]}'::jsonb,false,now(),now())->0)-'card',
  '{"permission":"p1","choice":"once"}'::jsonb,'and the worker is handed the choice to deliver');
 
+select is(public.settle_permission((select id from cards where kind='permission'),'decided'),'decided','the Engine took it');
+reset role;
+select is((select string_agg(l.action||':'||a.name,',' order by l.action) from public.company_log l join public.hermes_agents a on a.id=l.agent_id
+  where l.source='reply_card_answers' and l.source_id in (select id from cards)),
+ 'agent_permission_decided:Reach,agent_question_answered:Reach','the Activity log says the person answered Reach, not the chat''s Lead');
+set local role service_role;
 -- Reach answers; the handover ends, and Lead's next Run in the chat is told the job and the answer.
 select is(public.close_handover_target((select command from handed),'run-470','completed','Launched for Parents: three ad sets.'),true,
  'Reach''s reply is the chat''s answer');

@@ -13,6 +13,8 @@
 -- pinned at each Run's first start (pin_lead_brief) lists the newest five as `commands` (lib/lead-offer.mjs), since a
 -- Run's instructions are its own and Lead's session never held the command or its answer.
 --
+-- The answer to a command Agent's card is logged as answering that Agent (reply_card_asker), not the chat's own.
+--
 -- The previous app version runs against this: it calls none of the new functions, and reads the brief's keys by name.
 
 create function public.track_handover_question(h bigint, run text, asking jsonb, ended boolean, read_started_at timestamptz) returns jsonb
@@ -101,3 +103,72 @@ end $$;
 
 revoke all on function public.pin_lead_brief(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.pin_lead_brief(uuid,uuid) to service_role;
+
+-- Who asked: a card a job command's Agent asked on the command's Run is that Agent's, so its answer is logged as answering
+-- that Agent and not the chat's own (the Activity log names it); any other card is the Conversation's Agent's.
+create function public.reply_card_asker(card bigint) returns uuid language sql stable security definer set search_path='' as $$
+ select coalesce((select h.to_agent from public.agent_handovers h
+   where h.conversation_id=r.conversation_id and h.run_id=r.run_id and h.answers_person and h.parent_id is null limit 1),v.agent_id)
+ from public.reply_cards r join public.conversations v on v.id=r.conversation_id where r.id=card;
+$$;
+revoke all on function public.reply_card_asker(bigint) from public,anon,authenticated,service_role;
+
+-- 20270128000000's log_chat_event, naming the Agent the event is about when it is not the Conversation's own.
+drop function public.log_chat_event(uuid,uuid,text,text,text,jsonb,uuid,text,bigint,timestamptz);
+create function public.log_chat_event(conversation uuid, actor uuid, actor_kind text, actor_name text, action text, details jsonb, teller uuid, origin text, origin_id bigint, at timestamptz, agent uuid default null) returns void
+language plpgsql set search_path='' as $$
+declare talk public.conversations; tied bigint;
+begin
+ select * into talk from public.conversations where id=conversation;
+ select w.id into tied from public.work_cards w where w.company_id=talk.company_id and w.conversation_id=conversation;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,details,source,source_id,created_at)
+  values(talk.company_id,actor,actor_kind,actor_name,case when tied is null then 'agent' else 'card' end,tied,coalesce(agent,talk.agent_id),action,
+   case when tied is null then details||jsonb_build_object('private',true,'teller',teller) else details end,origin,origin_id,at)
+  on conflict (source,source_id) do nothing;
+end $$;
+revoke all on function public.log_chat_event(uuid,uuid,text,text,text,jsonb,uuid,text,bigint,timestamptz,uuid) from public,anon,authenticated,service_role;
+
+-- 20270128000000's settle_question and 20270129000000's settle_permission, logging the answer as given to the Agent that asked.
+create or replace function public.settle_question(card bigint, verdict text) returns text
+language plpgsql security definer set search_path='' as $$
+declare asked public.reply_cards;
+begin
+ if verdict is null or verdict not in ('answered','closed') then raise exception 'questionVerdictInvalid' using errcode='22023'; end if;
+ select * into asked from public.reply_cards where id=card and kind='question' for update;
+ if not found then return null; end if;
+ -- Not only the first verdict counts any more (20270112's rule): a delivery the Engine took wins over a "gone" another
+ -- closer settled first, or over the Run's end closing the card before its closer settled it. The answer did reach the
+ -- Engine, so the card reads answered and is logged once. A closed verdict never undoes an answered one.
+ if not (asked.state='sending' or verdict='answered' and asked.state='closed' and asked.content ? 'answer') then return asked.state; end if;
+ update public.reply_cards set state=verdict where id=asked.id;
+ if verdict='answered' then
+  perform public.log_chat_event(asked.conversation_id,asked.answered_by,'person',(select name from public.people where id=asked.answered_by),'agent_question_answered',
+   jsonb_build_object('question',jsonb_build_object('text',asked.content->'question','answer',asked.content->'answer')),
+   asked.answered_by,'reply_card_answers',asked.id,asked.answered_at,public.reply_card_asker(asked.id));
+ end if;
+ return verdict;
+end $$;
+
+create or replace function public.settle_permission(card bigint, verdict text) returns text
+language plpgsql security definer set search_path='' as $$
+declare asked public.reply_cards;
+begin
+ if verdict is null or verdict not in ('decided','closed') then raise exception 'permissionVerdictInvalid' using errcode='22023'; end if;
+ select * into asked from public.reply_cards where id=card and kind='permission' for update;
+ if not found then return null; end if;
+ if not (asked.state='sending' or verdict='decided' and asked.state='closed' and asked.content ? 'choice') then return asked.state; end if;
+ update public.reply_cards set state=verdict where id=asked.id;
+ if verdict='decided' then
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
+   values(asked.company_id,asked.decided_by,'person',(select name from public.people where id=asked.decided_by),'agent',
+    public.reply_card_asker(asked.id),'agent_permission_decided',
+    jsonb_build_object('permission',jsonb_build_object('text',case when btrim(asked.content->>'description',E' \t\r\n')<>'' then asked.content->'description' else asked.content->'command' end,
+     'choice',asked.content->'choice'),'private',true,'teller',asked.decided_by),
+    'reply_card_answers',asked.id,asked.decided_at)
+   on conflict (source,source_id) do nothing;
+ end if;
+ return verdict;
+end $$;
+
+revoke all on function public.settle_permission(bigint,text) from public,anon,authenticated;
+grant execute on function public.settle_permission(bigint,text) to service_role;

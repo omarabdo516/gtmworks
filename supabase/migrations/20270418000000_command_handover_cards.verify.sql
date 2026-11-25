@@ -10,6 +10,9 @@ select json_build_object(
  'command_agent_may_ask',position('ask them' in pg_get_functiondef('public.command_handover_job(bigint)'::regprocedure))>0
   and has_function_privilege('service_role','public.command_handover_job(bigint)','execute')
   and not has_function_privilege('authenticated','public.command_handover_job(bigint)','execute'),
+ 'answers_logged_for_the_asker',position('reply_card_asker' in pg_get_functiondef('public.settle_question(bigint,text)'::regprocedure))>0
+  and position('reply_card_asker' in pg_get_functiondef('public.settle_permission(bigint,text)'::regprocedure))>0
+  and not has_function_privilege('service_role','public.reply_card_asker(bigint)','execute'),
  'lead_brief_carries_commands',position('''commands''' in pg_get_functiondef('public.pin_lead_brief(uuid,uuid)'::regprocedure))>0
   and has_function_privilege('service_role','public.pin_lead_brief(uuid,uuid)','execute')
 );

@@ -199,6 +199,10 @@ test('a job command\'s Agent asks under its own name in Lead\'s chat, its card t
  const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf({...askedRow('open'),run_id:'command:k1'}))};
  const drawn=shown(sent,[],[{run_id:'command:k1',at:at(2),card,said:'Two angles fit.',asker:{id:'reach',name:'Reach'}}],'Lead');
  assert.deepEqual(drawn[1],{id:5,author:'agent',author_name:'Reach',agent_id:'reach',body:'Two angles fit.',created_at:at(2),kind:'asked',cards:[card]});
+ // The handover row the command made when it was sent comes before the question its Agent then asked.
+ const handed={kind:/** @type {const} */('handed'),from:{name:'Lead',face:'lead'},name:'Reach',face:'reach',goal:'Launch the December ads'};
+ const both=shown(sent,[],[{run_id:'command:k1',at:at(1),card:handed},{run_id:'command:k1',at:at(2),card,asker:{id:'reach',name:'Reach'}}],'Lead');
+ assert.deepEqual(both.map(message=>message.kind??message.id),[1,'made','asked']);
 });
 
 test('an answer claimed after the Engine stopped waiting is the person\'s turn marked not delivered; one the Engine took is not marked',()=>{
