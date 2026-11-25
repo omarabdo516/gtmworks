@@ -6,6 +6,12 @@
   "ar": { "title": "كل شركة ليها ديسك خاص بيها", "body": "وكلاء كل شركة بقوا بيشتغلوا على ديسك بحجم ثابت، ١٠ جيجا في الأول وبيتغيّر بـ gtmworks company limits --disk، فلو أمر ملاه بيقف عنده، وباقي التثبيت بيفضل شغال." }
  },
  {
+  "issue": 731,
+  "date": "2026-11-25",
+  "en": { "title": "A reply that ran out of usage names the accounts", "body": "When a reply stops because every account ran out of usage, the chat now names the accounts that ran out, by the names you gave them in Providers, beside when the usage resets." },
+  "ar": { "title": "الرد اللي الاستخدام خلص فيه بيقول على الحسابات", "body": "لما الرد يقف عشان استخدام كل الحسابات خلص، الشات بقى بيقول أنهي حسابات اللي خلصت، بالأسامي اللي إنت حاططها في المزوّدين، وجنبها إمتى الاستخدام هيتجدّد." }
+ },
+ {
   "issue": 770,
   "date": "2026-11-25",
   "en": { "title": "An Agent's tools show at once", "body": "An Agent's Connected tools list shows straight away, each app reading Checking… until its own test answers, and it keeps the last list it read when the agent engine is slow." },

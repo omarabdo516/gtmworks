@@ -14,7 +14,8 @@ const refusalWords={noCredit:'modelNoCredit',keyRefused:'modelKeyRefused',modelM
 
 // A Run whose every account ran out says when its usage resets (`resets`, an ISO time), when the Engine named it (#642):
 // in the reader's own zone, hidden until the page knows it, as a message's time is (#520).
-export function ModelLine({cause,agent,slug,owner,resets}:{cause:ModelCause,agent:string,slug:string,owner:boolean,resets?:string}) {
+// It names the accounts that ran out (`ranOut`, as Settings › Providers names them), when the Engine's pool did (#731).
+export function ModelLine({cause,agent,slug,owner,resets,ranOut}:{cause:ModelCause,agent:string,slug:string,owner:boolean,resets?:string,ranOut?:string[]}) {
  const {t,language}=useI18n();
  const zone=useZone();
  // Every account ran out (#622): the Owner adds one, or picks the Company's Fallback model, in Providers.
@@ -24,5 +25,10 @@ export function ModelLine({cause,agent,slug,owner,resets}:{cause:ModelCause,agen
  const reset=at&&!Number.isNaN(at.getTime())&&<><time dateTime={at.toISOString()} data-utc={zone}>{t('modelUsageResets',
   at.toLocaleDateString(localeFor(language),{weekday:'short',day:'numeric',month:'short',timeZone:zone}),
   at.toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone}))}</time>{' '}</>;
- return <>{t(refusalWords[cause],agent)} {reset}{owner?fix:t('modelRefusedAskOwner')}</>;
+ // Each name is the Owner's own words, so it keeps its own direction (design-reference: bx).
+ const names=ranOut?.length?new Intl.ListFormat(localeFor(language),{type:'conjunction'}).formatToParts(ranOut)
+  .map((part,index)=>part.type==='element'?<bdi key={index}>{part.value}</bdi>:part.value):null;
+ const [before,after]=t('modelAccountsRanOut','{0}').split('{0}');
+ const out=cause==='noAccess'&&names&&<>{before}{names}{after}{' '}</>;
+ return <>{t(refusalWords[cause],agent)} {out}{reset}{owner?fix:t('modelRefusedAskOwner')}</>;
 }
