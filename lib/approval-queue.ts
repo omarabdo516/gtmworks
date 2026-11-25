@@ -23,6 +23,8 @@ type ChangeProposal={setting:string|null,value:unknown,approved_value?:unknown,r
 // channel read from the card's message and its Agent's face from that message's Run. A mention in a channel message (#200,
 // kind channel_mention) carries its channel and that message, so it opens there at the message.
 export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by:string,card_id:number|null,conversation_id:string|null,created_at:string,suggestion?:RuleSuggestion,request?:AgentRequest|null,change?:ChangeProposal|null,note_id?:number|null,agent?:{id:string,name:string}|null,channel_id?:string|null,channel_message_id?:number|null};
+// A Card assigned to the reader (#677), listed under the bell until it is Live or Done.
+export type AssignedCard={id:number,title:string,status:string};
 // "Waiting on you" is one list (#16), read once per request from waiting_list(company) as the signed-in person: the
 // approvals they hold (`cards`, for the card's decision), those the board shows them (`visible`: none of an Agent hidden
 // from them, #190), every item but a hidden Agent's approvals, newest first (`items`), so no count names a Card the
@@ -32,11 +34,14 @@ export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by
 // knows the role (the chat does) and its parts find the same read.
 export const approvalQueue=(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role?:string)=>{ void role; return queue(db,company,person); };
 const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string)=>{
- void person; // the database reads it from the session
- const [stepResult,listResult]=await Promise.all([
+ // The database reads the person from the session for waiting_list; the Cards assigned to them (#677) are theirs until
+ // Live or Done, while each stays in its column.
+ const [stepResult,listResult,assignedResult]=await Promise.all([
   db.from('approval_steps').select('*').eq('company_id',company).is('removed_at',null).order('position').order('id'),
   db.rpc('waiting_list',{c:company}),
+  db.from('work_cards').select('id,title,status').eq('company_id',company).eq('assignee_person',person).in('status',['waiting','ideas','planned','progress']).order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
+ const assigned=(assignedResult.data || []) as AssignedCard[];
  const listed=(listResult.data || []) as WaitingItem[];
  const ids=listed.filter(item=>item.kind==='approval').map(item=>item.id);
  const ruleIds=listed.filter(item=>item.kind==='rule_suggestion').map(item=>item.id);
@@ -82,7 +87,7 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
  const askingIds=[...new Set([...chatAgents.values(),...[...channelRows.values()].flatMap(channelAgentOf).flatMap(agent=>agent??[]),...[...cardAgents.values()].flatMap(agent=>agent??[])])];
  const {data:faces,error:faceError}=askingIds.length?await db.from('hermes_agents').select('id,connection_id,name').eq('company_id',company).in('id',askingIds):{data:[],error:null};
  const faceOf=(agent:string|null|undefined)=>((faces || []) as {id:string,connection_id:string,name:string}[]).find(row=>row.id===agent) ?? null;
- const cards=ids.map(id=>(cardResult.data || []).find(card=>card.id===id)).filter(Boolean) as (ApprovalCard&{agent_id:string|null})[];
+ const cards=ids.map(id=>(cardResult.data || []).find(card=>card.id===id)).filter(Boolean) as (ApprovalCard&{assignee_agent:string|null})[];
  const visible=visibleApprovals(cards,listed,new Set(((agentResult.data || []) as {id:string}[]).map(agent=>agent.id)));
  type RuleRow={id:number,agent_rules:{body:string,hermes_agents:{id:string,name:string}|null}|null};
  const rules=new Map(((ruleResult.data || []) as unknown as RuleRow[]).map(row=>[row.id,row.agent_rules]));
@@ -118,5 +123,5 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!changeResult.error&&!accessResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
+ return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,assigned,count:waitingCount(visible.items,assigned),available:!stepResult.error&&!listResult.error&&!assignedResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!changeResult.error&&!accessResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
 });

@@ -147,6 +147,9 @@ export const workAction=withActionLog('workAction',async function workAction(for
    if(!error && body.includes('@')) await startNoteRun(sent.data);
   }
  }
+ // A Card's one assignee (#677): an Agent ("a:<id>"), a Member ("p:<id>", the caller's own for "Assign to me") or nobody
+ // (""); assign_card checks the Role, the Agent the caller sees and the Member who may be one. It starts nothing.
+ else if(op==='assign') { const [kind,id]=String(form.get('assignee')||'').split(':'); ({error}=await db.rpc('assign_card',{c:company,card,agent:kind==='a'?id:null,person:kind==='p'?id:null})); }
  else if(['actor','assignee','label','check'].includes(op)) { const payload=Object.fromEntries(['person','label','item','done','body'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('change_work_card',{c:company,card,operation:op,payload,evidence})); }
  else if(op==='upload') {
   const file=form.get('file');
@@ -165,6 +168,6 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='label-settings') { const result=await db.from('work_labels').update({name:String(form.get('name')),color:String(form.get('color'))}).eq('company_id',company).eq('id',Number(form.get('label'))).select('id'); error=result.error || (!result.data?.length?{message:'not permitted'}:null); }
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
- if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')||['move','move-column'].includes(op)&&error.message.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):error.message.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
+ if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')||['move','move-column'].includes(op)&&error.message.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):error.message.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):op==='assign'&&(error.message.includes('agent not found')||error.message.includes('assignee not a member')||error.message.includes('one assignee'))?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
  if(created) redirect(`${base}/${created}`);
 });

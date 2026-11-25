@@ -1,5 +1,11 @@
 [
  {
+  "issue": 677,
+  "date": "2026-11-25",
+  "en": { "title": "One assignee on a card, and your list under the bell", "body": "A card has one assignee, an Agent you see or a member who is not a viewer, with Assign to me; a card assigned to you is listed under the board's bell with what you can act on, your mentions and requests until it is live or done, and a card whose Agent is removed or whose member leaves is left with no assignee, logged." },
+  "ar": { "title": "مسؤول واحد عن البطاقة، وقايمتك تحت الجرس", "body": "البطاقة ليها مسؤول واحد، وكيل بتشوفه أو عضو مش بيقرا بس، ومعاها «خليها عليّا»؛ والبطاقة اللي عليك بتظهر تحت جرس اللوحة مع اللي تقدر تعمل فيه حاجة واللي اتذكرت فيه والطلبات لحد ما تبقى شغالة لايف أو تخلص، ولو الوكيل اتشال أو العضو خرج البطاقة بتفضل من غير مسؤول، ومتسجّلة." }
+ },
+ {
   "issue": 676,
   "date": "2026-11-25",
   "en": { "title": "A card's column is its status", "body": "Anyone who may edit work moves a card to any column, Live and Done included, Waiting on you fills by itself with reviews and questions, and Home counts the cards made by status and the work delivered by its approvals." },

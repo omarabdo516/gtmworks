@@ -43,7 +43,8 @@ insert into decisions
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_card_place()','public.work_guard()',
-  'public.channel_run_card()','public.channel_reply_card()','public.align_card_status()']) fn
+  'public.channel_run_card()','public.channel_reply_card()','public.align_card_status()','public.align_card_assignee()','public.assignee_from_list()']) fn
+ union all select 'public.unassign_removed()','exempt','a trigger on removing an Agent or a Member (#677): it leaves their Cards assigned to nobody and answers no caller; the log rows it writes are read under card_agent_visible'
  union all select 'public.keep_record_agent()','exempt','a trigger: it keeps the Agent a Card, a Conversation or a channel call was made with when that Agent is removed (#702), reading only whether the Agent still exists; it answers no caller'
  union all select 'public.work_card_moved()','exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller; the move it writes is read by its own mover alone, on a Card that mover can see (work_card_moves_read)'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[

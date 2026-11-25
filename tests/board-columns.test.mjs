@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, bellRows, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -130,11 +130,20 @@ test('a place before a Card or at the column\'s end gives the column\'s new orde
  assert.equal(placeChanges([1, 2, 3], 2, 1), true);
 });
 
-test('a card belongs to its first assigned Agent, else to its next actor when that is an Agent', () => {
- const agents = new Set(['writer', 'lead']);
- assert.equal(cardAgent({ id: 1, next_actor: 'lead' }, [{ card_id: 1, person_id: 'person' }, { card_id: 1, person_id: 'writer' }], agents), 'writer');
- assert.equal(cardAgent({ id: 2, next_actor: 'lead' }, [], agents), 'lead');
- assert.equal(cardAgent({ id: 3, next_actor: 'person' }, [{ card_id: 3, person_id: 'person' }], agents), null);
+// #677: the bell holds the reader's own list: the Cards they can act on (each once), the Cards assigned to them that are
+// not already among those, the requests waiting for their answer and their mentions; its count is the number of rows.
+test('the bell lists the Cards to act on once each, then the Cards assigned to the reader, requests and mentions, and counts its rows', () => {
+ const row = (kind, card_id, conversation_id = null, id = card_id ?? 0) => ({ kind, id, card_id, conversation_id });
+ const items = [row('approval', 5), row('question', 5, 'c-1', 31), row('hand', 6, 'c-3', 32), row('agent_request', null, null, 40), row('permission', null, 'c-2', 41), row('mention', 7, null, 50), row('channel_mention', null, null, 51)];
+ const assigned = [{ id: 6, title: 'Assigned and asked' }, { id: 8, title: 'Mine' }, { id: 9, title: 'Mine too' }];
+ const bell = bellRows(items, assigned);
+ assert.deepEqual(bell.act.map(item => item.card_id), [5, 6], 'a Card to act on is one row, however many of its rows wait');
+ assert.deepEqual(bell.assigned.map(card => card.id), [8, 9], 'a Card assigned to the reader that is already to act on is not listed twice');
+ assert.deepEqual(bell.requests.map(item => item.id), [40, 41]);
+ assert.deepEqual(bell.mentions.map(item => item.id), [50, 51]);
+ assert.equal(waitingCount(items, assigned), 8, 'the count is the bell\'s rows');
+ assert.equal(waitingCount(items), 6, 'and without Cards assigned to the reader it is as before');
+ assert.equal(waitingCount([], assigned), 3);
 });
 
 test('a drag scrolls a box by itself only while the finger is in the box\'s own edge bands', () => {
@@ -168,7 +177,7 @@ test('a box scrolls by itself on the axis it has room to scroll, not on the axis
 });
 
 test('an approval on a Card of an Agent hidden from the reader is not counted, nor its waiting item', () => {
- const cards = [{ id: 1, agent_id: null }, { id: 2, agent_id: 'seen' }, { id: 3, agent_id: 'hidden' }];
+ const cards = [{ id: 1, assignee_agent: null }, { id: 2, assignee_agent: 'seen' }, { id: 3, assignee_agent: 'hidden' }];
  const items = [{ kind: 'approval', id: 1 }, { kind: 'approval', id: 2 }, { kind: 'approval', id: 3 }, { kind: 'mention', id: 3 }];
  const shown = visibleApprovals(cards, items, new Set(['seen']));
  assert.deepEqual(shown.cards.map(card => card.id), [1, 2]);

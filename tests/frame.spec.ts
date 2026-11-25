@@ -135,12 +135,12 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await expect(page.locator('.content')).not.toContainText(/Spend|Run count/);
  await chooseCompany(page,'rs-learning');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
- // The seed gives RS Learning no real Agents, so Home has none; the Writer's Card still shows in the work list's
- // Next actor column.
+ // The seed gives RS Learning no real Agents, so Home has none; the Writer's Cards still show in the work list's
+ // Assignee column (#677): its own Card, and the Card in review it sent there.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
  await page.goto('/c/rs-learning/work/list');
  const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
- await expect(assigned).toHaveCount(1);
+ await expect(assigned).toHaveCount(2);
  // The Inbox count sits on the Marketing board entry and opens the Inbox.
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
@@ -160,7 +160,8 @@ test('Home has four parts in order and missing sources show unavailable, never z
 
 test('owner assigns a new Contributor agent through settings, the work list follows its rename, and demotion clears the key',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/list');
- const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
+ // The Writer's own Card (seed Card 1), not the Card in review it is also the assignee of (#677).
+ const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})}).filter({has:page.locator('a[href$="/work/board/1"]')});
  await expect(writerRow).toHaveCount(1);
  const current=writerRow.getByRole('link');
  await expect(current).toBeVisible();

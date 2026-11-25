@@ -36,7 +36,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  // The Agent's state for the reader (#699), the sidebar's own read; the open Run above says only what it is doing.
  const stateRead=agentFaceStates(db,company);
  const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount}]=await Promise.all([getI18n(),named,roled,
-  db.from('work_cards').select('id,title,status,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
+  db.from('work_cards').select('id,title,status,wait:card_wait').eq('company_id',company).eq('assignee_agent',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.

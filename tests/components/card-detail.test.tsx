@@ -32,15 +32,15 @@ for (const language of ['en', 'ar'] as const) for (const width of [390, 1440]) t
  expect(language === 'ar' ? x.right <= title.left + 1 : title.right <= x.left + 1, 'Close at the inline end').toBe(true);
 });
 
-for (const language of ['en', 'ar'] as const) test(`in ${language} a Card's stage, next actor, assignees and labels come right under the title on a phone, and beside the record on a wide screen`, async () => {
+for (const language of ['en', 'ar'] as const) test(`in ${language} a Card's stage, assignee and labels come right under the title on a phone, and beside the record on a wide screen`, async () => {
  await showWork(workProps({ cardId: 1 }), { language, width: 390 });
- const title = box('.card-detail h2'), stage = section('stage'), actor = section('next-actor'), assignees = section('assignees'), labels = section('labels'), form = box('.modal-grid > div form');
- const order = [title, stage, actor, assignees, labels, form].map(item => item.y);
+ const title = box('.card-detail h2'), stage = section('stage'), actor = section('assignee'), labels = section('labels'), form = box('.modal-grid > div form');
+ const order = [title, stage, actor, labels, form].map(item => item.y);
  expect(order).toEqual([...order].sort((a, b) => a - b));
  expect(new Set(order).size).toBe(order.length);
  expect(stage.y).toBeGreaterThanOrEqual(title.bottom);
  expect(labels.bottom).toBeLessThanOrEqual(form.y);
- expect(actor.bottom, 'the next actor is on the first screen').toBeLessThanOrEqual(900);
+ expect(actor.bottom, 'the assignee is on the first screen').toBeLessThanOrEqual(900);
  await page.viewport(1440, 900);
  const wide = section('stage'), record = box('.modal-grid > div form');
  expect(wide.y).toBeLessThanOrEqual(260);
@@ -59,7 +59,7 @@ test('on a phone the stage list and the checklist boxes are 44px tall, every con
  const screen = await showWork(workProps({ cardId: 1 }), { width: 390 });
  expect(screen.getByLabelText('Move to list', { exact: true }).element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
  expect(box('.checklist input[type=checkbox]').height).toBeGreaterThanOrEqual(44);
- for (const name of ['Next actor', 'Add assignee', 'Add label', 'New design file', 'Comment']) await expect.element(screen.getByLabelText(name, { exact: true })).toBeVisible();
+ for (const name of ['Assignee', 'Add label', 'New design file', 'Comment']) await expect.element(screen.getByLabelText(name, { exact: true })).toBeVisible();
  const comment = screen.getByLabelText('Comment', { exact: true });
  comment.element().scrollIntoView();
  await expect.element(comment).toBeInViewport({ ratio: 1 });
@@ -105,4 +105,31 @@ for (const empty of ['Not specified', undefined]) test(`a removed MemberPicker d
  await expect.element(shown).toBeVisible();
  expect(shown.element().querySelector(':scope > bdi')!.textContent).toBe(empty ?? 'First member');
  expect(new FormData(document.querySelector('form')!).get('person')).toBe(empty ? '' : 'first');
+});
+
+// #677: a Card has one assignee, an Agent the reader sees or a Member who is not a Viewer, or nobody; "Assign to me" is
+// one press. A Viewer reads who it is and finds no control.
+const team = [{ person_id: 'p-1', role: 'owner' as const, people: { name: 'Omar' } }, { person_id: 'p-2', role: 'contributor' as const, people: { name: 'Sara' } }, { person_id: 'p-4', role: 'viewer' as const, people: { name: 'Vee' } }];
+const ads = { id: 'h-ads', connection_id: 'c-ads', name: 'Ads', speciality: 'Ads', is_default: false };
+test('the Card page offers Assign to me, the Agents the reader sees, the Members who are not Viewers, or nobody, and sends the one picked', async () => {
+ const props = workProps({ cardId: 1, cards: [card({ next_actor: 'p-2' })], members: team, cardAgents: [ads] });
+ const screen = await showWork(props);
+ const picker = screen.getByLabelText('Assignee', { exact: true }).element() as HTMLSelectElement;
+ expect([...picker.options].map(option => option.value)).toEqual(['', 'a:h-ads', 'p:p-1', 'p:p-2']);
+ expect(picker.value).toBe('p:p-2');
+ await screen.getByRole('button', { name: 'Assign to me', exact: true }).click();
+ await expect.poll(() => sent(props).map(form => [form.op, form.card, form.assignee])).toEqual([['assign', '1', 'p:p-1']]);
+ await userEvent.selectOptions(picker, 'a:h-ads');
+ await screen.getByRole('button', { name: 'Assign', exact: true }).click();
+ await expect.poll(() => sent(props).map(form => [form.op, form.assignee])).toEqual([['assign', 'p:p-1'], ['assign', 'a:h-ads']]);
+});
+
+test('a Card already assigned to the reader has no Assign to me, and a Viewer reads the assignee with no control', async () => {
+ const mine = await showWork(workProps({ cardId: 1, cards: [card({ next_actor: 'p-1' })], members: team, cardAgents: [ads] }));
+ await expect.element(mine.getByLabelText('Assignee', { exact: true })).toBeVisible();
+ expect(document.querySelector('[data-card-section="assignee"]')!.textContent).not.toContain('Assign to me');
+ mine.unmount();
+ await showWork(workProps({ cardId: 1, cards: [card({ agent_id: 'h-ads' })], members: team, cardAgents: [ads], canCreate: false }));
+ const shown = document.querySelector('[data-card-section="assignee"]')!;
+ expect([shown.textContent, shown.querySelector('select,button')]).toEqual(['AssigneeAds', null]);
 });

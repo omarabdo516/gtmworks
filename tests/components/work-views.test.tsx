@@ -427,3 +427,43 @@ test('a decided suggestion is said once with the Agent\'s name the page read, an
   expect(toast).not.toHaveBeenCalled();
  } finally { history.replaceState(history.state, '', start); }
 });
+
+// #677: the bell holds the reader's own list: the Cards they can act on, the Cards assigned to them (which stay in their
+// columns), the requests and the mentions, and its number is its rows. A Viewer has no bell.
+test('the bell counts its rows and lists the Card to act on, the Cards assigned to the reader, a request and a mention, each opening what it names', async () => {
+ const at = '2026-06-01T00:00:00Z';
+ const waiting = [
+  { kind: 'approval', id: 1, title: 'أفكار لمحتوى الشهر', body: 'Owner review', asked_by: '', card_id: 1, conversation_id: null, created_at: at },
+  { kind: 'agent_request', id: 40, title: 'Ads', body: 'Runs the ads', asked_by: 'Sara', card_id: null, conversation_id: null, created_at: at },
+  { kind: 'mention', id: 50, title: 'Script', body: '@Omar look', asked_by: 'Sara', card_id: 3, conversation_id: null, created_at: at },
+ ];
+ const assigned = [{ id: 1, title: 'أفكار لمحتوى الشهر', status: 'waiting' }, { id: 3, title: 'Script', status: 'planned' }];
+ const props = workProps({ cards: [card({ stage_id: 4 }), card({ id: 3, title: 'Script', stage_id: 2, next_actor: 'p-1' })], waiting, assigned, approvableIds: [1] });
+ const screen = await showWork(props);
+ const bell = screen.getByRole('button', { name: 'Waiting on you: 4', exact: true });
+ await expect.element(bell).toHaveTextContent('4');
+ expect(document.querySelector('.board-tools__summary')!.textContent, 'the summary counts the same rows').toBe('4 things waiting on you');
+ expect(document.querySelector('#board-cols .kcard[data-card-id="3"]')!.closest('[data-column]')?.getAttribute('data-column'), 'a Card assigned to the reader stays in its column').toBe('planned');
+ await bell.click();
+ const menu = screen.getByRole('menu', { name: 'Waiting on you: 4' });
+ await expect.element(menu.getByRole('menuitem').first()).toHaveFocus();
+ const groups = [...menu.element().querySelectorAll('[role="group"]')].map(group => [group.getAttribute('aria-label'), [...group.querySelectorAll('[role="menuitem"]')].map(row => [row.textContent, row.getAttribute('href')])]);
+ expect(groups).toEqual([
+  ['Stopped at an Agent', [['أفكار لمحتوى الشهر', '/c/rs-learning/work/board?card=1']]],
+  ['Assigned to you', [['ScriptPlanned', '/c/rs-learning/work/board?card=3']]],
+  ['Requests waiting for your answer', [['AdsSara', '/c/rs-learning/approvals']]],
+  ['Mentions of you', [['ScriptSara', '/c/rs-learning/work/board?card=3']]],
+ ]);
+ await userEvent.keyboard('{Escape}');
+ await expect.element(bell).toHaveFocus();
+ await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
+});
+
+test('an empty bell says nothing waits, and a Viewer has no bell', async () => {
+ const screen = await showWork(workProps({ waiting: [], assigned: [] }));
+ await screen.getByRole('button', { name: 'Waiting on you: 0', exact: true }).click();
+ await expect.element(screen.getByRole('menu')).toHaveTextContent('Nothing waiting on you');
+ screen.unmount();
+ await showWork(workProps({ canCreate: false }));
+ expect(document.querySelector('.waiting-bell')).toBeNull();
+});

@@ -420,6 +420,17 @@ test('a memory or skill change nobody confirmed reads as asked for and not confi
   [['asked to edit a note in the memory of Ads', 'Not confirmed'], ['طلب يعدّل ملاحظة في ذاكرة Ads', 'مش متأكد إنه حصل']]);
 });
 
+// #677: a Card's one assignee changed reads as who it went to; nobody chose it when the Agent was removed or the Member
+// left or can only read now, and the row says so.
+test('an assignee change names who it went to, and a removal says why the Card has no assignee', () => {
+ const row = details => describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'assignee', ...details } });
+ assert.deepEqual(row({ old: 'p:1', new: 'a:2', old_name: 'Sara', new_name: 'Ads' }), { act: ['logActAssigned'], obj: undefined, from: { text: 'Sara' }, to: { text: 'Ads' }, note: undefined });
+ assert.deepEqual(row({ old: 'a:2', new: null, old_name: 'Ads' }).act, ['logActUnassigned']);
+ assert.deepEqual(row({ old: 'a:2', new: null, old_name: 'Ads', reason: 'agent_removed' }), { act: ['logActUnassignedRemoved'], obj: undefined, from: { text: 'Ads' }, to: { key: 'logNone' }, note: undefined });
+ assert.deepEqual(row({ old: 'p:1', new: null, old_name: 'Sara', reason: 'member_removed' }).act, ['logActUnassignedLeft']);
+ assert.deepEqual(row({ old: 'p:1', new: null, old_name: 'Sara', reason: 'member_viewer' }).act, ['logActUnassignedViewer']);
+});
+
 test('a change of an Agent\'s look says which part changed, from what to what, and a reset says it is automatic again (#698)', () => {
  const words = (entry, language) => { const { t } = i18n(language); const say = value => value && ('key' in value ? t(value.key) : value.text); const [key, ...args] = entry.act; return [t(key, ...args.map(say)), say(entry.from), say(entry.to)]; };
  const colour = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'colour', from: 'violet', to: 'rose', automatic: false } });

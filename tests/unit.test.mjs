@@ -57,15 +57,18 @@ test('work dates use Arabic month names and day-first western digits', async () 
 });
 
 
-test('work list sorts stages by position and actors by name', async () => {
+// #677: the list's assignee column sorts by the assignee's name, a Member's or an Agent's, and a Card nobody has last.
+test('work list sorts stages by position and assignees by name', async () => {
  const {sortWorkCards}=await import('../lib/work-sort.mjs');
- const cards=[{title:'أ',stage_id:2,next_actor:'a',channel:'',go_live:null},{title:'ب',stage_id:12,next_actor:'z',channel:'',go_live:null}];
+ const cards=[{title:'أ',stage_id:2,assignee_person:'a',assignee_agent:null,channel:'',go_live:null},{title:'ب',stage_id:12,assignee_person:'z',assignee_agent:null,channel:'',go_live:null},
+  {title:'ج',stage_id:12,assignee_person:null,assignee_agent:'ads',channel:'',go_live:null},{title:'د',stage_id:12,assignee_person:null,assignee_agent:null,channel:'',go_live:null}];
  const stages=[{id:2,position:8},{id:12,position:1}];
  const members=[{person_id:'a',people:{name:'يوسف'}},{person_id:'z',people:{name:'أحمد'}}];
- assert.deepEqual(sortWorkCards(cards,'stage_id','ascending',stages,members).map(c=>c.stage_id),[12,2]);
- assert.deepEqual(sortWorkCards(cards,'stage_id','descending',stages,members).map(c=>c.stage_id),[2,12]);
- assert.deepEqual(sortWorkCards(cards,'next_actor','ascending',stages,members).map(c=>c.next_actor),['z','a']);
- assert.deepEqual(cards.map(c=>c.stage_id),[2,12]);
+ const agents=[{id:'ads',name:'بلال'}];
+ assert.deepEqual(sortWorkCards(cards.slice(0,2),'stage_id','ascending',stages,members).map(c=>c.stage_id),[12,2]);
+ assert.deepEqual(sortWorkCards(cards.slice(0,2),'stage_id','descending',stages,members).map(c=>c.stage_id),[2,12]);
+ assert.deepEqual(sortWorkCards(cards,'assignee','ascending',stages,members,agents).map(c=>c.title),['ب','ج','أ','د']);
+ assert.deepEqual(cards.map(c=>c.stage_id),[2,12,12,12]);
 });
 
 test('authenticated secret encryption', async () => {
@@ -168,11 +171,11 @@ test('Home charts use fourteen UTC days, each Card\'s status and first acceptanc
 test('an Agent works on its newest Card in progress, never one whose chat waits on a person', async()=>{
  const {currentAgentCard}=await import('../lib/home-data.mjs');
  const cards=[
-  {id:1,status:'progress',agent_id:'a',created_at:'2030-01-02T00:00:00Z'},
-  {id:2,status:'progress',agent_id:'a',created_at:'2030-01-03T00:00:00Z'},
-  {id:3,status:'progress',agent_id:'a',created_at:'2030-01-04T00:00:00Z',wait:{person:'p',kind:'question',title:'Which tone?'}},
-  {id:4,status:'planned',agent_id:'a',created_at:'2030-01-05T00:00:00Z'},
-  {id:5,status:'progress',agent_id:'b',created_at:'2030-01-06T00:00:00Z'},
+  {id:1,status:'progress',assignee_agent:'a',created_at:'2030-01-02T00:00:00Z'},
+  {id:2,status:'progress',assignee_agent:'a',created_at:'2030-01-03T00:00:00Z'},
+  {id:3,status:'progress',assignee_agent:'a',created_at:'2030-01-04T00:00:00Z',wait:{person:'p',kind:'question',title:'Which tone?'}},
+  {id:4,status:'planned',assignee_agent:'a',created_at:'2030-01-05T00:00:00Z'},
+  {id:5,status:'progress',assignee_agent:'b',created_at:'2030-01-06T00:00:00Z'},
  ];
  assert.equal(currentAgentCard(cards,'a')?.id,2,'the newest Card in progress, not one waiting or in another column');
  assert.equal(currentAgentCard(cards,'b')?.id,5);
