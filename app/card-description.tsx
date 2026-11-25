@@ -20,8 +20,6 @@ type Block={key:string,level:number,quote:boolean}&(
  {t:'h1'|'h2'|'p'|'ul',inline:Inline}|{t:'ol',inline:Inline,n:number}|{t:'todo',inline:Inline,line:number,done:boolean}|
  {t:'code',value:string}|{t:'table',rows:Inline[][],align:(string|null)[]}|{t:'img',url:string,alt:string}|{t:'hr'}|{t:'text',value:string});
 
-const textOf=(nodes:Inline):string=>nodes.map(node=>'value' in node?String(node.value):'children' in node?textOf(node.children as Inline):'alt' in node?String(node.alt||''):'').join('');
-
 // The tree as lines, the prototype's blocks: a list item is a line at its depth, and what is under it follows it one
 // level in; a quote's lines carry the quote.
 function blocksOf(nodes:RootContent[],level=0,quote=false,out:Block[]=[]):Block[] {
@@ -105,7 +103,6 @@ export function CardDescription({body,slug,canTick,tick}:{body:string,slug:strin
   setTicked(now=>({...now,[line]:done})); setSaid('');
   let answer:TickResult; try { answer=await tick(line,item.item,done); } catch { answer={error:t('couldNotSaveTheChangeCheckPermissionsAnd')}; }
   if('error' in answer||'gone' in answer) { setTicked(now=>{ const next={...now}; delete next[line]; return next; }); setSaid('gone' in answer?t('deTodoChanged'):answer.error); } };
- let todo=-1;
  return <>
   <div ref={box} id={`${id}-de`} className={`de de--read${fold==='folded'?' is-fold':''}`}>
    {blocks.map((block,index)=>{
@@ -122,8 +119,8 @@ export function CardDescription({body,slug,canTick,tick}:{body:string,slug:strin
     else if(block.t==='text') line=<div {...attrs} data-t="p" dir="auto"><p className="de-t">{block.value}</p></div>;
     else {
      let mark:ReactNode=null; const label=`${id}-t${index}`;
-     if(block.t==='todo') { todo+=1; const item=items.get(block.line); const done=ticked[block.line]??block.done;
-      mark=canTick&&item?<button type="button" className="de-box" role="checkbox" aria-checked={done} aria-labelledby={label} data-todo={todo} onClick={()=>press(block.line,!done)}><ShellIcon name="check"/></button>
+     if(block.t==='todo') { const item=items.get(block.line); const done=ticked[block.line]??block.done;
+      mark=canTick&&item?<button type="button" className="de-box" role="checkbox" aria-checked={done} aria-labelledby={label} onClick={()=>press(block.line,!done)}><ShellIcon name="check"/></button>
        :<span className="de-box" role="checkbox" aria-checked={done} aria-disabled="true" aria-labelledby={label}><ShellIcon name="check"/></span>;
       line=<div {...attrs} data-c={done?'1':'0'} dir="auto"><span className="de-g">{mark}</span><div className="de-t" id={label}><Phrasing nodes={block.inline} slug={slug}/></div></div>; }
      else {
