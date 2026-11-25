@@ -3,7 +3,7 @@
 -- changed, and read only by the Conversation's own person.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(16);
 select ok((select relrowsecurity from pg_class where oid='public.conversation_run_ran_out'::regclass),'accounts that ran out keep row-level security');
 
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -32,6 +32,13 @@ select is((select count(*)::int from public.conversation_run_ran_out where run_i
 select is(public.close_conversation_run_ran_out('e2000000-0000-0000-0000-000000000031','run_3',null,false,null,'openai-codex',
  '[{"provider":"openai-codex","account":"c0dex1","place":1},{"provider":"anthropic","account":"c1aude","place":1}]'),true,'a Run on a chosen model closes');
 select results_eq($$select provider,account from public.conversation_run_ran_out where run_id='run_3'$$,$$values ('anthropic','c1aude')$$,'and keeps the chosen model''s accounts, not the Agent''s');
+-- run_4: a place of another shape is left out without stopping the close, and an account the Owner switched off is never
+-- named: the Run could not have used it.
+insert into public.provider_order(company_id,provider,account,enabled) values ('10000000-0000-0000-0000-000000000001','openai-codex','c0dex3',false);
+select is(public.close_conversation_run_ran_out('e2000000-0000-0000-0000-000000000031','run_4',null,false,null,'openai-codex',
+ '[{"provider":"openai-codex","account":"c0dex1","place":"x"},{"provider":"openai-codex","account":"c0dex2","place":1.5},{"provider":"openai-codex","account":"c0dex3","place":3},{"provider":"openai-codex","account":"c0dex4","place":4}]'),
+ true,'a Run with odd places closes');
+select results_eq($$select account,place from public.conversation_run_ran_out where run_id='run_4'$$,$$values ('c0dex4',4)$$,'and keeps only the well-formed accounts the Owner left on');
 select throws_ok($$update public.conversation_run_ran_out set place=5$$,'42501','conversationAppendOnly','accounts that ran out are append-only');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);

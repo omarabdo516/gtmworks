@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accountName, accountOrders, applyAccountOrder, keepProviderAccounts } from '../lib/provider-switches.mjs';
+import { accountName, accountOrders, placedName, applyAccountOrder, keepProviderAccounts } from '../lib/provider-switches.mjs';
 
 // #621: the Company's Engine moves a request to the next subscription account itself; this module gives it the Owner's
 // order and switches and copies each move it recorded into the Company's log once. The Engine and the database are
@@ -158,4 +158,13 @@ test('the order reaches the root\'s pool by entry id and switch, and the moves r
   assert.deepEqual(await writeAccountOrder(root,'openai-codex',[]),{state:'unsupported'});
   assert.deepEqual(await readAccountSwitches(root),{state:'unsupported',switches:null});
  } finally { await fake.close(); }
+});
+
+// #731: a Conversation names an account that ran out by its kept place, as Settings names it.
+test('an account with a known place reads under the Owner\'s name, else its kind\'s with its place', () => {
+ const names={'openai-codex:c0dex2':'Omar’s ChatGPT'};
+ assert.equal(placedName(names,'openai-codex','c0dex1',1),'ChatGPT');
+ assert.equal(placedName(names,'openai-codex','c0dex3',3),'ChatGPT 3');
+ assert.equal(placedName(names,'openai-codex','c0dex2',2),'Omar’s ChatGPT');
+ assert.equal(placedName(names,'other-kind','x',2),'other-kind 2');
 });

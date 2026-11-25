@@ -5,8 +5,8 @@ import type { AppStates } from './conversations';
 import { stepsOfReplies, type RunSteps, type SessionTurn } from './conversations';
 import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
-import { nameKey, readProviderNames } from './provider-names.mjs';
-import { subscriptionNames } from './activity-log.mjs';
+import { readProviderNames } from './provider-names.mjs';
+import { placedName } from './provider-switches.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -194,13 +194,11 @@ export async function conversationRecord(db:Database,person:string,company:strin
 }
 type RanOutRow={run_id:string,provider:string,account:string,place:number};
 // The accounts that ran out on a Run (#731), as Settings › Providers names them: the Owner's name, else its kind's with
-// its place among its provider's accounts (ChatGPT, ChatGPT 2). A provider gtmworks has no kind's name for reads as its id.
+// its place among its provider's accounts (ChatGPT, ChatGPT 2; lib/provider-switches.mjs placedName).
 async function ranOutNames(db:Database,company:string,rows:RanOutRow[]):Promise<string[]> {
  if(!rows.length) return [];
  const names=await readProviderNames(db,company);
- const brand=subscriptionNames as Record<string,string>;
- return [...rows].sort((a,b)=>a.provider.localeCompare(b.provider)||a.place-b.place).map(row=>names[nameKey(row.provider,row.account)]
-  ??`${Object.hasOwn(brand,row.provider)?brand[row.provider]:row.provider}${row.place>1?` ${row.place}`:''}`);
+ return [...rows].sort((a,b)=>a.provider.localeCompare(b.provider)||a.place-b.place).map(row=>placedName(names,row.provider,row.account,row.place));
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>&{unread?:true};
 // The Conversation's own rows could not be read (#768): a state of its own, never an empty Conversation.
