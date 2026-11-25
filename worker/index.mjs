@@ -48,7 +48,11 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // Which Routines each Agent runs now, so its face shows it working (#699); the database counts each set two minutes.
  loop('Running Routines',()=>keepRunningRoutines(db),15000),
  selfHosted&&loop('Hermes',async()=>{ await keepCompanyProfiles(db,{waiting}); await keepLeadSouls(db,{}); },2000),
- selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await keepSharedSkills(db,{}); await keepAgentRules(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); await releaseKeyWaits(db,{waiting:keyWaits,driverFor:connection=>engineFor(connection)}); },2000),
+ selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); await releaseKeyWaits(db,{waiting:keyWaits,driverFor:connection=>engineFor(connection)}); },2000),
+ // What gtmworks writes into each profile (its team's lessons, its rules) is written when it changed, with a slow pass for
+ // drift, and an Engine that does not answer is left alone a while (#772): its own loop, so a slow write never holds a
+ // new Agent's profile or an Agent waiting for a model key.
+ selfHosted&&loop('Agent upkeep',async()=>{ await keepSharedSkills(db,{}); await keepAgentRules(db,{}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000),
  // Each Company's Engine takes its subscription accounts in the Owner's order, and each move it made from one account to

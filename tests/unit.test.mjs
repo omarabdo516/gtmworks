@@ -284,6 +284,19 @@ test('a chat open writes one line of each step\'s whole milliseconds, with ids o
  assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'<script>'})).render,'open');
 });
 
+test('an Engine\'s change of state is one line with its cause, and a failed call names why (#772)',async()=>{
+ const {engineStateLine}=await import('../lib/diagnostics.mjs');
+ const {failureCause}=await import('../lib/hermes.mjs');
+ assert.deepEqual(JSON.parse(engineStateLine({engine:'hermes-rs:8642',state:'down',cause:'timedOut'},{now:new Date('2026-11-25T10:00:00Z')})),{event:'engine_state',at:'2026-11-25T10:00:00.000Z',engine:'hermes-rs:8642',state:'down',cause:'timedOut'});
+ assert.equal(JSON.parse(engineStateLine({engine:'h',state:'up',cause:'timedOut'})).cause,null);
+ assert.equal(JSON.parse(engineStateLine({engine:'h',state:'down',cause:'anything'})).cause,'failed');
+ assert.equal(failureCause(Object.assign(new Error('The operation was aborted due to timeout'),{name:'TimeoutError'})),'timedOut');
+ assert.equal(failureCause(Object.assign(new TypeError('fetch failed'),{cause:{code:'ECONNREFUSED'}})),'refused');
+ assert.equal(failureCause(Object.assign(new TypeError('fetch failed'),{cause:{code:'ENOTFOUND'}})),'nameNotFound');
+ assert.equal(failureCause(Object.assign(new TypeError('fetch failed'),{cause:{code:'ECONNRESET'}})),'noNetwork');
+ assert.equal(failureCause(new Error('other')),'failed');
+});
+
 test('an apps read that failed is one line with its cause, ids only (#770)',async()=>{
  const {appsUnreadLine}=await import('../lib/diagnostics.mjs');
  assert.deepEqual(JSON.parse(appsUnreadLine({company:'0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90',agent:'x',cause:'refused'},{now:new Date('2026-11-25T10:00:00Z')})),{event:'apps_unread',at:'2026-11-25T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',agent:null,cause:'refused'});
