@@ -343,7 +343,8 @@ test('in the chat, Done it posts the done intent with the card and shows the tim
  expect([group.element(), group.element().querySelector('.card__outcome svg path')!].map(motion)).toEqual([['gw-settle', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
  const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
  expect(posted.map(([url, init]) => [url, JSON.parse(init!.body as string)])).toEqual([['/api/conversations', { company: 'co-1', conversation: conversation.id, intent: 'done', card: 7 }]]);
- await expect.element(screen.getByText('SEO is working on a reply…')).toBeVisible();
+ // The Run's live read has not answered: the line reads "Thinking" (#756).
+ await expect.element(screen.getByRole('status')).toHaveTextContent('SEOThinking…');
  await expect.poll(() => calls.mock.calls.filter(([, init]) => init?.method !== 'POST').length).toBe(1);
  answer(Response.json(replied));
  const reply = screen.getByText('I saw it on the site.');

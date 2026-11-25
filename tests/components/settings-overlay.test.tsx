@@ -59,11 +59,12 @@ test('while the chosen language is being saved the other choice waits, so the ch
  const english = screen.getByRole('radio', { name: /^English/ }), arabic = screen.getByRole('radio', { name: /^العربية/ });
  await expect.element(arabic).toHaveAttribute('aria-checked', 'true');
  await english.click();
- await expect.element(arabic).toBeDisabled();
+ await expect.element(arabic).toHaveAttribute('aria-disabled', 'true');
+ (english.element() as HTMLElement).click();
  expect(saveLanguage.mock.calls.map(([, form]) => form.get('language'))).toEqual(['en']);
  finish('');
- await expect.element(english).toBeEnabled();
- await expect.element(arabic).toBeEnabled();
+ await expect.element(english).not.toHaveAttribute('aria-disabled');
+ await expect.element(arabic).not.toHaveAttribute('aria-disabled');
  expect(saveLanguage).toHaveBeenCalledOnce();
  await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
 });
@@ -238,6 +239,37 @@ test('the arrow keys move between the three Appearance choices in the reading di
  await expect.element(screen.getByRole('radio', { name: 'System' })).toHaveFocus();
  await userEvent.keyboard('{ArrowRight}');
  await expect.element(light).toHaveFocus();
+});
+
+// Two rendering updates: long enough for the browser to drop the focus from a button that can no longer take it.
+const twoFrames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+// #720: a choice made from the keyboard keeps the focus while it is saved; the choices say they wait (aria-disabled) and a
+// second choice is not sent, but the arrow keys still move between them.
+test('a choice made with the keyboard keeps the focus while it is saved, and the other choices wait', async () => {
+ let finish!: (failure: string) => void;
+ saveTheme.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+ const screen = await account('en', 'light');
+ const dark = screen.getByRole('radio', { name: 'Dark' }), system = screen.getByRole('radio', { name: 'System' });
+ (screen.getByRole('radio', { name: 'Light' }).element() as HTMLElement).focus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.element(dark).toHaveFocus();
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => saveTheme.mock.calls.map(([, form]) => form.get('theme'))).toEqual(['dark']);
+ await twoFrames();
+ await expect.element(dark).toHaveFocus();
+ await expect.element(dark).toHaveAttribute('aria-disabled', 'true');
+ await expect.element(screen.getByRole('radio', { name: /^English/ })).toHaveAttribute('aria-disabled', 'true');
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.element(system).toHaveFocus();
+ await userEvent.keyboard(' ');
+ await twoFrames();
+ expect(saveTheme).toHaveBeenCalledOnce();
+ await expect.element(system).toHaveFocus();
+ finish('');
+ await expect.element(dark).not.toHaveAttribute('aria-disabled');
+ await expect.element(system).toHaveFocus();
+ expect(saveTheme).toHaveBeenCalledOnce();
 });
 
 // #616: About names the installed version, lists What's new from the shipped release notes in the interface language,

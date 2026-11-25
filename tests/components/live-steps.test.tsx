@@ -55,8 +55,8 @@ test.each([
  const fake = engine();
  const screen = await render(chat(language, working));
  await expect.poll(() => fake.asked).toContain('/api/run-steps?company=co-1&conversation=cv-1');
- // Before the stream answers, the plain line.
- await expect.element(screen.getByRole('status')).toHaveTextContent(language === 'en' ? 'Ads is working on a reply…' : 'Ads يكتب الرد…');
+ // Before the stream answers, the line already reads "Thinking" (#756).
+ await expect.element(screen.getByRole('status')).toHaveTextContent(`Ads${thinking}`);
  fake.send({ run: 'run_1', steps: [], now: null });
  await expect.poll(() => step()?.textContent).toBe(thinking);
  expect(line()?.querySelector('.dot--working')).not.toBeNull();
@@ -138,7 +138,7 @@ test('a channel shows the same: the called Agent, its step now, and its steps so
   writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages: [message], handoffs: [], open: true, handover: false };
  const screen = await render(<LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={record}/></LanguageProvider>);
  await expect.poll(() => fake.asked).toContain('/api/run-steps?company=co-1&channel=ch-1');
- await expect.element(screen.getByRole('status')).toHaveTextContent('Lead is working on a reply…');
+ await expect.element(screen.getByRole('status')).toHaveTextContent('LeadThinking…');
  fake.send({ run: 'run_9', steps: [{ tool: 'calendar', preview: 'this week', state: 'done' }], now: { tool: 'web_search', preview: 'holidays in Egypt' } });
  await expect.poll(() => step()?.textContent).toBe('web_search · holidays in Egypt…');
  expect(line()?.querySelector('.activity__who')?.textContent).toBe('Lead');
@@ -162,7 +162,8 @@ test('a queued turn: once the first Run\'s reply lands its live steps go at once
  expect(live()?.querySelector('.steps'), 'no second list beside the reply: the next reply being worked on has none yet').toBeFalsy();
  expect(document.querySelectorAll('.steps').length).toBe(1);
  expect(document.querySelector('[data-author="agent"]')?.classList.contains('msg-in')).toBe(false);
- await expect.element(screen.getByRole('status')).toHaveTextContent('Ads is working on a reply…');
+ // The next Run is not read yet: "Thinking", not the plain line (#756).
+ await expect.element(screen.getByRole('status')).toHaveTextContent('AdsThinking…');
  await expect.poll(() => fake.asked.length, { timeout: 4000 }).toBe(2);
  fake.send({ run: 'run_2', steps: [], now: { tool: 'sheets', preview: 'budget' } });
  await expect.poll(() => step()?.textContent).toBe('sheets · budget…');

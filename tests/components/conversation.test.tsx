@@ -78,7 +78,7 @@ test('while the Agent works the page says so, and the line goes once the reply i
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  stubFetch(vi.fn(async () => Response.json(talk([sent, { id: 2, author: 'agent', author_name: 'Mona', body: 'Reply to: Draft the long launch plan', created_at: at }]))));
  const screen = await render(view(talk([sent], { pending: true })));
- await expect.element(screen.getByRole('status')).toHaveTextContent('Mona is working on a reply…');
+ await expect.element(screen.getByRole('status')).toHaveTextContent('MonaThinking…');
  await vi.advanceTimersByTimeAsync(500);
  await expect.element(screen.getByText('Reply to: Draft the long launch plan')).toBeVisible();
  await expect.element(screen.getByRole('status')).not.toBeInTheDocument();
@@ -462,11 +462,11 @@ test('a Conversation opened with its history moves nothing but the working line\
  await expect.element(page.getByRole('status')).toBeVisible();
  // An Agent's face lives by itself (components/face-life), as it does on every page; nothing else moves.
  const moving = [...document.querySelectorAll('.transcript *')].filter(element => !element.closest('.fw') && getComputedStyle(element).animationName !== 'none');
- expect(moving.map(element => element.className)).toEqual(['shimmer']);
- const words = document.querySelector('.thinking .shimmer')!;
+ expect(moving.map(element => element.className)).toEqual(['activity__t shimmer']);
+ const words = document.querySelector('.activity .shimmer')!;
  const style = getComputedStyle(words);
  expect([style.animationName, style.animationDuration, style.animationTimingFunction, style.animationIterationCount]).toEqual(['gw-breathe', '1.4s', 'ease-in-out', 'infinite']);
- expect(words.textContent).toContain('Omar');
+ expect(words.textContent).toBe('Thinking…');
  expect(document.querySelector('.ac-card')!.className).toBe('ac-card');
  await cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
  onTestFinished(async () => { await cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); });
