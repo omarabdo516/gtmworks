@@ -29,7 +29,8 @@ const handle = app.getRequestHandler();
 const screen = screenStreams();
 const server = createServer((request, response) => { void handle(request, response); });
 server.on('upgrade', (request, socket, head) => {
-  if (new URL(request.url ?? '/', 'http://gtmworks').pathname === screenStreamPath) void screen(request, socket, head);
+  const asked = new URL(request.url ?? '/', 'http://gtmworks');
+  if (asked.pathname === screenStreamPath) void screen(request, socket, head, asked.searchParams);
 });
 const keepAlive = Number.parseInt(process.env.KEEP_ALIVE_TIMEOUT ?? '', 10);
 if (Number.isFinite(keepAlive) && keepAlive >= 0) server.keepAliveTimeout = keepAlive;

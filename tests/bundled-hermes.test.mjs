@@ -406,7 +406,9 @@ test('the Engine management listener is on for web and worker with the Engine ke
  assert.equal(isHermesAddressAllowed('http://gtmworks-engine-first:9119'),true);
  // The public gateway proxies to the app, auth, rest and storage only.
  const gateway=readFileSync('scripts/install-nginx.conf','utf8');
- assert.deepEqual([...gateway.matchAll(/set \$\w+ ([\w-]+):\d+;/g)].map(match=>match[1]),['auth','rest','storage','web']);
+ // The app takes two: its pages, and the Screen's live stream it carries itself (ADR 0029).
+ assert.deepEqual([...gateway.matchAll(/set \$\w+ ([\w-]+):\d+;/g)].map(match=>match[1]),['auth','rest','storage','web','web']);
+ assert.match(gateway,/location = \/api\/display\/ws \{\s+set \$web web:3000;/);
  assert.doesNotMatch(gateway,/gtmworks-engine-first|9119|8642/);
  // The install job proves it on the real release: an Agent made through the contract, refused from outside.
  const install=installJob().steps.map(step=>step.run||'').join('\n');
