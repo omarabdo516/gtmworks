@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { uuid } from '@/lib/company-apps.mjs';
 import { supabase } from '@/lib/supabase';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { agentScreenPicture } from '@/lib/agent-screen.mjs';
@@ -7,7 +8,6 @@ import { agentScreenPicture } from '@/lib/agent-screen.mjs';
 // and handed on from gtmworks's own address (ADR 0011), never cached. Any Member who is shown the Agent reads it; a
 // hidden Agent is not found. While the Screen sleeps, or a person controls it (the picture may show what they type),
 // there is no picture: the answer says which.
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status:number)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 
 export async function GET(request:NextRequest) {

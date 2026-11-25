@@ -3,8 +3,8 @@
 -- Engine is asked for the lease, and the check answers the person's name, which the view shows to anyone else watching
 -- ("{name} has control"). Taking control and giving it back are one Company log row each, with the person and the
 -- Agent. Giving back is never refused for the Role: a person whose Role changed while they held the Screen still hands
--- it back, and it is logged, as long as they are still a Member who sees the Agent. Additive: three functions; the
--- previous app version calls none.
+-- it back, and it is logged, as long as they are still a Member who sees the Agent. Additive: four functions, one of
+-- them the log row the other two write; the previous app version calls none.
 
 -- Raises unless the caller may take control of this Agent's Screen; answers the caller's name.
 create function public.check_screen_control(c uuid, agent uuid) returns text
@@ -16,15 +16,23 @@ end $$;
 revoke all on function public.check_screen_control(uuid,uuid) from public,anon,service_role;
 grant execute on function public.check_screen_control(uuid,uuid) to authenticated;
 
--- The Company log's row for control of a Screen a person took: the person is the row's actor, on the Agent's subject.
+-- The Company log's row for control of a Screen: the caller is the row's actor, on the Agent's subject. Called only by
+-- the two functions below, after their own check; no role may call it.
+create function public.screen_control_logged(c uuid, agent uuid, act text) returns void
+language sql security definer set search_path='' as $$
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
+  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'agent',agent,act,
+   jsonb_build_object('agent_name',(select name from public.hermes_agents where id=agent)),
+   'hermes_agent_audit',nextval('public.agent_log_ids'),now());
+$$;
+revoke all on function public.screen_control_logged(uuid,uuid,text) from public,anon,authenticated,service_role;
+
+-- The row for control of a Screen a person took.
 create function public.log_screen_taken(c uuid, agent uuid) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  perform public.check_screen_wake(c,agent);
- insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
-  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'agent',agent,'agent_screen_taken',
-   jsonb_build_object('agent_name',(select name from public.hermes_agents where id=agent)),
-   'hermes_agent_audit',nextval('public.agent_log_ids'),now());
+ perform public.screen_control_logged(c,agent,'agent_screen_taken');
 end $$;
 revoke all on function public.log_screen_taken(uuid,uuid) from public,anon,service_role;
 grant execute on function public.log_screen_taken(uuid,uuid) to authenticated;
@@ -37,10 +45,7 @@ begin
  if not public.is_member(c) or not public.can_see_agent(c,agent)
   or not exists(select 1 from public.hermes_agents h where h.id=agent and h.company_id=c)
   then raise exception 'screenNotAllowed' using errcode='42501'; end if;
- insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
-  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'agent',agent,'agent_screen_given_back',
-   jsonb_build_object('agent_name',(select name from public.hermes_agents where id=agent)),
-   'hermes_agent_audit',nextval('public.agent_log_ids'),now());
+ perform public.screen_control_logged(c,agent,'agent_screen_given_back');
 end $$;
 revoke all on function public.log_screen_given_back(uuid,uuid) from public,anon,service_role;
 grant execute on function public.log_screen_given_back(uuid,uuid) to authenticated;

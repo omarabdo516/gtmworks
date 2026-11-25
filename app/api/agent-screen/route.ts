@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { uuid } from '@/lib/company-apps.mjs';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
@@ -9,7 +10,6 @@ import { readAgentScreen, wakeAgentScreen } from '@/lib/agent-screen.mjs';
 // they see, so a hidden Agent is not found, and the database checks the Role again (check_screen_wake) before the Engine
 // is asked to start it, then logs the wake (log_screen_woken). No answer names the Engine, its address or its words: a
 // refused start is one of the reasons the page has a line for.
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const identified=(body:{company?:unknown,agent?:unknown}|null):body is {company:string,agent:string}=>
  typeof body?.company==='string'&&uuid.test(body.company)&&typeof body.agent==='string'&&uuid.test(body.agent);
