@@ -91,7 +91,15 @@ export type Engine={
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,
  apps?():Promise<ProfileApps>,
+ screen?():Promise<ScreenRead>,
+ wakeScreen?():Promise<ScreenWake>,
+ screenPicture?():Promise<ScreenPicture>,
 };
+// An Agent's Screen (#712): its state, who controls it and why a start would be refused; a start; one picture.
+export type ScreenState={state:'none'|'asleep'|'awake',control:'agent'|'person',refusal:null|'missing'};
+export type ScreenRead={state:'found',screen:ScreenState}|{state:'missing'|'unreachable'};
+export type ScreenWake={state:'awake',screen:ScreenState}|{state:'notStarted',reason:'missing'|'failed'}|{state:'missing'|'unreachable'};
+export type ScreenPicture={state:'found',type:string,body:Uint8Array}|{state:'asleep'|'withheld'|'failed'|'missing'|'unreachable'};
 export function engineFor(connection:EngineConnection):Engine;
 export type RunEnd='completed'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'stopped'|'lost';
 export function endOf(run:Pick<RunState,'state'|'reply'|'noModel'|'modelRefused'>):RunEnd|null;
