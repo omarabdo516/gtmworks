@@ -80,6 +80,21 @@ test('a file\'s size reads as the reference writes it, in Latin digits', () => {
  assert.equal(fileSize(1536), '2 KB', 'kilobytes are whole, as the reference writes them');
 });
 
+test('a file the Agent handed over in a channel is listed by its channel, beside the Conversation\'s and the Card\'s (#715)', () => {
+ const files = agentFiles({
+  slug: 'rs-learning',
+  cards: [],
+  cardFiles: [],
+  conversationFiles: [{ id: 5, name: 'audiences.csv', size: 18000, created_at: '2026-06-12T09:00:00Z', conversation_id: 'c-1', agent_name: 'Meta Ads' }],
+  titles: new Map(),
+  channelFiles: [{ id: 5, name: 'report.pdf', size: 4000, created_at: '2026-06-13T09:00:00Z', channel: 'launch' }],
+ });
+ assert.deepEqual(files.map(file => [file.key, file.name, file.source, file.href]), [
+  ['channel-5', 'report.pdf', '#launch', '/c/rs-learning/files/channel/5'],
+  ['conversation-5', 'audiences.csv', 'Meta Ads', '/c/rs-learning/files/conversation/5'],
+ ]);
+});
+
 test('an Agent\'s files are its Cards\' and the reader\'s own Conversations\' with it, newest first, each named for where it came from', () => {
  const files = agentFiles({
   slug: 'rs-learning',
@@ -90,6 +105,7 @@ test('an Agent\'s files are its Cards\' and the reader\'s own Conversations\' wi
    { id: 4, name: 'old.png', size: 90, created_at: '2026-06-01T09:00:00Z', conversation_id: 'c-2', agent_name: 'Meta Ads' },
   ],
   titles: new Map([['c-1', 'Plan the June campaign']]),
+  channelFiles: [],
  });
  assert.deepEqual(files.map(file => [file.name, file.source, file.href]), [
   ['audiences.csv', 'Plan the June campaign', '/c/rs-learning/files/conversation/3'],
