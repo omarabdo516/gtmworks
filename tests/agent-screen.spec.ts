@@ -12,6 +12,7 @@ import { signIn } from './sign-in';
 // Member the Agent is hidden from finds nothing; a wake is one row of the Company log. No page and no answer names the
 // Engine or its address, and every picture comes from gtmworks's own address.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const company='10000000-0000-0000-0000-000000000001';
 const companyProfile=`co-${company.replaceAll('-','')}`;
 const ads=randomUUID(); const adsProfile=`ag-${ads.replaceAll('-','')}`;
@@ -73,8 +74,8 @@ test('the Owner wakes an Agent\'s Screen from its card, watches it refresh in th
  await expect(card.locator('img.scr__shot')).toBeVisible();
  expect(fake.settings.screenCalls.filter(call=>call.method==='display.start').map(call=>call.params.profile)).toEqual([adsProfile]);
  // The wake is one row of the Company log, with the person and the Agent.
- const rows=JSON.parse(query(`select actor_id,details->>'agent_name' as agent from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)).rows;
- expect(rows).toEqual([{actor_id:'20000000-0000-0000-0000-000000000001',agent:'Ads'}]);
+ const woke=rows(`select actor_id,details->>'agent_name' as agent from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`);
+ expect(woke).toEqual([{actor_id:'20000000-0000-0000-0000-000000000001',agent:'Ads'}]);
 
  // Watch opens the large view with the keyboard on its first action (here its close button), and its picture refreshes
  // without a reload: a later grab replaces the first.
@@ -134,7 +135,7 @@ test('a Screen that falls asleep while watched is woken from the view\'s asleep 
  await expect(view.getByRole('button',{name:'Close the screen'})).toBeFocused();
  await expect(card.locator('.scr-st')).toHaveText('Awake');
  await expect(page.locator('.toast')).toContainText('Ads’s screen is awake');
- expect(JSON.parse(query(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)).rows[0].n).toBe(2);
+ expect(rows(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)[0].n).toBe(2);
 });
 
 test('a start that is refused says why in one line and the Screen stays asleep',async({page})=>{
@@ -151,7 +152,7 @@ test('a start that is refused says why in one line and the Screen stays asleep',
  await expect(card.locator('.scr-err')).toHaveText('The work sandbox is missing what the screen needs. Ask the install owner to update gtmworks.');
  await expect(card.locator('.scr-st')).toHaveText('Asleep');
  expect(fake.settings.screenCalls.filter(call=>call.method==='display.start'&&call.params.profile===seoProfile)).toEqual([]);
- expect(JSON.parse(query(`select count(*)::int as n from public.company_log where agent_id='${seo}' and action='agent_screen_woken'`)).rows[0].n).toBe(0);
+ expect(rows(`select count(*)::int as n from public.company_log where agent_id='${seo}' and action='agent_screen_woken'`)[0].n).toBe(0);
 });
 
 test('a Viewer watches a Screen but cannot wake it, and the server refuses a Viewer\'s wake',async({page})=>{
@@ -184,12 +185,12 @@ test('the server answers the Screen per Role, and finds nothing of an Agent hidd
  // A Contributor who sees it wakes it; one already awake is woken again with nothing more logged.
  await page.context().clearCookies();
  await signIn(page,'reviewer@example.com','/c/rs-learning/home');
- const before=JSON.parse(query(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)).rows[0].n;
+ const before=rows(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)[0].n;
  const woken=await page.request.post('/api/agent-screen',{data:{company,agent:ads}});
  expect([woken.status(),await woken.json()]).toEqual([200,{screen:'awake'}]);
  const again=await page.request.post('/api/agent-screen',{data:{company,agent:ads}});
  expect([again.status(),await again.json()]).toEqual([200,{screen:'awake'}]);
- expect(JSON.parse(query(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)).rows[0].n).toBe(before+1);
+ expect(rows(`select count(*)::int as n from public.company_log where agent_id='${ads}' and action='agent_screen_woken'`)[0].n).toBe(Number(before)+1);
  // A person controls it: the state says so, and there is no picture.
  fake.settings.screens.set(adsProfile,{running:true,holder:'human'});
  expect(await (await page.request.get(`/api/agent-screen?company=${company}&agent=${ads}`)).json()).toEqual({screen:{state:'awake',control:'person',refusal:null}});
