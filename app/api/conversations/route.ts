@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -11,7 +12,7 @@ import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
-import { discardConversationFiles, keepConversationFiles } from '@/lib/conversation-files';
+import { discardConversationFiles, keepConversationFiles, type ConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord, conversationSteps } from '@/lib/conversation-record';
 import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
@@ -49,14 +50,16 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
   conversation=started as string;
  }
  const messageKey=body.sendKey as string; const company=body.company as string;
- const files=()=>({company,conversation,messageKey});
- const keepFiles=chosen.length?()=>keepConversationFiles(db,service(),{...files(),files:chosen}):undefined;
+ // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
+ // the key still holds (#727).
+ const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
+ const keepFiles=chosen.length?()=>keepConversationFiles(db,service(),{...files,files:chosen}):undefined;
  const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,keepFiles,later:after});
  // Refused before the turn was stored: nothing was, so the images kept for it go too, and the words go back to the box.
- if('code' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files()); return refuseFor(sent.code); }
- if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files()); return refuse(sent.error,sent.status); }
+ if('code' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuseFor(sent.code); }
+ if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuse(sent.error,sent.status); }
  // A note to a person and an answer to a question store no turn, so nothing can sit under one: their images go.
- if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files());
+ if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files);
  return reply(sent);
 }
 
