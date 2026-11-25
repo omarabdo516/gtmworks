@@ -137,6 +137,9 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
 
  await page.goto(`/c/rs-learning/chat/${ads}`);
  await tab(details,'Tasks').click();
+ // The Activity tab's row "Plan the June campaign" opens the chat: the Card is pressed once Tasks is the tab shown.
+ await expect(tab(details,'Tasks')).toHaveAttribute('aria-selected','true');
+ await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-tasks');
  await cards.filter({hasText:'June campaign'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board\/\d+$/);
  await expect(page.locator('.cw[open] .cw-title')).toContainText('June campaign');
