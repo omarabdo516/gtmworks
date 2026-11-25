@@ -107,6 +107,31 @@ drop trigger if exists align_card_assignee on public.work_cards;
 create trigger align_card_assignee before insert or update of agent_id,assignee_agent,assignee_person on public.work_cards
  for each row execute function public.align_card_assignee();
 
+-- The old guards held a Card's stage and approval to their functions; this one holds its status and its review the same
+-- way: a person moves a Card with move_card and undo_card_move, sends it to review with ask_review and decides it with
+-- decide_review, never by writing the row. A Card made by hand is not made waiting on a review or approved. Writes the
+-- database makes for nobody (a Run's, a channel's, the cutover's own) pass.
+create or replace function public.card_write_guard()
+ returns trigger language plpgsql security definer set search_path='' as $function$
+begin
+ if auth.uid() is null or coalesce(current_setting('approval.internal',true),'')='yes' then return new; end if;
+ if tg_op='INSERT' then
+  if new.status='waiting' then raise exception 'waiting is not placed by hand' using errcode='42501'; end if;
+  if num_nonnulls(new.approved_version,new.approved_at,new.review_submitter,new.review_entered_at,new.rejection_reason)>0 then
+   raise exception 'approval fields are protected' using errcode='42501'; end if;
+ else
+  if new.status is distinct from old.status and coalesce(current_setting('work.move',true),'')<>'yes' then
+   raise exception 'a card moves with move_card' using errcode='42501'; end if;
+  if (new.approved_version,new.approved_at,new.review_submitter,new.review_entered_at,new.rejection_reason)
+   is distinct from (old.approved_version,old.approved_at,old.review_submitter,old.review_entered_at,old.rejection_reason) then
+   raise exception 'approval fields are protected' using errcode='42501'; end if;
+ end if;
+ return new;
+end $function$;
+revoke all on function public.card_write_guard() from public,anon,authenticated,service_role;
+drop trigger if exists card_write_guard on public.work_cards;
+create trigger card_write_guard before insert or update on public.work_cards for each row execute function public.card_write_guard();
+
 -- A move is logged and remembered by its statuses.
 create or replace function public.work_card_moved()
  returns trigger language plpgsql security definer set search_path='' as $function$
@@ -210,6 +235,9 @@ create or replace function public.change_work_card(c uuid, card bigint, operatio
  returns bigint language plpgsql set search_path='' as $function$
 declare result bigint; begin
  if not public.work_can_edit(c) then raise exception 'not permitted'; end if;
+ -- Read as the caller: a Card its Agent hides from them answers as a Card that does not exist, as the Agent's own board
+ -- write it replaces did (#228).
+ if not exists(select 1 from public.work_cards w where w.company_id=c and w.id=card) then raise exception 'card not found or not permitted' using errcode='P0002'; end if;
  perform set_config('work.evidence',coalesce(evidence,''),true);
  case operation
  when 'comment' then insert into public.work_comments(company_id,card_id,body) values(c,card,payload->>'body') returning id into result;

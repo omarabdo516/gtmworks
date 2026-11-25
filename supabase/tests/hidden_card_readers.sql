@@ -12,20 +12,16 @@ insert into public.member_agent_access(company_id,person_id,agent_id)
  from unnest(array['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004']::uuid[]) p;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('e2280000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a2280000-0000-0000-0000-000000000001','Ads');
-insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
- select company_id,id,'Plan the June campaign','a2280000-0000-0000-0000-000000000001','e2280000-0000-0000-0000-000000000001' from public.work_stages
- where company_id='10000000-0000-0000-0000-000000000001' and board_column='progress' and kind='before_review' order by position,id limit 1;
-insert into public.work_cards(company_id,stage_id,title) select company_id,id,'An untied idea' from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas';
+insert into public.work_cards(company_id,status,title,agent_id,conversation_id,description) values
+ ('10000000-0000-0000-0000-000000000001','progress','Plan the June campaign','a2280000-0000-0000-0000-000000000001','e2280000-0000-0000-0000-000000000001','- [ ] Hook written');
+insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000001','ideas','An untied idea');
 select set_config('test.card',(select id::text from public.work_cards where conversation_id='e2280000-0000-0000-0000-000000000001'),true);
 select set_config('test.untied',(select id::text from public.work_cards where title='An untied idea'),true);
 select set_config('test.missing',(select (max(id)+1000)::text from public.work_cards),true);
-insert into public.work_checklist(company_id,card_id,title) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Hook written');
-select set_config('test.item',(select id::text from public.work_checklist where card_id=current_setting('test.card')::bigint),true);
 -- Written by the second Contributor while Ads was still shown to them.
 insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Shorter hook?','20000000-0000-0000-0000-000000000005');
 select set_config('test.note',(select id::text from public.work_comments where card_id=current_setting('test.card')::bigint),true);
 select set_config('test.missing_note',(select (max(id)+1000)::text from public.work_comments),true);
-update public.approval_steps set person_id='20000000-0000-0000-0000-000000000002',role=null where company_id='10000000-0000-0000-0000-000000000001' and removed_at is null;
 -- One call, as text, made on the Card a setting names: what it returned, or its error.
 create function pg_temp.answer(call text, card text) returns text language plpgsql as $$
 declare result text;
@@ -40,19 +36,20 @@ grant execute on function pg_temp.answer(text,text) to authenticated,service_rol
 grant insert,select on waiting to authenticated;
 grant select on writes to authenticated;
 insert into writes values
- ('move',$$public.agent_write('10000000-0000-0000-0000-000000000001','move-%1$s','f','move',%1$s,jsonb_build_object('stage',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas')))$$),
- ('edit',$$public.agent_write('10000000-0000-0000-0000-000000000001','edit-%1$s','f','edit',%1$s,'{"fields":{"title":"Renamed"}}')$$),
- ('actor',$$public.agent_write('10000000-0000-0000-0000-000000000001','actor-%1$s','f','actor',%1$s,'{"person":"30000000-0000-0000-0000-000000000001"}')$$),
- ('assignee',$$public.agent_write('10000000-0000-0000-0000-000000000001','assignee-%1$s','f','assignee',%1$s,'{"person":"30000000-0000-0000-0000-000000000002"}')$$),
- ('label',$$public.agent_write('10000000-0000-0000-0000-000000000001','label-%1$s','f','label',%1$s,jsonb_build_object('label',(select min(id) from public.work_labels where company_id='10000000-0000-0000-0000-000000000001')))$$),
- ('check',$$public.agent_write('10000000-0000-0000-0000-000000000001','check-%1$s','f','check',%1$s,jsonb_build_object('item',current_setting('test.item')::bigint,'done',true))$$),
- ('comment',$$public.agent_write('10000000-0000-0000-0000-000000000001','comment-%1$s','f','comment',%1$s,'{"body":"Three ads drafted."}')$$),
- ('version',$$public.agent_write('10000000-0000-0000-0000-000000000001','version-%1$s','f','version',%1$s,'{"creative":1,"path":"draft.png"}')$$),
- ('creative_with_version',$$public.agent_write('10000000-0000-0000-0000-000000000001','creative-%1$s','f','creative_with_version',%1$s,'{"name":"Ad one","path":"ad-one.png"}')$$);
+ -- The writes a Member makes on a Card since the cutover (#684); the Agent's own board write is gone.
+ ('move',$$public.move_card('10000000-0000-0000-0000-000000000001',%1$s,'ideas')$$),
+ ('title',$$public.save_card('10000000-0000-0000-0000-000000000001',%1$s,'title','Renamed',null)$$),
+ ('description',$$public.save_card_description('10000000-0000-0000-0000-000000000001',%1$s,'Renamed',0)$$),
+ ('assignee',$$public.assign_card('10000000-0000-0000-0000-000000000001',%1$s,null,'30000000-0000-0000-0000-000000000002')$$),
+ ('todo',$$public.tick_card_todo('10000000-0000-0000-0000-000000000001',%1$s,1,'Hook written',true)$$),
+ ('review',$$public.ask_review('10000000-0000-0000-0000-000000000001',%1$s)$$),
+ ('comment',$$public.change_work_card('10000000-0000-0000-0000-000000000001',%1$s,'comment','{"body":"Three ads drafted."}')$$),
+ ('version',$$public.change_work_card('10000000-0000-0000-0000-000000000001',%1$s,'version','{"creative":1,"path":"draft.png"}')$$),
+ ('creative',$$public.change_work_card('10000000-0000-0000-0000-000000000001',%1$s,'creative','{"name":"Ad one"}')$$);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'waiting');
+select public.ask_review('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint);
 reset role;
 select public.add_waiting_item('10000000-0000-0000-0000-000000000001',p,'question','About the June campaign','',current_setting('test.card')::bigint)
  from unnest(array['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000005']::uuid[]) p;
@@ -85,21 +82,18 @@ reset role;
 select ok(not (select prosecdef from pg_proc where oid='public.waiting_list(uuid)'::regprocedure),'the list reads as the signed-in Member, under the read rules');
 
 select set_config('request.jwt.claim.sub','',true);
-insert into public.work_assignees(company_id,card_id,person_id) values
- ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'30000000-0000-0000-0000-000000000001'),
- ('10000000-0000-0000-0000-000000000001',current_setting('test.untied')::bigint,'30000000-0000-0000-0000-000000000001');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claims','{"sub":"30000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
 select is_empty($$select op,hidden,missing from (select op,pg_temp.answer(call,'card') as hidden,pg_temp.answer(call,'missing') as missing from writes) w where hidden is distinct from missing$$,
- 'every write on the Card (move, edit, actor, assignee, label, check, comment, version, creative) answers as on a missing Card');
+ 'every write on the Card (move, title, description, assignee, to-do, review, comment, version, creative) answers as on a missing Card');
 reset role;
 
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','a2280000-0000-0000-0000-000000000001');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claims','{"sub":"30000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
-select matches(pg_temp.answer(call,'card'),'^ok \{"id": \d+\}$','it writes on the Card') from writes where op='comment';
+select matches(pg_temp.answer($$public.change_work_card('10000000-0000-0000-0000-000000000001',%1$s,'comment','{"body":"Three ads drafted."}')$$,'card'),'^ok','it writes on the Card');
 
 select set_config('request.jwt.claims','',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
@@ -115,13 +109,13 @@ reset role;
 delete from public.member_agent_access where person_id='20000000-0000-0000-0000-000000000002' and agent_id='a2280000-0000-0000-0000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is(pg_temp.answer(call,'card'),pg_temp.answer(call,'missing'),'and the Card''s approval is not theirs to decide, as on a missing Card')
- from (select $$public.decide_approval('10000000-0000-0000-0000-000000000001',%s,'approve')$$ as call) x;
+select is(pg_temp.answer(call,'card'),pg_temp.answer(call,'missing'),'and the Card''s review is not theirs to decide, as on a missing Card')
+ from (select $$public.decide_review('10000000-0000-0000-0000-000000000001',%s,null,'approve',null)$$ as call) x;
 reset role;
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a2280000-0000-0000-0000-000000000001');
 set local role authenticated;
-select is(pg_temp.answer(call,'card'),'ok ','and approve the Card')
- from (select $$public.decide_approval('10000000-0000-0000-0000-000000000001',%s,'approve')$$ as call) x;
+select matches(pg_temp.answer(call,'card'),'^ok','and approve the Card')
+ from (select $$public.decide_review('10000000-0000-0000-0000-000000000001',%s,null,'approve',null)$$ as call) x;
 reset role;
 select * from finish();
 rollback;
