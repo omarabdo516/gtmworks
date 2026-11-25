@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readModelAccess, readProviderModels, changeProviderModel, offeredModels, modelEnabled } from '../lib/provider-models.mjs';
 import { readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
+import { setProviderKey } from '../lib/hermes.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #620 (spec #611): each Provider's models are switched on or off by the Owner, and a model choice is offered once while
@@ -147,6 +148,21 @@ test('a subscription signed in only on an Agent\'s profile lists its models from
  } finally { await fake.close(); }
 });
 
+test('a partly connected subscription lists its own profile\'s models beside a shared-space key of its provider (#638)', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake);
+  // The Claude sign-in an older version left on the Company's profile reaches Opus and Sonnet; the shared space's
+  // Anthropic key reaches Opus only, so the space lists Opus alone for Anthropic.
+  delete fake.settings.defaultCredentials.anthropic;
+  fake.settings.profiles.get(main).credentials.anthropic='test-only-claude-oauth';
+  const {db}=database({rows:[{entry:'sub-anthropic',model:'claude-sonnet-4-6',enabled:false}]});
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:false}]);
+  assert.deepEqual(switches['key-anthropic'],[{model:'claude-opus-4-6',enabled:true}]);
+ } finally { await fake.close(); }
+});
+
 test('a Provider the Owner switched off offers nothing, and a subscription goes only once every account of it is off (#619)', async () => {
  const fake=await fakeHermes();
  try {
@@ -181,4 +197,114 @@ test('an order that could not be read offers nothing, and an unlisted subscripti
    'with an account of its kind off, which ones it holds is unknown: not offered');
   assert.deepEqual(await ids([{provider:'anthropic',account:'key',place:null,enabled:false}]),['key-openrouter','sub-anthropic'],'a key switched off says nothing of the subscription');
  } finally { await fake.close(); }
+});
+
+// #643: OpenCode Go serves its key only part of the Engine's catalogue; the Engine merges its own older ids into the list,
+// and OpenCode refuses each of those. A fake OpenCode Go, which the profile's OPENCODE_GO_BASE_URL points at as the
+// Engine's own route does, lists what the key is served.
+async function fakeOpenCode({served,status=200,rows}) {
+ const { createServer }=await import('node:http');
+ const asked=[];
+ const server=createServer((request,response)=>{
+  asked.push({path:request.url,authorization:request.headers.authorization});
+  response.writeHead(status,{'Content-Type':'application/json'});
+  response.end(JSON.stringify(status===200?{object:'list',data:rows??served.map(id=>({id,object:'model',owned_by:'opencode'}))}:{error:'down'}));
+ });
+ await new Promise(done=>server.listen(0,'127.0.0.1',done));
+ return {base:`http://127.0.0.1:${server.address().port}/zen/go/v1`,asked,close:()=>new Promise(done=>server.close(done))};
+}
+const goKey='sk-go-test-0123456789abcdef';
+const seedGo=(fake,base)=>{
+ seed(fake);
+ fake.settings.envRows.push({env:'OPENCODE_GO_API_KEY',provider:'opencode-go',label:'OpenCode Go',primary:true,password:true,category:'provider'});
+ fake.settings.providerModels['opencode-go']=['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon'];
+ for(const name of [space,main]) Object.assign(fake.settings.profiles.get(name).env,{OPENCODE_GO_API_KEY:goKey,OPENCODE_GO_BASE_URL:base});
+};
+
+test('an OpenCode Go key offers only the models OpenCode serves it, in Settings and in the pickers', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:['glm-5.3','gemini-4-argon','qwen-4']});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['key-opencode-go'],[{model:'glm-5.3',enabled:true,served:true},{model:'gemini-4-argon',enabled:true,served:true}],'the Engine\'s ids OpenCode does not serve are gone');
+  assert.deepEqual(switches['key-openrouter'],[{model:'anthropic/claude-opus-4.6',enabled:true},{model:'openai/gpt-5.5',enabled:true}],'another provider keeps the Engine\'s list');
+  const picks=await ownerPicks(db,fake);
+  assert.deepEqual(picks.company.filter(pair=>pair.startsWith('opencode-go/')),['opencode-go/glm-5.3','opencode-go/gemini-4-argon']);
+  assert.deepEqual(picks.agent.filter(pair=>pair.startsWith('opencode-go/')),['opencode-go/glm-5.3','opencode-go/gemini-4-argon']);
+  assert.ok(go.asked.every(request=>request.path==='/zen/go/v1/models'&&request.authorization===`Bearer ${goKey}`),'asked with the key the profile holds');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('an OpenCode Go list that cannot be read leaves the Engine\'s list', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:[],status:503});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['key-opencode-go'],['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon'].map(model=>({model,enabled:true})),'none marked as OpenCode\'s own');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('giving an OpenCode Go key sets the Company\'s model to one OpenCode serves, and to the Engine\'s first when OpenCode cannot say', async () => {
+ for(const [status,expected] of [[200,'glm-5.3'],[503,'mimo-v2-omni']]) {
+  const fake=await fakeHermes(); const go=await fakeOpenCode({served:['gemini-4-argon','glm-5.3'],status});
+  try {
+   seedGo(fake,go.base);
+   for(const name of [space,main]) { delete fake.settings.profiles.get(name).env.OPENCODE_GO_API_KEY; }
+   const set=await setProviderKey(install(fake),{space,profiles:[main],provider:'opencode-go',value:goKey});
+   assert.equal(set.state,'written');
+   assert.equal(set.model,expected,'the first of the Engine\'s list that OpenCode serves');
+   assert.deepEqual(set.profiles,{[main]:'written'});
+   const profile=fake.settings.profiles.get(main);
+   assert.deepEqual([profile.provider,profile.model],['opencode-go',expected]);
+  } finally { await go.close(); await fake.close(); }
+ }
+});
+
+test('an OpenCode Go key is sent only over HTTPS or to this machine, and an address that is neither keeps the Engine\'s list', async () => {
+ const fake=await fakeHermes();
+ try {
+  seedGo(fake,'http://opencode.example/zen/go/v1');
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+ } finally { await fake.close(); }
+});
+
+test('an OpenCode Go key served no model offers none, and an address the Engine could not read is not swapped for OpenCode\'s own', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:[]});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'],[],'OpenCode answered that it serves none');
+  for(const name of [space,main]) delete fake.settings.profiles.get(name).env.OPENCODE_GO_API_KEY;
+  const set=await setProviderKey(install(fake),{space,profiles:[main],provider:'opencode-go',value:goKey});
+  assert.deepEqual([set.model,set.profiles[main]],[null,'noModel'],'no model OpenCode refuses is set');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('an OpenCode Go address the Engine could not read keeps the Engine\'s list rather than asking OpenCode\'s own address', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:['glm-5.3']});
+ try {
+  seedGo(fake,go.base);
+  fake.settings.revealFail.add('OPENCODE_GO_BASE_URL');
+  const {db}=database();
+  // Every address this process asks, so a read of OpenCode's public address would show.
+  const real=globalThis.fetch; const asked=[];
+  globalThis.fetch=(url,init)=>{ asked.push(String(url)); return real(url,init); };
+  try {
+   assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+  } finally { globalThis.fetch=real; }
+  assert.deepEqual(asked.filter(url=>url.includes('/models')&&!url.includes('/api/model/options')),[],'neither OpenCode\'s own address nor the unread one is asked');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('an OpenCode Go list whose rows name no model is not read as serving none, so the Engine\'s list stays', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:[],rows:[{},{id:''},{object:'model'}]});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+ } finally { await go.close(); await fake.close(); }
 });

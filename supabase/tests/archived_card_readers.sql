@@ -14,7 +14,7 @@ select fn,body ~ '\yarchived_at\y' as asks from source where body ~ 'public\.wor
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('asks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'asks','reads only current Cards, or only archived ones, by archived_at' from unnest(array[
-  'public.channel_board_card(uuid)','public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)',
+  'public.channel_board_card(uuid)','public.archived_cards(uuid)','public.archived_card_list(uuid,text,uuid,bigint,timestamptz,bigint,integer)','public.archived_card_count(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)',
   'public.card_archive_stops(uuid,bigint[])','public.stop_named_channel_run(public.channel_runs,text)']) fn
  union all select 'public.stop_card_work(uuid,bigint)','exempt','inside the database only: archive_cards stops the work of the one Card it is archiving, before marking it'
  union all select fn,'asks','starts no work on an archived Card and keeps no wait on one (#671): it reads a Card only to ask whether it is archived' from unnest(array[

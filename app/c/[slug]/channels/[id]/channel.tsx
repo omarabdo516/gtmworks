@@ -7,23 +7,25 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { named } from '@/lib/bidi';
-import { AgentFaceDot } from '@/app/agent-face-dot';
-import { statusKeys } from '@/lib/agent-details.mjs';
+import { faceStateWords } from '@/lib/agent-face-states';
+import { OpenedHere } from '@/app/sidebar-live';
 import { ShellIcon } from '@/components/shell-icon';
+import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
-import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
 import { ReplyCard } from '@/app/reply-card';
 import type { AnswerQuestion } from '@/app/question-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { ActivityLine, LiveTurn, useLanding, useLiveSteps } from '@/app/run-activity';
+import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -152,7 +154,6 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  useEffect(()=>{ const box=transcript.current; if(landed.current&&seen.current===last) return; landed.current=false; seen.current=last; if(box) box.scrollTop=box.scrollHeight; },[last]);
  const name=channelTitle(t,channel);
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
- const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  const now=new Date(); const today=dayOf(now.toISOString(),zone); const yesterday=dayOf(new Date(now.getTime()-864e5).toISOString(),zone);
  const dayLabel=(at:string)=>{ const day=dayOf(at,zone); return day===today?t('today'):day===yesterday?t('yesterday'):madeDay(at,language,zone); };
  const [before,after]=own.channelRouteTip.split('@{0}');
@@ -167,12 +168,14 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
- const landing=useLanding({working:!!workingNow,live:useLiveSteps({company:channel.company,channel:channel.id},!!workingNow),
-  newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ const steps=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
+ const landing=useLanding({working:!!workingNow,live:steps,newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ // Each called Agent's face while the channel is open (#700, lib/live-runs channelRuns).
+ useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  const live=landing.view;
  const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
  const boardColumn=board?t(columnLabel(board.column,writer)):'';
- return <div className="convo"><div className="chat">
+ return <div className="convo"><OpenedHere company={record.channel.company} place={{channel:record.channel.id}}/><div className="chat">
   <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}
    corner={board&&<div className="chat__corner"><Link className={`corner-pill${board.waiting?' is-waiting':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('channelOnTheBoard')} ${boardColumn}`}>
     <span className={`dot dot--${board.waiting?'waiting':'idle'}`} aria-hidden="true"/><span className="corner-pill__lbl">{c('channelOnTheBoard')}</span><span className="corner-pill__col">{boardColumn}</span>
@@ -186,9 +189,9 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} rise={landedHere(message)?'':rise(`${message.author}:${message.id}`)} opened={message.author==='agent'&&landing.opened(message.id)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
+    <Turn message={message} rise={landedHere(message)?'':rise(`${message.author}:${message.id}`)} opened={message.author==='agent'&&landing.opened(message.id)} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
-     <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
+     <div className="sender"><span aria-hidden="true"><AgentFace agent={mention.face} name={mention.agent} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {/* What the Agent wrote before it asked, in the same message (#647), is its words above the card. */}
      {mention.questions.map(card=><Fragment key={`question${card.id}`}><Said words={card.said}/><ReplyCard card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
        team
@@ -197,7 +200,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
      {mention.permissions.map(card=><Fragment key={card.id}><Said words={card.said}/><PermissionCard card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/></Fragment>)}
     </li>)}
    </Fragment>)}
-    {workingNow&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
+    {workingNow&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
    {workingNow&&(live?<ActivityLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>
     :<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>)}
   </div></div>
@@ -206,7 +209,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    {record.archived&&<p className="arc-line" role="note"><ShellIcon name="archive"/><span>{c('channelArchivedLine')}</span></p>}
    {/* Stop (#478; design-reference: syncComposer): while a message the reader may stop has work open, an empty box turns
        the send arrow into the stop square, which ends that message's Runs and every Handover started from it. */}
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} stop={record.stop?{label:c('channelStop',record.stop.agent),run:async()=>{
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={channelCallable(record,person)} stop={record.stop?{label:c('channelStop',record.stop.agent),run:async()=>{
     const failure=await postMessage({company:channel.company,channel:channel.id,intent:'stop',message:record.stop?.message},'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;
@@ -217,10 +220,17 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     return failure;
    }}/>:!record.archived&&<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
   </div>
- </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
+ </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
-function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNames,done,owner}:{message:ChannelMessage,rise:string,opened?:boolean,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,owner:boolean}) {
+// A message's or a Handover's time, in the reader's own zone: the server draws it in UTC, hidden, and the page redraws it
+// once it hydrates, so it hydrates without a text mismatch outside UTC (#586, as the Conversation page does since #520).
+function When({at,className}:{at:string,className?:string}) {
+ const {language}=useI18n(); const zone=useZone();
+ return <time className={className} dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
+}
+
+function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,done,owner}:{message:ChannelMessage,rise:string,opened?:boolean,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,owner:boolean}) {
  const {t}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
@@ -234,14 +244,15 @@ function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNa
  // and that it did not finish when so (#375). One that ended with no reply for a cause a retry cannot fix (#428, #530)
  // says so under its row, as a Conversation does.
  if(message.author==='handoff') {
-  const row=<HandedRow className={rise.trim()} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}}
+  const row=<HandedRow className={rise.trim()} from={{id:message.from.face,name:message.from.name}} to={{id:message.to.face,name:message.to.name}}
    title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>;
   return message.model?<>{row}<li className="note" role="alert" data-outcome={modelOutcome(message.model.cause)}><ModelLine cause={message.model.cause} agent={message.model.agent} slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
-  <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
+  <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<When at={message.at} className="sender__time"/></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
-  <div className="bubble bubble--agent" dir="auto">{message.body}</div>
+  {!!message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
+  <ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/channel/${id}`}/>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
  </li>;
  // Every name that called an Agent is marked, so is every Member's name a message gives (#200), and each Agent that could
@@ -258,12 +269,12 @@ function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNa
  // every other Member (design-reference: filesHTML; `.turn--user` and `.turn--peer` put them on their own side).
  const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
  if(message.mine) return <li className={`turn turn--user msg${rise}`} data-author="person" data-msg={message.id}>
-  {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.at}>{time(message.at)}</time><div className="bubble bubble--user" dir="auto">{body}</div></div>}
+  {!!message.body.trim()&&<div className="bubble-row"><When at={message.at} className="bubble__time"/><div className="bubble bubble--user" dir="auto">{body}</div></div>}
   {files}
   {failed}
  </li>;
  return <li className={`turn turn--peer msg${rise}`} data-author="person" data-msg={message.id}>
-  <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
+  <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<When at={message.at} className="sender__time"/></div>
   {!!message.body.trim()&&<div className="bubble bubble--peer" dir="auto">{body}</div>}
   {files}
   {failed}
@@ -273,7 +284,7 @@ function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNa
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
 
 // design-reference: renderTeamDetails, with its "On the board" (#151) and "Handoffs" (#150) sections.
-function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{panel:DetailsPanel,slug:string,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,time:(value:string)=>string,refresh:()=>Promise<void>}) {
+function ChannelDetails({panel,slug,name,person,record,tip,c,refresh}:{panel:DetailsPanel,slug:string,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,refresh:()=>Promise<void>}) {
  const {t,language}=useI18n();
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const {channel,members,agents,manage,managers,handoffs,writer}=record;
@@ -326,12 +337,12 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
    <section className="dp-sec" aria-labelledby="ch-h-a">
     <h3 className="dp-label" id="ch-h-a"><span>{t('agents')} <span className="muted num">{count(agents.length)}</span></span></h3>
     <ul className="panel-card">
-     {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><AgentFaceDot agent={agent} size={28} status={agent.state}/>
-      <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:<span className="panel-row__d">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{' · '}</>}{t(statusKeys[agent.state])}</span>}</span>
+     {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><AgentFace agent={agent.id} size={28} state={agent.state} dot/>
+      <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:<span className="panel-row__d">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{' · '}</>}{t(faceStateWords[agent.state])}</span>}</span>
       {manage&&remove(`tm-rm-${agent.id}`,agent.name,{agent:agent.id,present:false},'tm-add-open')}</li>)
      :empty(team?c('channelNoAgentsYet'):c('channelNoAgents'))}
      {manage&&addRow('tm-add-open',addingAgent,c('channelAddAgent'),()=>void pick(!addingAgent,setAddingAgent))}
-     {manage&&addingAgent&&choices&&(agentCandidates.length?agentCandidates.map(candidate=><li key={candidate.id} className="panel-row tm-cand"><span aria-hidden="true"><CompanyAgentFace agent={candidate} size={28}/></span>
+     {manage&&addingAgent&&choices&&(agentCandidates.length?agentCandidates.map(candidate=><li key={candidate.id} className="panel-row tm-cand"><span aria-hidden="true"><AgentFace agent={candidate.id} size={28}/></span>
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{candidate.name}</bdi></span><span className="panel-row__d"><bdi>{candidate.speciality||t('newAgent')}</bdi></span></span>
       <button type="button" className="btn btn--secondary btn--sm" id={`tm-add-${candidate.id}`} onClick={()=>void change({agent:candidate.id,present:true},'tm-add-open')}>{c('channelAdd')}</button></li>)
       :empty(c('channelEveryAgentHere')))}
@@ -352,13 +363,13 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">
      {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.stopped?{'data-stopped':''}:handoff.failed?{'data-failed':''}:{})}>
-      <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
+      <span className="handed__faces"><AgentFace agent={handoff.from.face} name={handoff.from.name} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={handoff.to.face} name={handoff.to.name} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandoverAsked',handoff.from.name,handoff.to.name)}</span>
-       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
+       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}<When at={handoff.at}/></span></span>
      </li>)}
     </ul>
    </section>}
-   {record.archive&&<ChannelArchive company={channel.company} channel={channel.id} archived={!!record.archived} agents={agents} c={c} refresh={refresh}/>}
+   {record.archive&&<ChannelArchive company={channel.company} channel={channel.id} archived={!!record.archived} c={c} refresh={refresh}/>}
   </div>
  </DetailsShell>;
 }

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { faceAnimations, faceParts, faceTransitions } from './navigation-measure';
 
 // A page fades in when it opens, as the reference's view does (#135, design-reference setView and .view-enter): the
 // page drawn in the page region (.app-content), or on a chat page the chat beside the details panel, plays fadeIn once per page opened
@@ -55,7 +56,14 @@ const region = (page: Page) => page.evaluate(() => {
 // The shared five-property 150ms transition of everything a person can press (#128).
 const pressFade = (element: Element) => { const style = getComputedStyle(element); return [style.transitionProperty, [...new Set(style.transitionDuration.split(', '))].join()]; };
 const shared = ['background-color, box-shadow, color, border-color, transform', '0.15s'];
-const settle = (page: Page) => page.evaluate(async () => { await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))); });
+// Every motion on the page has ended, but an Agent face's own life, which never ends (#697): left out as the measured
+// navigation leaves it out (tests/navigation-measure.ts).
+const settle = (page: Page) => page.evaluate(async ({ names, parts, life }) => {
+ const face = (animation: Animation) => { const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
+  return animation instanceof CSSAnimation ? names.includes(animation.animationName)
+   : animation instanceof CSSTransition ? !!target?.matches(parts) : !!target?.matches(life); };
+ await Promise.all(document.getAnimations().filter(animation => !face(animation)).map(animation => animation.finished.catch(() => {})));
+}, { names: faceAnimations, parts: faceTransitions, life: faceParts });
 
 test('each page opened from the sidebar fades in once, polling fades nothing, and the current row fades to its fill', async ({ page }) => {
  test.setTimeout(120000);

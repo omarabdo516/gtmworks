@@ -30,6 +30,8 @@ export async function POST(request:NextRequest) {
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'speechInvalid'},400);
   if(!await routeAllowed(db,file,'POST',body.company,user.id)) return reply({error:'speechNotAllowed'},403);
   const result=await changeCompanySpeech(db,{company:body.company,provider:body.provider,intent:body.intent,value:body.value});
-  return reply(result.body,result.status);
+  // `savedAt` is when the server finished the save: the page holds the choice until it reads itself again after that
+  // time (app/settings-saved.ts, #663).
+  return reply(result.status===200?{...result.body,savedAt:Date.now()}:result.body,result.status);
  } catch { return reply({error:'speechInvalid'},400); }
 }

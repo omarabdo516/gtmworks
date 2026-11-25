@@ -4,7 +4,7 @@ import { useFormStatus } from 'react-dom';
 import { useCardText } from '@/app/agent-card';
 import { ChangeCard, useChangeShared, type ChangeField } from '@/app/change-card';
 import { useChangeWords, modelParts, type ModelChoice } from '@/app/change-words';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { Dialog, DialogContent, DialogTitle } from '@/components/paperclip/ui/dialog';
 import { useI18n } from '@/lib/i18n-client';
@@ -155,7 +155,7 @@ export function ChangeBoardCard({slug,company,item,alone}:{slug:string,company:s
   <button ref={opener} type="button" className="kcard__title authored-title" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><strong>{title}</strong></button>
   <span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{c('changeBadgeYou')}</span>
   <span className="kcard__t">{self?c('changeBoardSelf'):cb('changeBoardFor',view.by.name,view.agent.name)}</span>
-  <span className="kcard__foot"><span className="kcard__agent card-avatars">{read&&<span aria-hidden="true"><CompanyAgentFace agent={view.by} size={18}/></span>}<bdi className="od-truncate">{view.by.name}</bdi></span><span>· {c('changeBoardPlace')}</span></span>
+  <span className="kcard__foot"><span className="kcard__agent card-avatars">{read&&<span aria-hidden="true"><AgentFace agent={view.by.id} size={18}/></span>}<bdi className="od-truncate">{view.by.name}</bdi></span><span>· {c('changeBoardPlace')}</span></span>
   <Dialog open={open} onOpenChange={setOpen}>
    <DialogContent aria-describedby={undefined} className="gw modal chg-dialog" onCloseAutoFocus={event=>{ event.preventDefault(); opener.current?.focus(); }}>
     <DialogTitle className="sr-only">{c('changeTitle',view.agent.name)}</DialogTitle>

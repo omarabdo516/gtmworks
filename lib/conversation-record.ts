@@ -26,7 +26,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // through conversation_handovers by this Conversation's person whether or not they see that Agent; while its two Runs
 // move, the record says so (`handover`), so the chat keeps asking for the follow-up reply, and once it ended without
 // finishing the row says so (`failed`, #375).
-export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
+export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
  const conversation=found.id;
  // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
  const read=session&&found.agent_id&&found.hermes_session_id?session(found.agent_id,found.hermes_session_id).catch(()=>null):Promise.resolve(null);
@@ -38,12 +38,12 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
  type Message={id:number,author:'person'|'agent',author_name:string,agent_id:string|null,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- type HandedRow={id:number,run:string,from_name:string,from_connection:string,to_agent:string,to_name:string,to_connection:string,goal:string,answer:string|null,state:string,target_outcome:string|null,answers_person:boolean,created_at:string,answered_at:string|null,parent?:number|null,stopped?:boolean};
+ type HandedRow={id:number,run:string,from_agent:string,from_name:string,to_agent:string,to_name:string,goal:string,answer:string|null,state:string,target_outcome:string|null,answers_person:boolean,created_at:string,answered_at:string|null,parent?:number|null,stopped?:boolean};
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,approved_value?:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
- const [{ends,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
-  db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
+ const [{ends,resets,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
+  db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_run_resets(run_id,resets_at),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
    // Each handover's state in the same snapshot as the messages: a follow-up that closes writes its reply and marks the
@@ -54,8 +54,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
    .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
    .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'})
    .order('id',{referencedTable:'agent_change_proposals'}).maybeSingle()
-   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
-    return {ends:read?.conversation_run_ends||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[],moving:(read?.agent_handovers||[]).some(row=>row.state!=='done'&&row.state!=='failed')}; }),
+   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_run_resets:{run_id:string,resets_at:string}[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
+    return {ends:read?.conversation_run_ends||[],resets:read?.conversation_run_resets||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[],moving:(read?.agent_handovers||[]).some(row=>row.state!=='done'&&row.state!=='failed')}; }),
   // The handovers of this chat (#317, #475), both Agents named, oldest first, to draw them; whether one is still moving
   // is read with the messages above.
   db.rpc('conversation_handovers',{conversation}).then(({data})=>(data||[]) as HandedRow[]),
@@ -64,7 +64,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at').then(({data})=>(data||[]) as unknown as SavedRow[]),
   // The files each message was sent with (#155), read beside it: the message they were linked to, or the send key of a
   // turn still waiting. Only this Conversation's own person reads them (RLS, conversation_attachments_read).
-  db.from('conversation_attachments').select('id,name,message_id,send_key,position').eq('conversation_id',conversation).order('position').then(({data})=>(data||[]) as StoredFile[]),
+  db.from('conversation_attachments').select('id,name,content_type,message_id,send_key,position').eq('conversation_id',conversation).order('position').then(({data})=>(data||[]) as StoredFile[]),
   db.rpc('conversation_working_for',{conversation}),
   db.from('people').select('name').eq('id',person).maybeSingle(),
   tiedCard(db,company,conversation),
@@ -110,19 +110,19 @@ export async function conversationRecord(db:Database,person:string,company:strin
   return {...base,state:'made',by,at,agent:agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name}:null};
  };
  const requested=new Set(requestRows.map(row=>`${row.run_id}:${row.call_id}`));
- const handedCard=(row:HandedRow)=>({kind:'handed',from:{name:row.from_name,face:row.from_connection},name:row.to_name,face:row.to_connection,goal:row.goal,...handoverEnding(row)}) satisfies LeadCard;
+ const handedCard=(row:HandedRow)=>({kind:'handed',from:{name:row.from_name,face:row.from_agent},name:row.to_name,face:row.to_agent,goal:row.goal,...handoverEnding(row)}) satisfies LeadCard;
  // A handover the chat's Agent made sits under the reply of its Run; one an asked Agent handed on (#477) is its own row.
  const handed=handedRows.filter(row=>row.parent==null).map(row=>({run_id:row.run,at:row.created_at,card:handedCard(row)}));
  const handedOn=handedRows.filter(row=>row.parent!=null).map(row=>({id:row.id,at:row.created_at,card:handedCard(row)}));
  // The asked Agent's answer, once it came, for the asking Agent to reply with (a job command's answer is the chat's own
  // message instead, and none comes here).
- const answers=handedRows.flatMap(row=>row.answer&&row.answered_at?[{id:row.id,from:row.from_name,name:row.to_name,face:row.to_connection,body:row.answer,at:row.answered_at}]:[]);
+ const answers=handedRows.flatMap(row=>row.answer&&row.answered_at?[{id:row.id,from:row.from_name,name:row.to_name,face:row.to_agent,body:row.answer,at:row.answered_at}]:[]);
  // A job command's handover (#358) is the chat's own Run: the target Agent answers the person, so its reply is drawn
  // with that Agent's face, and the chat never waits on that Run as if the Conversation's Agent worked on it.
  const commandRuns=new Set(handedRows.filter(row=>row.answers_person).map(row=>row.run));
  // Only a job command's answer is a chat message from another Agent; a chain (#477) may ask the chat's own Agent back,
  // whose messages stay its own.
- const faces=new Map(handedRows.filter(row=>row.answers_person).map(row=>[row.to_agent,row.to_connection] as const));
+ const faces=new Map(handedRows.filter(row=>row.answers_person).map(row=>[row.to_agent,row.to_agent] as const));
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
@@ -147,6 +147,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // A job command's target answers the person (#358), so a refusal of its model call names that Agent, not the chat's (#530).
  const lastRun=messages.filter(message=>message.author==='person').at(-1)?.run_id;
  const commanded=reason?handedRows.find(row=>row.answers_person&&row.run===lastRun&&!row.parent):undefined;
+ // A Run whose every account ran out says when its usage resets, when the Engine named it (#642).
+ const resetsAt=reason==='access'?resets.find(row=>row.run_id===lastRun)?.resets_at:undefined;
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
  // of a Run no message of the person started. A job command's answer (#358) is a message from an Agent the chat handed
@@ -172,7 +174,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(ownsChanges===true?{changeOwner:true as const,...((mode as {work_mode?:string}|null)?.work_mode==='alone'?{alone:true as const}:{})}:{}),
   failed:ended!==null,
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
-  ...(reason?{modelRefused:{reason,owner:ownsIt===true,...(commanded?{agent:commanded.to_name}:{})}}:{}),
+  ...(reason?{modelRefused:{reason,owner:ownsIt===true,...(commanded?{agent:commanded.to_name}:{}),...(resetsAt?{resetsAt}:{})}}:{}),
   working:runner?.name??null,
   canStop:!!runner&&(runner.person===person||manages===true),
   ...(board?{board}:{}),

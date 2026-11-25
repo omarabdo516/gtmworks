@@ -26,11 +26,12 @@ h2 { font-size:16px; line-height:24px; font-weight:600; }
 h3 { font-size:14px; font-weight:500; }
 p { overflow-wrap:anywhere; }
 .brand { font-size:20px; font-weight:600; letter-spacing:-1px; color:var(--foreground); }
-.agent-face { display:inline-block; flex:none; overflow:visible; vertical-align:middle; }
 .member-picker { display:inline-flex; align-items:center; gap:8px; max-width:100%; }
 .member-option { min-height:44px; }
 .avatar { display:inline-flex; align-items:center; justify-content:center; flex:none; width:24px; height:24px; border-radius:50%; background:var(--muted); color:var(--foreground); font-size:12px; }
 .avatar[style] { color:light-dark(var(--foreground),var(--primary-foreground)); }
+/* An Agent drawn by its name's first letter (components/agent-face) keeps the muted fill, so its letter keeps the foreground in both themes; its inline style is only its size. */
+.avatar.avatar--agent[style] { color:var(--foreground); }
 .recent-title { overflow:hidden; text-overflow:ellipsis; }
 .recent-error { font-size:12px; color:var(--muted-foreground); }
 .content { padding:24px; }
@@ -96,7 +97,7 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .member-chips>span { display:inline-flex; align-items:center; gap:6px; }
 .label-chip { border:1px solid; border-radius:var(--radius-sm); padding:2px 8px; font-size:12px; }
 .mode-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid; border-radius:var(--radius-sm); padding:1px 8px; font-size:12px; }
-.mode-chip i { width:8px; height:8px; border-radius:999px; }
+.mode-chip i { width:8px; height:8px; border-radius:999px; background:currentColor; }
 .detail-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-top:1px solid var(--border); }
 .detail-row>div { min-width:0; }
 .detail-row p,.detail-row time { font-size:12px; color:var(--muted-foreground); }

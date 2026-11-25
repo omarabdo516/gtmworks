@@ -47,6 +47,10 @@ const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
 const routine = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
 const ownProfile = (agent: string) => `ag-${agent.replaceAll('-', '')}`;
 const companyProfile = `co-${rsLearning.replaceAll('-', '')}`;
+// A screen's Agents are written with triggers off, so none is given its look as a made Agent is (#696): each is given it
+// here, as the trigger would, so every picture draws the Agents in their own looks, never the plain look of one with none.
+const givenLooks = `select public.give_agent_look(a.company_id,a.id,a.is_default,a.template) from public.hermes_agents a
+  where not exists(select 1 from public.agent_looks l where l.agent_id=a.id) order by a.created_at,a.id;`;
 // A Routine as the fake Engine keeps it (#31): no zone of its own, so it reads in UTC, and its next and last runs are
 // tomorrow and yesterday at fixed hours of the server's own clock, which draws the page.
 const day = (offset: number, hour: number) => `${new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10)}T${String(hour).padStart(2, '0')}:00:00.000Z`;
@@ -239,7 +243,7 @@ for (const screen of screens) {
       test(`${screen.name} ${width} ${theme}`, async ({ baseURL }) => {
         forgetBlocked(context);
         const state = screen.state ? screenStates[screen.state] : undefined;
-        if (state) { asAdmin(state.unset); asAdmin(state.set); }
+        if (state) { asAdmin(state.unset); asAdmin(state.set); asAdmin(givenLooks); }
         if (state?.engine) expectNoOpenRun(screen.name, baseURL);
         // A screen whose data the Engine holds draws it from the lane's fake Engine, made for this picture alone.
         const engine = state?.engine ? await laneHermes() : null;
@@ -254,6 +258,8 @@ for (const screen of screens) {
           await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
           await expect(page.locator(screen.ready ?? '.content').first()).toBeVisible();
           await idle(page);
+          // A face's moment (a greeting, a birth: #701) shows as still frames for at most 1.8s; the picture waits it out.
+          await page.waitForFunction(() => !document.querySelector('.face[data-moment]'));
           // The fixed text is shorter than a real date, so it goes in before the window is sized for the page.
           await fixClockText(page);
           await showWholePage(page, width);

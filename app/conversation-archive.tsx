@@ -2,14 +2,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ArchiveConfirm } from '@/app/archive-confirm';
 import { archiveConversations } from '@/app/conversation-archive-actions';
 import type { ArchiveStop } from '@/lib/archive-stops';
 import { toast } from '@/app/toast';
 
-// One Conversation a person archives or restores (#674): its id, the title it is shown by, and its Agent's face.
-export type ArchivedChat={id:string,title:string,face:{connection_id:string,name:string}|null};
+// One Conversation a person archives or restores (#674): its id and the title it is shown by.
+export type ArchivedChat={id:string,title:string};
 type Asking={chats:ArchivedChat[],stops:ArchiveStop[]};
 
 // Archiving and restoring the person's own Conversations from any place that lists them (All conversations, the
@@ -44,10 +43,8 @@ export function useConversationArchive(company:string,changed?:(ids:string[],arc
  let confirm=null;
  if(asking) {
   const titled=new Map(asking.chats.map(chat=>[chat.id,chat]));
-  const faces=new Map(asking.stops.map(stop=>[stop.agent_id,titled.get(stop.about)?.face??null]));
   const stops=asking.stops.map((stop):ArchiveStop=>({...stop,title:titled.get(stop.about)?.title??''}));
-  const face=(agent:string|null)=>{ const found=faces.get(agent); return found?<CompanyAgentFace agent={found} size={24}/>:null; };
-  confirm=<ArchiveConfirm stops={stops} face={face}
+  confirm=<ArchiveConfirm stops={stops}
    heading={asking.chats.length>1?t('conversationArchiveConfirmMany',asking.chats.length):t('conversationArchiveConfirmOne')}
    confirm={()=>{ const chosen=asking.chats; setAsking(null); void archiveNow(chosen); }} cancel={()=>setAsking(null)}/>;
  }
