@@ -67,7 +67,7 @@ One person's exchange with one Agent, started from New. It stays with that Agent
 _Avoid_: chat, thread, session
 
 **Step / خطوة**:
-One tool call the Engine reported for the Run behind an Agent's reply in a Conversation, listed under the reply's sender line as the Engine reported it: the tool's name, the Engine's own preview of the call (left out when it holds a path, a key or the Engine's name), and whether the call ended ("Done") or failed ("Skipped"). gtmworks writes no step of its own. A Run's steps are kept once, when it closes completed; a failed or stopped Run, and one whose events were lost before they were read, shows none.
+One tool call the Engine reported for the Run behind an Agent's reply in a Conversation, listed under the reply's sender line as the Engine reported it: the tool's name, the Engine's own preview of the call (left out when it holds a path, a key or the Engine's name), and whether the call ended ("Done") or failed ("Skipped"). gtmworks writes no step of its own. The Engine alone keeps a Run's steps (ADR 0017): gtmworks reads them from it after the reply is drawn (ADR 0030) and stores none; a failed or stopped Run, and one whose events were lost before they were read, shows none.
 _Avoid_: action, task, activity
 
 **Channel / قناة**:
@@ -113,14 +113,14 @@ The named set of permissions a member holds in one company: Owner, Manager, Cont
 _Avoid_: group, user type, access level
 
 **Grant / صلاحية منفصلة**:
-A separate per-member permission in one company: publishing, money figures, or customer data.
+A separate per-member permission in one company: publishing, money figures, or customer data. A Manager never changes their own.
 
 **Permission / صلاحية**:
 One thing a role allows in a company, such as approving a post, sending a comment reply, or connecting accounts.
 _Avoid_: right, privilege, scope
 
 **Owner / مالك**:
-The role that can do everything in its company; only an Owner can make another member an Owner. The first person through first-run is the first company's Owner; a Company made later gets its first Owner through a first-Owner link from the install owner, which works once. A company always has at least one.
+The role that can do everything in its company; only an Owner can make another member an Owner, and only an Owner changes or removes an Owner. The first person through first-run is the first company's Owner; a Company made later gets its first Owner through a first-Owner link from the install owner, which works once. A company always has at least one.
 _Avoid_: admin, super admin
 
 **Install owner / صاحب التثبيت**:
