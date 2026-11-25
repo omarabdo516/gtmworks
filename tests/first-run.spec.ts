@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { signIn } from './sign-in';
+import { dialogExit, recordDialogExit, dialogRecords, type DialogExitRecord } from './dialog-exit';
 import { inbox, serverLogOf } from './lane.mjs';
 
 // The install's setup code (playwright.config.ts), as the installer's setup link carries it (issue #50).
@@ -338,21 +339,16 @@ test('"Back" and Escape return to the question with the team chosen and nothing 
 // #130: once the answer is saved the question leaves with the dialog's exit (design-reference: closeDlg, .fr.is-closing)
 // and only then does Lead's Conversation take the keyboard; a save that fails keeps the question with its error. Its parts
 // rise in the reference's order (.fr__col > *), and with reduced motion nothing rises and it leaves at once.
-const recordLeave=(page:Page)=>page.evaluate(()=>{
- const seen:string[][]=[]; Object.assign(window,{seen});
- // The exit is read when the question takes its closing class, from the animation that class gives it, and not from
- // animationstart: the leave is a timer (useLeave in lib/motion.ts), and a frame later than it (a busy CI runner) removes
- // the question before that event is ever sent (#595, as ready-made-roles.spec.ts, #526). An exit started without the
- // closing class (after a failed save) is still read from animationstart, since the question then stays.
- document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(event.animationName==='gw-modal-out'&&!part.classList.contains('is-closing')) seen.push(['exit',part.className,location.pathname]); });
- document.addEventListener('focusin',event=>{ if((event.target as Element).matches('textarea.composer__input')) seen.push(['composer',location.pathname]); });
- new MutationObserver(()=>{
-  const part=document.querySelector('.fr');
-  if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='closing')) seen.push(['closing',part.className,...part.getAnimations().map(run=>{ const {delay,duration}=run.effect!.getTiming(); return `${(run as CSSAnimation).animationName} ${run.playState} delay ${delay}ms for ${duration}ms`; }),location.pathname]);
-  if(!document.querySelector('.fr-root:not([hidden])')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]);
- }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
-});
-const recorded=(page:Page)=>page.evaluate(()=>(window as unknown as {seen:string[][]}).seen);
+const recordLeave=async(page:Page)=>{
+ await recordDialogExit(page,{part:'.fr',shown:'.fr-root:not([hidden])'});
+ await page.evaluate(()=>{
+  const {seen}=window as unknown as {seen:DialogExitRecord[]};
+  // tests/dialog-exit.ts reads the exit from the closing class (#595, #725). An exit started without it (after a failed
+  // save) is read from animationstart, since the question then stays.
+  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(event.animationName==='gw-modal-out'&&!part.classList.contains('is-closing')) seen.push(['exit',part.className,location.pathname+location.search]); });
+  document.addEventListener('focusin',event=>{ if((event.target as Element).matches('textarea.composer__input')) seen.push(['composer',location.pathname+location.search]); });
+ });
+};
 for(const motion of ['no-preference','reduce'] as const) test(`the saved answer leaves the question ${motion==='reduce'?'at once':'with the exit'} before Lead's Conversation takes the keyboard, and a failed save stays (#130, reduced motion ${motion})`,async({page,baseURL})=>{
  await page.emulateMedia({reducedMotion:motion});
  const slug=await newOwner(page);
@@ -373,7 +369,7 @@ for(const motion of ['no-preference','reduce'] as const) test(`the saved answer 
  await expect(dialog.getByRole('alert')).toHaveText('Your answer wasn’t saved. Try again.');
  await page.waitForTimeout(400);
  await expect(page.locator('.fr.is-closing')).toHaveCount(0);
- expect(await recorded(page)).toEqual([]);
+ expect(await dialogRecords(page)).toEqual([]);
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`));
 
  localQuery(`update public.companies set work_mode=null where slug='${slug}' returning id`,baseURL);
@@ -382,8 +378,8 @@ for(const motion of ['no-preference','reduce'] as const) test(`the saved answer 
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  const home=`/c/${slug}/home`;
- const seen=await recorded(page);
+ const seen=await dialogRecords(page);
  expect(seen.slice(0,2)).toEqual(motion==='reduce'?[['gone',home],['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]]
-  :[['closing','fr is-closing','gw-modal-out running delay 0ms for 190ms',home],['gone',home]]);
+  :[['closing',dialogExit,home],['gone',home]]);
  if(motion!=='reduce') expect(seen[2]).toEqual(['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]);
 });

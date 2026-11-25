@@ -102,6 +102,18 @@
   "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
  },
  {
+  "issue": 720,
+  "date": "2026-11-25",
+  "en": { "title": "Your account's choices keep the keyboard focus", "body": "Choosing Light, Dark or System, or a language, in Your account with the keyboard now keeps the focus on that choice while it is saved, and the arrow keys still move between the choices." },
+  "ar": { "title": "اختيارات حسابك بتحافظ على مكان الكيبورد", "body": "لما تختار الشكل أو اللغة في «حسابك» بالكيبورد، التركيز بقى بيفضل على اختيارك وهو بيتحفظ، والأسهم لسه بتنقلك بين الاختيارات." }
+ },
+ {
+  "issue": 756,
+  "date": "2026-11-25",
+  "en": { "title": "Your message shows the moment you send it", "body": "A message you send in a Conversation or a channel is on screen as soon as you press Send, with its files, and the Agent's line reads Thinking from then, even while the server is busy; if it can't be sent, its words go back in the box." },
+  "ar": { "title": "رسالتك بتظهر أول ما تبعتها", "body": "الرسالة اللي بتبعتها في محادثة أو قناة بقت بتظهر أول ما تدوس «ابعت»، بملفاتها، وسطر الوكيل بيقول «بيفكر» من ساعتها، حتى لو السيرفر مشغول؛ ولو ما اتبعتتش، كلامها بيرجع في الخانة." }
+ },
+ {
   "issue": 708,
   "date": "2026-11-24",
   "en": { "title": "Agents send you files in the chat", "body": "When an Agent makes a PDF, a spreadsheet, an image or any other file in its work folder, it sends it in its reply as a file you open and download, with images shown as thumbnails, and a file it cannot send says so instead of showing a path." },
