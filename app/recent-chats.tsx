@@ -15,11 +15,17 @@ const labels={today:'today',yesterday:'yesterday',earlier:'earlier'} as const;
 // The person's own Conversations in this company, by their newest message (#673), grouped by its local day (so the groups render after mount,
 // in the browser's time zone, never the server's), narrowed by the sidebar's search. Each row's menu archives it (#674;
 // design-reference-card: .thread-row, .thread-more); an archived one leaves the list, which holds current ones only.
-export default function RecentChats({slug,company,chats,current,lead}:{slug:string,company:string,chats:Chat[],current?:string,lead:string}) {
+// A page whose read of them failed passes null (#776): the list shown last for this Company in this tab stays. The Shell is
+// drawn by each page, so the list is kept here, outside any one page's components.
+const shownLast=new Map<string,Chat[]>();
+export default function RecentChats({slug,company,chats:read,current,lead}:{slug:string,company:string,chats:Chat[]|null,current?:string,lead:string}) {
  const {t,language}=useI18n();
+ if(read) shownLast.set(company,read);
+ const chats=read??shownLast.get(company)??null;
  const {archive,confirm}=useConversationArchive(company);
  const query=useSidebarQuery();
  const browser=useSyncExternalStore(subscribe,()=>true,()=>false);
+ if(!chats) return <p className="sb-empty">{t('sidebarNotRead')}</p>;
  const shown=matchChats(chats,query);
  if(!chats.length) return <p className="sb-empty">{t('noChatsYet',lead)}</p>;
  if(!shown.length) return <p className="sb-empty">{t('shellNoChatsMatch',query.trim())}</p>;

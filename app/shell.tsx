@@ -51,9 +51,10 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
   // The twenty current ones with the newest messages (#673); All conversations holds the rest, and the archived (#674).
   id?db.from('conversations').select('id,agent_name,last_message_at,good_morning_day,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).is('archived_at',null).eq('conversation_messages.author','person')
    .order('last_message_at',{ascending:false}).order('id',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).limit(20)
-   .then(({data})=>(data||[]) as {id:string,agent_name:string,last_message_at:string,good_morning_day:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
+   .then(({data,error})=>error?null:(data||[]) as {id:string,agent_name:string,last_message_at:string,good_morning_day:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
-  id?channelSidebar(db,id):[],
+  // A list whose read failed is null (#776): the sidebar keeps the one it shows (app/recent-chats, app/sidebar-live).
+  id?channelSidebar(db,id).catch(()=>null):[],
   id?db.rpc('can_manage_company',{target:id}).then(({data})=>!!data):false,
   // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
   !!id&&db.rpc('conversation_can_write',{c:id}).then(({data})=>data===true),
@@ -81,8 +82,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
  // A chat is named as everywhere else (lib/conversation-title.mjs).
- const chats=conversations.map(c=>{ const first=c.conversation_messages[0];
-  return {id:c.id,at:c.last_message_at,title:conversationTitle({morningDay:c.good_morning_day,body:first?.body,file:first?.conversation_attachments?.[0]?.name,agent:c.agent_name},t,language)}; });
+ const chats=conversations?.map(c=>{ const first=c.conversation_messages[0];
+  return {id:c.id,at:c.last_message_at,title:conversationTitle({morningDay:c.good_morning_day,body:first?.body,file:first?.conversation_attachments?.[0]?.name,agent:c.agent_name},t,language)}; })??null;
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;

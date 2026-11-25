@@ -77,3 +77,18 @@ test('one poll carries the channels\' counts and the Agents\' states', async () 
  await expect.element(screen.getByLabelText('4 new messages')).toBeVisible();
  await expect.element(screen.getByRole('link', { name: 'Reach · Runs the ads. · Waiting on you' })).toBeVisible();
 });
+
+// #776: a page whose read of the channels failed, and a poll that failed, keep the channels the sidebar shows.
+test('a failed read of the channels keeps the ones the sidebar shows, from a page drawn after it and from a poll', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'channelNotRead' }), { status: 503 }));
+ const general: ChannelSummary[] = [{ kind: 'general', id: 'ch-1', unread: 0 }];
+ const drawn = (channels: ChannelSummary[] | null) => <LanguageProvider language="en"><SidebarLive company="co-kept" channels={channels} states={{}}><ChannelList slug="rs" company="co-kept" person="p-1" manage={false}/></SidebarLive></LanguageProvider>;
+ const first = await render(drawn(general));
+ await expect.element(first.getByRole('link', { name: 'general' })).toBeVisible();
+ first.unmount();
+ const next = await render(drawn(null));
+ await expect.element(next.getByRole('link', { name: 'general' })).toBeVisible();
+ await vi.advanceTimersByTimeAsync(5000);
+ await expect.element(next.getByRole('link', { name: 'general' })).toBeVisible();
+});
