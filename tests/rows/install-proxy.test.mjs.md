@@ -1,1 +1,1 @@
-| `install-proxy.test.mjs` | The proxied install check follows first run to the Company home and fails without the setup code. (#40, #50) | 3.3 s | install job | keep (decision #50) |
+| `install-proxy.test.mjs` | The proxied install check follows first run to the Company home and fails without the setup code; a gateway location that sets its own headers (the Screen's stream) repeats Host and the address stripping. (#40, #50, #713) | 3.3 s | install job | keep (decision #50) |

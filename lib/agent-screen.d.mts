@@ -6,4 +6,5 @@ export type AgentScreenWake = { state: 'awake' } | { state: 'notStarted', reason
 export function wakeAgentScreen(db: unknown, request: ScreenRequest): Promise<AgentScreenWake>;
 export function agentScreenPicture(db: unknown, request: ScreenRequest): Promise<ScreenPicture>;
 export type ScreenHandRow = { card: number, conversation: string, agent: string, agent_name: string, title: string, app: string };
+export function screenLogged(db: unknown, fn: 'log_screen_woken' | 'log_screen_taken' | 'log_screen_given_back', company: string, agent: string): Promise<void>;
 export function screenHands(db: unknown, company: string): Promise<ScreenHandRow[]>;
