@@ -71,7 +71,7 @@ test('a project is created, a card is filed into it, and the board and list show
  await page.reload();
  await expect(card.getByRole('button',{name:`Project: ${name}`})).toBeVisible();
  await card.getByRole('tab',{name:/^Activity \d+$/}).click();
- await expect(card.locator('#cw-list .lg-row').filter({hasText:'changed project'}).filter({hasText:name})).toHaveCount(1);
+ await expect(card.locator('#cw-list .lg-row').filter({hasText:'changed the project'}).filter({hasText:name})).toHaveCount(1);
 
  // The board and the list filter by project.
  await page.goto('/c/rs-learning/work/board');
