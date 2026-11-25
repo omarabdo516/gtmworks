@@ -226,8 +226,8 @@ for (const screen of screens) {
       await signIn(page, 'omar@example.com', '/c/rs-learning/home');
       // The sidebar lists recently opened Cards and the board orders Ideas by last change: opening Card 1 first gives
       // every screen the same list.
-      await page.goto('/c/rs-learning/work/board/1');
-      await expect(page.locator('.modal')).toBeVisible();
+      await page.goto('/c/rs-learning/work/board?card=1');
+      await expect(page.locator('.cw[open]')).toBeVisible();
       await idle(page);
       // The open is recorded once Home lists it, before any picture's sidebar asks for the list (as the old spec waited).
       await page.goto('/c/rs-learning/home');

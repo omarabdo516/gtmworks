@@ -1,5 +1,11 @@
 [
  {
+  "issue": 678,
+  "date": "2026-11-25",
+  "en": { "title": "A card opens in one window", "body": "A card opens over the board, full screen on a phone, with its status, its result and versions, comments the whole team reads with @ and files, its activity and runs, and its assignee, publishing date, project and files beside them, each saved as you change it; the card page and its private chat tab are gone, and a chat that made a card stays your own conversation." },
+  "ar": { "title": "البطاقة بتفتح في شباك واحد", "body": "البطاقة بتفتح فوق اللوحة، وعلى الموبايل بتاخد الشاشة كلها، وفيها حالتها ونتيجتها ونسخها، وتعليقات الفريق كله بيقراها ومعاها @ وملفات، ونشاطها ومرات تشغيلها، وجنبهم المسؤول وميعاد النشر والمشروع والملفات، وكل حاجة بتتحفظ أول ما تغيّرها؛ وصفحة البطاقة وتبويب المحادثة الخاص راحوا، والمحادثة اللي عملت بطاقة بتفضل محادثتك انت." }
+ },
+ {
   "issue": 677,
   "date": "2026-11-25",
   "en": { "title": "One assignee on a card, and your list under the bell", "body": "A card has one assignee, an Agent you see or a member who is not a viewer, with Assign to me; a card assigned to you is listed under the board's bell with what you can act on, your mentions and requests until it is live or done, and a card whose Agent is removed or whose member leaves is left with no assignee, logged." },
