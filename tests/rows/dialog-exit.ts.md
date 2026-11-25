@@ -1,0 +1,1 @@
+| `dialog-exit.ts` | browser helper: records a dialog's leave (its exit animation when it takes `is-closing`, then gone, at each address) and holds the one expected exit, for the ready-made gallery, Settings and first run (#725) | — | — | helper, new |
