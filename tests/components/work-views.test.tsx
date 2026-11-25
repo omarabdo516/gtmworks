@@ -49,29 +49,14 @@ test('the Calendar shows a Card on its publishing day in its month, linking to t
  expect(link.element().closest('.day')!.firstChild!.textContent).toBe('12');
 });
 
-test('Work settings name every stage\'s and every label\'s fields for what they change', async () => {
- const screen = await showWork(workProps({ section: 'settings/work' }));
- for (const name of ['Stage name أفكار', 'Stage order أفكار', 'Label name static', 'Label color static']) await expect.element(screen.getByLabelText(name, { exact: true })).toBeVisible();
-});
-
-// #313, from app.spec.ts "card stage control and work settings navigation" (#257 removed the compared `work-settings`
-// screens): the settings tabs are General, Members and Work, and the board's "+ New card" stays off them.
-test('Work settings\' tabs show General and Members, and no "+ New card"', async () => {
- const screen = await showWork(workProps({ section: 'settings/work' }));
- await expect.element(screen.getByRole('link', { name: 'General', exact: true })).toBeVisible();
- await expect.element(screen.getByRole('link', { name: 'Members', exact: true })).toBeVisible();
- expect(screen.getByRole('button', { name: '+ New card' }).elements()).toHaveLength(0);
-});
-
-// The board's six columns over the stages (ADR 0013): card 5 is in the review stage, which is Waiting on you, and waits
-// for the reader's approval; card 1 is in أفكار, the Ideas column's one stage.
-test('the board shows the six columns of the approved design, Waiting on you first, each Card in its stage\'s column', async () => {
- const screen = await showWork(workProps({ cards: [card(), card({ id: 5, title: 'Review the reel', stage_id: 4 })], approvableIds: [5] }));
+// The board's six columns (ADR 0013, ADR 0026): card 5 is Waiting on you, for the reader's approval; card 1 is in Ideas.
+test('the board shows the six columns of the approved design, Waiting on you first, each Card in its status\'s column', async () => {
+ const screen = await showWork(workProps({ cards: [card(), card({ id: 5, title: 'Review the reel', status: 'waiting' })], approvableIds: [5] }));
  const columns = () => [...document.querySelectorAll('#board-cols > .col')].map(column => column.getAttribute('data-column'));
  expect(columns()).toEqual(['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
  await expect.element(screen.getByRole('heading', { level: 2, name: 'Waiting on you', exact: true })).toBeVisible();
  expect(document.querySelectorAll('.col[data-column="waiting"] .kcard[data-card-id="5"]')).toHaveLength(1);
- expect(document.querySelectorAll('.col[data-column="ideas"] .column[data-stage-name="أفكار"] .kcard[data-card-id="1"]')).toHaveLength(1);
+ expect(document.querySelectorAll('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toHaveLength(1);
 });
 
 // The Company's Agents (#190): Lead (main) and two Lead made, given in the sidebar's order. Cards 1 and 3 are Ads's,
@@ -84,7 +69,7 @@ const crewBoard = (more: Partial<WorkProps> = {}) => workProps({
  agents: [{ person_id: 'ag-w', role: 'writer', granted: true }, { person_id: 'ag-d', role: 'designer', granted: true }],
  members: [{ person_id: 'ag-w', people: { name: 'Writer' } }, { person_id: 'ag-d', people: { name: 'Designer' } }],
  cards: [card({ agent_id: 'h-ads', crew: ['h-seo', 'h-ads'] }), card({ id: 2, title: 'Design', agent_id: 'h-seo', crew: ['h-seo'] }),
-  card({ id: 3, title: 'Script', stage_id: 2, agent_id: 'h-ads' }), card({ id: 4, title: 'Untold', channel: 'Facebook' })],
+  card({ id: 3, title: 'Script', status: 'planned', agent_id: 'h-ads' }), card({ id: 4, title: 'Untold' })],
  ...more,
 });
 const shown = () => [...document.querySelectorAll('#board-cols .kcard')].map(item => item.getAttribute('data-card-id')).sort();
@@ -206,7 +191,7 @@ test('the Inbox puts the reader\'s mentions under "Mentions of you", above what 
 // draws it once, with the badge and line for whoever reads it (design-reference: kcardHTML's waiting branch, waitTagHTML).
 const members = [{ person_id: 'p-1', people: { name: 'Omar Abdo' } }, { person_id: 'p-2', people: { name: 'Sara' } }];
 const handed = { kind: 'hand', id: 42, title: 'انشر المقال', body: '', asked_by: 'Ads', card_id: 9, conversation_id: 'c-9', created_at: '2026-06-10T09:00:00Z' };
-const chatCard = (kind: 'hand' | 'question' = 'hand') => card({ id: 9, title: 'مقال المحاسبة', stage_id: 3, wait: { person: 'p-1', kind, title: kind === 'hand' ? 'انشر المقال' : 'Which audience first?' } });
+const chatCard = (kind: 'hand' | 'question' = 'hand') => card({ id: 9, title: 'مقال المحاسبة', status: 'progress', wait: { person: 'p-1', kind, title: kind === 'hand' ? 'انشر المقال' : 'Which audience first?' } });
 const readers: ['en' | 'ar', string, string, { me: string, waiting?: (typeof handed)[], canCreate?: boolean }][] = [
  ['en', 'the chat\'s person', 'Waiting on you', { me: 'p-1', waiting: [handed] }],
  ['ar', 'the chat\'s person', 'مستنيك', { me: 'p-1', waiting: [handed] }],
@@ -236,7 +221,7 @@ test('a question waiting in the chat shows the question symbol, and the Card is 
  const kcard = () => document.querySelector('#board-cols .kcard[data-card-id="9"]')!;
  expect(kcard().closest('.col')!.getAttribute('data-column')).toBe('waiting');
  expect(kcard().querySelector('.sym[data-sym="question"]')).not.toBeNull();
- await screen.rerender(workView(workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3, wait: null })], members })));
+ await screen.rerender(workView(workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', status: 'progress', wait: null })], members })));
  await expect.poll(() => kcard().closest('.col')!.getAttribute('data-column')).toBe('progress');
  expect(kcard().querySelector('.kt-syms')).toBeNull();
 });
@@ -261,7 +246,7 @@ test('the reader\'s own Waiting on you draws a Card whose chat waits once, in pl
 
 // A filter that leaves the Card out leaves its chat's step drawn on its own, as before #146, and counted once.
 test('a hand whose Card a filter leaves off the board is drawn as its own row, and the column counts what is drawn once', async () => {
- const screen = await showWork(workProps({ cards: [chatCard(), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, waiting: [handed] }));
+ const screen = await showWork(workProps({ cards: [chatCard(), card({ id: 7, title: 'December card', status: 'ideas', go_live: '2026-12-01T12:00:00+00:00' })], members, waiting: [handed] }));
  const column = () => document.querySelector('.col[data-column="waiting"]')!;
  const rows = () => [...column().querySelectorAll('a.mcard')].map(item => item.getAttribute('href'));
  const count = () => column().querySelector('.col__count')!.textContent;
@@ -305,7 +290,7 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
 test('the symbol of a Card that starts waiting on the reader shakes once, and not on the first read or the next', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  try {
-  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 }), card({ id: 5, title: 'Review the reel', stage_id: 4, status: 'waiting' }), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, approvableIds: [5] });
+  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', status: 'progress' }), card({ id: 5, title: 'Review the reel', status: 'waiting' }), card({ id: 7, title: 'December card', status: 'ideas', go_live: '2026-12-01T12:00:00+00:00' })], members, approvableIds: [5] });
   const screen = await showWork(before);
   const mark = (id: number) => document.querySelector(`.kcard[data-card-id="${id}"] .kt-syms`)!;
   expect(mark(5).className).toBe('kt-syms');
@@ -316,7 +301,7 @@ test('the symbol of a Card that starts waiting on the reader shakes once, and no
   expect(mark(5).className).toBe('kt-syms');
   vi.advanceTimersByTime(1200);
   await expect.poll(() => mark(9).className).toBe('kt-syms');
-  await screen.rerender(workView({ ...after, items: [] }));
+  await screen.rerender(workView({ ...after }));
   expect(mark(9).className).toBe('kt-syms');
  } finally { vi.useRealTimers(); }
 });
@@ -325,7 +310,7 @@ test('the symbol of a Card that starts waiting on the reader shakes once, and no
 test('a Card that waits again soon after its first nudge keeps its second one for its full time', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  try {
-  const idle = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 })], members });
+  const idle = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', status: 'progress' })], members });
   const waits = { ...idle, cards: [chatCard()], waiting: [handed] };
   const screen = await showWork(idle);
   const mark = () => document.querySelector('.kcard[data-card-id="9"] .kt-syms');
@@ -372,7 +357,7 @@ test('the bell counts its rows and lists the Card to act on, the Cards assigned 
   { kind: 'mention', id: 50, title: 'Script', body: '@Omar look', asked_by: 'Sara', card_id: 3, conversation_id: null, created_at: at },
  ];
  const assigned = [{ id: 1, title: 'أفكار لمحتوى الشهر', status: 'waiting' }, { id: 3, title: 'Script', status: 'planned' }];
- const props = workProps({ cards: [card({ stage_id: 4 }), card({ id: 3, title: 'Script', stage_id: 2, next_actor: 'p-1' })], waiting, assigned, approvableIds: [1] });
+ const props = workProps({ cards: [card({ status: 'waiting' }), card({ id: 3, title: 'Script', status: 'planned', assignee_person: 'p-1' })], waiting, assigned, approvableIds: [1] });
  const screen = await showWork(props);
  const bell = screen.getByRole('button', { name: 'Waiting on you: 4', exact: true });
  await expect.element(bell).toHaveTextContent('4');

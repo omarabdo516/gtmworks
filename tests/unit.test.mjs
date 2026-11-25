@@ -149,11 +149,11 @@ test('Home charts use fourteen UTC days, each Card\'s status and first acceptanc
  const now=Date.parse('2030-01-15T12:00:00Z');
  const cards=[{id:1,status:'progress',created_at:'2030-01-02T00:00:00Z'},{id:2,status:'planned',created_at:'2030-01-01T23:59:59Z'},{id:3,status:'planned',created_at:'2030-01-10T00:00:00Z'}];
  const approved=(id,card_id,created_at)=>({id,card_id,created_at,action:'approval_approved',details:{step:'مراجعة'}});
- // A row the previous release wrote names the stage only; one this release writes names the statuses too.
+ // A row from before the cutover (#684) names the stage; one written since names the status.
  const moved=(id,card_id,created_at,details={field:'stage_id',new:2,new_name:'اسم قديم'})=>({id,card_id,created_at,action:'card_changed',details});
  const events=[{id:1,card_id:1,created_at:'2029-12-01T00:00:00Z',action:'approval_rejected',details:{}},
   approved(2,1,'2030-01-03T12:00:00Z'),moved(3,1,'2030-01-03T12:00:00Z'),
-  approved(4,2,'2030-01-15T10:00:00Z'),moved(5,2,'2030-01-15T10:00:00Z',{field:'stage_id',new:9,old_status:'waiting',new_status:'planned'}),
+  approved(4,2,'2030-01-15T10:00:00Z'),moved(5,2,'2030-01-15T10:00:00Z',{field:'status',old_status:'waiting',new_status:'planned'}),
   approved(6,3,'2030-01-01T23:59:59Z'),moved(7,3,'2030-01-01T23:59:59Z'),
   approved(8,4,'2030-01-16T00:00:00Z'),moved(9,4,'2030-01-16T00:00:00Z'),
   // An Approval of an earlier step moved nothing: it is no delivery; a move with no Approval is none either.

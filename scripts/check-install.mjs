@@ -34,9 +34,8 @@ if(seed) {
   const created=await checked(admin.from('companies').insert({id:company,slug,name:slug,engine_id:record.id}).select().single());
   companies.push(created.id);
   await checked(admin.from('members').insert({company_id:company,person_id:user.id,role:'contributor'}));
-  // A card waiting on the person, with one stored file, written by the server (the external-agent API is gone, #341).
-  const stage=await checked(admin.from('work_stages').select('id').eq('company_id',company).eq('kind','ideas').single());
-  const card=await checked(admin.from('work_cards').insert({company_id:company,stage_id:stage.id,title:`Keep ${slug}`,next_actor:user.id}).select('id').single());
+  // A Card assigned to the person, with one stored file, written by the server (the external-agent API is gone, #341).
+  const card=await checked(admin.from('work_cards').insert({company_id:company,status:'ideas',title:`Keep ${slug}`,assignee_person:user.id}).select('id').single());
   const path=`${company}/${card.id}/keep.txt`;
   await checked(admin.storage.from('creatives').upload(path,new Blob([`File for ${slug}`],{type:'text/plain'})));
   const creative=await checked(admin.from('work_creatives').insert({company_id:company,card_id:card.id,name:'keep.txt'}).select('id').single());
@@ -69,7 +68,7 @@ for(const slug of ['restore-one','restore-two']) {
  assert.equal(found.state,'found',`the Company knowledge of ${slug}: ${found.state}`);
  assert.ok(found.content.includes(knowledge),`the Company knowledge of ${slug} is in the restored volume`);
  assert.equal((await checked(person.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).single())).role,'contributor');
- const cards=await checked(person.from('work_cards').select('id,title').eq('company_id',company.id).eq('next_actor',user.id));
+ const cards=await checked(person.from('work_cards').select('id,title').eq('company_id',company.id).eq('assignee_person',user.id));
  assert.equal(cards.length,1); assert.equal(cards[0].title,`Keep ${slug}`);
  const versions=await checked(person.from('work_versions').select('id,path').eq('company_id',company.id).eq('card_id',cards[0].id));
  assert.equal(versions.length,1);

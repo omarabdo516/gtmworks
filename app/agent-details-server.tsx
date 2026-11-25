@@ -38,7 +38,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  // The Agent's state for the reader (#699), the sidebar's own read; the open Run above says only what it is doing.
  const stateRead=agentFaceStates(db,company);
  const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount},{data:channelFileRows,count:channelFileCount}]=await Promise.all([getI18n(),named,roled,
-  db.from('work_cards').select('id,title,status,wait:card_wait').eq('company_id',company).eq('assignee_agent',agent).order('id'),
+  db.from('work_cards').select('id,title,status,description,wait:card_wait').eq('company_id',company).eq('assignee_agent',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
@@ -50,13 +50,12 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
    .eq('channel_messages.author','agent').eq('channel_messages.agent_id',agent).order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
  const writer=canCreateCard({role});
- const cards=(cardRows||[]) as {id:number,title:string,status:string,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
+ const cards=(cardRows||[]) as {id:number,title:string,status:string,description:string|null,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
  const rows=(logRows||[]) as LogRow[];
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
  const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{of:faceOf},{items:waiting},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory,standing]=await Promise.all([stateRead,waitingRead,
-  ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
+ const [{of:faceOf},{items:waiting},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory,standing]=await Promise.all([stateRead,waitingRead,
   run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
   ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}):Promise.resolve({data:[],count:0}),
@@ -68,7 +67,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   // Its standing permissions (#166), from that same own profile; one that cannot be read draws no section.
   readAgentPermissions(db,{company,agent}).catch(()=>({state:'failed',permissions:null})),
  ]);
- const tasks=agentTasks(cards,checklist||[],waiting);
+ const tasks=agentTasks(cards,waiting);
  const recent=latestActivity(rows,feedSince());
  // A Run "Done it" started (#140) is on the step the person did, named by its card, not the sentence the Agent was told.
  const asking=ask as {body:string,reply_cards:{title:string}|null}|null;

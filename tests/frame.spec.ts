@@ -88,7 +88,7 @@ test('a section not built yet says so at its address, and a settings page\'s tra
  await page.goto('/c/rs-learning/work/board/1');
  await expect(page.locator('.cw[open]')).toBeVisible();
  expect(await cardCrumbs.allInnerTexts()).toEqual(boardCrumbs);
- for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings']]) {
+ for(const [path,leaf] of [['settings/members','members']]) {
   await page.goto(`/c/rs-learning/${path}`);
   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
   await expect(crumbs,path).toHaveCount(3);
@@ -98,6 +98,9 @@ test('a section not built yet says so at its address, and a settings page\'s tra
  }
  // Settings > Agents went with the pasted Hermes (#342): its address is not found.
  await page.goto('/c/rs-learning/settings/agents');
+ await expect(page.getByRole('heading',{name:'Page not found'})).toBeVisible();
+ // Work settings (stages and labels) went with the Card cutover (#684): its address is not found either.
+ await page.goto('/c/rs-learning/settings/work');
  await expect(page.getByRole('heading',{name:'Page not found'})).toBeVisible();
 });
 

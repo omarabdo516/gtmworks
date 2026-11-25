@@ -1,5 +1,5 @@
 import type { CardWait } from './board-columns.mjs';
-export declare function agentTasks(cards: { id: number, title: string, status?: string | null, wait?: CardWait | null }[], checklist: { card_id: number, title: string, done: boolean }[], waitingItems: { kind: string, title: string, body: string, card_id: number | null }[]): { id: number, title: string, column: string, line: { key: string, args: string[] } | { text: string }, waiting: boolean }[];
+export declare function agentTasks(cards: { id: number, title: string, status?: string | null, description?: string | null, wait?: CardWait | null }[], waitingItems: { kind: string, title: string, body: string, card_id: number | null }[]): { id: number, title: string, column: string, line: { key: string, args: string[] } | { text: string }, waiting: boolean }[];
 export declare function latestActivity<T extends { id: number, created_at: string }>(rows: T[], since: string, n?: number): T[];
 export declare function agentLogFilter(agent: string): string;
 export type DetailsTab = 'activity' | 'tasks' | 'files' | 'memory' | 'log';

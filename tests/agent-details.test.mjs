@@ -8,14 +8,13 @@ import { columnLabel, progressOf } from '../lib/board-columns.mjs';
 test('an Agent\'s Cards follow the board\'s columns, each with the reference\'s line under it', () => {
  const cards = [
   { id: 10, title: 'Done post', status: 'done' },
-  { id: 11, title: 'Article', status: 'progress' },
+  { id: 11, title: 'Article', status: 'progress', description: '- [x] Outline\n- [ ] Write the intro\n- [ ] Edit' },
   { id: 12, title: 'Campaign', status: 'waiting' },
   { id: 13, title: 'Idea', status: 'ideas' },
   { id: 14, title: 'Draft', status: 'progress' },
  ];
- const checklist = [{ card_id: 11, title: 'Outline', done: true }, { card_id: 11, title: 'Write the intro', done: false }, { card_id: 11, title: 'Edit', done: false }];
  const waiting = [{ kind: 'approval', title: 'Campaign', body: 'Final OK', card_id: 12 }];
- assert.deepEqual(agentTasks(cards, checklist, waiting), [
+ assert.deepEqual(agentTasks(cards, waiting), [
   { id: 12, title: 'Campaign', column: 'waiting', line: { key: 'boardWaitingYourOk', args: ['Final OK'] }, waiting: true },
   { id: 13, title: 'Idea', column: 'ideas', line: { key: 'boardColIdeas', args: [] }, waiting: false },
   { id: 11, title: 'Article', column: 'progress', line: { text: 'Write the intro · 33%' }, waiting: false },
@@ -27,13 +26,13 @@ test('an Agent\'s Cards follow the board\'s columns, each with the reference\'s 
 // #676: a Card's status is its column, so a Card with nothing else to say shows its column's name.
 test('a question about a Card is its line; a Card waiting on someone else shows its column', () => {
  const cards = [{ id: 20, title: 'Ad', status: 'waiting' }, { id: 21, title: 'Reel', status: 'waiting' }];
- const lines = agentTasks(cards, [], [{ kind: 'question', title: 'Which angle?', body: '', card_id: 20 }]).map(task => task.line);
+ const lines = agentTasks(cards, [{ kind: 'question', title: 'Which angle?', body: '', card_id: 20 }]).map(task => task.line);
  assert.deepEqual(lines, [{ text: 'Which angle?' }, { key: 'boardColWaiting', args: [] }]);
 });
 
 test('a Card whose chat waits is under Waiting on you with the wait\'s line, its status kept, as on the board (#146)', () => {
  const cards = [{ id: 30, title: 'Article', status: 'progress', wait: { person: 'p-2', kind: 'hand', title: 'Post it' } }, { id: 31, title: 'Reel', status: 'progress', wait: null }];
- assert.deepEqual(agentTasks(cards, [], []), [
+ assert.deepEqual(agentTasks(cards, []), [
   { id: 30, title: 'Article', column: 'waiting', line: { text: 'Post it' }, waiting: true },
   { id: 31, title: 'Reel', column: 'progress', line: { key: 'boardColProgress', args: [] }, waiting: false },
  ]);
@@ -66,8 +65,9 @@ test('a column\'s name and a Card\'s progress are the board\'s', () => {
  assert.equal(columnLabel('waiting', false), 'boardColWaitingTeam');
  assert.equal(columnLabel('progress', false), 'boardColProgress');
  assert.equal(columnLabel('unknown', true), 'boardColIdeas');
- assert.deepEqual(progressOf({ id: 1 }, [{ card_id: 1, title: 'A', done: true }, { card_id: 1, title: 'B', done: false }, { card_id: 2, title: 'C', done: false }]), { pct: 50, next: 'B' });
- assert.equal(progressOf({ id: 3 }, []), null);
+ // A Card's progress is its description's to-do items (#684: where its checklist moved), never inside fenced code.
+ assert.deepEqual(progressOf({ description: '- [x] A\n- [ ] B\n\n```\n- [ ] C\n```' }), { pct: 50, next: 'B' });
+ assert.equal(progressOf({ description: 'No to-dos' }), null);
 });
 
 test('the panel opens on the tab its address names, Memory included since it opens (#350), and on Activity for anything else', () => {

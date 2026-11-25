@@ -1111,8 +1111,7 @@ lifecycle seed > data.before || fail 'create and read people, companies, cards a
 db -c "do \$\$ declare k record; person uuid; ch uuid; begin
  select id into person from public.people where name='Restore Person';
  for k in select id,slug from public.companies where slug like 'restore-%' loop
-  insert into public.work_cards(company_id,stage_id,title,archived_at,archived_by)
-   select k.id,s.id,'Archived '||k.slug,now(),person from public.work_stages s where s.company_id=k.id and s.kind='ideas';
+  insert into public.work_cards(company_id,status,title,archived_at,archived_by) values (k.id,'ideas','Archived '||k.slug,now(),person);
   insert into public.conversations(id,company_id,person_id,agent_name,archived_at,archived_by) values (gen_random_uuid(),k.id,person,'Lead',now(),person);
   ch:=gen_random_uuid();
   insert into public.channels(id,company_id,kind,name,created_by,create_key) values (ch,k.id,'team','Archived '||k.slug,person,gen_random_uuid());

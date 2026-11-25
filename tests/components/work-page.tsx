@@ -15,21 +15,13 @@ import '@/app/shell.css';
 // frame, with the stylesheets the app loads. A test file mocks next/navigation, @/lib/link and the other server actions;
 // the board's own action is a spy each page is given, and `sent` reads the forms it received.
 type Card = WorkProps['cards'][number];
-const stages = [
- { id: 1, name: 'أفكار', position: 1, board_column: 'ideas' },
- { id: 2, name: 'بريف جاهز', position: 2, board_column: 'planned' },
- { id: 3, name: 'كتابة', position: 3, board_column: 'progress' },
- { id: 4, name: 'مراجعة', position: 4, board_column: 'waiting' },
-];
-// A Card's status is its stage's column until the stages go (#676), and its assignee its Agent, else its next actor (#677),
-// as the database keeps them.
-export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفكار لمحتوى الشهر', stage_id: 1, status: stages.find(stage => stage.id === (more.stage_id ?? 1))?.board_column ?? 'ideas', channel: 'Instagram', format: '', go_live: '2026-06-04T12:00:00+00:00',
- offering: '', segment: '', hook: '', goal: '', caption: '', next_actor: null, mode: null, approval_step_id: null, rejection_reason: null, project_id: null,
- assignee_agent: more.agent_id ?? null, assignee_person: more.agent_id ? null : more.next_actor ?? null, ...more });
+// A Card as the database keeps it since the cutover (#684): a status, and its assignee its Agent (#677).
+export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفكار لمحتوى الشهر', status: 'ideas', go_live: '2026-06-04T12:00:00+00:00', rejection_reason: null, project_id: null,
+ assignee_agent: more.agent_id ?? null, assignee_person: null, ...more });
 export const workProps = (more: Partial<WorkProps> = {}): WorkProps => ({
- workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), newCard: vi.fn<NewCardAction>(async () => ({ id: 9 })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
- cards: [card()], items: [{ id: 1, card_id: 1, title: 'Script Ready', done: false }], members: [{ person_id: 'p-1', people: { name: 'عمر' } }],
- activity: [], creatives: [], versions: [], cardLabels: [], projects: [], approvableIds: [], agents: [],
+ workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), newCard: vi.fn<NewCardAction>(async () => ({ id: 9 })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board',
+ cards: [card()], members: [{ person_id: 'p-1', people: { name: 'عمر' } }],
+ activity: [], creatives: [], versions: [], projects: [], approvableIds: [], agents: [],
  canCreate: true, initialCreating: false, attachments: [], ...more,
 });
 export const sent = (props: WorkProps) => vi.mocked(props.workAction).mock.calls.map(([form]) => Object.fromEntries(form));

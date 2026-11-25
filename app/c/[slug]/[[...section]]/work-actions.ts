@@ -200,7 +200,7 @@ export const workAction=withActionLog('workAction',async function workAction(for
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
  let error: {message:string}|null=null;
  // The action's permission (lib/route-permissions.mjs) for this operation, with the role read now; the database checks
- // the finer rules (the current approver, the stage rules) again.
+ // the finer rules (who may move or decide the Card) again.
  if(!await actionAllowed(db,'workAction',company,op)) error={message:'not permitted'};
  // A review (#681): anyone who may edit asks for it on the Card's latest Version; an Owner or a Manager who sees the Card
  // approves it or sends it back with a reason, on the Version the review was asked on. decide_review keeps the first
@@ -211,12 +211,9 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='approve'||op==='send-back') ({error}=await db.rpc('decide_review',{c:company,card,version:form.get('version')?Number(form.get('version')):null,decision:op==='approve'?'approve':'send_back',reason:String(form.get('reason')||'')}));
 
  else if(op==='project') ({error}=await db.rpc('edit_work_card',{c:company,card,fields:{project_id:String(form.get('project')||'')},evidence}));
- // The Card page's stage list, the one way into review until the review is a decision of its own (#681): the stage
- // moves, and the status follows it.
- else if(op==='move') ({error}=await db.rpc('move_work_card',{c:company,card,stage:Number(form.get('stage')),evidence}));
  // A Card's status is its column (#676): move_card holds every rule of a move.
  else if(op==='move-column') ({error}=await db.rpc('move_card',{c:company,card,target:String(form.get('column')||''),evidence}));
- else if(op==='edit') { const fields=Object.fromEntries(['title','offering','segment','hook','channel','format','go_live','goal','caption'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('edit_work_card',{c:company,card,fields,evidence})); }
+ else if(op==='edit') { const fields=Object.fromEntries(['title','go_live'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('edit_work_card',{c:company,card,fields,evidence})); }
  else if(op==='comment') {
   const stored=await storeFiles(db,company,form,`${card}/${crypto.randomUUID()}`); error=stored.error;
   if(!error) {
@@ -234,7 +231,7 @@ export const workAction=withActionLog('workAction',async function workAction(for
  // A Card's one assignee (#677): an Agent ("a:<id>"), a Member ("p:<id>", the caller's own for "Assign to me") or nobody
  // (""); assign_card checks the Role, the Agent the caller sees and the Member who may be one. It starts nothing.
  else if(op==='assign') { const [kind,id]=String(form.get('assignee')||'').split(':'); ({error}=await db.rpc('assign_card',{c:company,card,agent:kind==='a'?id:null,person:kind==='p'?id:null})); }
- else if(['actor','assignee','label','check'].includes(op)) { const payload=Object.fromEntries(['person','label','item','done','body'].map(k=>[k,String(form.get(k)||'')])); ({error}=await db.rpc('change_work_card',{c:company,card,operation:op,payload,evidence})); }
+
  else if(op==='upload') {
   const file=form.get('file');
   if(file instanceof File && file.size) {
@@ -248,9 +245,7 @@ export const workAction=withActionLog('workAction',async function workAction(for
    }
   } else error={message:'missing file'};
  }
- else if(op==='stage-settings') { const result=await db.from('work_stages').update({name:String(form.get('name')),position:Number(form.get('position'))}).eq('company_id',company).eq('id',Number(form.get('stage'))).select('id'); error=result.error || (!result.data?.length?{message:'not permitted'}:null); }
- else if(op==='label-settings') { const result=await db.from('work_labels').update({name:String(form.get('name')),color:String(form.get('color'))}).eq('company_id',company).eq('id',Number(form.get('label'))).select('id'); error=result.error || (!result.data?.length?{message:'not permitted'}:null); }
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
- if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op.endsWith('settings')?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')||['move','move-column'].includes(op)&&error.message.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):error.message.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):error.message.includes('wait loop')?t('cwWaitLoop'):error.message.includes('review closed')?t('reviewClosed'):error.message.includes('version changed')?t('reviewVersionChanged'):error.message.includes('already in review')?t('reviewAlready'):error.message.includes('reason required')?t('reviewReasonRequired'):op==='assign'&&(error.message.includes('agent not found')||error.message.includes('assignee not a member')||error.message.includes('one assignee'))?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
+ if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(op!=='move-column'||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')||['move','move-column'].includes(op)&&error.message.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):error.message.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):error.message.includes('wait loop')?t('cwWaitLoop'):error.message.includes('review closed')?t('reviewClosed'):error.message.includes('version changed')?t('reviewVersionChanged'):error.message.includes('already in review')?t('reviewAlready'):error.message.includes('reason required')?t('reviewReasonRequired'):op==='assign'&&(error.message.includes('agent not found')||error.message.includes('assignee not a member')||error.message.includes('one assignee'))?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
 });

@@ -70,7 +70,7 @@ test('Connect apps can be chosen and closes the menu, and "More sections" reache
  const more = screen.getByRole('group', { name: 'More sections' }).getByRole('menuitem');
  expect(more.elements().map(link => [link.textContent, link.getAttribute('href')])).toEqual([
   ['Home', 'home'], ['Projects', 'projects'], ['Skills', 'skills'], ['Approvals', 'approvals'], ['Usage', 'usage'],
-  ['Members', 'settings/members'], ['Work settings', 'settings/work'], ['Agents', 'agents'],
+  ['Members', 'settings/members'], ['Agents', 'agents'],
  ].map(([name, path]) => [name, `/c/rs-learning/${path}`]));
  await more.filter({ hasText: 'Members' }).click();
  await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();

@@ -36,9 +36,9 @@ const frames = () => new Promise(resolve => requestAnimationFrame(() => requestA
 const options = () => vi.mocked(toast).mock.calls.at(-1)![1] as { icon?: string, action?: { label: string, run: () => void } } | undefined;
 const undone = (props: ReturnType<typeof workProps>) => Object.fromEntries(vi.mocked(props.undoMove).mock.calls.at(-1)![0]);
 // The board as the server's answer to the move draws it (#131): the Card in Planned, where it lands.
-const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, stage_id: 2, status: 'planned' } : each) });
+const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, status: 'planned' } : each) });
 // A Card in Ideas, drawn where the database put it.
-const ideas = () => workProps({ cards: [card({ id: 1, title: 'Launch post', stage_id: 1, board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'undone' as const, column: 'ideas' })) });
+const ideas = () => workProps({ cards: [card({ id: 1, title: 'Launch post', status: 'ideas', board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'undone' as const, column: 'ideas' })) });
 
 test('a move to another column is told with Undo, and Undo puts the Card back where it was, focused and landing', async () => {
  const props = ideas();
@@ -83,7 +83,7 @@ test('with reduced motion the Card comes back at once, still focused and with no
 });
 
 test('a Card that moved on stays where it is, and the toast says so with no landing', async () => {
- const props = workProps({ cards: [card({ id: 1, title: 'Launch post', stage_id: 1, board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'gone' as const })) });
+ const props = workProps({ cards: [card({ id: 1, title: 'Launch post', status: 'ideas', board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'gone' as const })) });
  const screen = await showWork(props);
  const landed = landings(1);
  link(1).focus();
@@ -106,7 +106,7 @@ test('a Card that moved on stays where it is, and the toast says so with no land
 
 test('a move the board refuses is told with no Undo', async () => {
  // A Card waiting for a decision leaves "Waiting on you" by the decision, never by a key.
- const props = workProps({ cards: [card({ id: 1, title: 'Waiting post', stage_id: 4, board_order: 1 }), card({ id: 2, title: 'Idea post', stage_id: 1, board_order: 1 })] });
+ const props = workProps({ cards: [card({ id: 1, title: 'Waiting post', status: 'waiting', board_order: 1 }), card({ id: 2, title: 'Idea post', status: 'ideas', board_order: 1 })] });
  await showWork(props);
  link(1).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');

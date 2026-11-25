@@ -17,7 +17,7 @@ vi.mock('@/app/note-actions', () => ({ editNote: vi.fn() }));
 
 afterEach(() => { vi.restoreAllMocks(); });
 
-const archived = (id: number, title: string): Card => card({ id, title, stage_id: 3, archived_at: `2026-11-${String(30 - id).padStart(2, '0')}T09:00:00Z`, archived_by: 'p-1' });
+const archived = (id: number, title: string): Card => card({ id, title, status: 'progress', archived_at: `2026-11-${String(30 - id).padStart(2, '0')}T09:00:00Z`, archived_by: 'p-1' });
 const rows = () => [...document.querySelectorAll('.arch-list .arch-t')].map(el => el.textContent);
 const board = (read: ReadArchived<Card>) => workProps({ readArchived: read, archiveCards: vi.fn(async () => ({ state: 'refused' as const })),
  archived: { first: { items: [archived(1, 'Weekly report'), archived(2, 'June ads')], next: { at: '2026-11-28T09:00:00Z', id: 2 } }, total: 3, named: [] } });

@@ -13,7 +13,7 @@ export declare function waitingCount(items: WaitingRow[], assigned?: {id:number}
 export declare function bellRows<I extends WaitingRow, C extends {id:number}>(items: I[], assigned: C[]): {act: I[], assigned: C[], requests: I[], mentions: I[]};
 export declare function chatPlace(slug: string, item: {kind:string, id:number, conversation_id:string|null, channel_id?:string|null}): string | null;
 export declare function columnLabel(column: string, writer: boolean): string;
-export declare function progressOf(card: {id:number}, checklist: {card_id:number, title:string, done:boolean}[]): {pct:number, next?:string} | null;
+export declare function progressOf(card: {description?: string | null}): {pct:number, next?:string} | null;
 export declare function keyboardTarget(column: string, key: string, rtl: boolean): string | null;
 /** The order a column's Cards are drawn in: "Waiting on you" newest first (ADR 0013), every other column by each Card's saved place (#174). */
 export declare function orderColumn<C extends {id:number, board_order?:number|null, created_at?:string|null}>(cards: C[], column: string): number[];
