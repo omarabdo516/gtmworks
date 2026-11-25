@@ -10,8 +10,8 @@ type Step = { name: string, link: string, path: string, content: string, search?
 // fadeIn (design-reference/index.html .view-enter, 200ms, after the page is shown) and the 150ms fade of the row that
 // becomes current (.sb-item, .agent-tile), which runs beside it. A Card's window opens over the same page, which does not fade.
 // A step that opens the board (Marketing board, and the Inbox, which is the board on "Waiting on you") also waits for the
-// board's entrance (#131, #559): its progress bars grow for 700ms from when it is shown (app/board.css gw-bar-grow;
-// design-reference boardEnter), beside the page's fade.
+// board's entrance (#131, #559): 700ms from when it is shown (design-reference boardEnter), beside the page's fade. Its
+// tiles carried the bars that grew in it until #683; the time is kept, as the reference's entrance still is.
 const pageFadeIn = 200, rowFade = 150, boardEnter = 700;
 const opensPage = { shown: 0, settled: Math.max(pageFadeIn, rowFade) };
 const opensBoard = { shown: 0, settled: Math.max(pageFadeIn, rowFade, boardEnter) };

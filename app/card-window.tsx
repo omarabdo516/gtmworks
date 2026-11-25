@@ -50,20 +50,21 @@ export function Sym({kind,inert=false}:{kind:CardSymbol,inert?:boolean}) {
 }
 
 const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=>(i+1)%n,ArrowUp:(i,n)=>(i-1+n)%n,Home:()=>0,End:(_,n)=>n-1};
-export type MenuItem={key:string,label:ReactNode,lead?:ReactNode,checked?:boolean,disabled?:boolean,run:()=>void}|{key:string,group:string};
+// `radio`: one choice among its group's (the board's phone Filter mixes choices with plain actions), as in a menu drawn
+// with `radio`, which makes every item one.
+export type MenuItem={key:string,label:ReactNode,lead?:ReactNode,checked?:boolean,disabled?:boolean,radio?:boolean,run:()=>void}|{key:string,group:string};
 // A property's menu (design-reference-card: openCwPop): the button opens it with the keyboard on the first item; Arrow
 // Down and Up move and wrap, Home and End go to the ends, Escape closes it back to the button without closing the Card,
 // Tab closes it, a press outside closes it, and a choice closes it and gives the button the keyboard back.
 export function CwMenu({label,button,className,items,radio=false}:{label:string,button:ReactNode,className:string,items:MenuItem[],radio?:boolean}) {
  const [open,setOpen]=useState(false); const id=useId(); const box=useRef<HTMLDivElement>(null); const trigger=useRef<HTMLButtonElement>(null);
- const role=radio?'menuitemradio':'menuitem';
  useEffect(()=>{
   if(!open) return;
-  (box.current?.querySelector<HTMLElement>(`[role="${role}"][aria-checked="true"]`)??box.current?.querySelector<HTMLElement>(`[role="${role}"]`))?.focus();
+  (box.current?.querySelector<HTMLElement>('[role^="menuitem"][aria-checked="true"]')??box.current?.querySelector<HTMLElement>('[role^="menuitem"]'))?.focus();
   const outside=(event:PointerEvent)=>{ if(!box.current?.contains(event.target as Node)) setOpen(false); };
   document.addEventListener('pointerdown',outside);
   return ()=>document.removeEventListener('pointerdown',outside);
- },[open,role]);
+ },[open]);
  // A menu opens below its button, or above it when the scrolling part it sits in has no room below (a property near
  // the end of the details), so no item is ever clipped out of reach.
  useLayoutEffect(()=>{ if(!open) return; const pop=box.current?.querySelector<HTMLElement>('.cw-pop'); const button=trigger.current; if(!pop||!button) return;
@@ -76,15 +77,16 @@ export function CwMenu({label,button,className,items,radio=false}:{label:string,
   if(event.key==='Tab') { setOpen(false); return; }
   const move=moves[event.key]; if(!move) return;
   event.preventDefault();
-  const list=[...event.currentTarget.querySelectorAll<HTMLElement>(`[role="${role}"]`)];
+  const list=[...event.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
   list[move(list.indexOf(event.target as HTMLElement),list.length)]?.focus();
  };
  return <div ref={box} className="cw-menu">
   <button ref={trigger} type="button" className={className} aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open?id:undefined} onClick={()=>setOpen(!open)}>{button}</button>
   {open&&<div className="menu cw-pop" id={id} role="menu" aria-label={label} onKeyDown={keys}>
-   {items.map(item=>'group' in item?<div key={item.key} className="menu__label" aria-hidden="true">{item.group}</div>
-    :<button key={item.key} type="button" className="menu__item" role={role} aria-checked={radio?!!item.checked:undefined} aria-disabled={item.disabled||undefined}
-      onClick={()=>{ if(item.disabled) return; close(); item.run(); }}>{item.lead}<span className="menu__t">{item.label}</span>{!radio&&item.checked&&<ShellIcon name="check"/>}</button>)}
+   {items.map(item=>{ if('group' in item) return <div key={item.key} className="menu__label" aria-hidden="true">{item.group}</div>;
+    const one=radio||item.radio;
+    return <button key={item.key} type="button" className="menu__item" role={one?'menuitemradio':'menuitem'} aria-checked={one?!!item.checked:undefined} aria-disabled={item.disabled||undefined}
+      onClick={()=>{ if(item.disabled) return; close(); item.run(); }}>{item.lead}<span className="menu__t">{item.label}</span>{!radio&&item.checked&&<ShellIcon name="check"/>}</button>; })}
   </div>}
  </div>;
 }

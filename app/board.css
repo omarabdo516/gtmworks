@@ -175,20 +175,11 @@
 .gw .kcard .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
 .gw .kcard .badge .dot { width: 6px; height: 6px; }
 .gw .kcard .badge--live .dot { background: var(--gw-text-1); }
-.gw .kcard__prog { display: grid; gap: 6px; }
-.gw .kcard .bar { display: block; height: 3px; border-radius: var(--gw-r-full); background: var(--gw-bg-active); overflow: hidden; }
-.gw .kcard .bar__fill { display: block; height: 100%; width: 100%; background: var(--gw-text-1); transform-origin: right center; }
-[dir="ltr"] .gw .kcard .bar__fill { transform-origin: left center; }
-/* A bar slides when its figure changes, and grows in when the board opens (#131; design-reference: .bar__fill, boardEnter). */
-.gw .kcard .bar__fill { transition: transform var(--gw-dur-slow) var(--gw-ease-out); }
-.gw .board--enter .kcard .bar__fill { animation: gw-bar-grow 700ms var(--gw-ease-out) both; }
-@keyframes gw-bar-grow { from { transform: scaleX(0); } }
 .gw .kcard__foot { display: flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); padding-top: 2px; min-width: 0; float: none; }
 .gw .kcard__agent { display: inline-flex; align-items: center; gap: 6px; color: var(--gw-text-2); min-width: 0; float: none; }
 .gw .kcard__agent .avatar { width: 18px !important; height: 18px !important; font-size: 10px; }
 .gw .kcard__agent > span[aria-hidden] { display: inline-flex; flex: none; }
 .gw .kcard__agent--own { flex: none; }
-.gw .kcard__job { min-width: 0; }
 .gw .kcard__crew { display: flex; align-items: flex-start; gap: 6px; min-width: 0; font-size: var(--gw-fs-xs); line-height: 18px; color: var(--gw-text-3); }
 .gw .kcard__crew-t { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
 .gw .kcard__crew-t bdi { white-space: nowrap; }
@@ -245,7 +236,6 @@
   .gw .board-view .kcard, .gw .board-view .col, .gw .board-view .chip { transition: none; }
   .gw .board-view .kcard:hover { transform: none; }
   .gw .kcard--ghost { transform: none; }
-  .gw .board--enter .kcard .bar__fill { animation: none; }
 }
 @media (pointer: coarse) { .gw .kcard[data-card-id] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } .gw .kcard a { -webkit-user-drag: none; } }
 @media (max-width: 1023px) {

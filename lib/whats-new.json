@@ -1,5 +1,11 @@
 [
  {
+  "issue": 683,
+  "date": "2026-11-25",
+  "en": { "title": "One New card form, and a board that filters by who and which project", "body": "New card on the toolbar and + on Ideas open the same form with a title, a description, an assignee and a project; the board filters by assignee and project, and each card tells its state in one symbol." },
+  "ar": { "title": "فورم واحد لبطاقة جديدة، ولوحة بتفلتر بمين وأنهي مشروع", "body": "«بطاقة جديدة» في الشريط و+ في الأفكار بيفتحوا نفس الفورم فيه عنوان ووصف ومسؤول ومشروع؛ واللوحة بتفلتر بالمسؤول والمشروع، وكل بطاقة بتقول حالتها برمز واحد." }
+ },
+ {
   "issue": 680,
   "date": "2026-11-25",
   "en": { "title": "Write a card's description where you read it", "body": "Press Edit in a card to write its description in place: / for blocks, the usual Markdown shortcuts, @ to call someone or an Agent, pictures, and a bar of blocks on a phone. It saves by itself, and when someone else changes it at the same time both changes are kept." },

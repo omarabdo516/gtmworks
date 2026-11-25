@@ -47,7 +47,7 @@ async function carry(page:Page,id:number,to:{column:string,before?:number,end?:b
 
 test('a card moves by drag and by keyboard, and both moves are logged',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- const card=await newCard(page,'Board move');
+ const card=await makeCard(page,`Board move ${Date.now()}`,{idea:true});
  await page.goto('/c/rs-learning/work/board');
  const source=page.locator(`.kcard[data-card-id="${card.id}"]`);
  await expect(source).toBeVisible();
@@ -147,7 +147,9 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
 
 test('a Viewer cannot move a card',async({page})=>{
  await signIn(page,'viewer@example.com','/c/rs-learning/work/board');
- await expect(page.getByText('Read only: approvals and moves are up to the rest of the team')).toBeVisible();
+ // A Viewer is offered no way to add one (#683: the toolbar has no summary line any more).
+ await expect(page.locator('#board-cols .kcard').first()).toBeVisible();
+ await expect(page.getByRole('button',{name:'New card',exact:true})).toHaveCount(0);
  const card=page.locator('.kcard[data-card-id="1"]');
  const before=await columnOf(page,1);
  const from=(await card.boundingBox())!,to=(await page.locator('.col[data-column="planned"] .col__body').boundingBox())!;

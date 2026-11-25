@@ -118,7 +118,8 @@ test('English default, account language across sessions/devices, automatic conte
    await expect(page.getByRole('menu')).toHaveCount(0);
    await page.goto('/c/rs-learning/work/board');
    for(const [index,title] of titles.entries()) {
-    const link=page.locator('.card').getByRole('link',{name:title,exact:true});
+    // The tile's link is named with its state and assignee too (#683), so it is found by the title it shows.
+    const link=page.locator('.card .kcard__title').filter({has:page.getByText(title,{exact:true})});
     const titleNode=link.locator('strong');
     await expect(titleNode).toHaveCSS('direction',index===0?'rtl':'ltr');
     await expectTitleAligned(titleNode,link.locator('..'),index===0?'right':'left');

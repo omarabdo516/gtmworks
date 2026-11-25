@@ -188,7 +188,7 @@ test('a channel\'s first Agent call puts one Card under In progress, which the c
  expect(made[0]).toMatchObject({title:'Board week',cards:1,logged:1,notes:1});
  channel=String(made[0].channel); cardId=String(made[0].card);
 
- // The Member who called the Agent reads the pill and the section, and the Card on the board at its foot "Channel".
+ // The Member who called the Agent reads the pill and the section, and finds the Card on the board.
  await signIn(page,'reviewer@example.com',`/c/rs-learning/channels/${channel}`);
  const pill=page.locator('.chat__corner .corner-pill');
  await expect(pill).toBeVisible();
@@ -202,7 +202,6 @@ test('a channel\'s first Agent call puts one Card under In progress, which the c
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
  await expect(page.locator(`.kcard[data-card-id="${cardId}"] a`).first()).toBeFocused();
  await expect(page.locator(`.kcard[data-card-id="${cardId}"]`)).toBeInViewport();
- await expect(page.locator(`.kcard[data-card-id="${cardId}"] .kcard__job`)).toContainText('Channel');
 });
 
 // #678: the Card's comments replace its chat, so the channel is one link away from the Card's window, for its Member.

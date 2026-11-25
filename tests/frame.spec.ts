@@ -137,10 +137,10 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await chooseCompany(page,'rs-learning');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
  // The seed gives RS Learning no real Agents, so Home has none; the Writer's Cards still show in the work list's
- // Assignee column (#677): its own Card, and the Card in review it sent there.
+ // Assignee column (#677, the third since #683): its own Card, and the Card in review it sent there.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
  await page.goto('/c/rs-learning/work/list');
- const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
+ const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:nth-child(3)',{hasText:'وكيل المحتوى'})});
  await expect(assigned).toHaveCount(2);
  // The Inbox count sits on the Marketing board entry and opens the Inbox.
  await page.goto('/c/rs-learning/approvals');
@@ -162,7 +162,7 @@ test('Home has four parts in order and missing sources show unavailable, never z
 test('owner assigns a new Contributor agent through settings, the work list follows its rename, and demotion clears the key',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/list');
  // The Writer's own Card (seed Card 1), not the Card in review it is also the assignee of (#677).
- const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})}).filter({has:page.locator('a[href$="/work/board?card=1"]')});
+ const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:nth-child(3)',{hasText:'وكيل المحتوى'})}).filter({has:page.locator('a[href$="/work/board?card=1"]')});
  await expect(writerRow).toHaveCount(1);
  const current=writerRow.getByRole('link');
  await expect(current).toBeVisible();
@@ -201,8 +201,8 @@ test('owner assigns a new Contributor agent through settings, the work list foll
   await page.goto('/c/rs-learning/work/list');
   const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
   // The next actor's name, beside its first letter as a person's (#697: a legacy role agent shows its name's first letter).
-  const nextActor=assigned.locator('td').last().locator('span:not(.avatar)');
-  await expect(assigned.locator('td').last().locator('.avatar')).toHaveText(Array.from(initialName)[0]);
+  const nextActor=assigned.locator('td').nth(2).locator('span:not(.avatar)');
+  await expect(assigned.locator('td').nth(2).locator('.avatar')).toHaveText(Array.from(initialName)[0]);
   await expect(nextActor).toHaveText(initialName);
   expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
   await page.reload();

@@ -99,7 +99,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for ea
 - ✅ **One review.** A Card in review shows its Version with Approve and Send back with a reason; any Owner or Manager who sees the Card decides it, the first answer closing it. Approved goes to Planned with the approved symbol when its date is ahead, else to Done; sent back goes to In progress with the reason as a comment. Approval steps are gone. [#681, #513]
 - ✅ **A Card waits for other Cards.** Each side names the other, the tile counts the Cards it still waits for, a loop is refused, and a Card Live, Done or archived holds nobody up. [#682]
 - ✅ **"Waiting on you".** One list for approvals, questions, permissions, requests and mentions. [#16, #165, #200]
-- ✅ **Add an idea.** The Ideas column takes a new Card, once even if pressed twice. [#188, #452]
+- ✅ **One New card form.** New card on the toolbar and "+" on Ideas open the same form: a title, a description, an assignee or nobody, and the Project the board is filtered by; it lands in Planned or at the top of Ideas, once even if pressed twice. The board filters by assignee and Project, and its tiles tell their state in one symbol. [#188, #452, #683]
 - ✅ **Alone or with a team.** First run asks one question; "Alone" hides the team parts until the first Member joins. [#9, #10, #186]
 - ✅ **Notes and mentions in the log.** Notes call Members and Agents, editable for five minutes. [#22, #114]
 - ✅ **Activity log.** One log for the Company with paging and filters. [#11]

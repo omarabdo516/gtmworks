@@ -204,7 +204,7 @@ test('a Card waits for another: both sides show it, the tile counts it, a loop i
  await expect.poll(() => JSON.parse(query(`select count(*)::int n from public.work_card_waits where card_id=1 and waits_for=2`))[0].n).toBe(1);
  await expect(card.getByRole('button', { name: /^Status: .* · Waiting for another card$/ })).toBeVisible();
  await page.keyboard.press('Escape');
- await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__waits')).toContainText('1');
+ await expect(page.locator('#board-cols .kcard[data-card-id="1"] a').first()).toHaveAccessibleName(/ · Waiting for another card · /);
 
  // Card 2 shows who waits for it, and waiting back is refused.
  await page.goto(`${board}?card=2`);
@@ -223,7 +223,7 @@ test('a Card waits for another: both sides show it, the tile counts it, a loop i
  query(`do $$ begin perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true); perform public.archive_cards('10000000-0000-0000-0000-000000000001',array[2::bigint]); perform public.restore_cards('10000000-0000-0000-0000-000000000001',array[2::bigint]); end $$`);
  await page.goto(board);
  await expect(page.locator('#board-cols .kcard[data-card-id="2"]')).toBeVisible();
- await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__waits')).toHaveCount(0);
+ await expect(page.locator('#board-cols .kcard[data-card-id="1"] a').first()).not.toHaveAccessibleName(/Waiting for another card/);
 });
 
 test('the description is written on the page: its editor loads only on Edit, saves by itself, and keeps another writer\'s line and a tick made meanwhile', async ({ page }) => {

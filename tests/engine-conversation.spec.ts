@@ -1196,8 +1196,8 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('handed to Salma');
   await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
   await reviewer.goto('/c/rs-learning/work/board');
-  await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Salma');
-  await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Runs the March launch.');
+  // The tile names its assignee (#683: its face, and the name in the tile's name and tooltip).
+  await expect(onCard(reviewer).locator('.kt-face')).toHaveAttribute('data-tip','Salma');
 
   // A second handover in the same chat gives the same Card the other Agent, and its own row on the Card.
   language('en');
@@ -1214,8 +1214,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('handed to Tarek');
   await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('Write the March launch email');
   await reviewer.goto('/c/rs-learning/work/board');
-  await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Tarek');
-  await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Writes the launch email.');
+  await expect(onCard(reviewer).locator('.kt-face')).toHaveAttribute('data-tip','Tarek');
  } finally {
   language('en'); for(const context of opened) await context.close();
   target.detach(); next.detach(); await fake.close();

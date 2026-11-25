@@ -438,7 +438,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const toggleArchived=()=>{ setShowArchived(!showArchived); setArchiveQuery(''); setArchiveSearching(false); dropAsking(); setSelected(null); };
  const clearFilters=()=>{ setAgentFilter('all'); setProject(''); setBoardQuery(''); setSearching(false); };
  const filterCount=(filter!=='all'?1:0)+(project?1:0)+(showArchived?1:0);
- const phoneItems:MenuItem[]=[{key:'g-who',group:t('assignee')},...whoItems,...(p.projects.length?[{key:'g-pr',group:t('project')},...projectItems]:[]),
+ const asRadio=(items:MenuItem[])=>items.map(item=>'group' in item?item:{...item,radio:true});
+ const phoneItems:MenuItem[]=[{key:'g-who',group:t('assignee')},...asRadio(whoItems),...(p.projects.length?[{key:'g-pr',group:t('project')},...asRadio(projectItems)]:[]),
   ...(p.archived&&!p.focus?[{key:'g-more',group:t('boardMore')},{key:'arch',label:t('boardArchived'),checked:showArchived,run:toggleArchived}]:[]),
   ...(canSelect&&!selected?[{key:'sel',label:t('boardSelectCards'),run:startSelecting}]:[]),
   ...((filter!=='all'||project)?[{key:'clear',label:t('boardClearFilters'),run:clearFilters}]:[])];

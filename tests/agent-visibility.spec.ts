@@ -125,7 +125,8 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
   perform set_config('approval.internal','',true);
  end $$;`);
  // The board's assignee menu (#683) names the Agents the reader sees, after Everyone, Me and No one.
- const agentsIn=async(on:typeof page)=>{ await on.getByRole('button',{name:/^Assignee:/}).click(); const names=await on.getByRole('menuitemradio').locator('.menu__t').allTextContents(); await on.keyboard.press('Escape'); return names.filter(name=>['Lead','Meta Ads','SEO'].includes(name)); };
+ // The Agents in the Assignee menu, by their faces: a Member may carry an Agent's name (the seed's Contributor "Lead").
+ const agentsIn=async(on:typeof page)=>{ await on.getByRole('button',{name:/^Assignee:/}).click(); const names=await on.getByRole('menuitemradio').filter({has:on.locator('.face')}).locator('.menu__t').allTextContents(); await on.keyboard.press('Escape'); return names.filter(name=>['Lead','Meta Ads','SEO'].includes(name)); };
  const card=(on:typeof page,title:string)=>on.locator('#board-cols .kcard').filter({hasText:title});
 
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
@@ -142,7 +143,7 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
    await expect(card(member,'SEO drafts the blog')).toHaveCount(0);
    await expect(card(member,'Ads runs the launch')).toHaveCount(seen.includes('Meta Ads')?1:0);
    await member.getByRole('button',{name:/^Assignee:/}).click();
-   await member.getByRole('menuitemradio',{name:'Lead'}).click();
+   await member.getByRole('menuitemradio',{name:'Lead',exact:true}).click();
    await expect(member.getByRole('button',{name:'Assignee: Lead'})).toBeFocused();
    await expect(member.locator('#board-cols .kcard')).toHaveText([/Lead plans the month/]);
    await member.getByRole('button',{name:'Assignee: Lead'}).click();

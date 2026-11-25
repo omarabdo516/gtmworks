@@ -30,7 +30,7 @@ test('New card makes one Card in Planned with its description, assignee and file
   await page.waitForTimeout(900);
   // A double press is one Card: the form's request key is the same for both.
   await dialog.getByRole('button',{name:'Add card'}).dblclick();
-  await expect(page).toHaveURL(/\/work\/board\?show=\d+&added=1$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.toast')).toHaveText('Added');
   const made=rows(`select w.id,w.status,w.description,w.assignee_person,(select count(*)::int from public.work_attachments a where a.card_id=w.id) files from public.work_cards w where w.title='Launch post ${stamp}'`);
   expect(made).toHaveLength(1);
@@ -46,7 +46,7 @@ test('New card makes one Card in Planned with its description, assignee and file
   for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.screenshot({path:`test-results/screenshots/new-card-ar-${width}.png`}); }
   await page.setViewportSize({width:1280,height:720});
   await page.getByRole('dialog').getByRole('button',{name:'ضيف البطاقة'}).click();
-  await expect(page).toHaveURL(/\/work\/board\?show=\d+&idea=1$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(ideas.locator('.kcard').first()).toContainText(`فكرة ${stamp}`);
  } finally { await chooseLanguage(page,'en'); }
 });
