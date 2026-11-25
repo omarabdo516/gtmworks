@@ -41,3 +41,15 @@ test('a press on its way holds Done it, so one press sends one', async () => {
  const screen = await render(<LanguageProvider language="en"><HandBanner hand={hand} agent="Ads" control={false} busy onDone={done}/></LanguageProvider>);
  await expect.element(screen.getByRole('button', { name: 'Done it' })).toBeDisabled();
 });
+
+// #714: the reference names the button the Agent stopped at ("Publish") in the line, beside the step's title; a step
+// handed with no button names its title there instead.
+test('the banner\'s line names the button the Agent stopped at, beside the step\'s title', async () => {
+ const screen = await render(<LanguageProvider language="en">
+  <div data-testid="watching"><HandBanner hand={{ ...hand, step: 'Publish' }} agent="Ads" control={false} busy={false} onDone={vi.fn()}/></div>
+  <div data-testid="holding"><HandBanner hand={{ ...hand, step: 'Publish' }} agent="Ads" control busy={false} onDone={vi.fn()}/></div></LanguageProvider>);
+ const line = (state: string) => screen.getByTestId(state).element().querySelector('.vw-hand__t > span')?.textContent;
+ expect(screen.getByTestId('watching').element().querySelector('.vw-hand__t > b')?.textContent).toBe(hand.title);
+ expect(line('watching')).toBe('Ads stopped at “Publish” and didn’t press it. Press it yourself in Meta Ads or take control, then “Done it”.');
+ expect(line('holding')).toBe('You have control: press “Publish” on the screen yourself, then “Done it”.');
+});

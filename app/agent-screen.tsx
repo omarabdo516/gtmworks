@@ -7,7 +7,7 @@ import { leave } from '@/lib/motion';
 import { toast } from '@/app/toast';
 import type { AgentScreen as Screen } from '@/lib/agent-screen.mjs';
 import { useScreenLive } from '@/app/screen-live';
-import { handDoneHere, onShowScreen, takeShowScreen, type ScreenHand } from '@/app/screen-hands';
+import { handDoneHere, onShowScreen, stepOf, takeShowScreen, type ScreenHand } from '@/app/screen-hands';
 import { useScreenHand } from '@/app/sidebar-live';
 
 // The "Agent's screen" card at the top of an Agent's details' Activity tab, and its large view (#712; design-reference:
@@ -138,7 +138,7 @@ export function AgentScreen({company,agent,name,canWake}:{company:string,agent:s
  const can=state!=='asleep'||canWake;
  const pill=state==='asleep'?<><ShellIcon name="sun"/><span>{t('screenWake')}</span></>:state==='waking'?<span>{t('screenWakingPill')}</span>:<><ShellIcon name="eye"/><span>{t('screenWatch')}</span></>;
  const waiting=state==='awake'&&!!hand;
- const line=state==='asleep'?t('screenAsleepLine'):state==='waking'?t('screenWakingLine'):holding?t('screenControlLine',name):hand?t('screenHandLine',hand.title,hand.app):null;
+ const line=state==='asleep'?t('screenAsleepLine'):state==='waking'?t('screenWakingLine'):holding?t('screenControlLine',name):hand?t('screenHandLine',stepOf(hand),hand.app):null;
  const overlay=<span className="scr-ov" aria-hidden={can?'false':'true'}>
   {can?<span className="scr-ov__pill">{pill}</span>:null}
   {line?<span className="scr-ov__line">{line}</span>:null}
@@ -280,9 +280,9 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
 // the step's title, one line that the Agent stopped there, and "Done it", which is the chat card's own press. While the
 // person holds control the line says to press the step on the Screen themselves, then "Done it". The names in the line
 // keep their own direction.
-export function HandBanner({hand,agent,control,busy,onDone,doneRef}:{hand:Pick<ScreenHand,'title'|'app'>,agent:string,control:boolean,busy:boolean,onDone:()=>void,doneRef?:RefObject<HTMLButtonElement|null>}) {
+export function HandBanner({hand,agent,control,busy,onDone,doneRef}:{hand:Pick<ScreenHand,'title'|'app'>&{step?:string},agent:string,control:boolean,busy:boolean,onDone:()=>void,doneRef?:RefObject<HTMLButtonElement|null>}) {
  const {t}=useI18n();
- const line=control?isolated(t('screenHandControl','{0}'),[hand.title]):isolated(t('screenHandStopped','{0}','{1}','{2}'),[agent,hand.title,hand.app]);
+ const line=control?isolated(t('screenHandControl','{0}'),[stepOf(hand)]):isolated(t('screenHandStopped','{0}','{1}','{2}'),[agent,stepOf(hand),hand.app]);
  return <div className="vw-hand" role="group" aria-labelledby="vw-hand-t">
   <span className="badge ck-badge"><ShellIcon name="hand"/>{t('handBadge')}</span>
   <span className="vw-hand__t"><b id="vw-hand-t"><bdi>{hand.title}</bdi></b><span>{line}</span></span>

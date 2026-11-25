@@ -1,14 +1,15 @@
--- #714: a step an Agent stopped at on its own Screen (spec #710). The hand card (#139) gains one key, `screen`, only ever
--- true: the Agent handed the step over with "on my screen", so the card's second button opens that Agent's Screen, where
--- its person does the step and presses "Done it", the same mark_hand_done as the chat card's. The Conversation's person
--- alone finds the open step on the Agent's Screen (screen_hands): its banner, the Screen's waiting state and line, and the
--- toast when it arrives. Every other Member, a Viewer included, sees the Screen as usual.
+-- #714: a step an Agent stopped at on its own Screen (spec #710). The hand card (#139) gains `screen`, only ever true:
+-- the Agent handed the step over with "on my screen", so the card's second button opens that Agent's Screen, where its
+-- person does the step and presses "Done it", the same mark_hand_done as the chat card's. Beside it only, `step` names
+-- the button the Agent stopped at (such as "Publish"), which the Screen's line, banner and toast name. The
+-- Conversation's person alone finds the open step on the Agent's Screen (screen_hands): its banner, the Screen's waiting
+-- state and line, and the toast when it arrives. Every other Member, a Viewer included, sees the Screen as usual.
 --
--- Additive: the hand branch of reply_card_valid accepts one more key and narrows nothing (a branch is only ever added
+-- Additive: the hand branch of reply_card_valid accepts two more keys and narrows nothing (a branch is only ever added
 -- to, as 20270116000000 says), and one new function. The previous app version sends no `screen`, reads a card's keys by
 -- name and calls nothing new.
 
--- 20270415999992's, with the hand branch taking `screen` true beside its other keys.
+-- 20270415999992's, with the hand branch taking `screen` true, and `step` beside it, beside its other keys.
 create or replace function public.reply_card_valid(kind text, state text, content jsonb) returns boolean
 language sql immutable set search_path='' as $$
  select coalesce(case kind
@@ -50,7 +51,7 @@ language sql immutable set search_path='' as $$
      and length(o#>>'{}') between 1 and 1000 and btrim(o#>>'{}',E' \t\r\n')<>'',false)) else false end
   else false end
   when 'hand' then state in ('open','done','closed') and case when jsonb_typeof(content)='object' then
-   (select array_agg(k order by k) from jsonb_object_keys(content) k where k<>'screen') in
+   (select array_agg(k order by k) from jsonb_object_keys(content) k where k not in ('screen','step')) in
     (array['app','line','rows'],array['app','line','rows','url'],array['app','line','note','rows'],array['app','line','note','rows','url'])
    and public.reply_card_text(content->'app',40)
    and public.reply_card_text(content->'line',160)
@@ -62,6 +63,7 @@ language sql immutable set search_path='' as $$
    and (not content ? 'note' or public.reply_card_text(content->'note',240))
    -- #714: a step the Agent stopped at on its own Screen; the key is there only as true.
    and (not content ? 'screen' or content->'screen'='true'::jsonb)
+   and (not content ? 'step' or (content->'screen'='true'::jsonb and public.reply_card_text(content->'step',40)))
   else false end
   when 'permission' then case when jsonb_typeof(content)='object' then
    case (select array_agg(k order by k) from jsonb_object_keys(content) k)
@@ -86,11 +88,12 @@ language sql immutable set search_path='' as $$
 $$;
 
 
--- The open steps on an Agent's Screen handed to the caller in this Company, newest first: each in a Conversation that is
+-- The open steps on an Agent's Screen handed to the caller in this Company, newest first, each with the button it
+-- names, if any: each in a Conversation that is
 -- the caller's own, with an Agent they see, not archived. A Viewer writes nothing and presses no "Done it", so has none.
-create function public.screen_hands(c uuid) returns table(card bigint, conversation uuid, agent uuid, agent_name text, title text, app text, created_at timestamptz)
+create function public.screen_hands(c uuid) returns table(card bigint, conversation uuid, agent uuid, agent_name text, title text, app text, step text, created_at timestamptz)
 language sql stable security definer set search_path='' as $$
- select r.id,v.id,v.agent_id,h.name,r.title,r.content->>'app',r.created_at
+ select r.id,v.id,v.agent_id,h.name,r.title,r.content->>'app',r.content->>'step',r.created_at
  from public.reply_cards r
  join public.conversations v on v.id=r.conversation_id
  join public.hermes_agents h on h.id=v.agent_id and h.company_id=c

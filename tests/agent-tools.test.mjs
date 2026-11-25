@@ -319,6 +319,31 @@ test('hand_over keeps "on my screen" only for the model\'s true, and a channel\'
  assert.deepEqual(posted,[['channel_show_card',{message:17,run:'char:17',call:'call_1',kind:'hand',title:'Publish',content:{app:'WordPress',line:'Ready',rows:[]}}]]);
 });
 
+// #714: the step on the Screen is the button the Agent stopped at, such as "Publish", which the card keeps beside its
+// title for the Screen's line, banner and toast. It is kept only with "on my screen", and a channel keeps neither.
+test('hand_over keeps the button the Agent stopped at on its screen, and only with "on my screen"',async()=>{
+ const {rpcs,call}=harness({},{state:'shown',card:45});
+ await call('hand_over',{title:'Publish the campaign',line:'Ready',app:'Meta Ads',screen:true,step:'Publish'});
+ await call('hand_over',{title:'Publish',line:'Ready',app:'WordPress',step:'Publish'});
+ await call('hand_over',{title:'Pay',line:'Ready',app:'Stripe',screen:true,step:'   '});
+ await call('hand_over',{title:'Pay',line:'Ready',app:'Stripe',screen:true,step:'P'.repeat(41)});
+ const sent=(/** @type {string} */ title,/** @type {object} */ content)=>['agent_show_card',{conversation:'conversation-1',run:'run-1',call:'call-0',kind:'hand',title,content}];
+ assert.deepEqual(rpcs,[sent('Publish the campaign',{app:'Meta Ads',line:'Ready',rows:[],screen:true,step:'Publish'}),
+  sent('Publish',{app:'WordPress',line:'Ready',rows:[]}),sent('Pay',{app:'Stripe',line:'Ready',rows:[],screen:true}),
+  sent('Pay',{app:'Stripe',line:'Ready',rows:[],screen:true,step:`${'P'.repeat(39)}…`})]);
+ const spec=JSON.parse(toolSpecTexts().hand_over);
+ assert.equal(spec.parameters.properties.step.type,'string');
+ assert.match(spec.parameters.properties.step.description,/button/);
+ // gtmworks does not hold the Agent still: the description promises nothing of the kind.
+ assert.doesNotMatch(spec.parameters.properties.screen.description,/hold still/);
+ const channel=JSON.parse(channelToolSpecTexts([]).hand_over);
+ assert.equal(channel.parameters.properties.step,undefined);
+ const posted=/** @type {[string,object][]} */([]);
+ const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ posted.push([name,args]); return {data:{state:'shown',card:12},error:null}; }};
+ await runToolCall({db,engine:fakeEngine().engineFor({}),profile,channel:{message:17},run:'char:17'},{id:'call_1',name:'hand_over',arguments:{title:'Publish',line:'Ready',app:'WordPress',screen:true,step:'Publish'}});
+ assert.deepEqual(posted,[['channel_show_card',{message:17,run:'char:17',call:'call_1',kind:'hand',title:'Publish',content:{app:'WordPress',line:'Ready',rows:[]}}]]);
+});
+
 // #203: an Agent asks its person for an app on gtmworks's list that its own profile does not have connected. The Engine is
 // asked for the Run's profile's apps, and only a listed app that is not connected there reaches the database; an unknown
 // app, or one already connected, shows nothing, and an Engine that does not answer leaves the run open for a retry.
@@ -370,9 +395,9 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
  });
  assert.equal(sha(specs.show_draft),'14f3e489f8903145db328693857952e95f34678a9071a2b50a48f1180ff4754c','show_draft (#136)');
  assert.equal(sha(specs.show_review),'5370ac820042bd31ca7cb07dc9a1b7e7002a9e43427ed9ebb33fd6fd926dc9e1','show_review (#137)');
- // #714 gave it the optional "on my screen" and the step the Agent wants its person to do (ADR 0020): a Run pinned before
- // keeps the earlier text in the database (pin_run) and resends that.
- assert.equal(sha(specs.hand_over),'32f74420fb9f02dff60d083ed927f783b7fff61b136384123648fbff5fd3e17d','hand_over (#139, #714)');
+ // #714 gave it the optional "on my screen" with the button it stopped at, and the step the Agent wants its person to
+ // do (ADR 0020): a Run pinned before keeps the earlier text in the database (pin_run) and resends that.
+ assert.equal(sha(specs.hand_over),'956edb77ac1606c8255785557f3533e6cb386a9bd7012ba5de70e42eb7d34f4d','hand_over (#139, #714)');
 });
 
 // #148: a channel Run's card calls are kept against its channel message, not a Conversation, so the channel reads them

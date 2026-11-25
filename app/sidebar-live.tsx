@@ -8,7 +8,7 @@ import type { ChannelSummary } from '@/lib/channels';
 import { onWatchedRunEnded, shownState, useChatKnows } from '@/lib/live-runs';
 import type { FaceState } from '@/components/face-life';
 import { toast } from '@/app/toast';
-import { onHandDone, type ScreenHand } from '@/app/screen-hands';
+import { onHandDone, stepOf, type ScreenHand } from '@/app/screen-hands';
 
 const pollEvery=5000;
 // What the sidebar shows that changes while a page stays open: the reader's channels with their unread counts (#24),
@@ -71,7 +71,7 @@ function HandedToasts({slug,handed}:{slug:string,handed:ScreenHand[]}) {
   // router fetched before the card arrived (the sidebar's link prefetches it) would not hold it.
   const path=`/c/${slug}/conversations/${hand.conversation}`;
   const open=()=>{ if(location.pathname===path) { history.replaceState(history.state,'',`${path}#hand-${hand.card}`); location.reload(); } else location.assign(`${path}#hand-${hand.card}`); };
-  toast(t('screenHandToast',hand.agent_name,hand.title),{icon:'hand',action:{label:t('screenHandToastOpen'),run:open}});
+  toast(t('screenHandToast',hand.agent_name,stepOf(hand)),{icon:'hand',action:{label:t('screenHandToastOpen'),run:open}});
  },[handed,slug,t]);
  return null;
 }

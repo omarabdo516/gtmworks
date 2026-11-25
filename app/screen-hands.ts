@@ -3,6 +3,9 @@
 // handCardOf). The sidebar's poll reads the open ones of the reader's own Conversations (screen_hands, app/sidebar-live),
 // so the Agent's screen card, its view and the toast on arrival follow it within 5 seconds wherever the reader is.
 export type { ScreenHandRow as ScreenHand } from '@/lib/agent-screen.mjs';
+// The button the Agent stopped at, such as "Publish", which the Screen's line, banner and toast name; a step handed with
+// none names its title there.
+export const stepOf=(hand:{title:string,step?:string})=>hand.step||hand.title;
 
 // "Open the screen" on the chat card: the details beside the chat open on Activity, and the Agent's screen card opens its
 // view with the keyboard on "Done it". The ask waits until the card takes it, so a card not drawn yet takes it once drawn
