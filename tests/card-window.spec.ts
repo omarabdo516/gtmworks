@@ -175,8 +175,12 @@ test('a description is read drawn and its to-do items are ticked while reading: 
  await expect(card.locator('p', { hasText: /ticked$/ }).locator('xpath=..').filter({ hasText: 'Write the hook' })).toBeVisible();
  // The keyboard unticks it.
  await card.getByRole('tab', { name: /Comments/ }).click();
- await card.getByRole('checkbox', { name: 'Pick the format' }).focus();
+ const format = card.getByRole('checkbox', { name: 'Pick the format' });
+ await expect(format).toHaveAttribute('aria-checked', 'true');
+ await format.focus();
+ await expect(format).toBeFocused();
  await page.keyboard.press('Space');
+ await expect(format).toHaveAttribute('aria-checked', 'false');
  await expect.poll(() => JSON.parse(query(`select split_part(description,E'\\n',4) line from public.work_cards where id=1`))[0].line).toBe('- [ ] Pick the format');
  await page.keyboard.press('Escape');
  await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__todo')).toContainText('1/2');
