@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
+import { WebSocketServer } from 'ws';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
@@ -16,6 +17,14 @@ export const modelMissingError='Model \'claude-fable\' isn\'t available on Anthr
 export const usageLimitFirstError='ChatGPT or Codex Subscription rate-limited every one of 3 attempts — its usage limit resets in ~121h. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: HTTP 429: The usage limit has been reached\n\nLimit resets at 19:24 (in 120h 58m).';
 export const usageLimitError='⏱️ The AI model service\'s usage limit is reached; it resets in ~121h. Use /retry after that, or /model to switch models.';
 export const failedRunText='Something else went wrong while the model was answering.';
+// #712: one grab of a Screen, as the pinned Engine's display.thumbnail sends it (tools/bot_desktop/thumbnail.py: a JPEG
+// data URL): a 16 by 10 JPEG whose comment names the grab, so every grab is a picture of its own.
+const screenJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAKABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGooor6Q8w/9k=','base64');
+/** @param {number} grab */
+export function screenFrame(grab) {
+ const note=Buffer.from(`grab ${grab}`);
+ return Buffer.concat([screenJpeg.subarray(0,2),Buffer.from([0xff,0xfe,0,note.length+2]),note,screenJpeg.subarray(2)]);
+}
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -108,6 +117,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   signInSessions:/** @type {Map<string,{provider:string,profile:string,status:string}>} */(new Map()),
   // Ignore the disabled list when reporting toolsets, as a Hermes that did not apply it would.
   ignoreDisabled:false,staleConfig:false,
+  // An Agent's Screen (#712), per profile as the pinned Engine keeps it (tools/bot_desktop): running or not, the Engine's
+  // `supported` and the programs the sandbox lacks, and who holds its lease (the Agent, or a person). The sandbox has one
+  // display, so a start fails while another profile's Screen runs (sandbox_host.py: display :20). `screenCalls` keeps
+  // every /api/ws request with the token it came with; `screenStartDelay` holds a start as the Engine's does while the
+  // desktop comes up; `screenPictureUrl` replaces what a grab sends.
+  screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human'}>} */(new Map()),
+  screenCalls:/** @type {{method:string,params:any,token:string|null}[]} */([]),screenStartDelay:0,screenPictureUrl:/** @type {string|null} */(null),screenGrabs:0,
   // Profiles the Run API answers 404 for, as Hermes does for one it does not serve; a removed profile joins them.
   unknownProfiles:/** @type {string[]} */([]),
   // The root profile's model block, which a new profile copies (hermes_cli/profiles.py, _seed_model_config); none
@@ -1026,8 +1042,48 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    send(response,404,{detail:'Not Found'});
   });
  });
+ // The management listener's JSON-RPC socket (#712; tui_gateway/ws.py, methods_display.py), opened with the session
+ // token as `?token=` (web_server_chat.py): newline-free JSON frames, the gateway.ready event first, and the display
+ // methods the Screen uses, each naming its profile. A profile the Engine does not have is refused with 4064 before
+ // the method runs; a display failure is 5300 with the Engine's English reason.
+ const sockets=new WebSocketServer({noServer:true});
+ management.on('upgrade',(request,socket,head)=>{
+  const url=new URL(request.url||'/','http://management');
+  if(url.pathname!=='/api/ws'||url.searchParams.get('token')!==settings.key) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
+  sockets.handleUpgrade(request,socket,head,ws=>{
+   ws.send(JSON.stringify({jsonrpc:'2.0',method:'event',params:{type:'gateway.ready',payload:{heartbeat:true}}}));
+   ws.on('message',async raw=>{
+    let call; try { call=JSON.parse(String(raw)); } catch { return; }
+    const params=call?.params&&typeof call.params==='object'?call.params:{};
+    settings.screenCalls.push({method:call.method,params,token:url.searchParams.get('token')});
+    const ok=result=>ws.send(JSON.stringify({jsonrpc:'2.0',id:call.id,result}));
+    const fail=(code,message)=>ws.send(JSON.stringify({jsonrpc:'2.0',id:call.id,error:{code,message}}));
+    const name=typeof params.profile==='string'?params.profile:'';
+    if(!settings.profiles.has(name)) return fail(4064,`Profile '${name}' does not exist.`);
+    const screen=settings.screens.get(name)??{}; settings.screens.set(name,screen);
+    const status=()=>({profile:name,supported:screen.supported!==false,installed:!screen.missing?.length,missing:screen.missing??[],running:screen.running===true,pid:null,
+     display:screen.running?':20':null,socket:null,geometry:'1440x900',install_command:null,browser:null,blocker:screen.missing?.length?`missing: ${screen.missing.join(', ')}`:null,
+     memory_available_mb:null,memory_limit_mb:null,placement:'terminal:ssh',image_switch:null,
+     lease:{holder:screen.holder??'agent',viewer_id:null,viewer_hash:screen.holder==='human'?'0123456789ab':null,since:0,epoch:0,reason:null},profile_key:`/opt/data/profiles/${name}`});
+    if(call.method==='display.status') return ok(status());
+    if(call.method==='display.start') {
+     if(settings.screenStartDelay) await new Promise(resolve=>setTimeout(resolve,settings.screenStartDelay));
+     if(screen.missing?.length) return fail(5300,`bot desktop needs ${screen.missing.join(', ')} in the sandbox`);
+     if([...settings.screens].some(([other,held])=>other!==name&&held.running)) return fail(5300,'sandbox desktop did not publish its display within 20s:\nXvnc exited during startup');
+     screen.running=true;
+     return ok(status());
+    }
+    if(call.method==='display.thumbnail') {
+     if(screen.holder==='human') return ok({data_url:null,suppressed:'human_has_control'});
+     if(!screen.running) return ok({data_url:null});
+     return ok({data_url:settings.screenPictureUrl??`data:image/jpeg;base64,${screenFrame(++settings.screenGrabs).toString('base64')}`});
+    }
+    fail(-32601,`unknown method: ${call.method}`);
+   });
+  });
+ });
  await new Promise(resolve=>server.listen(port,host,resolve));
  await new Promise(resolve=>management.listen(managementPort,host,resolve));
  const closing=listener=>new Promise(resolve=>{listener.close(resolve);listener.closeAllConnections();});
- return {settings,address:`http://${host}:${server.address().port}`,managementAddress:`http://${host}:${management.address().port}`,close:()=>Promise.all([closing(server),closing(management)]).then(()=>{})};
+ return {settings,address:`http://${host}:${server.address().port}`,managementAddress:`http://${host}:${management.address().port}`,close:()=>{ for(const ws of sockets.clients) ws.terminate(); return Promise.all([closing(server),closing(management)]).then(()=>{}); }};
 }

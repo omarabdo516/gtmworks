@@ -1,9 +1,21 @@
 [
  {
+  "issue": 712,
+  "date": "2026-11-25",
+  "en": { "title": "Watch an Agent's Screen and wake it", "body": "An Agent's details now show whether its Screen is awake, asleep or waking up with a small live picture, Watch opens a large view that keeps refreshing, and any member who is not a viewer can wake it, with the reason in one line when it cannot wake, such as another Agent of the company using the screen." },
+  "ar": { "title": "اتفرج على شاشة الوكيل وصحّيها", "body": "تفاصيل الوكيل بقت بتوريك شاشته صاحية ولا نايمة ولا بتصحى بصورة صغيرة حيّة، و«اتفرج» بتفتح شاشة كبيرة بتتحدّث لوحدها، وأي عضو مش مشاهد يقدر يصحّيها، ولو مصحيتش بيقولك السبب في سطر، زي إن وكيل تاني في الشركة شغال على الشاشة." }
+ },
+ {
   "issue": 711,
   "date": "2026-11-25",
   "en": { "title": "Agents work on a Screen", "body": "An Agent now works on a desktop and browser inside its company's work sandbox: one Screen the company's Agents share, so an account signed in there is signed in for all of them; it wakes when an Agent needs it and sleeps after 30 minutes unused, an Agent publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screen fits." },
   "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
+ },
+ {
+  "issue": 580,
+  "date": "2026-11-25",
+  "en": { "title": "DeepWiki shows its own logo", "body": "In Connect apps and Settings, Apps, DeepWiki now shows its official logo instead of the letter D, so every app there carries its company's logo." },
+  "ar": { "title": "DeepWiki بقى بلوجو شركته", "body": "في «ربط التطبيقات» وفي الإعدادات، التطبيقات، DeepWiki بقى بيظهر باللوجو الرسمي بتاعه بدل حرف D، وكده كل تطبيق هناك بقى بلوجو شركته." }
  },
  {
   "issue": 694,
