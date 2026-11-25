@@ -35,23 +35,35 @@ test('a model error a retry cannot fix ends the Run with its own outcome, and an
  assert.equal(await outcomeOfRead({state:'lost'}),'lost');
 });
 
-// #642: a Run whose every account ran out closes with when its usage resets, when the Engine named it, in the same call
-// that closes it; with no reset named it closes as any other no-access Run.
-test('a Run that ran out of usage closes with when its usage resets, in the same call',async()=>{
+// #642, #731: a Run whose every account ran out closes with when its usage resets, when the Engine named it, and the
+// accounts the Engine's pool found exhausted, beside the Agent's own provider, in the same call that closes it; with
+// neither, it closes as a no-access Run with nothing more kept. Only an ended no-access Run reads the pool.
+test('a Run that ran out of usage closes with when its usage resets and the accounts that ran out, in the same call',async()=>{
  const calls=/** @type {{name:string,args:any}[]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   calls.push({name,args});
   if(name==='open_conversation_runs') return {data:calls.some(call=>call.name.startsWith('close_'))?[]:[open],error:null};
   if(name==='track_run_question'||name==='track_run_permission') return {data:[],error:null};
-  if(name==='close_conversation_run_out_of_usage'||name==='close_conversation_run') return {data:true,error:null};
+  if(name==='close_conversation_run_ran_out'||name==='close_conversation_run') return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  const resetsAt='2027-05-01T19:24:00.000Z';
+ const read=/** @type {any[]} */([]);
+ const accounts=[{provider:'openai-codex',account:'c0dex1',place:1},{provider:'openai-codex',account:'c0dex2',place:2}];
+ const ranOut=async(/** @type {any} */ connection)=>{ read.push(connection.profile); return {ownProvider:'openai-codex',accounts}; };
  const engine={read:async()=>({state:'failed',reply:null,session:'s-1',usage:null,toolCalls:[],modelRefused:'access',resetsAt})};
- assert.equal(await closeOpenRuns(db,{hermes,conversation,engineFor:()=>engine}),1);
- assert.deepEqual(calls.filter(call=>call.name.startsWith('close_')),[{name:'close_conversation_run_out_of_usage',args:{conversation,run:'run-1',hermes_session:'s-1',read_completed:false,usage_resets_at:resetsAt}}]);
+ assert.equal(await closeOpenRuns(db,{hermes,conversation,engineFor:()=>engine,ranOut}),1);
+ assert.deepEqual(calls.filter(call=>call.name.startsWith('close_')),[{name:'close_conversation_run_ran_out',
+  args:{conversation,run:'run-1',hermes_session:'s-1',read_completed:false,usage_resets_at:resetsAt,own_provider:'openai-codex',ran_out:accounts}}]);
+ assert.deepEqual(read,['writer'],'the pool is read for the Run\'s own profile');
  calls.length=0;
  const unnamed={read:async()=>({state:'failed',reply:null,session:null,usage:null,toolCalls:[],modelRefused:'access'})};
- assert.equal(await closeOpenRuns(db,{hermes,conversation,engineFor:()=>unnamed}),1);
- assert.deepEqual(calls.filter(call=>call.name.startsWith('close_')).map(call=>[call.name,call.args.run_outcome]),[['close_conversation_run','no_access']]);
+ const nothing=async()=>({ownProvider:null,accounts:[]});
+ assert.equal(await closeOpenRuns(db,{hermes,conversation,engineFor:()=>unnamed,ranOut:nothing}),1);
+ assert.deepEqual(calls.filter(call=>call.name.startsWith('close_')).map(call=>[call.name,call.args.usage_resets_at,call.args.ran_out]),[['close_conversation_run_ran_out',null,[]]]);
+ calls.length=0; read.length=0;
+ const failed={read:async()=>({state:'failed',reply:null,session:null,usage:null,toolCalls:[]})};
+ assert.equal(await closeOpenRuns(db,{hermes,conversation,engineFor:()=>failed,ranOut}),1);
+ assert.deepEqual(calls.filter(call=>call.name.startsWith('close_')).map(call=>[call.name,call.args.run_outcome]),[['close_conversation_run','failed']]);
+ assert.deepEqual(read,[],'a Run that failed for another cause reads no pool');
 });
