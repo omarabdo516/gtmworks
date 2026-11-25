@@ -163,8 +163,10 @@ async function journey(page) {
  const create=page.getByRole('dialog').getByRole('button',{name:'Add card'});
  await hydrated(page.getByRole('dialog').getByRole('textbox',{name:'Title'}),title,create);
  await create.click();
- await expect(page).toHaveURL(/\/work\/board\?show=\d+/,{timeout:30000});
- const card=Number(new URL(page.url()).searchParams.get('show'));
+ // The board shows the new Card and takes the address it was shown by back off, so its id is read from its tile.
+ const tile=page.locator('#board-cols .kcard').filter({hasText:title});
+ await expect(tile).toHaveCount(1,{timeout:30000});
+ const card=Number(await tile.getAttribute('data-card-id'));
  await page.goto(`${origin}/c/${seeded.company}/work/board`);
  const source=page.locator(`.kcard[data-card-id="${card}"]`);
  await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
