@@ -14,7 +14,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const general: ChannelSummary = { kind: 'general', id: 'ch-g', unread: 2 };
 const launch: ChannelSummary = { kind: 'team', name: 'Launch week', id: 'ch-t', unread: 1 };
 const list = ({ initial = [general, launch], ...props }: Partial<ComponentProps<typeof ChannelList>> & { initial?: ChannelSummary[] } = {}, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>
- <SidebarLive company="co-1" channels={initial} states={{}}><ChannelList slug="rs" company="co-1" person="p-1" manage={false} {...props}/></SidebarLive>
+ <SidebarLive person="p-1" company="co-1" channels={initial} states={{}}><ChannelList slug="rs" company="co-1" person="p-1" manage={false} {...props}/></SidebarLive>
 </LanguageProvider>);
 
 test('each channel shows how many messages are new, and the one being read shows none', async () => {

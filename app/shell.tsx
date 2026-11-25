@@ -120,7 +120,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {/* design-reference-card: the sidebar's "All conversations" row, over the channels and the recent chats (#673). */}
     <Link className="sb-item sb-all" href={`/c/${slug}/conversations`} aria-current={section==='all-conversations'?'page':undefined}><ShellIcon name="archive"/><span className="od-fill">{t('allConversations')}</span><ShellIcon name="chevron"/></Link>
     {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} current={channelId} manage={manage}/>}
-    <RecentChats slug={slug} company={company?.id||''} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
+    <RecentChats slug={slug} company={company?.id||''} person={personId} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
   </>}</nav>
@@ -147,5 +147,5 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:states[id]??'idle'}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} slug={company.slug} channels={channels} states={states} handed={handed}><RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
+ return <LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} person={personId} slug={company.slug} channels={channels} states={states} handed={handed}><RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
 }

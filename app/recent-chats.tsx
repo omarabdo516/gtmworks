@@ -17,13 +17,15 @@ const labels={today:'today',yesterday:'yesterday',earlier:'earlier'} as const;
 // design-reference-card: .thread-row, .thread-more); an archived one leaves the list, which holds current ones only.
 // A page whose read of them failed passes null (#776): the list shown last for this Company in this tab stays. The Shell is
 // drawn by each page, so the list is kept here, outside any one page's components, and in the browser only: the server
-// never draws a list from shared state, which could be another reader's.
+// never draws a list from shared state, which could be another reader's. Keyed by the reader and the Company: another
+// account signed in from another tab never gets this reader's list.
 const shownLast=new Map<string,Chat[]>();
 const inBrowser=typeof window!=='undefined';
-export default function RecentChats({slug,company,chats:read,current,lead}:{slug:string,company:string,chats:Chat[]|null,current?:string,lead:string}) {
+export default function RecentChats({slug,company,person,chats:read,current,lead}:{slug:string,company:string,person:string,chats:Chat[]|null,current?:string,lead:string}) {
  const {t,language}=useI18n();
- if(read&&inBrowser) shownLast.set(company,read);
- const chats=read??(inBrowser?shownLast.get(company):undefined)??null;
+ const shownKey=`${person}:${company}`;
+ if(read&&inBrowser) shownLast.set(shownKey,read);
+ const chats=read??(inBrowser?shownLast.get(shownKey):undefined)??null;
  const {archive,confirm}=useConversationArchive(company);
  const query=useSidebarQuery();
  const browser=useSyncExternalStore(subscribe,()=>true,()=>false);
