@@ -45,6 +45,8 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.defaultPool.anthropic=[{id:'c1aude',label:'team@example.com',auth_type:'oauth',source:'claude_code',priority:0,access_token:'claude-token-playwright-fallback-0123'}];
  // Both ChatGPT accounts have no quota left; Claude has.
  fake.settings.outOfQuota=new Set(['c0dex1','c0dex2']);
+ // The Owner named the second ChatGPT account (#618); the first reads under its kind's name.
+ query(`insert into public.provider_names(company_id,provider,account,name) values ('${company}','openai-codex','c0dex2','Omar’s ChatGPT') on conflict do nothing`);
  query(`update public.people set language='en' where id in ('${omar}','${manager}')`);
  query(`do $$ begin
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${co}');
@@ -107,6 +109,11 @@ test('with None, a request that ran out of every ChatGPT account asks no other k
  expect(resets).toHaveLength(1);
  expect(Math.abs(Date.parse(resets[0].resets_at)-Date.now()-(120*60+58)*60_000)).toBeLessThan(5*60_000);
  await expect(page.locator('.convo-status[role="alert"] time')).toContainText('The usage resets on');
+ // #731: the Engine's pool marked both ChatGPT accounts exhausted, so the line names them as Settings › Providers does:
+ // the first by its kind's name, the second by the name the Owner gave it.
+ expect(rows<{provider:string,account:string,place:number}>(`select provider,account,place from public.conversation_run_ran_out where run_id='${run}' order by place`))
+  .toEqual([{provider:'openai-codex',account:'c0dex1',place:1},{provider:'openai-codex',account:'c0dex2',place:2}]);
+ await expect(page.locator('.convo-status[role="alert"]')).toContainText('ChatGPT and Omar’s ChatGPT ran out of usage.');
  await testInfo.attach('chat-out-of-access',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  // #642: the next message, with both accounts already marked exhausted, makes no model call: the Engine fails it at once
  // with its usage-limit line, and the chat says the same, with when the usage resets (~121h), not "could not finish".
@@ -117,6 +124,7 @@ test('with None, a request that ran out of every ChatGPT account asks no other k
  expect(Math.abs(Date.parse(later[0].resets_at)-Date.now()-121*3600_000)).toBeLessThan(5*60_000);
  const time=page.locator('.convo-status[role="alert"] time');
  await expect(time).toHaveAttribute('datetime',new Date(later[0].resets_at).toISOString());
+ await expect(page.locator('.convo-status[role="alert"]')).toContainText('ChatGPT and Omar’s ChatGPT ran out of usage.');
  await expect(page.getByText('Send the message again to retry.')).toHaveCount(0);
  await testInfo.attach('chat-out-of-usage-again',{body:await page.locator('.convo-status[role="alert"]').screenshot(),contentType:'image/png'});
 });
