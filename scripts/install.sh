@@ -67,7 +67,48 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 node_image=node:22.14.0-alpine3.21
-compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+# The app and the worker join every Company's Engine network through a Compose file the installer writes beside the
+# release's (#773, ADR 0018: the installer on the host writes it; no Docker API enters the install):
+# docker-compose.engines.yml, made again from the Engines this install has before every Compose command that makes
+# containers, so any such command that recreates them (an update, a restore, an Owner's own `docker compose ... -f
+# docker-compose.engines.yml up --force-recreate`, README) leaves them on each Engine's network, the app as `web` there.
+# A network that is gone (a Company removed) is left out, so the file never names one Compose cannot find.
+engines_file=docker-compose.engines.yml
+write_engines_file() {
+  networks=
+  for name in $(engine_names); do
+    network=$(engine_network_of "$name")
+    [ "$name" = first ] && network=${network:-gtmworks-engine-first}
+    [ -n "$network" ] || continue
+    docker network inspect "$network" > /dev/null 2>&1 || continue
+    case " $networks " in *" $network "*) ;; *) networks="$networks $network" ;; esac
+  done
+  {
+    echo '# Written by scripts/install.sh before every Compose command (#773): the app and the worker on each Company'"'"'s'
+    echo '# Engine network. Do not edit: the next install command writes it again from the Engines this install has.'
+    if [ -z "$networks" ]; then echo 'services: {}'; else
+      echo 'services:'
+      for service in web worker; do
+        echo "  $service:"
+        echo '    networks:'
+        echo '      default: {}'
+        for network in $networks; do
+          if [ "$service" = web ]; then echo "      $network:"; echo '        aliases: [web]'; else echo "      $network: {}"; fi
+        done
+      done
+      echo 'networks:'
+      for network in $networks; do echo "  $network:"; echo '    external: true'; done
+    fi
+  } > "$engines_file.tmp" && mv "$engines_file.tmp" "$engines_file"
+}
+# Only a command that makes containers (up, create) needs the file: it is written then, from the Engines there are now.
+compose() {
+  case "$1" in
+    up|create) write_engines_file || return 1
+      docker compose --env-file .env.install -f docker-compose.install.yml -f "$engines_file" "$@" ;;
+    *) docker compose --env-file .env.install -f docker-compose.install.yml "$@" ;;
+  esac
+}
 # The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
 # pulls it; a source checkout builds it from its one build file. Its reference is written under .install-lock while the
 # run is in flight and only moved to .work-sandbox-image when the run succeeds (#393), so a run that failed records no

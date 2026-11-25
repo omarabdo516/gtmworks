@@ -138,7 +138,15 @@ with the release: the official Hermes image, pinned by tag and digest and kept
 unmodified, with its own data volume, its own generated key and its own network.
 The app and the worker join the Engine's network; the Engine joins nothing else,
 so it cannot reach the database, the sign-in service, REST, Storage or another
-Engine. No container of the install mounts the server's Docker socket.
+Engine. No container of the install mounts the server's Docker socket. The
+installer names every Company's Engine network for the app and the worker in
+`docker-compose.engines.yml`, beside `docker-compose.install.yml` in the install
+folder, and writes it again before each Compose command it runs; a Compose
+command of your own that recreates them keeps them on those networks when it
+reads both files: `docker compose --env-file .env.install -f
+docker-compose.install.yml -f docker-compose.engines.yml up -d web worker`. An
+Engine counts as healthy only while both its Run API and its management listener
+answer.
 
 **The work sandbox image (ADR 0020).** Every Company's work sandbox runs it: one image,
 built on the Engine's own sandbox image with ffmpeg, Chromium, Node, Python and the

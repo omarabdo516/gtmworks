@@ -1423,7 +1423,7 @@ esac
   env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands},encoding:'utf8'});
  assert.notEqual(result.status,0,result.stdout);
  // The stack was started again, and nothing wrote .engines/ or moved the key out of the install's file.
- assert.match(readFileSync(commands,'utf8'),/compose --env-file \.env\.install -f docker-compose\.install\.yml up -d/);
+ assert.match(readFileSync(commands,'utf8'),/compose --env-file \.env\.install -f docker-compose\.install\.yml -f docker-compose\.engines\.yml up -d/);
  assert.equal(existsSync(join(directory,'.engines/first/.env')),false,'the cleanup adopted no Engine');
  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
  assert.deepEqual(readdirSync(join(directory,'backups')),[]);
@@ -1564,7 +1564,7 @@ esac
  assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
  assert.deepEqual(readdirSync(join(directory,'backups')),[]);
  // What was stopped starts again: the exit handler brings the stack and the Engine back.
- assert.match(readFileSync(commands,'utf8'),/compose --env-file \.env\.install -f docker-compose\.install\.yml up -d/);
+ assert.match(readFileSync(commands,'utf8'),/compose --env-file \.env\.install -f docker-compose\.install\.yml -f docker-compose\.engines\.yml up -d/);
  assert.match(readFileSync(commands,'utf8'),/network connect --alias web gtmworks-engine-first web-id/);
 });
 
@@ -1698,9 +1698,9 @@ exit 0
  assert.equal(result.status,0,result.stderr);
  const run=readFileSync(commands,'utf8').split('\n').filter(Boolean);
  const at=pattern=>run.findIndex(line=>pattern.test(line));
- const databaseUp=at(/^compose --env-file \.env\.install -f docker-compose\.install\.yml up -d --wait --wait-timeout 300 db$/);
+ const databaseUp=at(/^compose --env-file \.env\.install -f docker-compose\.install\.yml -f docker-compose\.engines\.yml up -d --wait --wait-timeout 300 db$/);
  const migrations=at(/--single-transaction$/);
- const recreate=at(/^compose --env-file \.env\.install -f docker-compose\.install\.yml up -d --force-recreate/);
+ const recreate=at(/^compose --env-file \.env\.install -f docker-compose\.install\.yml -f docker-compose\.engines\.yml up -d --force-recreate/);
  const settled=at(/exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts\/install-engine\.mjs$/);
  for(const [index,name] of [[databaseUp,'the database is started alone'],[migrations,'the migrations run'],[recreate,'everything is recreated'],[settled,'the Engine records are settled']]) assert.ok(index>=0,`${name}: ${run.join('\n')}`);
  assert.ok(databaseUp<migrations&&migrations<recreate,'the migrations run on the restored database, before web and the worker are recreated');
