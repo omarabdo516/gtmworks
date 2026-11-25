@@ -277,7 +277,42 @@ test('a failed server action writes one structured log line with its name and no
 test('a chat open writes one line of each step\'s whole milliseconds, with ids only',async()=>{
  const {chatOpenLine}=await import('../lib/diagnostics.mjs');
  const entry=JSON.parse(chatOpenLine({company:'0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90',conversation:'not an id; drop table',steps:{frame:12.4,sidebar:80.6,record:NaN,body:5,done:301}},{now:new Date('2026-11-18T10:00:00Z')}));
- assert.deepEqual(entry,{event:'chat_opened',at:'2026-11-18T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',conversation:null,ms:{frame:12,sidebar:81,done:301}});
+ assert.deepEqual(entry,{event:'chat_opened',at:'2026-11-18T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',conversation:null,render:'open',ms:{frame:12,sidebar:81,done:301}});
+ // The kind of render (#762): a prefetch and a refresh say so; anything else is an open.
+ assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'prefetch'})).render,'prefetch');
+ assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'refresh'})).render,'refresh');
+ assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'<script>'})).render,'open');
+});
+
+test('a page render is told apart as an open, a prefetch or a refresh from the router\'s headers (#762)',async()=>{
+ const {renderKind}=await import('../lib/diagnostics.mjs');
+ const path='/c/rs-learning/conversations/0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90';
+ assert.equal(renderKind(new Headers(),path),'open');
+ assert.equal(renderKind(new Headers({rsc:'1','next-router-prefetch':'1',referer:'http://app/c/rs-learning/numbers'}),path),'prefetch');
+ assert.equal(renderKind(new Headers({rsc:'1',referer:`http://app${path}`}),path),'refresh');
+ assert.equal(renderKind(new Headers({rsc:'1',referer:'http://app/c/rs-learning/numbers'}),path),'open');
+ assert.equal(renderKind(new Headers({rsc:'1'}),path),'open');
+});
+
+test('what a person waited for is one line each, with ids and whole milliseconds only (#762)',async()=>{
+ const {waitLine,waitResponse,limiter}=await import('../lib/diagnostics.mjs');
+ const company='0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90'; const conversation='1b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90';
+ const now=new Date('2026-11-25T10:00:00Z');
+ assert.deepEqual(JSON.parse(waitLine({event:'message_drawn',company,conversation,ms:41.6,body:'secret words'},{now})),{event:'message_drawn',at:'2026-11-25T10:00:00.000Z',company:company.toLowerCase(),conversation,ms:42});
+ assert.deepEqual(JSON.parse(waitLine({event:'run_started',company,conversation,ms:812},{now})),{event:'run_started',at:'2026-11-25T10:00:00.000Z',company:company.toLowerCase(),conversation,ms:812});
+ assert.deepEqual(JSON.parse(waitLine({event:'reply_drawn',company,conversation:'not an id',ms:300,from:'stream'},{now})),{event:'reply_drawn',at:'2026-11-25T10:00:00.000Z',company:company.toLowerCase(),conversation:null,ms:300,from:'stream'});
+ assert.equal(JSON.parse(waitLine({event:'reply_drawn',company,conversation,ms:300,from:'anything'})).from,'stored');
+ assert.equal(waitLine({event:'chat_opened',company,conversation,ms:1}),null);
+ assert.equal(waitLine({event:'message_drawn',company,conversation,ms:-1}),null);
+ assert.equal(waitLine({event:'message_drawn',company,conversation,ms:Number.NaN}),null);
+ // The browser's report: written once, the starter's own line refused, rate-limited as a client error is.
+ const lines=[]; const allowed=limiter(2);
+ const post=body=>waitResponse(new Request('http://localhost/api/waits',{method:'POST',body:JSON.stringify(body)}),{write:line=>lines.push(line),allowed});
+ assert.equal((await post({event:'message_drawn',company,conversation,ms:50})).status,204);
+ assert.equal((await post({event:'run_started',company,conversation,ms:50})).status,400);
+ assert.equal((await post({event:'reply_drawn',company,conversation,ms:50})).status,429);
+ assert.equal(lines.length,1);
+ assert.equal(JSON.parse(lines[0]).event,'message_drawn');
 });
 
 test('a setting save writes one line of each step\'s whole milliseconds, with ids and the setting\'s name only',async()=>{

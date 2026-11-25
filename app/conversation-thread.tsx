@@ -41,6 +41,7 @@ import { localeFor } from '@/lib/i18n.mjs';
 import { useReportRun } from '@/lib/live-runs';
 import { useArrivals, useSentIntoNewChat, type Arrival } from '@/lib/arrivals';
 import { useSending, type Send, type Sending } from '@/lib/sending';
+import { reportWait } from '@/lib/waits';
 
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
@@ -96,7 +97,7 @@ export function useConversationText() {
 export function useConversationRecord({company,initial}:{company:string,initial:ConversationRecord}) {
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
- const {list:sendingList,start:sending,reading}=useSending();
+ const {list:sendingList,start:sending,reading}=useSending({company,conversation:id});
  const {messages,pending}=record;
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
@@ -186,7 +187,9 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed}=record;
  // A Run's events ended: the record is read now, so its reply is drawn without waiting for the next tick (#763).
- const ended=()=>{ void reread?.(); };
+ // The Run's end is kept, so the time until its reply is drawn is reported once that reply is (#762).
+ const endedAt=useRef<number|null>(null);
+ const ended=()=>{ endedAt.current=Date.now(); void reread?.(); };
  const modelCause=record.noModel?'noModel' as const:record.modelRefused?refusalCause[record.modelRefused.reason]:null;
  const answer=async(card:number,choice:number|number[],answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
@@ -267,7 +270,18 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // A message just sent sets the Agent working at once (#756), a typed answer to the question it waits on too.
  const working=(pending&&!record.asking)||messages.some(message=>message.kind==='sending');
  // An Agent's reply, not a decision drawn as its message.
- const newest=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided')?.id??null;
+ const newestReply=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided');
+ const newest=newestReply?.id??null;
+ const drawnReply=useRef(newest);
+ useEffect(()=>{
+  if(drawnReply.current===newest) return;
+  drawnReply.current=newest;
+  if(!newestReply||newestReply.author!=='agent') return;
+  const end=endedAt.current; endedAt.current=null;
+  const stored=Date.parse(newestReply.created_at);
+  const ms=end!==null?Date.now()-end:Date.now()-stored;
+  if(Number.isFinite(ms)) requestAnimationFrame(()=>reportWait({event:'reply_drawn',company,conversation:conversation.id,ms,from:end!==null?'stream':'stored'}));
+ },[newest,newestReply,company,conversation.id]);
  const {view:steps}=useLiveSteps({company,conversation:conversation.id},working,ended);
  const landing=useLanding({working,live:steps,newest});
  // The open Run's face, on the page and in a Card's sheet alike (#184, #700): thinking until its first step, working

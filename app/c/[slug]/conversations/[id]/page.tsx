@@ -1,6 +1,8 @@
 import '@/app/channel.css';
 import { notFound, redirect } from 'next/navigation';
 import { after } from 'next/server';
+import { headers } from 'next/headers';
+import { renderKind } from '@/lib/diagnostics.mjs';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import Shell, { sidebarReads } from '@/app/shell';
@@ -41,7 +43,9 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  sidebarReads(company.id).catch(()=>{});
  const waitingCount=approvalQueue(db,company.id,user.id).then(({count})=>count);
  // Each step's time, written once the response has gone (docs/production-logs.md: chat_opened).
- after(()=>logOpen(timing,company.id,id));
+ // Whether it was a person's open, a prefetch or the page drawn again (#762).
+ const render=renderKind(await headers(),`/c/${slug}/conversations/${id}`);
+ after(()=>logOpen(timing,company.id,id,render));
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
  const readRecord=()=>conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));

@@ -6,5 +6,10 @@ export function logActionFailure(action: string, error: unknown, options?: { out
 export function withActionLog<A extends unknown[], R>(action: string, run: (...args: A) => Promise<R>, options?: { write?: Write; env?: Env }): (...args: A) => Promise<R>;
 export function limiter(max?: number, windowMs?: number, clock?: () => number): () => boolean;
 export function clientErrorResponse(request: Request, options?: { write?: Write; env?: Env; allowed?: () => boolean }): Promise<Response>;
-export function chatOpenLine(open: { company: string; conversation: string; steps: Record<string, number> }, options?: { now?: Date }): string;
+export type RenderKind = 'open' | 'prefetch' | 'refresh';
+export function chatOpenLine(open: { company: string; conversation: string; steps: Record<string, number>; render?: RenderKind }, options?: { now?: Date }): string;
+export function renderKind(headers: { get(name: string): string | null }, path: string): RenderKind;
+export type Wait = { event: 'message_drawn' | 'run_started' | 'reply_drawn'; company: string; conversation: string; ms: number; from?: 'stream' | 'stored' };
+export function waitLine(wait: Wait, options?: { now?: Date }): string | null;
+export function waitResponse(request: Request, options?: { write?: Write; allowed?: () => boolean }): Promise<Response>;
 export function settingSaveLine(save: { company: unknown; setting: unknown; status: number; steps: Record<string, number> }, options?: { now?: Date }): string;

@@ -12,7 +12,17 @@ password, anything shaped like a token, and short digit runs such as authenticat
   Fields: `company`, `conversation`, and `ms`, each step's elapsed milliseconds from the page's start: `frame` (sign-in,
   Companies and the Conversation), `reads` (the page's other reads), `details` (the Agent's details), `sidebar` (the
   Shell's reads), `firstByte` (the frame is drawn and its first bytes leave), `session` (the Hermes session read), `record`
-  (the transcript's reads) and `done`. A step that did not run is left out. Never a body or a key.
+  (the transcript's reads) and `done`. A step that did not run is left out. Never a body or a key. `render` (#762) says
+  what the render was: `open` (a person opened the page), `prefetch` (a link drew it ahead of a press) or `refresh` (the
+  page the browser already showed, drawn again); only `open` lines measure what a person waited for.
+- `"event":"message_drawn"`: from a person pressing Send in a Conversation until their own message was drawn, measured
+  by their browser and reported to `POST /api/waits` (#762). Fields: `company`, `conversation`, `ms`. At most 120 lines
+  a minute from the browser's reports; never a message's text.
+- `"event":"run_started"`: from a message being stored until the Engine started its Run, written by the one starter of
+  a Conversation's turns once the Run is recorded (#762). Fields: `company`, `conversation`, `ms`.
+- `"event":"reply_drawn"`: from a Run's end until its reply was drawn in the person's browser, reported to
+  `POST /api/waits` (#762). Fields: `company`, `conversation`, `ms`, and `from`: `stream` when the end is the moment the
+  Steps stream said the Run ended, `stored` when no stream was read and the reply's own stored time is used.
 - `"event":"agent_setting_saved"`: one line per `POST /api/agent-settings` (an Agent's or the Company's model, sub-agents
   or other Engine setting, or a learning mode), written once its answer has gone. Fields: `company`, `setting` (the
   setting's name, `settings` for several at once, `learning` for a mode), `status` (the answer's HTTP status) and `ms`,
