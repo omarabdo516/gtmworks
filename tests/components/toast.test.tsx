@@ -9,9 +9,11 @@ import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/settings.css';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
+// The page the host is on; a test that opens another page sets it and draws the host again.
+const at = vi.hoisted(() => ({ path: '/c/rs-learning/chat' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => at.path, useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); at.path = '/c/rs-learning/chat'; history.replaceState(null, '', '/'); });
 
 const show = (page: ReactNode = null, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>{page}<ToastHost/></LanguageProvider>);
 const toasts = () => document.querySelectorAll('.toast');
@@ -84,6 +86,29 @@ test('a toast’s 2.8 seconds start once it is drawn, so a page that draws nothi
  expect(leaving()).toHaveLength(1);
  await vi.advanceTimersByTimeAsync(140);
  expect(toasts()).toHaveLength(0);
+});
+
+// A drop the board refuses raises its toast and opens the Card (app/c/[slug]/[[...section]]/work.tsx): the toast is about
+// the Card, so its 2.8 seconds start once the Card's page is shown, however long it takes to arrive (#746).
+test('a toast raised as its page opens another starts its 2.8 seconds once that page is shown', async () => {
+ fakeClock();
+ history.replaceState(null, '', '/c/rs-learning/work/board'); at.path = '/c/rs-learning/work/board';
+ const page = (language: 'en' | 'ar' = 'en') => <LanguageProvider language={language}><ToastHost/></LanguageProvider>;
+ const screen = await render(page());
+ toast('It needs your OK first. Decide here and the card moves on its own', { icon: 'hand', opensPage: true });
+ await drawn();
+ // The Card's page takes five seconds to arrive: the toast waits on the board meanwhile.
+ await vi.advanceTimersByTimeAsync(5000);
+ expect([...toasts()].map(each => each.textContent)).toEqual(['It needs your OK first. Decide here and the card moves on its own']);
+ expect(leaving()).toHaveLength(0);
+ at.path = '/c/rs-learning/work/board/5';
+ await screen.rerender(page());
+ await frame(); await frame();
+ await vi.advanceTimersByTimeAsync(2799);
+ expect(toasts()).toHaveLength(1);
+ expect(leaving()).toHaveLength(0);
+ await vi.advanceTimersByTimeAsync(1);
+ await expect.poll(() => leaving().length).toBe(1);
 });
 
 test('a toast with an action stays 6 seconds, then takes the same leaving step', async () => {

@@ -15,7 +15,7 @@ import '@/app/shell.css';
 // the person may do.
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 const responder=(body:unknown,status=200)=>vi.fn(async (url:string,init:RequestInit)=>{ void url; void init; return new Response(JSON.stringify(body),{status}); });
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/settings' }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); refresh.mockClear(); });
 
