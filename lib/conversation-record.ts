@@ -5,6 +5,7 @@ import type { AppStates } from './conversations';
 import { stepsOfReplies, type RunSteps, type SessionTurn } from './conversations';
 import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
+import { placedName, readProviderNames } from './provider-names.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -46,8 +47,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // poll a new stamp, never a stamp newer than the rows it came with.
  const stamp=await db.rpc('conversation_stamp',{conversation}).then(({data})=>typeof data==='string'?data:null,()=>null);
  const stamped=Promise.resolve(stamp);
- const [{ends,resets,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
-  db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_run_resets(run_id,resets_at),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
+ const [{ends,resets,ranOut,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
+  db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_run_resets(run_id,resets_at),conversation_run_ran_out(run_id,provider,account,place),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
    // Each handover's state in the same snapshot as the messages: a follow-up that closes writes its reply and marks the
@@ -58,8 +59,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
    .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
    .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'})
    .order('id',{referencedTable:'agent_change_proposals'}).maybeSingle()
-   .then(({data,error})=>{ if(error) throw new ConversationUnread(); const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_run_resets:{run_id:string,resets_at:string}[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
-    return {ends:read?.conversation_run_ends||[],resets:read?.conversation_run_resets||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[],moving:(read?.agent_handovers||[]).some(row=>row.state!=='done'&&row.state!=='failed')}; }),
+   .then(({data,error})=>{ if(error) throw new ConversationUnread(); const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_run_resets:{run_id:string,resets_at:string}[],conversation_run_ran_out:RanOutRow[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
+    return {ends:read?.conversation_run_ends||[],resets:read?.conversation_run_resets||[],ranOut:read?.conversation_run_ran_out||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[],moving:(read?.agent_handovers||[]).some(row=>row.state!=='done'&&row.state!=='failed')}; }),
   // The handovers of this chat (#317, #475), both Agents named, oldest first, to draw them; whether one is still moving
   // is read with the messages above.
   db.rpc('conversation_handovers',{conversation}).then(({data})=>(data||[]) as HandedRow[]),
@@ -153,6 +154,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const commanded=reason?handedRows.find(row=>row.answers_person&&row.run===lastRun&&!row.parent):undefined;
  // A Run whose every account ran out says when its usage resets, when the Engine named it (#642).
  const resetsAt=reason==='access'?resets.find(row=>row.run_id===lastRun)?.resets_at:undefined;
+ // And which accounts ran out, by the Owner's name for each (#731), when the Engine's pool named them.
+ const accounts=reason==='access'?await ranOutNames(db,company,ranOut.filter(row=>row.run_id===lastRun)):[];
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
  // of a Run no message of the person started. A job command's answer (#358) is a message from an Agent the chat handed
@@ -180,13 +183,21 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(ownsChanges===true?{changeOwner:true as const,...((mode as {work_mode?:string}|null)?.work_mode==='alone'?{alone:true as const}:{})}:{}),
   failed:ended!==null,
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
-  ...(reason?{modelRefused:{reason,owner:ownsIt===true,...(commanded?{agent:commanded.to_name}:{}),...(resetsAt?{resetsAt}:{})}}:{}),
+  ...(reason?{modelRefused:{reason,owner:ownsIt===true,...(commanded?{agent:commanded.to_name}:{}),...(resetsAt?{resetsAt}:{}),...(accounts.length?{ranOut:accounts}:{})}}:{}),
   working:runner?.name??null,
   // A turn waiting behind another person's Run says whom the Agent works for (#763).
   ...(runner&&runner.person!==person?{workingFor:runner.name}:{}),
   canStop:!!runner&&(runner.person===person||manages===true),
   ...(board?{board}:{}),
  };
+}
+type RanOutRow={run_id:string,provider:string,account:string,place:number};
+// The accounts that ran out on a Run (#731), as Settings › Providers names them: the Owner's name, else its kind's with
+// its place among its provider's accounts (ChatGPT, ChatGPT 2; lib/provider-names.mjs placedName).
+async function ranOutNames(db:Database,company:string,rows:RanOutRow[]):Promise<string[]> {
+ if(!rows.length) return [];
+ const names=await readProviderNames(db,company);
+ return [...rows].sort((a,b)=>a.provider.localeCompare(b.provider)||a.place-b.place).map(row=>placedName(names,row.provider,row.account,row.place));
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>&{unread?:true};
 // The Conversation's own rows could not be read (#768): a state of its own, never an empty Conversation.
