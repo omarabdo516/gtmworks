@@ -44,7 +44,7 @@ test('the counts are asked again while the page shows, so a new message raises t
  const screen = await list();
  expect(asked).not.toHaveBeenCalled();
  await vi.advanceTimersByTimeAsync(5000);
- expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1');
+ expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1&person=p-1');
  await expect.element(screen.getByLabelText('3 new messages')).toBeVisible();
 });
 
