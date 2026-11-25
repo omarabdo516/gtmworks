@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accountName, accountOrders, placedName, applyAccountOrder, keepProviderAccounts } from '../lib/provider-switches.mjs';
+import { accountName, accountOrders, applyAccountOrder, keepProviderAccounts } from '../lib/provider-switches.mjs';
+import { placedName } from '../lib/provider-names.mjs';
 
 // #621: the Company's Engine moves a request to the next subscription account itself; this module gives it the Owner's
 // order and switches and copies each move it recorded into the Company's log once. The Engine and the database are

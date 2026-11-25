@@ -5,8 +5,7 @@ import type { AppStates } from './conversations';
 import { stepsOfReplies, type RunSteps, type SessionTurn } from './conversations';
 import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
-import { readProviderNames } from './provider-names.mjs';
-import { placedName } from './provider-switches.mjs';
+import { placedName, readProviderNames } from './provider-names.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -194,7 +193,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
 }
 type RanOutRow={run_id:string,provider:string,account:string,place:number};
 // The accounts that ran out on a Run (#731), as Settings › Providers names them: the Owner's name, else its kind's with
-// its place among its provider's accounts (ChatGPT, ChatGPT 2; lib/provider-switches.mjs placedName).
+// its place among its provider's accounts (ChatGPT, ChatGPT 2; lib/provider-names.mjs placedName).
 async function ranOutNames(db:Database,company:string,rows:RanOutRow[]):Promise<string[]> {
  if(!rows.length) return [];
  const names=await readProviderNames(db,company);
