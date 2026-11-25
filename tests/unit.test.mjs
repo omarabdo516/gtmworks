@@ -284,6 +284,12 @@ test('a chat open writes one line of each step\'s whole milliseconds, with ids o
  assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'<script>'})).render,'open');
 });
 
+test('an apps read that failed is one line with its cause, ids only (#770)',async()=>{
+ const {appsUnreadLine}=await import('../lib/diagnostics.mjs');
+ assert.deepEqual(JSON.parse(appsUnreadLine({company:'0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90',agent:'x',cause:'refused'},{now:new Date('2026-11-25T10:00:00Z')})),{event:'apps_unread',at:'2026-11-25T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',agent:null,cause:'refused'});
+ assert.equal(JSON.parse(appsUnreadLine({company:'x',agent:'y',cause:'secret text'})).cause,'failed');
+});
+
 test('a page render is told apart as an open, a prefetch or a refresh from the router\'s headers (#762)',async()=>{
  const {renderKind}=await import('../lib/diagnostics.mjs');
  const path='/c/rs-learning/conversations/0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90';

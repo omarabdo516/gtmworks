@@ -1,5 +1,17 @@
 [
  {
+  "issue": 770,
+  "date": "2026-11-25",
+  "en": { "title": "An Agent's tools show at once", "body": "An Agent's Connected tools list shows straight away, each app reading Checking… until its own test answers, and it keeps the last list it read when the agent engine is slow." },
+  "ar": { "title": "أدوات الوكيل بتظهر على طول", "body": "قايمة الأدوات المتوصلة بالوكيل بقت بتظهر على طول، وكل تطبيق مكتوب عليه «بنتأكد…» لحد ما الاختبار بتاعه يرد، وبتفضل القايمة اللي اتقرت آخر مرة لو محرك الوكلاء بطيء." }
+ },
+ {
+  "issue": 769,
+  "date": "2026-11-25",
+  "en": { "title": "An Agent's details open at once", "body": "An Agent's details open straight away with its activity, tasks, files and log; its memory and permissions load on their own when shown, and a new chat reads only the Agent you opened." },
+  "ar": { "title": "تفاصيل الوكيل بتفتح على طول", "body": "تفاصيل الوكيل بقت بتفتح على طول بنشاطه ومهامه وملفاته والسجل؛ وذاكرته وصلاحياته بيتحمّلوا لوحدهم لما تفتحهم، والشات الجديد بيقرا بس الوكيل اللي فتحته." }
+ },
+ {
   "issue": 768,
   "date": "2026-11-25",
   "en": { "title": "A Conversation never goes blank", "body": "If a Conversation can't be read for a moment, what you already see stays on the page and it tries again; after several tries it says so, with Try again." },

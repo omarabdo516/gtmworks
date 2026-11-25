@@ -220,7 +220,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   emit(/** @type {string} */ run,/** @type {any} */ event) { push(run,event); },
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
-  backlogLimit:1000,runSeconds:41,sessionDelay:0,
+  backlogLimit:1000,runSeconds:41,sessionDelay:0,memoryDelay:0,memoryInFlight:0,memoryAtOnce:0,
   // The folders the dashboard's file routes read (#194), by the Engine's own absolute path: each entry is the folder's
   // path to the entries `/api/files?path=` reports (a name, whether it is a folder, its size, its mtime, and `resolves`:
   // the path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds a file's
@@ -1078,6 +1078,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // `sessionDelay` holds a session's read that long (#766), and Infinity never answers it, as a busy Engine does.
  const management=createServer((request,response)=>{
   if(settings.sessionDelay>0&&request.method==='GET'&&/^\/api\/sessions\/[^/]+\/messages(\?|$)/.test(request.url||'')) { if(Number.isFinite(settings.sessionDelay)) setTimeout(()=>manage(request,response),settings.sessionDelay); return; }
+  // `memoryDelay` holds a memory read that long (#769), Infinity for ever; `memoryAtOnce` is the most memory reads it held at once.
+  if(settings.memoryDelay>0&&request.method==='GET'&&/^\/api\/learning\/(graph|node)(\?|$)/.test(request.url||'')) {
+   settings.memoryInFlight++; settings.memoryAtOnce=Math.max(settings.memoryAtOnce,settings.memoryInFlight);
+   response.on('close',()=>{ settings.memoryInFlight--; });
+   if(Number.isFinite(settings.memoryDelay)) setTimeout(()=>manage(request,response),settings.memoryDelay); return;
+  }
   manage(request,response);
  });
  // The management listener's JSON-RPC socket (#712; tui_gateway/ws.py, methods_display.py), opened with the session

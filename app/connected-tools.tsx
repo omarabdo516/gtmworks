@@ -16,6 +16,10 @@ import { useAppsReader, useAppsSheet } from '@/app/apps-sheet-open';
 import type { AgentTool } from '@/lib/company-apps.mjs';
 
 export type AgentToolItem=AgentTool&{use:string};
+// The last good list of each Agent's tools this browser read (#770), shown for a minute while a new read runs or fails.
+const keptTools=new Map<string,{tools:AgentToolItem[],at:number}>();
+const keptFor=60000;
+const keptOf=(key:string)=>{ const kept=keptTools.get(key); return kept&&Date.now()-kept.at<keptFor?kept.tools:undefined; };
 type State=AgentToolItem['state']|'connecting';
 
 export function ConnectedTools({company,agent,name,owner,tools:given}:{company:string,agent:string,name:string,owner:boolean,tools?:AgentToolItem[]|null}) {
@@ -25,24 +29,43 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
  // A sign-in still followed when the panel goes is cancelled and its window closed.
  const following=useRef(new Set<AbortController>());
  useEffect(()=>{ const open=following.current; return ()=>open.forEach(controller=>controller.abort()); },[]);
- // Until the read lands the section is its heading alone; a failed read is the apps' "can't be read" line.
- const [read,setRead]=useState<AgentToolItem[]|null>(); const [reads,setReads]=useState(0);
+ // Until the read lands the section is its heading alone, or the last good list this browser read for the Agent in the
+ // last minute (#770); a failed read keeps that list and is tried again, more slowly each time, and with none to keep it
+ // is the apps' "can't be read" line, still tried again.
+ const [read,setRead]=useState<AgentToolItem[]|null|undefined>(()=>keptOf(`${company}:${agent}`)); const [reads,setReads]=useState(0);
  // The apps sheet's store changes after a connect there (#458: a tool that needs a token is connected on its page), so
  // the Agent's tools are read again, and a row left Not connected by that handoff shows what the read says.
  const held=useHeldApps(reader);
  useEffect(()=>{
   if(given!==undefined) return;
-  let live=true;
-  void fetch(`/api/company-apps?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`,{cache:'no-store'})
+  let live=true; let timer:ReturnType<typeof setTimeout>|undefined; let failures=0;
+  const ask=()=>{ void fetch(`/api/company-apps?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`,{cache:'no-store'})
    .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.tools)?body.tools as AgentToolItem[]:null).catch(()=>null)
-   .then(tools=>{ if(live) setRead(tools); });
-  return ()=>{ live=false; };
+   .then(tools=>{
+    if(!live) return;
+    if(tools) { keptTools.set(`${company}:${agent}`,{tools,at:Date.now()}); setRead(tools); return; }
+    setRead(now=>now??null);
+    failures++; timer=setTimeout(ask,Math.min(2000*2**(failures-1),30000));
+   }); };
+  ask();
+  return ()=>{ live=false; clearTimeout(timer); };
  },[given,company,agent,reads]);
+ // Each connected app's own test (#770): its row reads "Checking…" until its answer, which no other row waits for.
+ const [tested,setTested]=useState<Record<string,AgentToolItem['state']>>({});
+ const checking=(read??[]).filter(tool=>tool.state==='checking').map(tool=>tool.key).join(',');
+ useEffect(()=>{
+  if(!checking) return;
+  let live=true;
+  for(const key of checking.split(',')) void fetch(`/api/company-apps?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}&test=${encodeURIComponent(key)}`,{cache:'no-store'})
+   .then(response=>response.ok?response.json():null).catch(()=>null)
+   .then(body=>{ if(live&&(body?.state==='connected'||body?.state==='attention')) setTested(now=>({...now,[key]:body.state})); });
+  return ()=>{ live=false; };
+ },[checking,company,agent]);
  // Read again only after a handoff to the sheet, once the sheet's store changes; a change made here keeps its own row.
  const handedOff=useRef(false);
  useEffect(()=>{ if(handedOff.current&&held!==undefined) { handedOff.current=false; setReads(count=>count+1); } },[held]);
  const tools=given!==undefined?given:read;
- const stateOf=(tool:AgentToolItem):State=>states[tool.key]??tool.state;
+ const stateOf=(tool:AgentToolItem):State=>states[tool.key]??(tool.state==='checking'?tested[tool.key]??'checking':tool.state);
  const set=(key:string,state:State)=>setStates(now=>({...now,[key]:state}));
 
  const connect=async(tool:AgentToolItem)=>{
@@ -67,6 +90,8 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
  const end=(tool:AgentToolItem)=>{
   const state=stateOf(tool);
   if(state==='connecting') return <span className="panel-row__meta">{t('connectConnecting')}</span>;
+  // Its own test has not answered yet (#770), in the row's waiting style.
+  if(state==='checking') return <span className="panel-row__meta panel-row__meta--wait">{t('agentToolChecking')}</span>;
   if(state==='missing') return owner?<button type="button" className="btn btn--primary btn--sm" onClick={()=>void connect(tool)}>{t('connectDo')}</button>
    :<span className="panel-row__meta">{t('agentToolMissing')}</span>;
   if(managing&&owner) return <button type="button" className="link-btn" onClick={()=>void disconnect(tool)}>{t('agentToolDisconnect')}</button>;

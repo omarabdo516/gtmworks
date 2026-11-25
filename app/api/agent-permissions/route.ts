@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { revokeAgentPermission } from '@/lib/standing-permissions.mjs';
+import { readAgentPermissions, revokeAgentPermission } from '@/lib/standing-permissions.mjs';
 
 // "Revoke" on one of an Agent's standing permissions (#166): the entry leaves the Agent's own Engine profile and the
 // Agent asks again. The request runs as the signed-in person: an Agent hidden from them is not found, and the database
@@ -15,6 +15,19 @@ function refused(state:string) {
  if(state==='invalid') return reply({error:'agentPermissionInvalid'},400);
  if(state==='notAllowed') return reply({error:'agentPermissionNotAllowed'},403);
  return reply({error:'agentPermissionFailed'},state==='unreachable'||state==='noEngine'||state==='busy'?503:502);
+}
+// An Agent's standing permissions, read by its details' part when shown (#769, ADR 0030): from its own Engine profile, as
+// the signed-in person sees the Agent. One that cannot be read answers an error, and the details draw nothing there.
+export async function GET(request:NextRequest) {
+ try {
+  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+  if(!user) return reply({error:'agentPermissionNotAllowed'},401);
+  const company=request.nextUrl.searchParams.get('company'); const agent=request.nextUrl.searchParams.get('agent');
+  if(!company||!uuid.test(company)||!agent||!uuid.test(agent)) return reply({error:'agentPermissionInvalid'},400);
+  if(!await routeAllowed(db,'app/api/agent-permissions/route.ts','GET',company,user.id)) return reply({error:'agentPermissionNotAllowed'},403);
+  const read=await readAgentPermissions(db,{company,agent});
+  return read.state==='found'?reply({permissions:read.permissions}):refused(read.state);
+ } catch { return reply({error:'agentPermissionFailed'},500); }
 }
 export async function POST(request:NextRequest) {
  try {

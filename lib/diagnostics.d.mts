@@ -13,3 +13,4 @@ export type Wait = { event: 'message_drawn' | 'run_started' | 'reply_drawn'; com
 export function waitLine(wait: Wait, options?: { now?: Date }): string | null;
 export function waitResponse(request: Request, options?: { write?: Write; allowed?: () => boolean }): Promise<Response>;
 export function settingSaveLine(save: { company: unknown; setting: unknown; status: number; steps: Record<string, number> }, options?: { now?: Date }): string;
+export function appsUnreadLine(read: { company: string; agent: string; cause: string }, options?: { now?: Date }): string;

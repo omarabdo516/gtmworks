@@ -399,3 +399,26 @@ test('in Arabic the search, its no-match line, Clear search and the knowledge li
  await expect.element(screen.getByText(/مفيش حاجة في ذاكرة Ads فيها «zzz»/)).toBeVisible();
  await expect.element(screen.getByRole('button', { name: 'امسح البحث' })).toBeVisible();
 });
+
+// #769 (ADR 0030): the Memory tab is read when it is shown: the reference's skeleton while its notes are read, then the
+// notes; a read that fails is the tab's own line, and nothing else of the details waits on it.
+test('the Memory tab shows its skeleton, then the notes; a failed read is its own line', async () => {
+ const { AgentMemoryPart } = await import('@/app/agent-details-parts');
+ let answer: (response: Response) => void = () => {};
+ const fetch = vi.spyOn(window, 'fetch').mockReturnValue(new Promise<Response>(resolve => { answer = resolve; }));
+ try {
+  const screen = await render(<LanguageProvider language="en"><div className="gw"><AgentMemoryPart company="co-1" agent={{ id: 'ag-1', name: 'Mona' }} canReset={false} canEdit={false} canForget={false}/></div></LanguageProvider>);
+  expect(fetch).toHaveBeenCalledWith('/api/agent-memory?company=co-1&agent=ag-1', expect.objectContaining({ cache: 'no-store' }));
+  await expect.poll(() => screen.container.querySelectorAll('.sk.sk-line').length).toBeGreaterThan(0);
+  expect(screen.container.querySelector('[aria-busy="true"]')?.textContent).toBe('Loading memory');
+  answer(Response.json({ notes: [{ id: 'memory:memory:0:aaaaaaaaaaaa', text: 'Prefers short subject lines.' }], main: false }));
+  await expect.element(screen.getByText('Prefers short subject lines.')).toBeVisible();
+  expect(screen.container.querySelector('.sk')).toBeNull();
+ } finally { fetch.mockRestore(); }
+ const failing = vi.spyOn(window, 'fetch').mockResolvedValue(new Response('{}', { status: 503 }));
+ try {
+  const failed = await render(<LanguageProvider language="en"><div className="gw"><AgentMemoryPart company="co-1" agent={{ id: 'ag-2', name: 'Mona' }} canReset={false} canEdit={false} canForget={false}/></div></LanguageProvider>);
+  await expect.poll(() => failed.container.querySelector('.panel-empty')?.textContent).toBeTruthy();
+  expect(failed.container.querySelector('.sk')).toBeNull();
+ } finally { failing.mockRestore(); }
+});

@@ -15,6 +15,9 @@ password, anything shaped like a token, and short digit runs such as authenticat
   session is no step of an open since #766: the steps under the replies are their own request after the page is drawn. A step that did not run is left out. Never a body or a key. `render` (#762) says
   what the render was: `open` (a person opened the page), `prefetch` (a link drew it ahead of a press) or `refresh` (the
   page the browser already showed, drawn again); only `open` lines measure what a person waited for.
+- `"event":"apps_unread"`: an Agent's apps that could not be listed for its Connected tools (#770), one line per failed
+  read. Fields: `company`, `agent`, `cause` (`unreachable`, `timedOut`, `refused`, `noNetwork`, `errorAnswer`, `failed`,
+  `noProfile`, `database`, `missing`). The page keeps the last good list it read in the last minute and reads again.
 - `"event":"message_drawn"`: from a person pressing Send in a Conversation until their own message was drawn, measured
   by their browser and reported to `POST /api/waits` (#762). Fields: `company`, `conversation`, `ms`. At most 120 lines
   a minute from the browser's reports; never a message's text.

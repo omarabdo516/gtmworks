@@ -1,7 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { supabase } from './supabase';
-import { readAgentApps, readAgentSession, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, type AgentsUsage } from './company-apps.mjs';
+import { readAgentApps, readAgentSession, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, type AgentTool, type AgentsUsage } from './company-apps.mjs';
+import { appsUnreadLine } from './diagnostics.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
@@ -55,12 +56,28 @@ export const channelSessionTurns=cache(async(company:string,profile:string,sessi
 
 // One Agent's connected tools now, each with what it is for in the reader's words, for its details (#204); null when
 // they cannot be read.
+// The last good list of each Agent's tools, kept in this web process for a minute (#770, ADR 0030): a read that fails
+// meanwhile answers it, so a slow moment never reads as "can't be read". Nothing is kept in a table (ADR 0017).
+const lastTools=new Map<string,{tools:AgentTool[],at:number}>();
+const toolsKeptFor=60000;
+// One Agent's connected tools, each with what it is for in the reader's words, for its details (#204): the catalogue
+// and the profile's settings only, so the list shows at once; each connected app reads `checking` until its own test
+// (agentToolTest) answers (#770). null when they cannot be read and none was read in the last minute; a failed read is
+// logged once with its cause (docs/production-logs.md: apps_unread).
 export const agentToolItems=cache(async(company:string,agent:string,language:Language):Promise<AgentToolItem[]|null>=>{
+ const key=`${company}:${agent}`; let why='failed';
  try {
-  const tools=await readAgentTools(await supabase(),{company,agent});
+  const tools=await readAgentTools(await supabase(),{company,agent,test:false,cause:cause=>{ why=cause; }});
+  if(tools) lastTools.set(key,{tools,at:Date.now()});
+  else console.log(appsUnreadLine({company,agent,cause:why}));
+  const shown=tools??(()=>{ const kept=lastTools.get(key); return kept&&Date.now()-kept.at<toolsKeptFor?kept.tools:null; })();
   const text:Text=language==='ar'?ar:en;
-  return tools&&tools.map(tool=>({...tool,use:text[`use.${tool.key}`]??text['use.custom']}));
- } catch { return null; }
+  return shown&&shown.map(tool=>({...tool,use:text[`use.${tool.key}`]??text['use.custom']}));
+ } catch { console.log(appsUnreadLine({company,agent,cause:'failed'})); return null; }
+});
+// One connected app of an Agent tested on its own (#770); null when it cannot be tested.
+export const agentToolTest=cache(async(company:string,agent:string,app:string)=>{
+ try { return await testAgentTool(await supabase(),{company,agent,app}); } catch { return null; }
 });
 
 // The token use of every Company this person manages (Owner or Manager) over the last `days` (#347, #32), each Agent's
