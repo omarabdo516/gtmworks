@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 
-// A browser shard starts with its browser ready and the suite runs in eight shards (#404, spec #401, #653, #710): the browser comes
+// A browser shard starts with its browser ready and the suite runs in ten shards (#404, spec #401, #653, #710, #755): the browser comes
 // from the cache the fast job keeps, and a miss installs Chromium alone, because the runner image already has its system
 // packages and fonts. So no shard downloads a browser, a package or a font during a run, and a slow mirror cannot add
-// ten minutes to a pull request. The eight shards pass --shard to ci.sh, which splits them by measured time (#653), each uploads its own artifacts, and one
+// ten minutes to a pull request. The ten shards pass --shard to ci.sh, which splits them by measured time (#653), each uploads its own artifacts, and one
 // red shard leaves the others running. The browser job is read from the real workflow, and the check script from the
 // real ci.sh.
 const workflow = () => load(readFileSync('.github/workflows/ci.yml', 'utf8'));
@@ -18,15 +18,15 @@ const texts = value => typeof value === 'string' ? [value]
 
 const pricey = /--with-deps|install-deps|\bapt(?:-get)?\b|ldd/;
 
-test('the browser suite runs as eight shards, and a red shard leaves the others running', () => {
+test('the browser suite runs as ten shards, and a red shard leaves the others running', () => {
   const { integration } = workflow().jobs;
-  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8] } });
+  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] } });
 });
 
-test('each shard runs its sixth of the browser suite', () => {
+test('each shard runs its tenth of the browser suite', () => {
   const { integration } = workflow().jobs;
   const suite = integration.steps.find(step => step.name === 'integration');
-  assert.equal(suite.run, './ci.sh integration --shard=${{ matrix.shard }}/8');
+  assert.equal(suite.run, './ci.sh integration --shard=${{ matrix.shard }}/10');
 });
 
 test('each shard uploads its own screenshots, report and server logs', () => {

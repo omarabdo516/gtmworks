@@ -76,11 +76,11 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). Its dependencies and its browser come from the caches the `fast` job keeps, restored by the same keys (the
   lock file's hash for `node_modules`; Playwright's version and the runner image for the browser), and a miss installs
   Chromium alone: the runner image has its system packages and fonts, so no shard downloads a browser, a package or a
-  font during a run (#404). It runs as 8 shards at the same time (a matrix
-  passing `--shard=<i>/8` to `./ci.sh integration`, #335, which runs the spec files `scripts/browser-shards.mjs` gives
+  font during a run (#404). It runs as 10 shards at the same time (a matrix
+  passing `--shard=<i>/10` to `./ci.sh integration`, #335, which runs the spec files `scripts/browser-shards.mjs` gives
   shard i, split by measured time, #653), each on a GitHub-hosted runner with stacks of
   its own; the proxy suite runs in shard 1 only, and each shard uploads its screenshots, report and server logs under
-  its own number. `check` is green only when all eight shards passed: with fail-fast off, the matrix's one result is red
+  its own number. `check` is green only when all ten shards passed: with fail-fast off, the matrix's one result is red
   when any shard is (`scripts/ci-verdict.mjs`). All of it runs when the journeys' own area changes: a browser spec or
   its helpers, the fake engines, the Playwright configs, the stacks it runs on (migrations, stack configuration, local
   default privileges, the first-run reset helpers, the image the proxy suite runs in), the seed, `public/`, and the code
@@ -290,6 +290,7 @@ cause or closed with the repeat that did not reproduce it. No test was moved, re
 | #73 | `password.spec.ts` sign-in answers wrong and unknown alike | The seed restore met the lane's worker in a deadlock on the #69 branch before it merged; `main` restores in one transaction and repeats it after a deadlock. | Fixed by #69: 20 passed on `main`. |
 | #84 | `agent-attachments.spec.ts` a run key downloads the files of its own card | CI twice reset the request client's connection (ECONNRESET). An idle client between 4.9s and 5.1s, around the server's 5s keep-alive, was answered every time, so that was not it. | Left open: no repeat reset a connection; on a host at load above 30, some repeats waited past 5s for the reply's thumbnail. |
 | #746 | `main`'s browser shards, a different spec each run (agent-rules, agent-visibility, conversation-files, channel-archive, conversation-archive, card-select, board, …) | A CI shard runs four lanes on a runner of four CPUs, and every page a test opens renders the ten pages its links prefetch in full and reads each face's state for each (#707): an action answered in 5-6 s there and under 1 s on a lane alone. Two faults turned that into red runs. A file that prepares rows in its `beforeAll` restored the seed on its retry only if it passed `testInfo.retry>0` itself, so most retries met their own rows and failed with a duplicate key; and the archive specs spent their Undo toast's 6 s on slower reads before pressing it. | Fixed: `freshSeed(testInfo)` restores the seed in every worker and repeat that runs a file's `beforeAll`; the reads inside an Undo toast's time use the lane's database at once (`laneRows`), not the Supabase CLI; a toast the board raises as it opens the Card starts its time once the Card's page is shown (`board.spec.ts:124`, whose page took longer than the toast's 2.8 s); an expectation waits 10 s in CI. 10 repeats of every listed spec at four lanes: see #753. The per-render cost of face states is #754. |
+| #755 | `card-select.spec.ts` a selected Card that changed meanwhile is left and named | #746 left one Supabase CLI read inside the Undo toast's time here: the card's title for the "Not archived" alert, read when the expectation was made, after the toast. On a busy shard it took the toast's time, and Undo was gone before its press, twice (run 45678780051). | Fixed: the title is read before Archive is pressed. |
 
 ## Setting a test aside (#336)
 

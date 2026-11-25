@@ -6,6 +6,18 @@
   "ar": { "title": "الدفة بتفضل معاك لو النت فصل لحظة", "body": "لو النت فصل لحظة والدفة معاك على شاشة وكيل، الصفحة بترجع تتوصل والدفة لسه معاك، ومش بتقولك إن الدفة رجعت غير لما ترجع فعلاً." }
  },
  {
+  "issue": 735,
+  "date": "2026-11-25",
+  "en": { "title": "A model you switch off stays off", "body": "Switching a model off on one provider now takes it out of the chat's model menu, every agent's model choice and the Fallback model, unless another provider that lists that model still has it on." },
+  "ar": { "title": "الموديل اللي بتقفله بيفضل مقفول", "body": "لما تقفل موديل في مزوّد، بقى بيختفي من قايمة الموديلات في المحادثة ومن اختيار موديل أي وكيل ومن الموديل البديل، إلا لو فيه مزوّد تاني بيعرض نفس الموديل ولسه مشغّله." }
+ },
+ {
+  "issue": 774,
+  "date": "2026-11-25",
+  "en": { "title": "Only an Owner changes an Owner", "body": "A Manager can no longer remove an Owner, change an Owner's Role or Grants, or change their own Role or Grants, and the team page no longer offers them those controls; Managers still manage Contributors, Viewers and other Managers as before." },
+  "ar": { "title": "المالك بس هو اللي يغيّر في المالك", "body": "المدير مبقاش يقدر يشيل مالك أو يغيّر دوره أو صلاحياته، ولا يغيّر دوره أو صلاحياته هو، وصفحة الفريق مبقتش بتعرضله الحاجات دي؛ والمديرين لسه بيديروا المساهمين والمشاهدين والمديرين التانيين زي الأول." }
+ },
+ {
   "issue": 720,
   "date": "2026-11-25",
   "en": { "title": "Your account's choices keep the keyboard focus", "body": "Choosing Light, Dark or System, or a language, in Your account with the keyboard now keeps the focus on that choice while it is saved, and the arrow keys still move between the choices." },

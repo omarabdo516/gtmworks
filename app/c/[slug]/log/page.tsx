@@ -12,6 +12,7 @@ import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { LogEntry, logAnchor, logColumns, logPeople } from './entries';
 import { PageIcon } from './icons';
 import { LogEmpty } from './parts';
+import { mustRead } from '@/lib/read-failed';
 
 // A page shows logPageSize rows, newest first; "Older entries" opens the next page. The count names every row that matches.
 const shown=logPageSize;
@@ -24,7 +25,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
  // Signing in comes back to the same filters.
  const filters=new URLSearchParams(Object.entries(query).filter((entry):entry is [string,string]=>typeof entry[1]==='string'));
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/log${filters.size?`?${filters}`:''}`)}`);
- const {data:companies}=await db.from('companies').select('id,slug,name').order('name'); const company=companies?.find(c=>c.slug===slug);
+ const companies=mustRead(await db.from('companies').select('id,slug,name').order('name'),'companies'); const company=companies?.find(c=>c.slug===slug);
  if(!company) notFound();
  const who=parseWho(query.who); const card=parseCard(query.card); const before=parseBefore(query.before);
  const matching=(head:boolean)=>{
@@ -37,7 +38,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
  };
  // A page after the first starts below the cursor: an earlier moment, or the same moment and a smaller id.
  const page=before?matching(false).lte('created_at',before.at).or(`created_at.lt."${before.at}",id.lt.${before.id}`):matching(false);
- const [{data:person},{data:membership},{data:logRows,count:left},{count},{count:total},{data:cardRows}]=await Promise.all([
+ const [{data:person},membershipRead,{data:logRows,count:left},{count},{count:total},{data:cardRows}]=await Promise.all([
   db.from('people').select('name').eq('id',user.id).single(),
   db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
   page.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(shown),
@@ -45,6 +46,7 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
   db.from('company_log').select('id',{count:'exact',head:true}).eq('company_id',company.id),
   db.from('company_log').select('card_id').eq('company_id',company.id).not('card_id','is',null).limit(5000),
  ]);
+ const membership=mustRead(membershipRead,'membership');
  const entries=(logRows||[]) as LogRow[];
  const loggedCards=[...new Set((cardRows||[]).map(row=>row.card_id as number))];
  const people=await logPeople(db,company.id,[...loggedCards,...entries.flatMap(row=>row.card_id!=null?[row.card_id]:[])]);

@@ -7,6 +7,7 @@ import { replyShown } from './media-tags.mjs';
 import { calledAgents, mentionedAgent } from './composer-mentions.mjs';
 import type { Sending } from './sending';
 import { handoverEnding, messageFiles, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
+import { mustRead, ReadFailed } from './read-failed';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
@@ -127,58 +128,66 @@ const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome=
 export const channelNameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
 export const channelTitle=(t:(key:string)=>string,channel:ChannelName)=>channel.kind==='team'?channel.name:t('shellGeneralChannel');
 
+// A failed read throws ReadFailed (#776): the sidebar keeps the channels it shows, never an empty list.
 export async function channelSidebar(db:Database,company:string):Promise<ChannelSummary[]> {
- const {data}=await db.rpc('channel_sidebar',{c:company});
+ const data=mustRead(await db.rpc('channel_sidebar',{c:company}),'channel sidebar');
  return ((data||[]) as {id:string,kind:string,name:string|null,unread:number}[]).map(row=>({...channelNameOf(row),id:row.id,unread:row.unread}));
 }
 
 // With `read`, the reader has read every message it returns. Only the open channel asks for that: a page render can be
 // a link's prefetch, which nobody saw. `session` reads an Agent's Hermes session for its replies' steps (#148), as a
 // Conversation's record does (#346).
-export async function channelRecord(db:Database,person:string,company:string,channel:string,read=false,session?:ReadSession):Promise<ChannelRecord|null> {
- const {data:found}=await db.from('channels').select('id,company_id,kind,name,archived_at,archived_by').eq('id',channel).eq('company_id',company).maybeSingle();
- if(!found) return null;
+// A channel the reader does not see is 'missing'; one whose read failed (any of its reads) is 'failed' (#776), never an
+// empty or view-only channel, so the page and the route answer it as an error and the browser keeps what it shows.
+export async function channelRecord(db:Database,person:string,company:string,channel:string,read=false,session?:ReadSession):Promise<ChannelRecord|'missing'|'failed'> {
+ try { return await readChannel(db,person,company,channel,read,session); }
+ catch(error) { if(error instanceof ReadFailed) return 'failed'; throw error; }
+}
+async function readChannel(db:Database,person:string,company:string,channel:string,read:boolean,session?:ReadSession):Promise<ChannelRecord|'missing'> {
+ const found=mustRead(await db.from('channels').select('id,company_id,kind,name,archived_at,archived_by').eq('id',channel).eq('company_id',company).maybeSingle(),'channel');
+ if(!found) return 'missing';
  const name=channelNameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). A
  // message may have up to three Runs (#152), one per Agent it called, in the order the Agents were named.
- const runs=((await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3)).data||[]) as StoredRun[];
+ const runs=(mustRead(await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3),'channel runs')||[]) as StoredRun[];
  const runsOf=new Map<number,StoredRun[]>();
  for(const run of runs) runsOf.set(run.message_id,[...(runsOf.get(run.message_id)??[]),run]);
  for(const group of runsOf.values()) group.sort((a,b)=>(a.ordinal??1)-(b.ordinal??1));
- const {data:openRuns}=await db.from('channel_runs').select('message_id,ordinal,agent_id').eq('channel_id',channel).is('outcome',null);
- const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,reply_to,reply_ordinal,hand_card,created_at,missed_files').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
+ const openRuns=mustRead(await db.from('channel_runs').select('message_id,ordinal,agent_id').eq('channel_id',channel).is('outcome',null),'open runs');
+ const latest=(mustRead(await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,reply_to,reply_ordinal,hand_card,created_at,missed_files').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages),'channel messages')||[]) as StoredMessage[];
  // The quiet lines the channel got (#207). Not messages: nobody writes them, they are never called, and they start no
  // Run. Only the ones inside the messages shown are drawn.
- const notes=((await db.from('channel_notes').select('id,kind,invitee_name,actor_name,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredNote[];
+ const notes=(mustRead(await db.from('channel_notes').select('id,kind,invitee_name,actor_name,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages),'channel notes')||[]) as StoredNote[];
  const ordered=[...latest].reverse();
  // The images of the messages shown (#156). The table's own policy shows only this channel's to a Member of it.
  const shown=latest.map(message=>message.id);
- const attached=(shown.length?((await db.from('channel_attachments').select('id,message_id,name,content_type').in('message_id',shown).order('position')).data||[]):[]) as StoredFile[];
- const {data:members}=await db.rpc('channel_members',{ch:channel});
+ const attached=(shown.length?(mustRead(await db.from('channel_attachments').select('id,message_id,name,content_type').in('message_id',shown).order('position'),'channel files')||[]):[]) as StoredFile[];
+ const members=mustRead(await db.rpc('channel_members',{ch:channel}),'channel members');
  // A team channel's Agents come with it, also one hidden from the reader elsewhere, so its replies keep their face.
- const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
+ const agents=mustRead(await db.rpc('channel_agent_list',{ch:channel}),'channel agents');
  // The channel's handovers (#150), newest first: the transcript draws the row, the target's answer and Lead's reply of
  // the ones whose message is shown, and the details draw the count and the last four.
- const {data:handed}=await db.rpc('channel_handovers',{ch:channel});
+ const handed=mustRead(await db.rpc('channel_handovers',{ch:channel}),'channel handovers');
  // Each Agent's own state (#699): the one state read, as the reader, so only their own state comes back, and only the
  // state is kept below. An Agent's turn behind another's on a message is not working yet (#152), there too.
  const faces=await agentFaceStates(db,company);
- const {data:canWrite}=await db.rpc('conversation_can_write',{c:company});
+ if(!faces.available) throw new ReadFailed('agent states');
+ const canWrite=mustRead(await db.rpc('conversation_can_write',{c:company}),'whether the reader writes');
  // Nobody writes in an archived channel (#675): the database refuses a message there too.
  const writer=!!canWrite&&!found.archived_at;
- const {data:manager}=await db.rpc('can_manage_company',{target:company});
- const {data:may}=await db.rpc('permission_choices',{c:company});
+ const manager=mustRead(await db.rpc('can_manage_company',{target:company}),'whether the reader manages');
+ const may=mustRead(await db.rpc('permission_choices',{c:company}),'permission choices');
  // What the reader's Stop ends now (#478), on stop_channel_message's own rule.
- const {data:stoppable}=await db.rpc('channel_stoppable',{ch:channel});
+ const stoppable=mustRead(await db.rpc('channel_stoppable',{ch:channel}),'what Stop ends');
  const stop=((stoppable||[]) as {message:number,agent_name:string|null}[])[0];
  // The channel's Card on the board (#151): the one Card a team channel has, the column it stands in now and its line,
  // read only for a Member who sees its Agent. The general channel has none.
- const {data:board}=await db.rpc('channel_board_card',{ch:channel});
- const asked=runs.length?((await db.from('channel_permissions').select('id,message_id,ordinal,title,content,state,decided_at,created_at,said_before').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id')).data||[]) as StoredPermission[]:[];
+ const board=mustRead(await db.rpc('channel_board_card',{ch:channel}),'channel card');
+ const asked=runs.length?(mustRead(await db.from('channel_permissions').select('id,message_id,ordinal,title,content,state,decided_at,created_at,said_before').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id'),'channel requests')||[]) as StoredPermission[]:[];
  // A reply's cards (#136, #137, #139) are kept against the message its Run answers, and a question (#149) against the
  // same message, drawn under it before the reply. Every member of the channel reads them.
  const askedIds=ordered.filter(message=>message.author==='person').map(message=>message.id);
- const cards=askedIds.length?((await db.from('reply_cards').select(`${replyCardColumns},channel_message_id,channel_ordinal,addressed_to`).in('channel_message_id',askedIds).order('id')).data||[]) as StoredCard[]:[];
+ const cards=askedIds.length?(mustRead(await db.from('reply_cards').select(`${replyCardColumns},channel_message_id,channel_ordinal,addressed_to`).in('channel_message_id',askedIds).order('id'),'channel cards')||[]) as StoredCard[]:[];
  // Each card under the reply of the Agent whose Run showed it (#152): a message may call up to three. A question is its
  // Agent's turn under the message instead, with the chips flag the database kept for the main Agent's own question.
  const cardsOf=new Map<string,ReplyCard[]>();
@@ -249,7 +258,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const messages=inWrittenOrder([...written.flat(),...handoverLines(((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)))]);
  // Only a channel that shows a model failure asks whether the reader owns the Company, for its line's link (#428, #530).
  const modelLine=messages.some(message=>message.author==='handoff'?!!message.model:message.author==='person'&&(message.mentions??[]).some(mention=>isModelCause(mention.state)));
- const {data:owner}=modelLine?await db.rpc('is_company_owner',{c:company}):{data:false};
+ const owner=modelLine?mustRead(await db.rpc('is_company_owner',{c:company}),'whether the reader owns'):false;
  if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
  return {
   channel:{id:found.id,company:found.company_id,...name},

@@ -142,11 +142,13 @@ test('with a verified authenticator the password changes only after the second s
 
 test('an invited Member sets a password from the invitation and signs in with it later',async({page,context})=>{
  const email=`password-invited-${Date.now()}@example.com`;
- await signIn(page,'manager@example.com','/c/rs-learning/settings/members');
+ // Only the Owner invites (#775).
+ await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
  await page.request.delete(inbox);
- await page.getByLabel('Email').fill(email);
- await page.getByRole('button',{name:'Send invitation'}).click();
- await expect(page.getByRole('status').filter({hasText:'Invite sent to'})).toContainText('Invite sent to');
+ await page.getByRole('button',{name:'Invite a member'}).click();
+ await page.getByLabel('Member’s email').fill(email);
+ await page.getByRole('button',{name:'Invite',exact:true}).click();
+ await expect(page.getByText(`Invite sent to ${email}`)).toBeVisible();
  const link=await emailLink(page,email);
  await context.clearCookies();
  await page.goto(link);

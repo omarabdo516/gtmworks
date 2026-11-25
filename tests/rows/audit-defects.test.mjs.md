@@ -1,0 +1,1 @@
+| `audit-defects.test.mjs` | The 2026-11-25 audit's defects (spec #760): the client-error limit per sender, a body over the limit refused before it is read, the alert drawn only from a catalogue key, the threat model's service-role clients (#778); the home charts' Cairo day and a Routine's unknown time zone (#779). | 0.2 s | — | new |

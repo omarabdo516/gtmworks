@@ -1,0 +1,1 @@
+| `components/recent-chats.test.tsx` | The sidebar's recent chats keep the ones shown last for their Company when a page's read of them failed, and a Company never shown, or another reader of the same tab, gets no list and a line saying they could not be read (#776). | — | failed-reads.spec.ts (the sidebar through the server) | new |

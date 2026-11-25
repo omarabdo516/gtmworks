@@ -32,7 +32,7 @@ function owner({error=null,agents=[{agent:'a1',name:'Lead',profile:'co-x'},{agen
   return {data:null,error:{code:'P0001'}};
  }};
 }
-const enabled=on=>async()=>({entries:[{id:'sub-anthropic',provider:'anthropic'}],off:new Set(on?[]:['sub-anthropic\u0000claude-sonnet-4-6'])});
+const enabled=on=>async()=>({entries:[{id:'sub-anthropic',provider:'anthropic',models:['claude-sonnet-4-6']}],off:new Set(on?[]:['sub-anthropic\u0000claude-sonnet-4-6'])});
 
 test('a choice is one provider/model as the pickers take it; None is an empty chain', () => {
  assert.deepEqual(fallbackPair('anthropic/claude-sonnet-4-6'),claude);

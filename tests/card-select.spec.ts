@@ -18,6 +18,11 @@ const toggle=(page:Page)=>page.getByRole('button',{name:'Select several cards'})
 const bar=(page:Page)=>page.getByRole('region',{name:'Selecting cards'});
 const toast=(page:Page)=>page.locator('.toast');
 const confirmOf=(page:Page)=>page.getByRole('dialog',{name:/^Archive/});
+// A press before React hydrated the board does nothing: wait until the button has its handlers.
+const hydrated=(page:Page,selector:string)=>page.waitForFunction(found=>{
+ const control=document.querySelector(found);
+ return !!control&&Object.getOwnPropertyNames(control).some(name=>name.startsWith('__reactFiber$')||name.startsWith('__reactProps$'));
+},selector);
 
 test('with the keyboard: select mode, a Card, "Select all shown", Escape on the confirmation archives nothing, Cancel ends it',async({page})=>{
  // First in the file: card 5 still waits for its approval, so the confirmation is what stands before archiving all.
@@ -108,6 +113,7 @@ test('"Archive everything in Done" archives every Card shown in Done at once, an
  const made=rows(`select id from public.work_cards where company_id='${company}' and title in ('Spring post','Summer post') order by id`).map(row=>Number(row.id));
  await signIn(page,'reviewer@example.com',board);
  for(const id of made) await expect(inColumn(page,'done',id)).toBeVisible();
+ await hydrated(page,'button.col__act[aria-label="Archive everything in Done"]');
  await page.getByRole('button',{name:'Archive everything in Done'}).click();
  await expect(toast(page)).toContainText('2 archived');
  for(const id of made) await expect(onBoard(page,id)).toHaveCount(0);
@@ -129,12 +135,15 @@ test('a selected Card that changed meanwhile is left and named; the others are a
  await toggle(page).click();
  await pick(page,1).click();
  await pick(page,2).click();
+ // Read before Archive: Undo lasts only as long as its toast (app/toast.tsx), and a Supabase CLI read between the toast
+ // and Undo took its time on a busy runner (#755).
+ const second=titleOf(2);
  // Someone else archives card 2 before this person presses Archive.
  query(`update public.work_cards set archived_at=now(),archived_by='20000000-0000-0000-0000-000000000001' where id=2`);
  try {
   await bar(page).getByRole('button',{name:'Archive'}).click();
   await expect(toast(page)).toContainText('Archived');
-  await expect(page.getByRole('alert').filter({hasText:'Not archived'})).toContainText(`Not archived: “${titleOf(2)}”`);
+  await expect(page.getByRole('alert').filter({hasText:'Not archived'})).toContainText(`Not archived: “${second}”`);
   await expect(onBoard(page,1)).toHaveCount(0);
   await toast(page).getByRole('button',{name:'Undo'}).click();
   await expect(inColumn(page,'ideas',1)).toBeVisible();
