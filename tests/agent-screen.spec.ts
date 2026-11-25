@@ -23,7 +23,7 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const name of [adsProfile,seoProfile]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  // A start takes a moment on the Engine, as the desktop comes up.
