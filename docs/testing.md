@@ -76,11 +76,11 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). Its dependencies and its browser come from the caches the `fast` job keeps, restored by the same keys (the
   lock file's hash for `node_modules`; Playwright's version and the runner image for the browser), and a miss installs
   Chromium alone: the runner image has its system packages and fonts, so no shard downloads a browser, a package or a
-  font during a run (#404). It runs as 8 shards at the same time (a matrix
-  passing `--shard=<i>/8` to `./ci.sh integration`, #335, which runs the spec files `scripts/browser-shards.mjs` gives
+  font during a run (#404). It runs as 10 shards at the same time (a matrix
+  passing `--shard=<i>/10` to `./ci.sh integration`, #335, which runs the spec files `scripts/browser-shards.mjs` gives
   shard i, split by measured time, #653), each on a GitHub-hosted runner with stacks of
   its own; the proxy suite runs in shard 1 only, and each shard uploads its screenshots, report and server logs under
-  its own number. `check` is green only when all eight shards passed: with fail-fast off, the matrix's one result is red
+  its own number. `check` is green only when all ten shards passed: with fail-fast off, the matrix's one result is red
   when any shard is (`scripts/ci-verdict.mjs`). All of it runs when the journeys' own area changes: a browser spec or
   its helpers, the fake engines, the Playwright configs, the stacks it runs on (migrations, stack configuration, local
   default privileges, the first-run reset helpers, the image the proxy suite runs in), the seed, `public/`, and the code

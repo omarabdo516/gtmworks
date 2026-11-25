@@ -474,7 +474,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=sandbox-browser
 
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 8
-  # shards at the same time (#335; six since #404, seven since #653, eight since #710), each on a runner and stacks of its own. ci.sh gives each shard its
+  # shards at the same time (#335; six since #404, seven since #653, eight since #710, ten since #755), each on a runner and stacks of its own. ci.sh gives each shard its
   # spec files split by measured time (scripts/browser-shards.mjs, #653), not Playwright's count-based --shard. The
   # proxy suite runs in shard 1 only (ci.sh). The browser comes from the cache the fast job keeps: a shard never
   # downloads a browser or a system package during a run. The image is the one the image job built (#403): a shard
@@ -487,11 +487,12 @@ jobs:
       # Every shard runs to the end, so one red shard still shows the others' failures.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     # 10.0 min measured for the slowest of the seven shards on run 45088411177 (#653): 12 min is 1.5 times it, capped at
-    # 12 (#410). Spec #710's Screen tests took three of seven past it (run 45654432600), so the suite runs as eight. Its
-    # split, measured again on runs 45664486098 and 45668614439 after #753, had shards at 11.6 min (#755); refreshed, the
-    # slowest is the one that holds good-morning.spec.ts, a serial file of 5.7 min of tests alone.
+    # 12 (#410). Spec #710's Screen tests took three of seven past it (run 45654432600), so the suite runs as eight. Eight
+    # still reached 11.6 min (run 45664486098) and 12.3 min refreshed (run 45673930434): a shard spends about 4 min
+    # before its first test, and one file's minutes vary by half between runs (engine-conversation.spec.ts 859 to 1340
+    # s), so the suite runs as ten (#755), split from the mean of runs 45664486098, 45668614439 and 45673930434.
     timeout-minutes: 12
     permissions:
       contents: read
@@ -575,7 +576,7 @@ jobs:
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
           # Each test's time, from which `node scripts/browser-shards.mjs times` refreshes the split's measured times (#653).
           PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-report/times.json
-        run: ./ci.sh integration --shard=${{ matrix.shard }}/8
+        run: ./ci.sh integration --shard=${{ matrix.shard }}/10
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots
         if: always()
