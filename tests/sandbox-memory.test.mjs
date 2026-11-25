@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-// #711: a Company's work sandbox holds its Agents' Screens, so its default memory is set from one measured Screen awake
+// #711: a Company's work sandbox holds its Screen, which its Agents share, so its default memory is set from one measured Screen awake
 // with a page open (README, Server size). An install the previous release made may hold a Company whose own limit is
 // below that default: the update raises it to the default, once, and never lowers one. A limit an Owner sets after that
 // (`company limits`) is the Owner's and is kept. The installer's own functions run here against a folder of Engine files.
@@ -35,12 +35,11 @@ function engines(t, files) {
   return { run, env };
 }
 
-test('the default sandbox memory fits two Screens awake with a page open, or one beside a render', () => {
-  // The measurement (README): one Screen awake with an ads page open peaked at 831 MiB of its sandbox's working set, and
-  // one short render at 337 MiB.
+test("the default sandbox memory fits the Company's Screen awake with a page open beside a render", () => {
+  // The measurement (README): the Screen awake with an ads page open peaked at 831 MiB of its sandbox's working set, and
+  // one short render at 337 MiB. A Company has one awake Screen, shared by its Agents (vault decision 0068).
   const mib = Number(defaultMemory.slice(0, -1)) * (defaultMemory.endsWith('g') ? 1024 : 1);
   assert.equal(defaultMemory, '2g');
-  assert.ok(mib > 2 * 831, 'two Screens at once');
   assert.ok(mib > 831 + 337, 'a Screen beside a render');
   const readme = readFileSync('README.md', 'utf8');
   assert.match(readme, /\*\*2 GB of RAM and 2 CPUs\*\* by default/);

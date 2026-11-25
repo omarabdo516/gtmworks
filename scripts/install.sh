@@ -156,7 +156,7 @@ write_limits() {
 default_sandbox_memory() { sed -n 's/^    mem_limit: ${SANDBOX_MEMORY:-\([0-9]*[mg]\)}$/\1/p' "$engine_template"; }
 # A size as Docker reads it (512m, 2g) in megabytes.
 megabytes() { case "$1" in *g) echo $(( ${1%g} * 1024 ));; *m) echo "${1%m}";; *) return 1;; esac; }
-# A Company's sandbox holds its Agents' Screens (#711), so an update to a release whose default memory is larger raises a
+# A Company's sandbox holds its Screen, which its Agents share (#711), so an update to a release whose default memory is larger raises a
 # Company's own limit below it to that default, once for that default, and never lowers one; a limit the Owner sets after
 # that (`company limits`) is noted under the same default and kept. A Company with no limit of its own follows the default,
 # and its file is not touched.
@@ -168,7 +168,7 @@ raise_sandbox_memory() {
   [ "$(sandbox_limit "$1" MEMORY_DEFAULT)" != "$default" ] || return 0
   [ "$(megabytes "$own")" -lt "$(megabytes "$default")" ] || return 0
   write_limits "$1" "$default" "$(sandbox_limit "$1" CPUS)" || return 1
-  echo "The work sandbox of the Engine $1 had $own of memory: raised to $default, the new default, so its Agents' Screens fit."
+  echo "The work sandbox of the Engine $1 had $own of memory: raised to $default, the new default, so its Screen fits."
 }
 # The Engine reaches its sandbox as every Agent's command does (#396): over ssh, as the Engine's own user, with its own
 # key and the host key its known_hosts pins. A few tries, as Docker's name for the sandbox can take a moment to answer.

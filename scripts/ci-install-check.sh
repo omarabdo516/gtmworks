@@ -749,7 +749,8 @@ scan_engines
 # agents-sandbox: an Agent's work in its Company's work sandbox (#393, #395, #459, ADR 0018, ADR 0024), split from the
 # agents area to keep each within its minutes (#553): its command, file and code run in the sandbox and never on its
 # Engine, a command MCP server runs there, its Library shows the work folder, the Engine pins the sandbox's host key, no
-# file sync runs between them, the apps still answer, and the same scan of every Engine, sandbox and exit. It makes its
+# file sync runs between them, the Company's Screen opens a page for an Agent's Run and sleeps and wakes (#711), the apps
+# still answer, and the same scan of every Engine, sandbox and exit. It makes its
 # own install, first run and second Company, and the first Company's second Agent the sandbox checks start in.
 agents_sandbox() {
 cd "$root"
@@ -942,6 +943,31 @@ after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills aft
 [[ -z $after_sync ]] || fail "what an Agent changed in the sandbox came back to the Engine: $after_sync"
 [[ $(docker exec "$engine_id" cat "/opt/data/profiles/$first/sandbox-check-credentials/credential.json") == "CHECK-$credential_marker" ]] \
   || fail 'a credential file of the Engine profile changed with the sandbox session'
+# The Company's Screen (#711, vault decision 0068): the Engine holds the sandbox image's own driver the install copied in,
+# so the Agent's Run is offered computer_use; asked to open a page on its Screen, the Agent captures the Screen, which
+# wakes it inside the sandbox, opens the page on its display and finds its window with computer_use, and display.status on
+# the management listener reads it awake on :20 over ssh. The host's Docker then shows the Screen's X server is a process
+# of the sandbox and never of the Engine. With the profile's idle stop set short, the Screen goes to sleep by itself, and
+# the Agent's next use wakes it again.
+engine_driver=$(docker exec "$engine_id" sha256sum /opt/data/screen-driver/cua-driver | cut -d' ' -f1) || fail "the Engine holds a cua-driver"
+sandbox_driver=$(docker exec "$sandbox" sh -c 'sha256sum "$(readlink -f "$(command -v cua-driver)")"' | cut -d' ' -f1) || fail "the sandbox image's cua-driver"
+[[ -n $engine_driver && $engine_driver == "$sandbox_driver" ]] || fail "the Engine holds the sandbox image's own cua-driver"
+screen_marker="screen-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+screen_xvnc() { docker exec "$1" ps -eo args= | awk '/X(tiger)?vnc :20 / {found=1} END {exit !found}'; }
+engine_node "$engine_key" - screen-open "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-open.log \
+  || fail "a Run is offered computer_use and the Agent opens a page on the Company's Screen"
+grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-open.log || fail 'display.status reads the Screen awake on :20 inside the sandbox'
+screen_xvnc "$sandbox" || fail "the Screen's X server runs in the Company's sandbox"
+if screen_xvnc "$engine_id"; then fail "no Screen runs on the Engine"; fi
+[[ $(docker exec "$sandbox" cat "/work/$first/$screen_marker-screen.html") == *"SCREEN-$screen_marker"* ]] || fail "the page the Agent opened is in its own folder of the work folder"
+engine_node "$engine_key" - screen-sleep "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-sleep.log \
+  || fail 'the idle Screen goes to sleep by itself'
+grep -q '"screen":{"running":false' screen-sleep.log || fail 'display.status reads the idle Screen asleep'
+if screen_xvnc "$sandbox"; then fail "the asleep Screen's X server is stopped"; fi
+engine_node "$engine_key" - screen-wake "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-wake.log \
+  || fail "the Agent's next use wakes the Screen"
+grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-wake.log || fail 'display.status reads the Screen awake again'
+screen_xvnc "$sandbox" || fail "the woken Screen's X server runs in the sandbox again"
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.
@@ -2608,19 +2634,19 @@ default_mib=$(( $(sandbox_memory_bytes) / 1048576 ))
 (( render_peak < default_mib )) || fail "the render's peak memory ($render_peak MiB) is within the default limit ($default_mib MiB)"
 [[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the render at the defaults had no process killed at the memory limit'
 echo "sizes: one short render at the default limits took $render_seconds s and peaked at $render_peak MiB of the $default_mib MiB limit"
-# One Agent's Screen awake with a page open (#711), started as the pinned Engine starts one in its sandbox: its own
+# The Company's Screen awake with a page open (#711), started as the pinned Engine starts it in its sandbox: its own
 # launcher.sh, read out of the Engine's image, runs in the first Company's sandbox, and the sandbox's Chromium opens a
-# page through the Company's exit. The default memory must hold two such Screens at once, or one beside the render.
+# page through the Company's exit. A Company has one awake Screen, shared by its Agents (vault decision 0068), and the
+# default memory must hold it beside the render.
 launcher=$(docker exec "$engine_id" base64 -w0 /opt/hermes/tools/bot_desktop/launcher.sh) || fail "the pinned Engine's Screen launcher"
 docker exec -i -e SCREEN_LAUNCHER="$launcher" "$first_sandbox" node --input-type=module - < sandbox/check/screen.mjs | tee screen-defaults.log \
   || fail 'one Screen wakes with a page open in a sandbox at the default limits'
 screen_peak=$(sed -n 's/^screen=.*"peakMiB":\([0-9]*\).*/\1/p' screen-defaults.log)
 screen_awake=$(sed -n 's/^screen=.*"awakeMiB":\([0-9]*\).*/\1/p' screen-defaults.log)
 [[ -n $screen_peak && -n $screen_awake ]] || fail 'the Screen prints its memory awake and its peak'
-(( screen_peak * 2 < default_mib )) || fail "two Screens at their peak ($screen_peak MiB each) fit in the default limit ($default_mib MiB)"
 (( screen_peak + render_peak < default_mib )) || fail "a Screen ($screen_peak MiB) beside the render ($render_peak MiB) fits in the default limit ($default_mib MiB)"
 [[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the Screen at the defaults had no process killed at the memory limit'
-echo "sizes: one Screen awake with a page open held $screen_awake MiB and peaked at $screen_peak MiB of the $default_mib MiB limit"
+echo "sizes: the Screen awake with a page open held $screen_awake MiB and peaked at $screen_peak MiB of the $default_mib MiB limit"
 # A render that needs more memory than its Company's limit: the second Company's sandbox gets four fifths of the render's
 # measured peak, so Chromium renders part of the way before the limit stops it, and the first Company's sandbox is asked
 # throughout. It is set on the running sandbox with `docker update`, the cgroup change a Company's own limit (`company

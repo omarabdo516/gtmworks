@@ -1,4 +1,4 @@
-// One Agent's Screen awake with a page open in a Company's work sandbox, the work the install's default sandbox memory is
+// The Company's Screen awake with a page open in a Company's work sandbox, the work the install's default sandbox memory is
 // measured on (#711). The Screen is started as the pinned Engine starts one inside its sandbox
 // (tools/bot_desktop/sandbox_host.py start()): the Engine's own launcher.sh, handed in by the proof, runs Xvnc and Xfce in
 // a session of its own on display :20 at the Engine's 1440x900; then Chromium, the sandbox image's own, opens one page on

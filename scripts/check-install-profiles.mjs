@@ -918,4 +918,99 @@ try {
  assert.ok(!said.includes(`${marker}-leak`)&&!said.includes('theirs'),'no byte of the other profile comes back');
  writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');
+} else if(step==='screen-open'||step==='screen-sleep'||step==='screen-wake') {
+// The Company's Screen (#711, vault decision 0068): one display and one browser profile in the Company's sandbox, shared
+// by its Agents. screen-open: the first Company's main Agent is asked to open a page on its Screen. Its Run is offered
+// computer_use (the Engine finds the sandbox image's driver the install copied in), so it captures the Screen, which
+// wakes it, opens the page with the sandbox's own browser on the display the Engine published, and lists the Screen's
+// windows with computer_use until the page's title is there. The Engine's display.status, asked on its management
+// listener's /api/ws as the Engine contract will, then reads the Screen awake on :20 inside the sandbox. The profile's
+// idle stop is set short for the proof first (the default, 30 minutes, is the Engine's and is put back by screen-wake).
+// screen-sleep: display.status, read every few seconds, until the Screen is asleep: the listener stops an idle Screen
+// only for a profile a display.* call named there (tui_gateway/methods_display_watch.py), which screen-open's call did.
+// screen-wake: the same Agent uses its Screen again, and display.status reads it awake.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+// One JSON-RPC call on the management listener's /api/ws, admitted by the Engine's own key (the session-token provider
+// of a gated listener takes it as `?token=`).
+const display=async(method,params={})=>{
+ const socket=new WebSocket(`${firstEngine.managementAddress.replace(/^http/,'ws')}/api/ws?token=${encodeURIComponent(firstEngine.key)}`);
+ try {
+  return await new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>reject(new Error(`${method} was not answered within 60 s`)),60000);
+   socket.addEventListener('message',event=>{
+    const data=JSON.parse(String(event.data));
+    if(data.id!==1) return;
+    clearTimeout(timer);
+    if(data.error) reject(new Error(`${method}: ${data.error.message}`)); else resolve(data.result);
+   });
+   socket.addEventListener('close',event=>{ clearTimeout(timer); reject(new Error(`${method}: the listener closed /api/ws (${event.code} ${event.reason})`)); });
+   socket.addEventListener('open',()=>socket.send(JSON.stringify({jsonrpc:'2.0',id:1,method,params:{profile:first.profile,...params}})));
+  });
+ } finally { socket.close(); }
+};
+const shownStatus=status=>({running:status.running,display:status.display,placement:status.placement});
+if(step==='screen-sleep') {
+ const asleep=await until('the idle Screen asleep',async()=>{ const status=await display('display.status'); return status.running?null:status; },300);
+ assert.equal(asleep.blocker,null,'an asleep Screen can wake again');
+ writeProof({step,marker,profile:first.profile,screen:shownStatus(asleep)});
+} else {
+await pointAtFakeModel(firstEngine,first.profile);
+const idle=step==='screen-open'?0.5:30;
+const idled=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',body:JSON.stringify({config:{bot_desktop:{idle_stop_minutes:idle}}})});
+assert.equal(idled.status,200,`the profile's idle stop is set to ${idle} minutes`);
+const title=`SCREEN-${marker}`;
+const page=`/work/${first.profile}/${marker}-screen.html`;
+// The page, written beside the Agent's work and opened with the sandbox's browser on the Screen's own display (the
+// launcher publishes it in the profile's folder under /tmp/hermes-bot-desktop) and the Screen's one browser profile.
+const open=`printf '<!doctype html><title>${title}</title><h1>${marker}</h1>' > ${page} && set -a && . "$(ls -t /tmp/hermes-bot-desktop/*/env | head -n 1)" && set +a && exec chromium --user-data-dir="$HOME/.hermes/bot-desktop/browser-profile" --no-first-run --no-default-browser-check file://${page}`;
+const offered=[];
+const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+const call=(done,name,args)=>({id:`call_screen_${done}`,type:'function',function:{name,arguments:JSON.stringify(args)}});
+const plan=(messages,body)=>{
+ offered.push((body.tools||[]).map(tool=>tool.function?.name));
+ const text=textOf(messages);
+ const tools=messages.filter(message=>message.role==='tool');
+ const done=tools.length;
+ if(text.includes(`SCREEN-WAKE ${marker}`)) return done<1?call(done,'computer_use',{action:'capture',mode:'ax'}):null;
+ if(!text.includes(`SCREEN-OPEN ${marker}`)) return null;
+ if(done===0) return call(done,'computer_use',{action:'capture',mode:'ax'});
+ if(done===1) return call(done,'terminal',{command:open,background:true});
+ const seen=tools.slice(2).some(message=>JSON.stringify(message.content).includes(title));
+ if(seen||done>=16) return null;
+ return done%2===0?call(done,'computer_use',{action:'list_windows'}):call(done,'computer_use',{action:'wait',seconds:2});
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const message=step==='screen-open'?`SCREEN-OPEN ${marker}: open the page on your Screen.`:`SCREEN-WAKE ${marker}: look at your Screen.`;
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until('reply on the Screen check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300);
+ assert.ok(answer.body.includes(reply),answer.body);
+ // The Run itself was offered computer_use, and never the browser tools no Agent gets: what the model was sent, not the
+ // toolsets the profile reports, which read its settings only.
+ assert.ok(offered.length>0&&offered.every(names=>names.includes('computer_use')),`the Run is offered computer_use: ${JSON.stringify(offered[0])}`);
+ assert.ok(!offered.flat().some(name=>/^browser_/.test(name||'')),'the Run is offered no browser tool');
+ const captured=String(results[0]??'');
+ assert.ok(results.length>=1&&!/human_has_control|not ready|not installed|is not running/.test(captured),`the Screen is captured: ${captured.slice(0,400)}`);
+ if(step==='screen-open') {
+  const launched=(()=>{ try { return JSON.parse(String(results[1])); } catch { return null; } })();
+  assert.ok(launched&&!launched.error,`the page is opened on the Screen: ${String(results[1]).slice(0,400)}`);
+  assert.ok(results.slice(2).some(result=>result.includes(title)),`computer_use lists the page's window on the Screen: ${results.at(-1)?.slice(0,600)}`);
+ }
+ const status=await display('display.status');
+ assert.equal(status.running,true,'display.status reads the Screen awake');
+ assert.equal(status.display,':20','the Screen is the Company\'s one display');
+ assert.equal(status.placement,'terminal:ssh','the Screen is inside the Company\'s sandbox, reached over ssh');
+ assert.equal(status.lease?.holder,'agent','the Agent holds its Screen');
+ writeProof({step,marker,profile:first.profile,screen:shownStatus(status),window:step==='screen-open'?title:undefined});
+} finally { model.close(); model.closeAllConnections(); }
+}
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker> | screen-open <marker> | screen-sleep <marker> | screen-wake <marker>');
