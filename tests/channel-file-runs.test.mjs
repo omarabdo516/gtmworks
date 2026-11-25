@@ -195,7 +195,7 @@ test('a discard never removes the object a send of the same key kept again befor
 test('a send gives back only the rows its own keep attempt holds (#727)',async()=>{
  // A send of the same key that found these rows still holds them: the discard names this send's attempt, the one its
  // reserve named, so the database takes this attempt off the rows and gives back only those no other send still holds
- // (supabase/tests/message_files_held.sql).
+ // (supabase/tests/message_files_holders.sql).
  const stand=databases({refusePost:true});
  await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
  const reserved=stand.calls.find(([name])=>name==='reserve_channel_files')?.[1];

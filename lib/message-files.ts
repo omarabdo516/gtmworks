@@ -93,7 +93,7 @@ export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,
 
 // A send that stored no message takes its images with it: the sender's own rows the database gives back, then their
 // bytes. The discard names the send's attempt, and the database gives back only rows no other attempt still holds
-// (#727). A file a stored message already took is kept, and so is every file of a send key that is still a waiting turn
+// (#727; a hold lapses fifteen minutes after its key's last keep). A file a stored message already took is kept, and so is every file of a send key that is still a waiting turn
 // or holds a Run reservation: the database gives back no path for them (#465).
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {{place:FilesPlace,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>}} gone */
 export async function discardMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,discard,discardArgs}:{place:FilesPlace,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>}) {
