@@ -12,6 +12,9 @@ select json_build_object(
  'no_function_reads_them',not exists(select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.prolang<>13 and p.prokind='f'
   and p.prosrc ~ '(work_stages|work_labels|work_card_labels|work_checklist|work_assignees|approval_steps|stage_id|next_actor|approval_step_id)'),
  'every_card_placed',not exists(select 1 from public.work_cards where status is null or board_order is null),
+ -- A status and a review are written by their functions only (card_write_guard), as the stages and steps were.
+ 'status_guarded',exists(select 1 from pg_trigger where tgrelid='public.work_cards'::regclass and tgname='card_write_guard' and tgenabled='O' and not tgisinternal)
+  and not has_function_privilege('authenticated','public.card_write_guard()','execute'),
  'one_assignee',exists(select 1 from pg_constraint where conrelid='public.work_cards'::regclass and conname='work_cards_one_assignee')
   and exists(select 1 from pg_trigger where tgrelid='public.work_cards'::regclass and tgname='align_card_assignee' and not tgisinternal),
  -- The spec's own writers are for signed-in Members only; edit_work_card and change_work_card, made again on the new

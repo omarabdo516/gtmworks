@@ -75,7 +75,7 @@ release savepoint earlier;
 select lives_ok($q$${guard}$q$,'a cutover whose first step an earlier transaction applied applies');
 
 select lives_ok($q$${cutover}$q$,'the cutover applies on the old shapes');
-select ok((${verify})::jsonb @> '{"old_tables_gone":true,"old_columns_gone":true,"old_functions_gone":true,"no_function_reads_them":true,"every_card_placed":true,"one_assignee":true,"the_final_writers":true,"kept_tables":true}','and leaves the schema its verify file describes');
+select ok((${verify})::jsonb @> '{"old_tables_gone":true,"old_columns_gone":true,"old_functions_gone":true,"no_function_reads_them":true,"every_card_placed":true,"status_guarded":true,"one_assignee":true,"the_final_writers":true,"kept_tables":true}','and leaves the schema its verify file describes');
 select is((select count(*)::int from public.work_cards w join kept k using(id) where w.status is distinct from k.status or w.board_order is distinct from k.board_order),0,'every Card stays in its column and its place');
 select is((select count(*)::int from public.work_cards w join kept k using(id) where w.assignee_agent is distinct from k.assignee_agent or w.assignee_person is distinct from k.assignee_person
  or w.agent_id is distinct from k.agent_id or w.conversation_id is distinct from k.conversation_id or w.channel_id is distinct from k.channel_id),0,'its assignee, its Agent and its chat or channel stay');

@@ -43,7 +43,7 @@ insert into decisions
   'public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.work_audit()','public.work_card_place()',
-  'public.channel_run_card()','public.channel_reply_card()','public.align_card_assignee()']) fn
+  'public.channel_run_card()','public.channel_reply_card()','public.align_card_assignee()','public.card_write_guard()']) fn
  union all select 'public.tick_card_todo(uuid,bigint,integer,text,boolean)','checks','ticks a to-do on a Card the caller sees (can_see_card) and writes its own Activity row (#679); a hidden Card is not found'
  union all select fn,'checks','asks for or decides the review of a Card the caller sees (can_see_card); a hidden Card is not found (#681)' from unnest(array['public.ask_review(uuid,bigint)','public.decide_review(uuid,bigint,bigint,text,text)']) fn
  union all select fn,'checks','sets, ends or reads the waits of Cards the caller sees (can_see_card); a Card waited for that they may not see is named by nothing (#682)' from unnest(array['public.add_card_wait(uuid,bigint,bigint)','public.remove_card_wait(uuid,bigint,bigint)','public.card_wait_links(uuid,bigint)','public.open_card_waits(uuid)']) fn

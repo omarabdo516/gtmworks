@@ -113,7 +113,10 @@ select is((select count(*)::int from public.channel_messages where channel_id=(s
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select ok((select count(*) from public.channel_messages where channel_id=(select id from made where label='launch'))>0,'a Viewer in the channel reads its messages');
 reset role;
+-- As a review leaves it (ask_review's own flag), so the board's reading is what is tested.
+select set_config('work.move','yes',true);
 update public.work_cards set status='waiting' where channel_id=(select id from made where label='launch');
+select set_config('work.move','',true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select is(public.channel_board_card((select id from made where label='launch'))->>'column','waiting','a Card in review reads as waiting');
