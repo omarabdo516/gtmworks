@@ -75,13 +75,13 @@ test('while the called Agent replies the page says so and asks again, and a repl
 for (const [language, notSent, tryAgain] of [['en', 'Not sent to Lead', 'Try again'], ['ar', 'ما اتبعتتش لـ Lead', 'جرّب تاني']] as const) test(`in ${language} a call that was not sent says so with Try again, which retries the same turn`, async () => {
  const posts: unknown[] = [];
  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => { if (url.startsWith('/api/run-steps?')) return new Promise<Response>(() => {}); if (init?.method === 'POST') posts.push(JSON.parse(String(init.body))); return Response.json(record([called('notSent')])); }));
- const message = { ...called('notSent'), mention: { agent: 'Lead', face: 'c-1', state: 'notSent' as const, ordinal: 1, permissions: [], questions: [] } };
+ const message: ChannelMessage = { ...called('notSent') as Extract<ChannelMessage, { author: 'person' }>, mention: { agent: 'Lead', face: 'c-1', state: 'notSent' as const, ordinal: 1, permissions: [], questions: [] } };
  const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([message])}/></LanguageProvider>);
  await expect.element(screen.getByRole('alert')).toHaveTextContent(`${notSent} ${tryAgain}`);
  await screen.getByRole('button', { name: tryAgain }).click();
  await expect.poll(() => posts).toEqual([{ company: 'co-1', channel: 'ch-1', intent: 'retry', message: 2, ordinal: 1 }]);
  // Another member's message that was not sent has no Try again for this reader.
- const theirs = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([{ ...message, mine: false }])}/></LanguageProvider>);
+ const theirs = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([{ ...message as Extract<ChannelMessage, { author: 'person' }>, mine: false }])}/></LanguageProvider>);
  await expect.poll(() => theirs.container.querySelector('[data-outcome="not-sent"]')?.textContent).toBe(notSent);
  expect(theirs.container.querySelectorAll('[data-outcome="not-sent"] button').length).toBe(0);
 });

@@ -220,7 +220,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   emit(/** @type {string} */ run,/** @type {any} */ event) { push(run,event); },
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
-  backlogLimit:1000,runSeconds:41,
+  backlogLimit:1000,runSeconds:41,sessionDelay:0,
   // The folders the dashboard's file routes read (#194), by the Engine's own absolute path: each entry is the folder's
   // path to the entries `/api/files?path=` reports (a name, whether it is a folder, its size, its mtime, and `resolves`:
   // the path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds a file's
@@ -507,7 +507,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   });
  });
  // The routes and answers observed on the pinned release's dashboard (port 9119), authenticated by its session token.
- const management=createServer((request,response)=>{
+ const manage=(/** @type {import('node:http').IncomingMessage} */ request,/** @type {import('node:http').ServerResponse} */ response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    let body=null; try { body=raw?JSON.parse(raw):null; } catch { body=null; }
    settings.managementRequests.push({method:request.method,path:request.url,authorization:request.headers.authorization,range:request.headers.range,body});
@@ -1074,6 +1074,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    send(response,404,{detail:'Not Found'});
   });
+ };
+ // `sessionDelay` holds a session's read that long (#766), and Infinity never answers it, as a busy Engine does.
+ const management=createServer((request,response)=>{
+  if(settings.sessionDelay>0&&request.method==='GET'&&/^\/api\/sessions\/[^/]+\/messages(\?|$)/.test(request.url||'')) { if(Number.isFinite(settings.sessionDelay)) setTimeout(()=>manage(request,response),settings.sessionDelay); return; }
+  manage(request,response);
  });
  // The management listener's JSON-RPC socket (#712; tui_gateway/ws.py, methods_display.py), opened with the session
  // token as `?token=` (web_server_chat.py): newline-free JSON frames, the gateway.ready event first, and the display

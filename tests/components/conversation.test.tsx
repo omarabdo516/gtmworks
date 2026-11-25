@@ -25,7 +25,8 @@ vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 // The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
 // answer meant for the record.
-const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : fetch(url, init));
+// The live steps' read (#646) waits for ever, and each reply's steps (#766) are read as none: neither is the record's read.
+const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : String(url).includes('&intent=steps') ? Promise.resolve(Response.json({ steps: {}, usage: null })) : fetch(url, init));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
@@ -105,6 +106,24 @@ for (const [language, line] of [['en', 'The agent engine did not take that model
  const later = await render(view(talk([sent, { ...queued, model_refused: true }, { ...sent, id: 3, body: 'Then the post' }]), language));
  expect(later.container.querySelector('textarea')?.value).toBe('');
  expect(later.container.querySelector('.composer-error')).toBeNull();
+});
+
+// #766 (ADR 0030): a Conversation is drawn from its record at once, and each reply's steps are their own read after it:
+// they fill in under their reply when that read lands, with no second rise-in, and a read that fails changes nothing.
+test('each reply\'s steps arrive after the messages, under their own reply, and a failed read leaves the replies as they are', async () => {
+ const reply = { id: 2, author: 'agent' as const, author_name: 'Lead', body: 'Here is the plan.', created_at: at };
+ let answer: (value: Response) => void = () => {};
+ vi.stubGlobal('fetch', (url: string) => String(url).includes('&intent=steps') ? new Promise<Response>(resolve => { answer = resolve; }) : new Promise<Response>(() => {}));
+ const screen = await render(view(talk([sent, reply])));
+ await expect.element(screen.getByText('Here is the plan.')).toBeVisible();
+ expect(document.querySelector('.steps__toggle'), 'the messages are drawn before the steps').toBeNull();
+ answer(Response.json({ steps: { 2: { list: [{ tool: 'web_search', preview: 'courses', state: 'done' }], seconds: 12 } }, usage: { input: 10, output: 5 } }));
+ await expect.element(screen.getByRole('button', { name: 'Used 1 tool · 12 sec' })).toBeVisible();
+ expect(screen.getByText('Here is the plan.').element().closest('.turn')!.classList.contains('msg-in'), 'no second rise-in').toBe(false);
+ vi.stubGlobal('fetch', (url: string) => String(url).includes('&intent=steps') ? Promise.resolve(Response.json({ error: 'conversationStepsUnread' }, { status: 503 })) : new Promise<Response>(() => {}));
+ const failed = await render(view(talk([sent, reply])));
+ await expect.poll(() => failed.container.textContent).toContain('Here is the plan.');
+ expect(failed.container.querySelector('[role="alert"]'), 'no error line in the Conversation').toBeNull();
 });
 
 // #764: a message is stored the moment it is sent and its Run starts after. A turn the Engine refused stays with "Not sent"

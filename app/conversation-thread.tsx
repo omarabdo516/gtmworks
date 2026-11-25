@@ -36,7 +36,7 @@ import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { ModelLine } from '@/app/model-line';
 import { modelOutcome } from '@/lib/model-causes';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord, ConversationSteps } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useReportRun } from '@/lib/live-runs';
 import { useArrivals, useSentIntoNewChat, type Arrival } from '@/lib/arrivals';
@@ -147,9 +147,24 @@ export function useConversationRecord({company,initial}:{company:string,initial:
   try { const landed=reading(); const response=await fetch(`/api/conversations?company=${company}&conversation=${id}`,{cache:'no-store'}); if(response.ok) { setRecord(await response.json() as ConversationRecord); landed(); } }
   catch { /* The next send or read brings it. */ }
  };
- const drawn=useMemo(()=>withSending(record,sendingList),[record,sendingList]);
+ // Each reply's steps and the token use are their own read (ADR 0030, #766), after the messages are drawn, and again
+ // when a new reply lands: a read that fails leaves the replies as they are, with no line about it.
+ const [steps,setSteps]=useState<ConversationSteps|null>(null);
+ const replies=messages.filter(message=>message.author==='agent'&&!message.kind).map(message=>message.id).join(',');
+ useEffect(()=>{
+  if(!replies) return;
+  const stopped=new AbortController();
+  void fetch(`/api/conversations?company=${company}&conversation=${id}&intent=steps`,{cache:'no-store',signal:stopped.signal})
+   .then(async response=>{ if(response.ok) setSteps(await response.json() as ConversationSteps); else await response.arrayBuffer(); }).catch(()=>{});
+  return ()=>stopped.abort();
+ },[replies,company,id]);
+ const drawn=useMemo(()=>withSteps(withSending(record,sendingList),steps),[record,sendingList,steps]);
  return {record:drawn,asked,reread,sending};
 }
+// The record with each reply's steps under it and the Conversation's token use, once read; a reply the read does not
+// name stays as it is.
+const withSteps=(record:ConversationRecord,read:ConversationSteps|null):ConversationRecord=>!read?.steps?record:{...record,usage:record.usage??read.usage??null,
+ messages:record.messages.map(message=>message.author==='agent'&&!message.kind&&!message.steps&&read.steps[message.id]?{...message,steps:read.steps[message.id]}:message)};
 // The record as drawn: the messages just sent after it, and the Agent working on them.
 const withSending=(record:ConversationRecord,list:Sending[]):ConversationRecord=>!list.length?record:{...record,pending:true,
  messages:[...record.messages,...list.map(sending=>({id:sending.id,author:'person' as const,author_name:'',body:sending.body,created_at:sending.at,kind:'sending' as const,

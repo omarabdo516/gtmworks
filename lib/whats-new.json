@@ -1,5 +1,11 @@
 [
  {
+  "issue": 766,
+  "date": "2026-11-25",
+  "en": { "title": "Conversations open at once", "body": "A Conversation opens with its messages straight away, even when the agent engine is busy; the tools each reply used appear under it a moment later." },
+  "ar": { "title": "المحادثات بتفتح على طول", "body": "المحادثة بقت بتفتح برسايلها على طول، حتى لو محرك الوكلاء مشغول؛ والأدوات اللي كل رد استخدمها بتظهر تحته بعدها بلحظة." }
+ },
+ {
   "issue": 765,
   "date": "2026-11-25",
   "en": { "title": "A channel message is kept first too", "body": "A message you send in a channel or a card's chat is stored and shown at once, and the Agents it calls start after; if one can't start, the message says Not sent to that Agent, with Try again." },

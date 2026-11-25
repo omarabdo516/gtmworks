@@ -11,8 +11,8 @@ password, anything shaped like a token, and short digit runs such as authenticat
 - `"event":"chat_opened"`: one line per chat opened (`/c/<slug>/conversations/<id>`), written once its response has gone.
   Fields: `company`, `conversation`, and `ms`, each step's elapsed milliseconds from the page's start: `frame` (sign-in,
   Companies and the Conversation), `reads` (the page's other reads), `details` (the Agent's details), `sidebar` (the
-  Shell's reads), `firstByte` (the frame is drawn and its first bytes leave), `session` (the Hermes session read), `record`
-  (the transcript's reads) and `done`. A step that did not run is left out. Never a body or a key. `render` (#762) says
+  Shell's reads), `firstByte` (the frame is drawn and its first bytes leave), `record` (the transcript's reads) and `done`. The Hermes
+  session is no step of an open since #766: the steps under the replies are their own request after the page is drawn. A step that did not run is left out. Never a body or a key. `render` (#762) says
   what the render was: `open` (a person opened the page), `prefetch` (a link drew it ahead of a press) or `refresh` (the
   page the browser already showed, drawn again); only `open` lines measure what a person waited for.
 - `"event":"message_drawn"`: from a person pressing Send in a Conversation until their own message was drawn, measured

@@ -13,7 +13,7 @@ import { conversationColumns, uuid } from '@/lib/conversations';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import { discardConversationFiles, keepConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
-import { conversationRecord } from '@/lib/conversation-record';
+import { conversationRecord, conversationSteps } from '@/lib/conversation-record';
 import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -190,7 +190,7 @@ async function read(db:Database,person:string,company:string,conversation:string
   const {data:named}=await db.from('conversations').select('hermes_session_id').eq('id',conversation).maybeSingle();
   if(named?.hermes_session_id) found.hermes_session_id=named.hermes_session_id;
  }
- return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session)));
+ return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent)));
 }
 
 // "Try again" on a message that was not sent (#764): the same turn, by its send key, waits again and its Run starts
@@ -200,6 +200,16 @@ async function retry(db:Database,body:Record<string,unknown>) {
  const retried=await retryTurn(db,service(),{company:body.company as string,conversation:body.conversation as string,sendKey:body.sendKey as string,later:after});
  if('code' in retried) return refuseFor(retried.code);
  return reply(retried);
+}
+
+// Each reply's steps and the Conversation's token use (#766, ADR 0030): their own request, after the messages are drawn,
+// read from the Agent's Hermes session through the person's own session (RLS sees only their Conversation). A session
+// that cannot be read answers 503, and the page keeps the replies as they are. Nothing of it is kept or logged.
+async function steps(db:Database,company:string,conversation:string) {
+ const {data:found}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).maybeSingle();
+ if(!found) return refuse('conversationNotFound',404);
+ const read=await conversationSteps(db,found,(agent,session)=>agentSessionTurns(company,agent,session));
+ return read?reply(read):refuse('conversationStepsUnread',503);
 }
 
 // Each write's intent and its handler; any other intent is a message to send.
@@ -245,6 +255,7 @@ async function respond(request:NextRequest) {
    const {data:agents}=writer?await db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',body.company).order('name'):{data:[]};
    return reply({writer:!!writer,agents:agents||[]});
   }
+  if(body.intent==='steps') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await steps(db,body.company,body.conversation):refuse('conversationNotFound',404);
   if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
   return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
  } catch { logActionFailure('conversation',new Error('Conversation request failed')); return refuse('conversationFailed',400); }

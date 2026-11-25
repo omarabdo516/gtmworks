@@ -175,7 +175,8 @@ test('a Card waiting on a decision reads "Waiting on you" for its writer and "Wa
 test('while its chat waits on its person the pill reads "Waiting on you" and shakes once, "Waiting on the team" for a reader who cannot write, and its column again after', async () => {
  const wait = { person: 'p-3', kind: 'hand', title: 'انشر المقال' } as const;
  const answers = [{ ...await recordWith({ id: 7, column: 'progress', wait }), pending: false }, { ...await recordWith({ id: 7, column: 'progress' }), pending: false }];
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift())));
+ // Each reply's steps (#766) are their own read, answered as none: only the record's reads take the answers.
+ vi.stubGlobal('fetch', vi.fn(async (url: string) => String(url).includes('&intent=steps') ? Response.json({ steps: {}, usage: null }) : Response.json(answers.shift())));
  const record = await recordWith({ id: 7, column: 'progress' });
  const screen = await show(record);
  await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();

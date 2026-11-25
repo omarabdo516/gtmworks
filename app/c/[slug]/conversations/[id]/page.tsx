@@ -12,7 +12,7 @@ import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { conversationRecord, tiedCard } from '@/lib/conversation-record';
-import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
+import { agentAppStates } from '@/lib/company-app-items';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
 import { pickTab } from '@/lib/agent-details.mjs';
@@ -48,7 +48,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  after(()=>logOpen(timing,company.id,id,render));
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
- const readRecord=()=>conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));
+ const readRecord=()=>conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent));
  let record=readRecord();
  // Awaited only by the transcript: a read of the frame that fails first must not leave its failure unhandled.
  record.then(()=>markOpen('record',timing),()=>{});

@@ -2,7 +2,8 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { stepsOfReplies, type RunSteps, type SessionTurn } from './conversations';
+import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -15,9 +16,10 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // Agents its person asked Lead for and the Owner's answer (#17), the cards its Agent showed with its replies (#136), the
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
 // told it reads one that is not the team's), the Card it put on the board with that Card's column now (#144), and the
-// questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`). Each
-// reply carries the tool calls of its Run (#141), read from the Agent's Hermes session as the chat opens (#346), never kept, and the
-// Conversation's token use is that session's own (#347), null while it cannot be read. While a request to
+// questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`). The
+// record is what the database holds and never waits on the Engine (ADR 0030, #766): each reply's tool calls (#141) and
+// the Conversation's token use (#347), which the Agent's Hermes session keeps, are their own read (conversationSteps),
+// started once the messages are drawn. While a request to
 // allow an action waits (#163), the record says which choices this person may send (`permit`); the Run is still working. The
 // turn a hand card's "Done it" started (#140) is drawn by that card alone, which says when that turn could not start.
 // A connect card (#203) shows its app's state in the Agent's profile now (`apps`, read only while one is open); the record
@@ -26,10 +28,8 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // through conversation_handovers by this Conversation's person whether or not they see that Agent; while its two Runs
 // move, the record says so (`handover`), so the chat keeps asking for the follow-up reply, and once it ended without
 // finishing the row says so (`failed`, #375).
-export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
+export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>) {
  const conversation=found.id;
- // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
- const read=session&&found.agent_id&&found.hermes_session_id?session(found.agent_id,found.hermes_session_id).catch(()=>null):Promise.resolve(null);
  // The record's reads go out together, each one round trip, so a busy machine adds one wait and not a chain of them to
  // opening the chat (decision 0042). The messages with how their runs ended and the turns still waiting, and the requests
  // for an Agent with the Agents made for them, are read in one statement (one snapshot): a run closed in one transaction
@@ -162,9 +162,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   ...(found.good_morning_day?{morningDay:found.good_morning_day}:{}),
-  messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files,waiting(messages,ends,commandRuns).length>0),firstReply)
+  messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,[],files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files,waiting(messages,ends,commandRuns).length>0),firstReply)
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
-  usage:(await read)?.usage??null,
+  usage:null as SessionUsage|null,
   pending:waiting(messages,ends,commandRuns).length>0||queuedWaiting(queued),
   ...(moving?{handover:true as const}:{}),
   ...(lead?{lead:true as const}:{}),
@@ -183,6 +183,24 @@ export async function conversationRecord(db:Database,person:string,company:strin
  };
 }
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>;
+
+// Each reply's steps and the Conversation's token use, read from its Agent's Hermes session (#346, #347) on their own
+// request, after the messages are drawn (ADR 0030, #766): by the id of the reply they go under. Null when the session
+// cannot be read, which changes nothing on the page. `session` reads it; nothing of it is kept (ADR 0017).
+export type ConversationSteps={steps:Record<number,RunSteps>,usage:SessionUsage|null};
+export async function conversationSteps(db:Database,found:{id:string,agent_id:string|null,hermes_session_id?:string|null},session:(agent:string,session:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>):Promise<ConversationSteps|null> {
+ if(!found.agent_id||!found.hermes_session_id) return {steps:{},usage:null};
+ const [{data},read]=await Promise.all([
+  db.from('conversation_messages').select('id,author,run_id,created_at').eq('conversation_id',found.id).order('id'),
+  session(found.agent_id,found.hermes_session_id).catch(()=>null),
+ ]);
+ if(!read) return null;
+ const messages=(data||[]) as {id:number,author:string,run_id:string,created_at:string}[];
+ const byRun=new Map(messages.filter(message=>message.author==='agent').map(message=>[message.run_id,message.id]));
+ const steps:Record<number,RunSteps>={};
+ for(const row of stepsOfReplies(messages,read.turns)) { const id=byRun.get(row.run_id); if(id!==undefined) steps[id]={list:row.steps,seconds:row.seconds}; }
+ return {steps,usage:read.usage};
+}
 
 // A done hand card says its turn could not start until its person writes to the Agent after that.
 const handPickup=(card:ReplyCard|null,queued:QueuedTurn[],messages:{author:string,created_at:string}[]):ReplyCard|null=>{
