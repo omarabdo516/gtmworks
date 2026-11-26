@@ -67,7 +67,7 @@ test('a listener that timed out is slow and asked one call at a time by every ca
  } finally { warned.mock.restore(); told.mock.restore(); await fake.close(); }
 });
 
-test('a listener that is down is not asked again until its backoff ends, and every failure names its cause', async()=>{
+test('a listener nothing connects to is down, asked one call at a time by every caller, and back the moment it answers', async()=>{
  const engine=await listener();
  const warned=mock.method(console,'warn',()=>{}); const told=mock.method(console,'info',()=>{});
  try {
@@ -76,19 +76,17 @@ test('a listener that is down is not asked again until its backoff ends, and eve
   const refused=await failureOf(engineRequest(at,{path:'/health'}));
   assert.equal(refused.cause,'refused');
   assert.equal(refused.sent,false,'nothing connected, so nothing reached the Engine');
-  assert.equal(listenerHealth(at,'api').state,'down');
+  assert.deepEqual(listenerHealth(at,'api'),{state:'down',cause:'refused'});
+  assert.deepEqual(await hermesEngine(at).start({conversation:'c',input:'hi',idempotencyKey:'i'}),{state:'notReached'},'a Run start nothing connected to is not reached (#413)');
+  assert.equal(warned.mock.callCount(),1,'one log line for the change, none for the same state again');
+  assert.match(String(warned.mock.calls[0].arguments[0]),/is down \(refused\)/);
+  // It comes back: the very next call reaches it, with no wait held over from the outage, and restores it.
   await engine.start();
-  const held=await failureOf(engineRequest(at,{path:'/health'}));
-  assert.equal(held.cause,'refused','a held call names the cause the listener is down for');
-  assert.equal(held.sent,false,'and was never sent');
-  assert.deepEqual(await hermesEngine(at).start({conversation:'c',input:'hi',idempotencyKey:'i'}),{state:'notReached'},'a Run start held back is not reached (#413)');
-  assert.equal(engine.state.connections,0,'the listener was not asked in its backoff');
-  await new Promise(resolve=>setTimeout(resolve,300));
   const answered=await engineRequest(at,{path:'/health'});
   assert.equal(answered.status,200);
   assert.equal(engine.state.connections,1);
-  assert.equal(listenerHealth(at,'api').state,'answering');
-  assert.equal(warned.mock.callCount(),1); assert.equal(told.mock.callCount(),1);
+  assert.deepEqual(listenerHealth(at,'api'),{state:'answering',cause:null});
+  assert.equal(told.mock.callCount(),1);
  } finally { warned.mock.restore(); told.mock.restore(); await engine.stop(); }
  // An address gtmworks never calls is refused before anything is sent.
  const outside=await failureOf(engineRequest({address:'http://8.8.8.8:8642',key:'k'},{path:'/health'}));
