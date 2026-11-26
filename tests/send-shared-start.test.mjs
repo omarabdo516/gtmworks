@@ -42,14 +42,22 @@ function databases(other) {
    reservation.in_flight=true; reservation.start_attempts++; return {data:reservation.start_attempts,error:null};
   }
   if(name==='record_conversation_turn') { turns.get(args.message_key).started_at='now'; reservations.get(args.message_key).abandoned_at='done'; return {data:true,error:null}; }
+  // Where a turn stands, as the database answers the service role (queued_turn_start).
+  if(name==='queued_turn_start') {
+   const turn=turns.get(args.message_key); const held=reservations.get(args.message_key);
+   const state=!turn?'waiting':turn.started_at?'started':turn.failed_at?(turn.model_refused?'modelRefused':'failed')
+    :!held||held.abandoned_at||held.start_unknown_at?'waiting':'inFlight';
+   return {data:state,error:null};
+  }
   return {data:null,error:{message:`unexpected ${name}`}};
  };
  const from=table=>{
   const filter={};
   const read={select:()=>read,eq:(column,value)=>{ filter[column]=value; return read; },maybeSingle:async()=>{
    if(table==='hermes_agents') return {data:{id:agent,instructions:null},error:null};
-   if(table==='conversation_queued_turns') return {data:turns.get(filter.send_key)??null,error:null};
-   if(table==='conversation_run_reservations') return {data:reservations.get(filter.send_key)??null,error:null};
+   // As the database grants them: the service role reads neither table itself (only authenticated reads a turn, under
+   // its row policy), so a send learns where its turn stands from queued_turn_start alone.
+   if(table==='conversation_queued_turns'||table==='conversation_run_reservations') return {data:null,error:{code:'42501',message:`permission denied for table ${table}`}};
    return {data:null,error:null};
   }};
   return read;
