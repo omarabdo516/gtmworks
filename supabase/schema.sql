@@ -33,19 +33,6 @@ ALTER SCHEMA public OWNER TO pg_database_owner;
 COMMENT ON SCHEMA public IS 'standard public schema';
 
 --
--- Name: member_agent_role; Type: TYPE; Schema: public; Owner: postgres
---
-
-CREATE TYPE public.member_agent_role AS ENUM (
-    'account_manager',
-    'writer',
-    'designer',
-    'critic'
-);
-
-ALTER TYPE public.member_agent_role OWNER TO postgres;
-
---
 -- Name: member_role; Type: TYPE; Schema: public; Owner: postgres
 --
 
@@ -361,19 +348,6 @@ $$;
 ALTER FUNCTION public.agent_fields_valid(agent_name text, job text, apps text[], template text, instructions text) OWNER TO postgres;
 
 --
--- Name: agent_identities(); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION public.agent_identities() RETURNS TABLE(id uuid, role text, name text)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
- select a.id, a.role, p.name from public.agents a join public.people p on p.id=a.id where auth.uid() is not null;
-$$;
-
-ALTER FUNCTION public.agent_identities() OWNER TO postgres;
-
---
 -- Name: agent_key_wait_work(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -499,23 +473,6 @@ CREATE FUNCTION public.agent_may_move(agent uuid) RETURNS boolean
 $$;
 
 ALTER FUNCTION public.agent_may_move(agent uuid) OWNER TO postgres;
-
---
--- Name: agent_membership_guard(); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION public.agent_membership_guard() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$ begin
- if new.removed_at is null and (tg_op='INSERT' or old.removed_at is not null) and exists(select 1 from public.agents a where a.id=new.person_id)
-  and not exists(select 1 from public.agent_grants g where g.company_id=new.company_id and g.agent_id=new.person_id and g.revoked_at is null) then
-  raise exception 'agent has no active grant in this company' using errcode='42501';
- end if;
- return new;
-end $$;
-
-ALTER FUNCTION public.agent_membership_guard() OWNER TO postgres;
 
 --
 -- Name: agent_move_blocked(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2909,8 +2866,7 @@ CREATE FUNCTION public.channel_message_mentions(ch uuid, person uuid, message te
  select m.person_id from public.channels k
   join public.members m on m.company_id=k.company_id
   join public.people p on p.id=m.person_id
- where k.id=ch and m.removed_at is null and m.agent_role is null
-  and not exists(select 1 from public.agents a where a.id=m.person_id)
+ where k.id=ch and m.removed_at is null
   and public.channel_member(ch, m.person_id) and m.person_id <> person
   and btrim(p.name) <> ''
   and not exists(select 1 from public.hermes_agents h where h.company_id=k.company_id
@@ -3077,8 +3033,7 @@ CREATE FUNCTION public.channel_person(c uuid, person uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
- select exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null
-  and m.agent_role is null and not exists(select 1 from public.agents a where a.id=m.person_id));
+ select exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null);
 $$;
 
 ALTER FUNCTION public.channel_person(c uuid, person uuid) OWNER TO postgres;
@@ -3647,7 +3602,7 @@ begin
  insert into public.people(id,name) values(auth.uid(),split_part(mail,'@',1)) on conflict(id) do nothing;
  for inv in select * from public.member_invitations where lower(email)=lower(mail) and claimed_at is null for update loop
   joined := false;
-  insert into public.members(company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) values(inv.company_id,auth.uid(),inv.role,inv.grant_publishing,inv.grant_money_figures,inv.grant_customer_data) on conflict (company_id,person_id) do update set role=excluded.role, grant_publishing=excluded.grant_publishing, grant_money_figures=excluded.grant_money_figures, grant_customer_data=excluded.grant_customer_data, removed_at=null, agent_role=null where public.members.removed_at is not null
+  insert into public.members(company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) values(inv.company_id,auth.uid(),inv.role,inv.grant_publishing,inv.grant_money_figures,inv.grant_customer_data) on conflict (company_id,person_id) do update set role=excluded.role, grant_publishing=excluded.grant_publishing, grant_money_figures=excluded.grant_money_figures, grant_customer_data=excluded.grant_customer_data, removed_at=null where public.members.removed_at is not null
    returning true into joined;
   if joined then
    delete from public.member_agent_access where company_id=inv.company_id and person_id=auth.uid();
@@ -4157,20 +4112,6 @@ $$;
 ALTER FUNCTION public.company_agent_models(c uuid) OWNER TO postgres;
 
 --
--- Name: company_agents(uuid); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION public.company_agents(c uuid) RETURNS TABLE(person_id uuid, role text, granted boolean)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
- select a.id, a.role, exists(select 1 from public.agent_grants g join public.members m on m.company_id=g.company_id and m.person_id=g.agent_id and m.removed_at is null where g.company_id=c and g.agent_id=a.id and g.revoked_at is null)
- from public.agents a where public.is_member(c);
-$$;
-
-ALTER FUNCTION public.company_agents(c uuid) OWNER TO postgres;
-
---
 -- Name: company_app_agents(uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -4413,7 +4354,6 @@ CREATE FUNCTION public.conversation_addressee(c uuid, message text) RETURNS TABL
     AS $$
  select p.id,p.name from public.members m join public.people p on p.id=m.person_id, lateral (select ltrim(message) as text) t
  where m.company_id=c and m.removed_at is null and length(btrim(p.name))>0
-  and m.agent_role is null and not exists(select 1 from public.agents a where a.id=m.person_id)
   and not exists(select 1 from public.hermes_agents h where h.company_id=c and lower(h.name)=lower(p.name))
   and lower(left(t.text,length(p.name)+1))='@'||lower(p.name)
   and (length(t.text)=length(p.name)+1 or substr(t.text,length(p.name)+2,1) ~ '[[:space:][:punct:]،؛؟]')
@@ -4906,12 +4846,11 @@ CREATE FUNCTION public.create_card_request(c uuid, message text, agent uuid, car
 declare result bigint; first_stage bigint; text_body text := btrim(coalesce(message,'')); begin
  if not public.work_can_edit(c) then raise exception 'not permitted'; end if;
  if text_body='' or card_mode is null or card_mode not in ('plan','do','answer') then raise exception 'invalid request' using errcode='22023'; end if;
-  -- Only an agent the company has granted (a role agent with an active grant and membership) can be asked.
- if not exists(select 1 from public.company_agents(c) x where x.person_id=agent and x.granted) then raise exception 'agent not found'; end if;
+ if agent is null or not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=agent)
+  or not public.can_see_agent(c,agent) then raise exception 'agent not found'; end if;
  select id into first_stage from public.work_stages where company_id=c and kind='ideas';
  if first_stage is null then raise exception 'no Ideas stage'; end if;
- insert into public.work_cards(company_id,stage_id,title,mode) values (c,first_stage,left(btrim(split_part(text_body,E'\n',1)),80),card_mode) returning id into result;
- insert into public.work_assignees(company_id,card_id,person_id) values (c,result,agent);
+ insert into public.work_cards(company_id,stage_id,title,mode,agent_id) values (c,first_stage,left(btrim(split_part(text_body,E'\n',1)),80),card_mode,agent) returning id into result;
  insert into public.work_comments(company_id,card_id,body) values (c,result,text_body);
  return result;
 end $$;
@@ -5688,6 +5627,20 @@ end $$;
 ALTER FUNCTION public.forget_shared_space(c uuid) OWNER TO postgres;
 
 --
+-- Name: former_member_names(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.former_member_names(c uuid) RETURNS TABLE(person_id uuid, name text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select m.person_id, p.name from public.members m join public.people p on p.id=m.person_id
+ where m.company_id=c and m.removed_at is not null and public.is_member(c);
+$$;
+
+ALTER FUNCTION public.former_member_names(c uuid) OWNER TO postgres;
+
+--
 -- Name: give_agent_look(uuid, uuid, boolean, text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -5799,27 +5752,6 @@ $_$;
 ALTER FUNCTION public.good_morning_work() OWNER TO postgres;
 
 --
--- Name: grant_agent_access(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION public.grant_agent_access(c uuid, a uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-declare found_agent public.agents%rowtype; begin
- if auth.uid() is null or not public.can_assign_owner(c) then raise exception 'not permitted to grant agent access' using errcode='42501'; end if;
- select * into found_agent from public.agents where id=a;
- if not found then raise exception 'agent not found'; end if;
- insert into public.agent_grants(company_id,agent_id,granted_by) values (c,a,auth.uid())
-  on conflict (company_id,agent_id) do update set granted_by=auth.uid(), granted_at=now(), revoked_by=null, revoked_at=null;
- insert into public.members(company_id,person_id,role,agent_role) values (c,a,'contributor',found_agent.role::public.member_agent_role)
-  on conflict (company_id,person_id) do update set role='contributor', agent_role=excluded.agent_role, removed_at=null;
- insert into public.member_audit(company_id,actor_id,actor_name,person_id,person_name,action,after_data) values (c,auth.uid(),(select name from public.people where id=auth.uid()),a,(select name from public.people where id=a),'GRANT_AGENT',jsonb_build_object('agent_role',found_agent.role));
-end $$;
-
-ALTER FUNCTION public.grant_agent_access(c uuid, a uuid) OWNER TO postgres;
-
---
 -- Name: guard_agent_profile_agent(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -5916,12 +5848,12 @@ begin
   -- A signed-in person's write (the request's role), however it reaches the row: the database's own maintenance is not
   -- a person changing a Member.
   if tg_op = 'UPDATE' and current_setting('role', true) = 'authenticated' and old.removed_at is null and not public.is_company_owner(old.company_id) then
-   if old.role = 'owner' and (new.role, new.agent_role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data, new.removed_at)
-      is distinct from (old.role, old.agent_role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data, old.removed_at) then
+   if old.role = 'owner' and (new.role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data, new.removed_at)
+      is distinct from (old.role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data, old.removed_at) then
     raise exception 'ownerChangedByOwnerOnly' using errcode = '42501';
    end if;
-   if old.person_id = auth.uid() and (new.role, new.agent_role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data)
-      is distinct from (old.role, old.agent_role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data) then
+   if old.person_id = auth.uid() and (new.role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data)
+      is distinct from (old.role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data) then
     raise exception 'ownGrantsUnchangeable' using errcode = '42501';
    end if;
   end if;
@@ -5935,26 +5867,6 @@ begin
 end $$;
 
 ALTER FUNCTION public.guard_member() OWNER TO postgres;
-
---
--- Name: guard_member_agent_role(); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION public.guard_member_agent_role() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-begin
- if auth.uid() is not null and new.agent_role is distinct from old.agent_role and not public.can_assign_owner(new.company_id) then
-  -- Role changes and invitation claims must release a key without assigning a new one.
-  if new.agent_role is not null or (new.role='contributor' and not (old.removed_at is not null and new.removed_at is null)) then
-   raise exception 'only an owner can change agent roles' using errcode='42501';
-  end if;
- end if;
- return new;
-end $$;
-
-ALTER FUNCTION public.guard_member_agent_role() OWNER TO postgres;
 
 --
 -- Name: guard_note_edit(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -5991,6 +5903,24 @@ begin
 end $_$;
 
 ALTER FUNCTION public.guard_shared_space_agent() OWNER TO postgres;
+
+--
+-- Name: guard_work_assignee(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.guard_work_assignee() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+ if auth.uid() is not null and public.is_member(new.company_id)
+  and not exists(select 1 from public.members m where m.company_id=new.company_id and m.person_id=new.person_id and m.removed_at is null) then
+  raise exception 'memberNotFound' using errcode='P0002';
+ end if;
+ return new;
+end $$;
+
+ALTER FUNCTION public.guard_work_assignee() OWNER TO postgres;
 
 --
 -- Name: guard_work_stage_kind(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6961,11 +6891,7 @@ CREATE FUNCTION public.log_actor_kind(c uuid, actor uuid) RETURNS text
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
- select case
-  when actor is null then 'system'
-  when exists(select 1 from public.agents a where a.id=actor)
-   or exists(select 1 from public.members m where m.company_id=c and m.person_id=actor and m.agent_role is not null) then 'agent'
-  else 'person' end;
+ select case when actor is null then 'system' else 'person' end;
 $$;
 
 ALTER FUNCTION public.log_actor_kind(c uuid, actor uuid) OWNER TO postgres;
@@ -7302,7 +7228,6 @@ CREATE FUNCTION public.log_member_details(person_name text, before_data jsonb, a
   'person_name',person_name,
   'old_role',before_data->>'role',
   'new_role',after_data->>'role',
-  'agent_role',coalesce(after_data->>'agent_role',before_data->>'agent_role'),
   'changed',case when before_data is not null and after_data is not null then
    (select coalesce(jsonb_agg(k order by k),'[]'::jsonb) from jsonb_object_keys(after_data) k where before_data->k is distinct from after_data->k) end));
 $$;
@@ -7991,8 +7916,7 @@ begin
   select new.company_id, m.person_id, 'mention', left(coalesce(nullif(card_title,''), '#'||new.card_id), 300), left(new.body, 4000),
    left(coalesce(writer,''), 120), new.card_id, new.id
   from public.members m join public.people p on p.id=m.person_id
-  where m.company_id=new.company_id and m.removed_at is null and m.agent_role is null and m.person_id <> new.author_id
-   and not exists(select 1 from public.agents a where a.id=m.person_id) and btrim(p.name) <> ''
+  where m.company_id=new.company_id and m.removed_at is null and m.person_id <> new.author_id and btrim(p.name) <> ''
    and (public.mention_at(new.body, p.name) > 0 or public.mention_at(new.body, split_part(btrim(p.name),' ',1)) > 0)
   on conflict (note_id, person_id) where note_id is not null do nothing;
  select * into chosen from public.hermes_agents where id=public.channel_mention(new.company_id, new.author_id, new.body);
@@ -10346,25 +10270,6 @@ end $$;
 ALTER FUNCTION public.retry_conversation_turn(conversation uuid, c uuid, message_key uuid) OWNER TO postgres;
 
 --
--- Name: revoke_agent_access(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION public.revoke_agent_access(c uuid, a uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-declare found_agent public.agents%rowtype; begin
- if auth.uid() is null or not public.can_assign_owner(c) then raise exception 'not permitted to revoke agent access' using errcode='42501'; end if;
- update public.agent_grants set revoked_at=now(), revoked_by=auth.uid() where company_id=c and agent_id=a and revoked_at is null;
- if not found then raise exception 'grant not found'; end if;
- update public.members set removed_at=now() where company_id=c and person_id=a and removed_at is null;
- select * into found_agent from public.agents where id=a;
- insert into public.member_audit(company_id,actor_id,actor_name,person_id,person_name,action,before_data) values (c,auth.uid(),(select name from public.people where id=auth.uid()),a,(select name from public.people where id=a),'REVOKE_AGENT',jsonb_build_object('agent_role',found_agent.role));
-end $$;
-
-ALTER FUNCTION public.revoke_agent_access(c uuid, a uuid) OWNER TO postgres;
-
---
 -- Name: routine_results_seen(uuid, text, text[]); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -12220,22 +12125,6 @@ ALTER TABLE public.agent_change_proposals ALTER COLUMN id ADD GENERATED ALWAYS A
 );
 
 --
--- Name: agent_grants; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.agent_grants (
-    company_id uuid NOT NULL,
-    agent_id uuid NOT NULL,
-    granted_by uuid,
-    granted_at timestamp with time zone DEFAULT now() NOT NULL,
-    revoked_by uuid,
-    revoked_at timestamp with time zone,
-    CONSTRAINT agent_grants_revocation CHECK (((revoked_at IS NULL) = (revoked_by IS NULL)))
-);
-
-ALTER TABLE public.agent_grants OWNER TO postgres;
-
---
 -- Name: agent_handovers_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
@@ -12420,19 +12309,6 @@ CREATE TABLE public.agent_rules (
 );
 
 ALTER TABLE public.agent_rules OWNER TO postgres;
-
---
--- Name: agents; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.agents (
-    id uuid NOT NULL,
-    role text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT agents_role_check CHECK ((role = ANY (ARRAY['account_manager'::text, 'writer'::text, 'designer'::text, 'critic'::text])))
-);
-
-ALTER TABLE public.agents OWNER TO postgres;
 
 --
 -- Name: approval_steps; Type: TABLE; Schema: public; Owner: postgres
@@ -13456,9 +13332,7 @@ CREATE TABLE public.members (
     grant_publishing boolean DEFAULT false NOT NULL,
     grant_money_figures boolean DEFAULT false NOT NULL,
     grant_customer_data boolean DEFAULT false NOT NULL,
-    removed_at timestamp with time zone,
-    agent_role public.member_agent_role,
-    CONSTRAINT members_agent_role_check CHECK (((agent_role IS NULL) OR (role = 'contributor'::public.member_role)))
+    removed_at timestamp with time zone
 );
 
 ALTER TABLE public.members OWNER TO postgres;
@@ -14103,13 +13977,6 @@ ALTER TABLE ONLY public.agent_change_proposals
     ADD CONSTRAINT agent_change_proposals_pkey PRIMARY KEY (id);
 
 --
--- Name: agent_grants agent_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agent_grants
-    ADD CONSTRAINT agent_grants_pkey PRIMARY KEY (company_id, agent_id);
-
---
 -- Name: agent_handovers agent_handovers_conversation_id_run_id_call_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -14220,20 +14087,6 @@ ALTER TABLE ONLY public.agent_rules
 
 ALTER TABLE ONLY public.agent_rules
     ADD CONSTRAINT agent_rules_pkey PRIMARY KEY (id);
-
---
--- Name: agents agents_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT agents_pkey PRIMARY KEY (id);
-
---
--- Name: agents agents_role_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT agents_role_key UNIQUE (role);
 
 --
 -- Name: approval_steps approval_steps_company_id_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
@@ -15324,12 +15177,6 @@ CREATE UNIQUE INDEX hermes_one_default ON public.hermes_agents USING btree (comp
 CREATE INDEX lead_agent_requests_waiting ON public.lead_agent_requests USING btree (company_id, created_at) WHERE (state = 'waiting'::text);
 
 --
--- Name: members_active_agent_role; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE UNIQUE INDEX members_active_agent_role ON public.members USING btree (company_id, agent_role) WHERE ((agent_role IS NOT NULL) AND (removed_at IS NULL));
-
---
 -- Name: note_runs_agent; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -15484,12 +15331,6 @@ CREATE TRIGGER agent_handovers_marked_stays_stopped BEFORE UPDATE OF state ON pu
 --
 
 CREATE TRIGGER agent_look_given AFTER INSERT ON public.hermes_agents FOR EACH ROW EXECUTE FUNCTION public.give_made_agent_look();
-
---
--- Name: members agent_membership_guard; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE TRIGGER agent_membership_guard BEFORE INSERT OR UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION public.agent_membership_guard();
 
 --
 -- Name: hermes_agents agent_profile_agent; Type: TRIGGER; Schema: public; Owner: postgres
@@ -15732,12 +15573,6 @@ CREATE TRIGGER conversations_keep_agent BEFORE INSERT OR UPDATE ON public.conver
 CREATE TRIGGER conversations_visible_agent BEFORE INSERT ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.refuse_hidden_agent();
 
 --
--- Name: members member_agent_role_guard; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE TRIGGER member_agent_role_guard BEFORE INSERT OR UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION public.guard_member_agent_role();
-
---
 -- Name: member_audit member_audit_company_log; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -15826,6 +15661,12 @@ CREATE TRIGGER stamp_card_visit BEFORE INSERT OR UPDATE ON public.work_card_visi
 --
 
 CREATE TRIGGER work_activity_company_log AFTER INSERT ON public.work_activity FOR EACH ROW WHEN ((new.action <> 'comment_added'::text)) EXECUTE FUNCTION public.log_card_activity();
+
+--
+-- Name: work_assignees work_assignee_active; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER work_assignee_active BEFORE INSERT ON public.work_assignees FOR EACH ROW EXECUTE FUNCTION public.guard_work_assignee();
 
 --
 -- Name: work_assignees work_audit; Type: TRIGGER; Schema: public; Owner: postgres
@@ -16057,34 +15898,6 @@ ALTER TABLE ONLY public.agent_change_proposals
     ADD CONSTRAINT agent_change_proposals_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES public.hermes_agents(id) ON DELETE CASCADE;
 
 --
--- Name: agent_grants agent_grants_agent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agent_grants
-    ADD CONSTRAINT agent_grants_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.agents(id);
-
---
--- Name: agent_grants agent_grants_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agent_grants
-    ADD CONSTRAINT agent_grants_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
-
---
--- Name: agent_grants agent_grants_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agent_grants
-    ADD CONSTRAINT agent_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.people(id);
-
---
--- Name: agent_grants agent_grants_revoked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agent_grants
-    ADD CONSTRAINT agent_grants_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.people(id);
-
---
 -- Name: agent_handovers agent_handovers_channel_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -16244,13 +16057,6 @@ ALTER TABLE ONLY public.agent_rules
 
 ALTER TABLE ONLY public.agent_rules
     ADD CONSTRAINT agent_rules_said_by_fkey FOREIGN KEY (said_by) REFERENCES public.people(id);
-
---
--- Name: agents agents_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT agents_id_fkey FOREIGN KEY (id) REFERENCES public.people(id);
 
 --
 -- Name: approval_steps approval_steps_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
@@ -17459,18 +17265,6 @@ ALTER TABLE public.agent_change_proposals ENABLE ROW LEVEL SECURITY;
 CREATE POLICY agent_change_proposals_read ON public.agent_change_proposals FOR SELECT TO authenticated USING ((public.is_member(company_id) AND (public.is_company_owner(company_id) OR ((asked_by = auth.uid()) AND public.can_see_agent(company_id, agent_id) AND public.can_see_agent(company_id, proposed_by)))));
 
 --
--- Name: agent_grants; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.agent_grants ENABLE ROW LEVEL SECURITY;
-
---
--- Name: agent_grants agent_grants_read; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY agent_grants_read ON public.agent_grants FOR SELECT TO authenticated USING (public.can_manage_company(company_id));
-
---
 -- Name: agent_handovers; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -17573,18 +17367,6 @@ ALTER TABLE public.agent_rules ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY agent_rules_read ON public.agent_rules FOR SELECT TO authenticated USING ((public.is_member(company_id) AND public.can_see_agent(company_id, agent_id) AND ((suggestion IS NULL) OR (suggestion = 'approved'::text) OR (said_by = auth.uid()) OR public.can_manage_company(company_id))));
-
---
--- Name: agents; Type: ROW SECURITY; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.agents ENABLE ROW LEVEL SECURITY;
-
---
--- Name: agents agents_read; Type: POLICY; Schema: public; Owner: postgres
---
-
-CREATE POLICY agents_read ON public.agents FOR SELECT TO authenticated USING (true);
 
 --
 -- Name: approval_steps; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -18782,13 +18564,6 @@ GRANT ALL ON FUNCTION public.agent_face_states(c uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.agent_fields_valid(agent_name text, job text, apps text[], template text, instructions text) FROM PUBLIC;
 
 --
--- Name: FUNCTION agent_identities(); Type: ACL; Schema: public; Owner: postgres
---
-
-REVOKE ALL ON FUNCTION public.agent_identities() FROM PUBLIC;
-GRANT ALL ON FUNCTION public.agent_identities() TO authenticated;
-
---
 -- Name: FUNCTION agent_key_wait_work(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -18833,12 +18608,6 @@ REVOKE ALL ON FUNCTION public.agent_look_in_use(look public.agent_looks) FROM PU
 --
 
 REVOKE ALL ON FUNCTION public.agent_may_move(agent uuid) FROM PUBLIC;
-
---
--- Name: FUNCTION agent_membership_guard(); Type: ACL; Schema: public; Owner: postgres
---
-
-REVOKE ALL ON FUNCTION public.agent_membership_guard() FROM PUBLIC;
 
 --
 -- Name: FUNCTION agent_move_blocked(agent uuid); Type: ACL; Schema: public; Owner: postgres
@@ -19819,13 +19588,6 @@ REVOKE ALL ON FUNCTION public.company_agent_models(c uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.company_agent_models(c uuid) TO authenticated;
 
 --
--- Name: FUNCTION company_agents(c uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-REVOKE ALL ON FUNCTION public.company_agents(c uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.company_agents(c uuid) TO authenticated;
-
---
 -- Name: FUNCTION company_app_agents(c uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20319,6 +20081,13 @@ REVOKE ALL ON FUNCTION public.forget_shared_space(c uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.forget_shared_space(c uuid) TO service_role;
 
 --
+-- Name: FUNCTION former_member_names(c uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.former_member_names(c uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.former_member_names(c uuid) TO authenticated;
+
+--
 -- Name: FUNCTION give_agent_look(c uuid, agent uuid, main boolean, template text, request bigint); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20367,13 +20136,6 @@ REVOKE ALL ON FUNCTION public.good_morning_work() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.good_morning_work() TO service_role;
 
 --
--- Name: FUNCTION grant_agent_access(c uuid, a uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-REVOKE ALL ON FUNCTION public.grant_agent_access(c uuid, a uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.grant_agent_access(c uuid, a uuid) TO authenticated;
-
---
 -- Name: FUNCTION guard_agent_profile_agent(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20412,14 +20174,6 @@ GRANT ALL ON FUNCTION public.guard_member() TO authenticated;
 GRANT ALL ON FUNCTION public.guard_member() TO service_role;
 
 --
--- Name: FUNCTION guard_member_agent_role(); Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON FUNCTION public.guard_member_agent_role() TO anon;
-GRANT ALL ON FUNCTION public.guard_member_agent_role() TO authenticated;
-GRANT ALL ON FUNCTION public.guard_member_agent_role() TO service_role;
-
---
 -- Name: FUNCTION guard_note_edit(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20430,6 +20184,12 @@ REVOKE ALL ON FUNCTION public.guard_note_edit() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.guard_shared_space_agent() FROM PUBLIC;
+
+--
+-- Name: FUNCTION guard_work_assignee(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.guard_work_assignee() FROM PUBLIC;
 
 --
 -- Name: FUNCTION guard_work_stage_kind(); Type: ACL; Schema: public; Owner: postgres
@@ -21793,13 +21553,6 @@ REVOKE ALL ON FUNCTION public.retry_conversation_turn(conversation uuid, c uuid,
 GRANT ALL ON FUNCTION public.retry_conversation_turn(conversation uuid, c uuid, message_key uuid) TO authenticated;
 
 --
--- Name: FUNCTION revoke_agent_access(c uuid, a uuid); Type: ACL; Schema: public; Owner: postgres
---
-
-REVOKE ALL ON FUNCTION public.revoke_agent_access(c uuid, a uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.revoke_agent_access(c uuid, a uuid) TO authenticated;
-
---
 -- Name: FUNCTION routine_results_seen(c uuid, at_profile text, sessions text[]); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -22388,12 +22141,6 @@ REVOKE ALL ON FUNCTION public.written_message(m public.conversation_messages) FR
 GRANT SELECT ON TABLE public.agent_change_proposals TO authenticated;
 
 --
--- Name: TABLE agent_grants; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT SELECT ON TABLE public.agent_grants TO authenticated;
-
---
 -- Name: TABLE agent_key_waits; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -22412,12 +22159,6 @@ GRANT ALL ON TABLE public.agent_requests TO service_role;
 --
 
 GRANT SELECT ON TABLE public.agent_rules TO authenticated;
-
---
--- Name: TABLE agents; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT SELECT ON TABLE public.agents TO authenticated;
 
 --
 -- Name: TABLE approval_steps; Type: ACL; Schema: public; Owner: postgres
