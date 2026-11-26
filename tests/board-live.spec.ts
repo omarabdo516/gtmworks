@@ -15,6 +15,7 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rs='10000000-0000-0000-0000-000000000001', aleem='10000000-0000-0000-0000-000000000003';
 const viewer='20000000-0000-0000-0000-000000000004';
+const rsProfile=`co-${rs.replaceAll('-','')}`;
 const ads=randomUUID(), adsProfile=`ag-${ads.replaceAll('-','')}`;
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 // Company B's own Engine, at a loopback address of its own (its record is pointed there).
@@ -30,6 +31,8 @@ test.beforeAll(async({},testInfo)=>{
    insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${rs}');
    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${ads}','${rs}','Ads','Runs the ads.',false,'${adsProfile}');
    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rs}','${viewer}','${ads}');
+   insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${rs}','${rsProfile}',true)
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   end $$;`);
 });
 test.afterAll(async()=>{ await fake?.close(); await other?.close(); });
@@ -70,8 +73,8 @@ test('a Card moved on the Engine moves on an open board within a second, and a c
  expect(reloaded).toBe(false);
  // The board's socket is gtmworks's own; nothing the browser was sent on it holds the Engine's key or address.
  expect(seen.opened.length).toBeGreaterThan(0);
- for(const one of seen.opened) expect(new URL(one.url).origin,one.url).toBe(new URL(page.url()).origin);
- for(const leak of [fake.settings.key,fake.address,fake.managementAddress,new URL(fake.managementAddress).host,adsProfile,'Use the new price.'])
+ for(const one of seen.opened) expect(new URL(one.url).host,one.url).toBe(new URL(page.url()).host);
+ for(const leak of [fake.settings.key,fake.address,fake.managementAddress,new URL(fake.managementAddress).host,adsProfile,rsProfile,'Use the new price.'])
   expect(seen.frames().some(frame=>frame.includes(leak)),leak).toBe(false);
 });
 
