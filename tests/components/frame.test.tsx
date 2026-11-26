@@ -1,7 +1,7 @@
 import { expect, onTestFinished, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { Frame } from '@/app/frame';
+import { Frame, PageFrame } from '@/app/frame';
 import { continuePage } from '@/lib/page-fade';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/tokens.css';
@@ -10,12 +10,12 @@ import '@/app/shell.css';
 const route = vi.hoisted(() => ({ pathname: '/c/rs-learning/home' }));
 vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 
-// Links stay on the test page: a new page is the pathname changing, as the app's router changes it. Each route draws
-// a frame of its own (`segment`, its key).
+// Links stay on the test page: a new page is the pathname changing, as the app's router changes it. The frame stays, as
+// the Company's layout keeps it (#789); each route draws a page frame of its own (`segment`, its key).
 const stay = (event: { preventDefault: () => void }) => event.preventDefault();
-const frame = (segment = '') => <LanguageProvider language="en"><Frame key={segment} title="Home" sidebar={<nav aria-label="Navigation">
+const frame = (segment = '', loading = false) => <LanguageProvider language="en"><Frame sidebar={<nav aria-label="Navigation">
  <a href="#chats" onClick={stay}>Chats</a><a href="#board" onClick={stay}>Marketing board</a><button type="button">Account menu</button>
-</nav>}><main className="page"><a href="#card" onClick={stay}>A card on the page</a></main></Frame></LanguageProvider>;
+</nav>}><PageFrame key={loading ? `${segment} loading` : segment} title="Home" loading={loading}>{loading ? <main className="page"/> : <main className="page"><a href="#card" onClick={stay}>A card on the page</a></main>}</PageFrame></Frame></LanguageProvider>;
 const show = async (width: number) => { route.pathname = '/c/rs-learning/home'; await page.viewport(width, 900); return render(frame()); };
 
 const sidebar = () => document.querySelector<HTMLElement>('.sidebar')!;
@@ -122,6 +122,23 @@ test('a new page fades in once; a redraw, a frame drawn again on the same page a
  expect(getComputedStyle(sidebar()).opacity).toBe('1');
 });
 
+// A press draws the page's loading frame at once (#771): it is busy and does not fade; the page that replaces it fades
+// once, as any new page does.
+test('a loading frame does not fade, and the page that arrives in its place fades once', async () => {
+ const screen = await show(1440);
+ const starts = watchStarts(event => event.animationName);
+ await settle();
+ starts.length = 0;
+ route.pathname = '/c/rs-learning/numbers';
+ await screen.rerender(frame('numbers', true));
+ expect(content().getAttribute('aria-busy')).toBe('true');
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(starts, 'the loading frame').toEqual([]);
+ await screen.rerender(frame('numbers'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in']);
+ expect(content().hasAttribute('aria-busy')).toBe(false);
+});
+
 // A new chat whose first message starts its Conversation goes on as the same page (lib/page-fade), as the reference's
 // send() draws the thread without setView; the next page fades again.
 test('a new chat going on as its Conversation does not fade again, in its frame or a new one; the next page does', async () => {
@@ -154,9 +171,9 @@ test('a new chat going on as its Conversation does not fade again, in its frame 
 
 // On a chat page the chat fades and the details panel beside it does not, as the reference's #details sits outside the
 // view that fades (#135); the panel's scrim, over the chat on a narrow screen, does not fade either.
-const chatPage = (segment: string) => <LanguageProvider language="en"><Frame key={segment} title="Chats" chat sidebar={<nav aria-label="Navigation"><a href="#chats" onClick={stay}>Chats</a></nav>}>
+const chatPage = (segment: string) => <LanguageProvider language="en"><Frame chat sidebar={<nav aria-label="Navigation"><a href="#chats" onClick={stay}>Chats</a></nav>}><PageFrame key={segment} title="Chats">
  <main className="convo-page"><div className="convo"><div className="chat">A chat</div><div className="dp-scrim"/><aside id="details" className="details">Lead</aside></div></main>
-</Frame></LanguageProvider>;
+</PageFrame></Frame></LanguageProvider>;
 test('on a chat page the chat fades in and the details panel and its scrim do not', async () => {
  route.pathname = '/c/rs-learning/chat/lead'; await page.viewport(1440, 900);
  const screen = await render(chatPage('chat'));

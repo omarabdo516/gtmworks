@@ -3,7 +3,7 @@ import { CountPill } from './approvals-count-pill';
 import { waitingLabel } from '@/lib/sidebar.mjs';
 
 type T=(key:string,...values:unknown[])=>string;
-type Props={slug:string,current:boolean,t:T};
+type Props={slug:string,current?:boolean,t:T};
 
 // The approvals entry beside Marketing board in the sidebar (app/shell.tsx): its own link to the Inbox, with the count
 // of what waits on the reader. A page may hand the count over while it is still being read (Numbers, #172): the pill

@@ -9,6 +9,7 @@ import { onWatchedRunEnded, shownState, useChatKnows } from '@/lib/live-runs';
 import type { FaceState } from '@/components/face-life';
 import { toast } from '@/app/toast';
 import { onHandDone, stepOf, type ScreenHand } from '@/app/screen-hands';
+import { useShellPlace } from '@/app/shell-place';
 
 const pollEvery=5000;
 // What the sidebar shows that changes while a page stays open: the reader's channels with their unread counts (#24),
@@ -128,7 +129,9 @@ export function useAgentStates():(agent:string)=>AgentFaceState|undefined {
 // An Agent's tile in the sidebar (design-reference-orb: the sidebar tile): its 56px face with the state dot, and a name
 // for assistive technology that ends with the state in words, both following the sidebar's poll. `named` is what comes
 // before the state: the name, Main, New and the Agent's line.
-export function AgentTile({agent,href,current,named,title,children}:{agent:string,href:string,current?:boolean,named:string[],title:string,children:ReactNode}) {
+export function AgentTile({agent,href,current:drawn,named,title,children}:{agent:string,href:string,current?:boolean,named:string[],title:string,children:ReactNode}) {
+ // The tile of the Agent whose chat or Conversation is open is the current one (app/shell-place).
+ const place=useShellPlace(); const current=drawn??(place.chat&&place.agent===agent);
  const {t}=useI18n(); const state=useAgentState(agent); const shown=useShownState(agent);
  return <Link className="agent-tile" data-agent={agent} data-birth href={href} aria-current={current?'true':undefined} aria-label={[...named,t(faceStateWords[shown])].join(' · ')} title={title}>
   <AgentFace agent={agent} size={56} state={state} dot live/>{children}

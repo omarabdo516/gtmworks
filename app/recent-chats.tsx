@@ -2,6 +2,7 @@
 import { useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
+import { useShellPlace } from './shell-place';
 import { localeFor } from '@/lib/i18n.mjs';
 import { groupRecents, matchChats } from '@/lib/sidebar.mjs';
 import { useSidebarQuery } from './sidebar-search';
@@ -21,7 +22,8 @@ const labels={today:'today',yesterday:'yesterday',earlier:'earlier'} as const;
 // account signed in from another tab never gets this reader's list.
 const shownLast=new Map<string,Chat[]>();
 const inBrowser=typeof window!=='undefined';
-export default function RecentChats({slug,company,person,chats:read,current,lead}:{slug:string,company:string,person:string,chats:Chat[]|null,current?:string,lead:string}) {
+export default function RecentChats({slug,company,person,chats:read,current:drawn,lead}:{slug:string,company:string,person:string,chats:Chat[]|null,current?:string,lead:string}) {
+ const place=useShellPlace(); const current=drawn??place.conversation;
  const {t,language}=useI18n();
  const shownKey=`${person}:${company}`;
  if(read&&inBrowser) shownLast.set(shownKey,read);

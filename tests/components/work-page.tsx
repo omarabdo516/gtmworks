@@ -2,7 +2,7 @@ import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { onTestFinished, vi } from 'vitest';
 import Work, { type AddIdeaAction, type PlaceCard, type UndoMove, type WorkAction, type WorkProps } from '@/app/c/[slug]/[[...section]]/work';
-import { Frame } from '@/app/frame';
+import { Frame, PageFrame } from '@/app/frame';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { LooksProvider } from '@/lib/agent-looks-client';
 import type { CompanyLooks } from '@/lib/agent-looks';
@@ -43,4 +43,4 @@ export async function showWork(props: WorkProps, { language = 'en', width = 1440
  await page.viewport(width, 900);
  return render(looks ? <LooksProvider looks={looks}>{workView(props, language)}</LooksProvider> : workView(props, language));
 }
-export const workView = (props: WorkProps, language: Language = 'en') => <LanguageProvider language={language}><Frame sidebar={null} title="Work"><main className="content"><Work {...props}/></main></Frame></LanguageProvider>;
+export const workView = (props: WorkProps, language: Language = 'en') => <LanguageProvider language={language}><Frame sidebar={null}><PageFrame title="Work"><main className="content"><Work {...props}/></main></PageFrame></Frame></LanguageProvider>;

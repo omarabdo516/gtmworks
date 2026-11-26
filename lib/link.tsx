@@ -68,14 +68,15 @@ function Pending({ href }: { href: string }) {
   return pending ? <Feedback href={href} /> : null;
 }
 
-// A link loads its page only when the person points at it, focuses it or touches it (#771, #739): never every link on
-// screen in the background, which rendered a whole page (a Conversation's included) for each. A press right after the
-// intent opens the page it prepared; a press with none fetches it then.
+// A link loads its page's frame only when the person points at it, focuses it or touches it (#771, #739), as the
+// framework prefetches by default (up to the page's loading frame, app/c/[slug]/loading.tsx): never every link on screen
+// in the background, and never a whole page (a Conversation's included) that was not asked for. A press shows that
+// frame at once and the page fills it when its data arrives.
 export default function Link({ children, ...props }: ComponentProps<typeof NextLink>) {
   const router = useRouter();
   const target = props.as || props.href;
   const href = typeof target === 'string' ? target : target.pathname || '';
-  const intent = () => { try { router.prefetch(href, { kind: 'full' } as Parameters<typeof router.prefetch>[1]); } catch { /* A prefetch never stands in the way of a press. */ } };
+  const intent = () => { try { router.prefetch(href); } catch { /* A prefetch never stands in the way of a press. */ } };
   // A plain click or Enter (which the browser turns into a click) opens the page here; a modified click opens it
   // elsewhere and is not this page being opened.
   const onClick: ComponentProps<typeof NextLink>['onClick'] = event => {
