@@ -165,9 +165,10 @@ test('both views draw their frame in the page\'s first answer and keep the last 
  await expect(page.getByRole('link',{name:'Meta campaign for the course'})).toBeVisible();
  await fake.close();
  try {
-  const again=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/board');
+  // A read the live stream asked for may still be answering from before the stop: the one that counts is refused.
+  const again=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/board'&&response.status()===503);
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-  expect((await again).status()).toBe(503);
+  await again;
   await expect(page.getByRole('status').filter({hasText:'Couldn’t refresh the board. Showing what it last read.'})).toBeVisible();
   await expect(page.getByRole('link',{name:'Meta campaign for the course'})).toBeVisible();
   // The calendar, opened from the list, keeps the same read.
