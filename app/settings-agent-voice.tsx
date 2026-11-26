@@ -6,8 +6,8 @@ import { seedDraft, setDraftValue, useDraftState, useDraftValue } from './settin
 import { SettingsIcon } from './settings-icons';
 import { InfoTip } from './settings-info';
 
-// An Agent's Voice in Settings (#162; design-reference: voiceSetHTML): the language the agent engine listens in, the voice
-// of the profile's provider with the reference's Listen, and the speed. Each control is one setting of the Agent's own
+// An Agent's Voice in Settings (#162; design-reference: voiceSetHTML): the voice of the profile's provider with the
+// reference's Listen, and the speed; the language it listens in is the Company's, on Settings → Voice (#863). Each control is one setting of the Agent's own
 // profile, held in the page's draft until Save, so Listen plays the saved voice and is off while the section differs. The
 // voice is a list only for ElevenLabs; every other provider shows its saved voice with one line naming what is missing.
 // The Engine's default provider sends the sample to Microsoft to be spoken, and the line beside Listen says so.
@@ -19,13 +19,12 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || '';
 
 /** @param {{company:string,agent:string,personName:string,voice:AgentVoiceRead}} props */
 export function AgentVoice({company,agent,personName,voice}:{company:string,agent:string,personName:string,voice:AgentVoiceRead}) {
- const {t,language}=useI18n();
- const speaking=useDraftValue(agent,'voice.language',voice.language);
+ const {t}=useI18n();
  const speed=useDraftValue(agent,'voice.speed',String(voice.speed));
  const chosen=useDraftValue(agent,'voice.voice',voice.voice??'');
  // The section's own keys: a change to About does not hold Listen, a change here does until Save.
  const draft=useDraftState(agent);
- const dirty=!!draft&&['voice.language','voice.speed','voice.voice'].some(key=>draft.saved[key]!==draft.draft[key]);
+ const dirty=!!draft&&['voice.speed','voice.voice'].some(key=>draft.saved[key]!==draft.draft[key]);
  const choices=voice.list?.state==='found'&&voice.list.available?voice.list.voices:null;
  const sample=t('settingsVoiceSample',firstName(personName));
  const sound=useRef<HTMLAudioElement|null>(null);
@@ -36,9 +35,9 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
  const [loading,setLoading]=useState(false);
  const [missing,setMissing]=useState<''|'noSpeech'|'unreachable'>('');
  // The sample is the saved voice's: the draft's values only reach the profile on Save, so Listen is off until then.
- useEffect(()=>{ seedDraft(agent,{'voice.language':voice.language,'voice.speed':String(voice.speed),...(
+ useEffect(()=>{ seedDraft(agent,{'voice.speed':String(voice.speed),...(
   voice.list?.state==='found'&&voice.list.available&&voice.voice?{'voice.voice':voice.voice}:{})}); },
-  [agent,voice.language,voice.speed,voice.voice,voice.list?.state,voice.list?.available]);
+  [agent,voice.speed,voice.voice,voice.list?.state,voice.list?.available]);
  // Listen plays what is saved, so any change to the section stops the sound and leaves it off until Save.
  const stop=()=>{ sound.current?.pause(); sound.current=null; setPlaying(false); };
  // Any change to the section, the speed in Advanced too, stops the sound: Listen plays only what is saved. The button
@@ -62,9 +61,6 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
    await audio.play?.()?.catch?.(()=>{});
   } catch { setMissing('noSpeech'); } finally { setLoading(false); }
  };
- // Arabic on Deepgram is Egyptian (#430); its other Arabic variants are named in the page's own language.
- const languageLabel=(value:string)=>value==='ar'?t(voice.speech==='deepgram'?'settingsVoiceArabicEgypt':'settingsVoiceArabic'):value==='en'?t('settingsVoiceEnglish'):!value?t('settingsVoiceDetect')
-  :(()=>{ try { return new Intl.DisplayNames([language],{type:'language'}).of(value)||value; } catch { return value; } })();
  const nameOfVoice=(id:string)=>choices?.find(choice=>choice.id===id)?.name||choices?.find(choice=>choice.id===id)?.label||id;
  const shownVoice=(choices&&chosen?nameOfVoice(chosen):null)||voice.voiceName||chosen||null;
  const hint=playing?t('settingsVoiceSays',shownVoice||'—',sample,speed)
@@ -74,13 +70,6 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
   :t('settingsVoiceListenHint');
  // The page's Voice group carries the heading (#615); the speed is in its Advanced part (AgentVoiceSpeed below).
  return <div className="panel-card set-card">
-   <div className="set-field"><span className="set-label-row"><label className="set-label" htmlFor="set-voice-lang">{t('settingsVoiceLang')}</label><InfoTip about={t('settingsVoiceLang')} id="set-voice-lang-hint">{t('settingsVoiceLangHint')}</InfoTip></span>
-    <select className="set-input vc-select" id="set-voice-lang" value={speaking} aria-describedby="set-voice-lang-hint"
-     onChange={event=>{ stop(); setDraftValue('voice.language',event.target.value); }}>
-     {voice.languages.map(value=><option key={value||'detect'} value={value}>{languageLabel(value)}</option>)}
-     {!voice.languages.includes(speaking)&&<option value={speaking}>{languageLabel(speaking)}</option>}
-    </select>
-   </div>
    <div className="set-field"><label className="set-label" htmlFor="set-voice">{t('settingsVoice')}</label>
     <div className="vc-row">
      {choices?<select className="set-input vc-select" id="set-voice" value={chosen} aria-describedby="set-voice-hint" aria-label={t('settingsVoice')}

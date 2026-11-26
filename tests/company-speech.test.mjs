@@ -6,7 +6,8 @@ import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { readSpeech, writeSpeech } from '../lib/engine/speech.mjs';
-import { changeCompanySpeech, readCompanySpeech, deepgramCommand, deepgramArabic } from '../lib/company-speech.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
+import { changeCompanySpeech, readCompanySpeech, changeCompanyVoice, readCompanyVoice, deepgramCommand, deepgramArabic } from '../lib/company-speech.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'read':'speech.read','write':'speech.write'};
 
@@ -40,6 +41,91 @@ const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.mana
  return {read:(target,asked)=>readSpeech(at(target),asked),write:(target,change)=>writeSpeech(at(target),change)}; };
 const change=(person,fake,request)=>withDriver(DRIVER,pointedAt(fake),()=>changeCompanySpeech(person.db,{company,...request}));
 const read=(person,fake)=>withDriver(DRIVER,pointedAt(fake),()=>readCompanySpeech(person.db,{company}));
+
+const voice=(person,fake,request)=>withDriver(DRIVER,pointedAt(fake),()=>changeCompanyVoice(person.db,{company,...request}));
+const readVoice=(person,fake)=>withDriver(DRIVER,pointedAt(fake),()=>readCompanyVoice(person.db,{company}));
+
+// #863: the Owner sets Hermes's own speech-to-text options once, and every profile of the Company (its space, its main
+// Agent and each Agent) holds them; no other Company's profile is touched.
+test('an Owner sets the language once: Automatic is a blank stt.language on every profile, Arabic is ar', async () => {
+ const fake=await engineServing(company);
+ try {
+  madeCompany(fake,one); madeCompany(fake,two);
+  const owner=sessions({owner:true});
+  await change(owner,fake,{provider:'openai',intent:'set',value:key});
+  const automatic=await voice(owner,fake,{language:''});
+  assert.equal(automatic.status,200);
+  assert.deepEqual(automatic.body,{provider:'openai',keys:['openai'],language:'',model:'whisper-1',prompt:'',trimSilence:true,
+   languages:['','ar','en'],models:['whisper-1','gpt-4o-mini-transcribe','gpt-4o-transcribe','gpt-transcribe'],failed:[]});
+  for(const name of all) assert.equal(profileOf(fake,name).config.stt.language,'',name);
+  const arabic=await voice(owner,fake,{language:'ar'});
+  assert.equal(arabic.body.language,'ar');
+  for(const name of all) assert.equal(profileOf(fake,name).config.stt.language,'ar',name);
+  for(const name of [two.space,two.main,...two.agents]) assert.equal(profileOf(fake,name).config.stt,undefined,`${name} of another Company`);
+ } finally { await fake.close(); }
+});
+
+test('the model, the vocabulary and the silence trim reach every profile of the Company and no other Company\'s', async () => {
+ const fake=await engineServing(company);
+ try {
+  madeCompany(fake,one); madeCompany(fake,two);
+  const owner=sessions({owner:true});
+  await change(owner,fake,{provider:'groq',intent:'set',value:key});
+  const set=await voice(owner,fake,{model:'whisper-large-v3',prompt:'  gtmworks, Hermes, Omar  ',trimSilence:false});
+  assert.deepEqual(set.body,{provider:'groq',keys:['groq'],language:'en',model:'whisper-large-v3',prompt:'gtmworks, Hermes, Omar',trimSilence:false,
+   languages:['','ar','en'],models:['whisper-large-v3-turbo','whisper-large-v3'],failed:[]});
+  for(const name of all) {
+   const {stt}=profileOf(fake,name).config;
+   assert.deepEqual([stt.provider,stt.groq,stt.prompt,stt.cloud_trim_silence],['groq',{model:'whisper-large-v3'},'gtmworks, Hermes, Omar',false],name);
+  }
+  for(const name of [two.space,two.main,...two.agents]) assert.equal(profileOf(fake,name).config.stt,undefined,`${name} of another Company`);
+  // ElevenLabs names its model model_id; a switch keeps every option the Company set.
+  await change(owner,fake,{provider:'elevenlabs',intent:'set',value:key});
+  const eleven=await voice(owner,fake,{model:'scribe_v1'});
+  assert.deepEqual([eleven.body.model,eleven.body.prompt,eleven.body.trimSilence],['scribe_v1','gtmworks, Hermes, Omar',false]);
+  for(const name of all) assert.deepEqual(profileOf(fake,name).config.stt.elevenlabs,{model_id:'scribe_v1'},name);
+  assert.deepEqual(await readVoice(owner,fake),{provider:'elevenlabs',keys:['elevenlabs','groq'],language:'en',model:'scribe_v1',prompt:'gtmworks, Hermes, Omar',trimSilence:false,
+   languages:['','ar','en'],models:['scribe_v2','scribe_v1']});
+ } finally { await fake.close(); }
+});
+
+test('a choice Hermes does not offer for the provider, a non-Owner and an unread space change nothing', async () => {
+ const fake=await engineServing(company);
+ try {
+  madeCompany(fake,one);
+  const owner=sessions({owner:true});
+  await change(owner,fake,{provider:'deepgram',intent:'set',value:key});
+  const before=JSON.stringify(all.map(name=>profileOf(fake,name).config));
+  // Deepgram has no automatic and no Hermes model; its Arabic variants stay.
+  for(const request of [{language:''},{language:'fr'},{model:'whisper-1'},{prompt:'x'.repeat(897)},{trimSilence:'no'},{},{language:7}])
+   assert.deepEqual(await voice(owner,fake,request),{status:400,body:{error:'speechInvalid'}},JSON.stringify(request));
+  assert.deepEqual(await voice(sessions({owner:false}),fake,{language:'ar'}),{status:403,body:{error:'speechNotAllowed'}});
+  assert.equal(JSON.stringify(all.map(name=>profileOf(fake,name).config)),before);
+  const variant=await voice(owner,fake,{language:'ar-SA'});
+  assert.deepEqual([variant.body.language,variant.body.model,variant.body.models,variant.body.languages],['ar-SA',null,[],['ar',...deepgramArabic,'en']]);
+  // An Agent the Engine did not take the write for is named.
+  fake.settings.configWriteFail.add(one.agents[1]);
+  assert.deepEqual((await voice(owner,fake,{language:'en'})).body.failed,[{agent:agentId(one.agents[1]),name:'Designer'}]);
+ } finally { await fake.close(); }
+});
+
+test('an Agent made after the save is given the Company\'s speech: its key and every option', async () => {
+ const fake=await engineServing(company);
+ try {
+  madeCompany(fake,one);
+  const owner=sessions({owner:true});
+  await change(owner,fake,{provider:'deepgram',intent:'set',value:key});
+  await voice(owner,fake,{language:'ar-SA',prompt:'gtmworks',trimSilence:false});
+  const later=`ag-c${hex(1).slice(1)}`;
+  made(fake,later);
+  const engine=hermesEngine({address:fake.address,managementAddress:fake.managementAddress,profile:one.main,key:'test-only-key'});
+  await engine.giveProviders({name:later,space:one.space,keeper:one.main});
+  const profile=profileOf(fake,later);
+  assert.equal(profile.env.DEEPGRAM_API_KEY,key);
+  assert.deepEqual(profile.config.stt,profileOf(fake,one.space).config.stt);
+  assert.deepEqual([profile.config.stt.provider,profile.config.stt.language,profile.config.stt.prompt,profile.config.stt.cloud_trim_silence],['deepgram','ar-SA','gtmworks',false]);
+ } finally { await fake.close(); }
+});
 
 test('an Owner sets Deepgram with a key: every profile holds the key and transcribes through the Engine\'s command provider, Arabic as Egyptian', async () => {
  const fake=await engineServing(company);

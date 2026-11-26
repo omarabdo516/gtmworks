@@ -12,6 +12,7 @@ import type { SpeechToText as Speech, DefaultModel as Default, FallbackModel as 
 // replays a click made before their code arrives; the note form stays read-only until it is hydrated (member-note.tsx).
 const LazyProviders=lazy(()=>import('./settings-providers').then(module=>({default:module.CompanyProviders})));
 const LazyNote=lazy(()=>import('./member-note'));
+const LazyVoiceSettings=lazy(()=>import('./settings-voice').then(module=>({default:module.VoiceSettings})));
 const LazyKnowledge=lazy(()=>import('./company-knowledge-client'));
 const LazyEditedAt=lazy(()=>import('./company-knowledge-client').then(module=>({default:module.KnowledgeEditedAt})));
 const LazyAbout=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentAbout})));
@@ -62,3 +63,4 @@ export function DefaultEffort() { return <Suspense fallback={null}><LazyDefaultE
 // The Learning section's controls (#28): the Company's mode with each Agent's, and a rule's Forget this and Bring it back.
 export function LearningModes(props:ComponentProps<typeof Modes>) { return <Suspense fallback={null}><LazyModes {...props}/></Suspense>; }
 export function RuleActions(props:ComponentProps<typeof RuleAction>) { return <Suspense fallback={null}><LazyRuleActions {...props}/></Suspense>; }
+export function VoiceSettings(props:{company:string,slug:string,owner:boolean}) { return <Suspense fallback={null}><LazyVoiceSettings {...props}/></Suspense>; }
