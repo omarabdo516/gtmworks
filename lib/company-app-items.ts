@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { supabase } from './supabase';
-import { readAgentApps, readAgentSession, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, type AgentTool, type AgentsUsage } from './company-apps.mjs';
+import { readAgentApps, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, type AgentTool, type AgentsUsage } from './company-apps.mjs';
 import { appsUnreadLine } from './diagnostics.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
@@ -40,12 +40,6 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
 // One Agent's apps now, by key, for the connect cards of its Conversations (#203); null when they cannot be read.
 export const agentAppStates=cache(async(company:string,agent:string):Promise<AppStates>=>{
  try { return await readAgentApps(await supabase(),{company,agent}); } catch { return null; }
-});
-
-// One Agent's Hermes session now, its turns and token use, for its Conversation's steps and usage (#346, #347); null
-// when it cannot be read.
-export const agentSessionTurns=cache(async(company:string,agent:string,session:string)=>{
- try { return await readAgentSession(await supabase(),{company,agent,session}); } catch { return null; }
 });
 
 // One channel reply's Hermes session on the profile its Run was pinned to, for the channel's steps (#148); null when it

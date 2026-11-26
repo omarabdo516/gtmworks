@@ -13,8 +13,9 @@ import { conversationColumns, uuid } from '@/lib/conversations';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import { discardConversationFiles, keepConversationFiles, type ConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
-import { conversationRecord, conversationSteps } from '@/lib/conversation-record';
-import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
+import { conversationRecord } from '@/lib/conversation-record';
+import { conversationSteps } from '@/lib/conversation-steps';
+import { agentAppStates } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -207,12 +208,14 @@ async function retry(db:Database,body:Record<string,unknown>) {
 }
 
 // Each reply's steps and the Conversation's token use (#766, ADR 0030): their own request, after the messages are drawn,
-// read from the Agent's Hermes session through the person's own session (RLS sees only their Conversation). A session
-// that cannot be read answers 503, and the page keeps the replies as they are. Nothing of it is kept or logged.
+// read from the Agent's Hermes session through the person's own session (RLS sees only their Conversation), on the
+// profile the Engine handle gives this reader: an Agent hidden from them is not found (#782). A session that cannot be
+// read answers 503, and the page keeps the replies as they are. Nothing of it is kept or logged.
 async function steps(db:Database,company:string,conversation:string) {
  const {data:found}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).maybeSingle();
  if(!found) return refuse('conversationNotFound',404);
- const read=await conversationSteps(db,found,(agent,session)=>agentSessionTurns(company,agent,session));
+ const read=await conversationSteps(db,company,found).catch(()=>null);
+ if(read==='notSeen') return refuse('conversationNotFound',404);
  return read?reply(read):refuse('conversationStepsUnread',503);
 }
 

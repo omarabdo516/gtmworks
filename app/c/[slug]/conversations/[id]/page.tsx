@@ -11,8 +11,9 @@ import ConversationView, { ConversationLoaded, ConversationNotRead } from './con
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
-import { conversationRecord, conversationSteps, tiedCard, type ConversationSteps } from '@/lib/conversation-record';
-import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
+import { conversationRecord, tiedCard, type ConversationSteps } from '@/lib/conversation-record';
+import { conversationSteps } from '@/lib/conversation-steps';
+import { agentAppStates } from '@/lib/company-app-items';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
 import { pickTab } from '@/lib/agent-details.mjs';
@@ -52,7 +53,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Each reply's steps and the token use (#766, ADR 0030) go out now beside the record and come down the same response
  // once read, never awaited by the page or the messages: the chat shows them without first waiting for its script and
  // a second request (decision 0042). A read that fails is null, and the replies stay as they are.
- const steps=conversationSteps(db,conversation,(agent,session)=>agentSessionTurns(company.id,agent,session)).catch(()=>null);
+ const steps=conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
  // Its Card on the board, in the corner from the start (design-reference: renderChat's corner pill): read beside the
  // frame's other reads, and handled the same way until the frame awaits it.
  const tiedRead=tiedCard(db,company.id,id);
