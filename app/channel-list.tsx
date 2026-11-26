@@ -2,6 +2,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from '@/lib/link';
+import { useShellPlace } from './shell-place';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { ShellIcon } from '@/components/shell-icon';
@@ -13,7 +14,8 @@ const NewChannel=lazy(()=>import('./new-channel-dialog'));
 // design-reference: renderThreadList. The channels and their counts follow the sidebar's poll (app/sidebar-live). The
 // open channel is being read, so it shows no count; ?new=channel opens New channel from any page, which is how its
 // compared screen reaches it.
-export default function ChannelList({slug,company,person,current,manage}:{slug:string,company:string,person:string,current?:string,manage:boolean}) {
+export default function ChannelList({slug,company,person,current:drawn,manage}:{slug:string,company:string,person:string,current?:string,manage:boolean}) {
+ const place=useShellPlace(); const current=drawn??place.channel;
  const {t,language}=useI18n();
  const router=useRouter(); const path=usePathname(); const search=useSearchParams();
  const channels=useSidebarChannels();

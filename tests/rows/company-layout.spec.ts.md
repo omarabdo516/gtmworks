@@ -1,0 +1,7 @@
+| `company-layout.spec.ts` | The Company's layout draws the Shell once (#789): moving between a Company's pages draws no sidebar and its marks follow the page; a press paints the page's loading frame inside the Shell before its data arrives (#771); the sidebar's poll carries the recent chats and the count of what waits, which a page move no longer draws. | 20 s | components/frame.test.tsx (a press draws the loading frame after 100ms in the page's place; it does not fade), components/shell-place.test.tsx (which page the Shell marks) | new (#771, #789) |
+
+## Cases
+
+| `company-layout.spec.ts` "moving between a Company's pages draws no sidebar: the Shell stays and its marks follow the page" | stays | Only the server's answers to a real page move show that the layout's Shell is not drawn again: no RSC answer carries the sidebar, the same sidebar element stays, and the current entry moves with the page. |
+| `company-layout.spec.ts` "a press paints the page's loading frame inside the Shell before its data arrives, and the page fills it" | stays | A press with the page's request held at the network: the loading frame (busy, "Opening page") is drawn inside the Shell before the page, the page left out of sight, and the page then takes its place. |
+| `company-layout.spec.ts` "the sidebar's poll carries the recent chats and what waits on the reader, which a page move no longer draws" | stays | The sidebar route through the server: its answer carries the recent chats and the count, and the pill shows that count. |
