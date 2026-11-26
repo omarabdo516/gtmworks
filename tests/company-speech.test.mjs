@@ -107,6 +107,12 @@ test('a switch keeps every other provider\'s key where the Engine keeps it, a he
    assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,key,name);
    assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,openai,name);
   }
+  // A profile that lacks the held key keeps the provider it transcribes with, and is named as waiting for the key.
+  delete profileOf(fake,one.agents[1]).env.VOICE_TOOLS_OPENAI_KEY;
+  assert.deepEqual(await change(owner,fake,{provider:'openai',intent:'set'}),{status:200,body:{provider:'openai',keys:['deepgram','openai'],missing:[{agent:agentId(one.agents[1]),name:'Designer'}],failed:[]}});
+  assert.equal(profileOf(fake,one.agents[1]).config.stt.provider,'deepgram','it is not moved onto a key it lacks');
+  assert.equal(profileOf(fake,one.agents[0]).config.stt.provider,'openai');
+  await change(owner,fake,{provider:'deepgram',intent:'set'});
   // A provider with no key held cannot be chosen without one, and nothing is written.
   const writes=fake.settings.managementRequests.filter(request=>request.method!=='GET').length;
   assert.deepEqual(await change(owner,fake,{provider:'elevenlabs',intent:'set'}),{status:400,body:{error:'speechInvalid'}});
