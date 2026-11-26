@@ -1,5 +1,11 @@
 [
  {
+  "issue": 898,
+  "date": "2026-11-26",
+  "en": { "title": "Every Settings page opens at once", "body": "Moving between Settings pages no longer waits for the agent engine: each page shows straight away, every part the engine keeps (an Agent's About, skills, voice and model, usage, learning, routines, apps) fills in on its own, and each app says it is checking until its own test answers." },
+  "ar": { "title": "كل صفحات الإعدادات بتفتح على طول", "body": "التنقل بين صفحات الإعدادات مبقاش بيستنى محرك الوكلاء: كل صفحة بتظهر على طول، وكل جزء المحرك شايله (نبذة الوكيل ومهاراته وصوته والموديل بتاعه، والاستهلاك، والتعلّم، والمهام المتكررة، والتطبيقات) بيتملي لوحده، وكل تطبيق بيقول إنه بيتأكد لحد ما الاختبار بتاعه يرد." }
+ },
+ {
   "issue": 863,
   "date": "2026-11-26",
   "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },

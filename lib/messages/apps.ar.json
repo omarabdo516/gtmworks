@@ -15,6 +15,8 @@
  "stateConnected": "متوصل",
  "stateAttention": "محتاج يتوصل تاني",
  "stateOff": "مش متوصل",
+ "stateChecking": "بنتأكد…",
+ "reading": "بنقرا…",
  "manage": "إدارة",
  "manageLabel": "إدارة {0}",
  "connect": "وصّل",

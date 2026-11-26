@@ -1,0 +1,1 @@
+| `settings-part-queue.test.mjs` | One Settings page sends at most four Engine reads at once (#898): ten parts never have more than four open and every one is read, a read that fails frees its place for the next, and one no longer wanted before its turn is never sent. | 0.1 s | settings-engine-wait.spec.ts (the cap in the running app) | new |

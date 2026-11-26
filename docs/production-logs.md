@@ -15,6 +15,13 @@ password, anything shaped like a token, and short digit runs such as authenticat
   session is no step of an open since #766: the steps under the replies are their own request after the page is drawn. A step that did not run is left out. Never a body or a key. `render` (#762) says
   what the render was: `open` (a person opened the page), `prefetch` (a link drew it ahead of a press) or `refresh` (the
   page the browser already showed, drawn again); only `open` lines measure what a person waited for.
+- `"event":"settings_opened"`: one line per Settings page opened (`/c/<slug>/settings`, any section), written once its
+  response has gone (#898), in the shape of `chat_opened`. Fields: `company`, `section` (the page's key: `agents`,
+  `models` and so on), `render` (`open`, `prefetch` or `refresh`, as for `chat_opened`; moving to another section or
+  Agent is an `open`) and `ms`, each step's elapsed milliseconds from the layer's start: `frame` (sign-in, the Company
+  and the reader's Role), `reads` (the section's own database reads), `firstByte` (the page is drawn and its first bytes
+  leave) and `done`. No step reads the Engine: each part it backs is its own request from the browser afterwards, at
+  most four at once (ADR 0030). The target is `firstByte` under 500 ms at p95 on the production install.
 - `"event":"engine_state"`: a listener of a Company's Engine changed its health (#772, #781), written by the one
   transport (`lib/engine/transport.mjs`) for every caller, the web and the worker: one line per change of state, never
   one per call. Fields: `engine` (its host and port), `listener` (`api` or `management`), `state` (`slow`: a call timed

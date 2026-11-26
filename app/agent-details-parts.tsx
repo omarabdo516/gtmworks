@@ -27,7 +27,8 @@ function usePart<T>(url:string,parse:(body:unknown)=>T|null):[Read<T>,()=>void] 
 }
 
 const notesOf=(body:unknown)=>{ const read=body as {notes?:unknown,main?:unknown}; return Array.isArray(read?.notes)?{notes:read.notes as MemoryNote[],main:read.main===true}:null; };
-export function AgentMemoryPart(props:Omit<AgentMemoryProps,'notes'|'main'|'reread'>) {
+// Settings draws the same part on an Agent's Memory tab (#898), with its introduction as optional help.
+export function AgentMemoryPart(props:Omit<AgentMemoryProps,'notes'|'main'|'reread'>&{introAsHelp?:boolean}) {
  const {t}=useI18n();
  const [read,reread]=usePart(`/api/agent-memory?company=${props.company}&agent=${props.agent.id}`,notesOf);
  if(read.state==='loading') {

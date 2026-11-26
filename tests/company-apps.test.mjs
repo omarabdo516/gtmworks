@@ -5,7 +5,7 @@ import { provideProfile } from '../lib/engine/agents.mjs';
 import { readApps, testApp, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/engine/apps.mjs';
 import { readUsage } from '../lib/engine/sessions.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
-import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentSession, readAgentTools, readCompanyUsage, testAgentTool } from '../lib/company-apps.mjs';
+import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentSession, readAgentTools, readCompanyUsage, testAgentTool, testCompanyApp } from '../lib/company-apps.mjs';
 import { changeCompanyServer } from '../lib/company-servers.mjs';
 import { mergedState } from '../lib/app-catalogue.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
@@ -138,6 +138,27 @@ test('each Agent\'s state is read from its own profile: connected, needing atten
  } finally { await fake.close(); }
 });
 
+// #898: Settings, Apps lists at once; each app that is on reads checking for its Agents until its own test answers.
+test('the list is read without a test, each app on reads checking, and its own test gives its state and each Agent\'s', async () => {
+ const fake=await engineServing(company);
+ try {
+  const driver=driverAt(fake);
+  for(const name of [companyProfile(company),agentProfile(writer),agentProfile(analyst)]) makeProfile(fake,name);
+  fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={klaviyo:installed('klaviyo')};
+  fake.settings.appTokens.add(`${companyProfile(company)}:klaviyo`);
+  fake.settings.profiles.get(agentProfile(writer)).config.mcp_servers={klaviyo:installed('klaviyo')};
+  const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow,writerRow,analystRow,helperRow]});
+  const listed=await withDriver(DRIVER,driver,()=>readCompanyApps(someone.db,{company,test:false}));
+  const klaviyo=listed?.find(app=>app.key==='klaviyo');
+  assert.deepEqual(klaviyo?.agents.map(agent=>[agent.name,agent.state]),[['Lead','checking'],['Writer','checking'],['Analyst','off'],['Helper','checking']]);
+  assert.equal(klaviyo?.state,'checking');
+  assert.equal(listed?.find(app=>app.key==='canva')?.state,'off');
+  const tested=await withDriver(DRIVER,driver,()=>testCompanyApp(someone.db,{company,app:'klaviyo'}));
+  assert.deepEqual(tested,{state:'connected',agents:[{id:lead,state:'connected'},{id:writer,state:'attention'},{id:analyst,state:'off'},{id:helper,state:'connected'}]});
+  assert.equal(await withDriver(DRIVER,driver,()=>testCompanyApp(someone.db,{company,app:'not a key'})),null);
+ } finally { await fake.close(); }
+});
+
 // #203: a Conversation's connect card shows the app's state in its Agent's profile now, read from that profile alone.
 test('one Agent\'s apps are read from its own profile alone, by key; an Agent the person does not see, or an Engine that cannot be read, gives none', async () => {
  const fake=await engineServing(company);
@@ -226,6 +247,7 @@ test('the card\'s state is connected when any Agent of its own is, else attentio
  assert.equal(mergedState(of([true,'off'],[true,'attention'],[true,null])),'attention');
  assert.equal(mergedState(of([true,'off'],[true,null],[false,'connected'])),'off','an Agent on the main profile adds nothing of its own');
  assert.equal(mergedState([]),'off');
+ assert.equal(mergedState(of([true,'attention'],[true,'checking'])),'checking','an Agent still being tested may yet be connected (#898)');
 });
 
 test('an app turned on for one Agent is in that Agent\'s profile and no other, and off removes it from there', async () => {

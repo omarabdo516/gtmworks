@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { supabase } from './supabase';
-import { readAgentApps, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, type AgentTool, type AgentsUsage } from './company-apps.mjs';
+import { readAgentApps, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, testCompanyApp, type AgentTool, type AgentsUsage } from './company-apps.mjs';
 import { appsUnreadLine } from './diagnostics.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
@@ -15,12 +15,13 @@ const catalogues:Text[]=[en,ar];
 
 // A Company's apps as Settings, Apps and the Connect apps sheet draw them (#30, #201): each with its state read now from
 // the Company's own profile in the Engine (lib/company-apps.mjs), in the reader's words; search reads an app's words in
-// both languages. null when the Engine or the database cannot be read; it never rejects. Settings reads it while drawing;
-// the sheet asks for it through GET /api/company-apps, so no other page waits on the Engine.
+// both languages. null when the Engine or the database cannot be read; it never rejects. Settings, Apps and the sheet ask
+// for it through GET /api/company-apps, so no page waits on the Engine (#898, ADR 0030); an app that is on reads
+// `checking` until its own test (companyAppTest) answers, so the list never waits on a test.
 export const companyAppItems=cache(async(company:string,language:Language):Promise<AppItem[]|null>=>{
  try {
   const db=await supabase();
-  const [apps,owner]=await Promise.all([readCompanyApps(db,{company}),db.rpc('is_company_owner',{c:company}).then(({data,error})=>!error&&data===true)]);
+  const [apps,owner]=await Promise.all([readCompanyApps(db,{company,test:false}),db.rpc('is_company_owner',{c:company}).then(({data,error})=>!error&&data===true)]);
   if(!apps) return null;
   const text:Text=language==='ar'?ar:en;
   return apps.map(entry=>{
@@ -35,6 +36,11 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
     words:[name,...catalogues.flatMap(words=>[`use.${style}`,`can.${style}`,`alias.${style}`,`category.${entry.category}`].map(key=>words[key]))].join(' ')};
   });
  } catch { return null; }
+});
+
+// One of the Company's apps tested on its own (#898): its state and each Agent's; null when it cannot be tested.
+export const companyAppTest=cache(async(company:string,app:string)=>{
+ try { return await testCompanyApp(await supabase(),{company,app}); } catch { return null; }
 });
 
 // One Agent's apps now, by key, for the connect cards of its Conversations (#203); null when they cannot be read.
