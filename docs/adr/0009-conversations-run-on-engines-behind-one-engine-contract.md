@@ -1,10 +1,10 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0010 and ADR 0033
 ---
 
 # Conversations run on engines behind one engine contract; Hermes is one driver
 
-Superseded by [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26) where it sets an engine contract and offers tools through a Run's instructions: gtmworks talks to Hermes directly, and its tools are registered by an Engine plugin. The known limits below still describe the pinned Engine.
+Partly superseded by [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26) where it sets an engine contract and offers tools, `save_rule` and `suggest_rule` among them, through a Run's instructions: gtmworks talks to Hermes directly, its tools are registered by an Engine plugin, and the rule record goes. The known limits below still describe the pinned Engine.
 
 Partly superseded by [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md) (#282): Hermes ships inside the install and is the engine; the Codex and Claude Code drivers below are no longer planned. The engine contract still holds.
 

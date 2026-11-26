@@ -5,7 +5,7 @@ date: 2026-11-23
 
 # One board, in gtmworks, working the way Hermes's Kanban does
 
-Superseded by [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): the board is the Engine's own Kanban board, and gtmworks adds the person responsible and the publishing date.
+Superseded by [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): the board is the Engine's own Kanban board, and gtmworks adds a Member as a Card's Assignee and the publishing date.
 
 Omar's decision of 2026-11-23 (grill on the Card). He wants a Card, its details and its way of working to be like a task on Hermes's Kanban. It supersedes [ADR 0013](0013-the-board-shows-six-columns-over-the-stages.md) where they differ, and the two layers of work in `PRODUCT.md` (a marketing board in gtmworks, agent work on Hermes's own board), whose second layer was never built. Not built yet; the code and the other records describe today's Card until its spec lands.
 

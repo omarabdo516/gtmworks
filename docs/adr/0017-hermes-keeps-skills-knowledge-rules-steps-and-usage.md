@@ -1,11 +1,11 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0033
 date: 2026-11-18
 ---
 
 # Hermes keeps skills, knowledge, rules, run steps and usage; gtmworks keeps the team layer
 
-[ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26) takes this further: the chat record, the queued turns, the rule record, the lesson approval and the board move to the Engine or go.
+[ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26) takes this further: a Conversation's record, the rule record with who may give a rule and its log, the lesson approval and the board move to the Engine or go.
 
 Spec #340, decisions 0040 and 0042 (Omar, 2026-11-18): gtmworks is Hermes itself plus the team layer and the UI, and stores nothing Hermes already keeps. It supersedes [ADR 0006](0006-agent-identities-company-grants-and-card-scoped-runs.md) and [ADR 0007](0007-run-keys-are-pushed-by-webhook-or-pulled-by-the-assigned-agent.md) where they describe the external-agent API, and [ADR 0008](0008-gtmworks-connects-to-hermes-with-encrypted-profile-keys.md) where it describes pasted Hermes connections. Everything else in ADR 0009 to 0016 still holds.
 
