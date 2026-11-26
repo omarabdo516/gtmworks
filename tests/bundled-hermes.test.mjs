@@ -10,6 +10,7 @@ import { hermesVersion } from '../lib/engine/version.mjs';
 import { isHermesAddressAllowed } from '../lib/engine/transport.mjs';
 import { selfHosted } from '../lib/company-engine.mjs';
 import { companyEngine } from '../lib/engine/handle.mjs';
+import { noAgentGets } from '../lib/agent-toolsets.mjs';
 import { engineRecord } from './engine-records.mjs';
 import { installJob } from './install-job.mjs';
 
@@ -86,7 +87,11 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.match(refused.stderr,/The Engine has no key/);
  // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it.
  const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
- assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false}});
+ // And the tools ADR 0018 keeps out of the Engine's own container (#871): a write from the Owner's Hermes dashboard turns
+ // none of them on. Only that list is pinned, so each Agent's own tools stay the Owner's to change.
+ assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false},
+  agent:{disabled_toolsets:['browser','tts','video','video_gen','project','desktop_ui','catalog','onboarding','kanban','connections']}});
+ assert.deepEqual(managed.agent.disabled_toolsets,[...noAgentGets],'the managed list is the tools no Agent gets');
  // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
  // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
  // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is

@@ -430,6 +430,7 @@ second_company=$(db -c "select id from public.companies where name='Second Compa
 # app and the worker join its network.
 [[ $(docker inspect -f '{{.Config.Image}}' "$second_container") == *'nousresearch/hermes-agent:v0.23.0@sha256:'* ]] || fail 'the second Engine runs the pinned Hermes image'
 ! publishes_host_port "$second_container" || fail 'the second Engine publishes no host port'
+engine_pinned "$second_container" || fail "the second Engine holds the release's managed configuration: the sandbox's terminal and no tool an Agent never gets"
 second_sandbox=$(printf '%s' "$second_container" | sed 's/^gtmworks-engine-/gtmworks-sandbox-/')
 second_work_network=$(printf '%s' "$second_container" | sed 's/^gtmworks-engine-/gtmworks-work-/')
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | grep . | sort) == $(printf '%s\n' "$second_network" "$second_work_network" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
@@ -1434,10 +1435,19 @@ docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PW
 # and nothing of the Engine is reached on this machine but through the gate.
 engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ -n $engine_id ]] && ! publishes_host_port "$engine_id" || fail 'the Engine publishes no host port'
+engine_image=$(docker inspect -f '{{.Image}}' "$engine_id") || fail 'the first Engine image'
 ENGINE_KEY=$(first_engine_key) docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" \
   --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) -e ENGINE_KEY \
   -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e SIGN_IN_EMAIL=proxy-owner@example.com -e SIGN_IN_PASSWORD=proxy-owner-password \
   node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-engine-dashboard.mjs || { docker logs --tail 80 "$(compose ps -q web)"; fail 'the Owner'"'"'s Hermes dashboard behind the gate on the pinned Engine'; }
+# The update the dashboard asked for was refused (#871): the same Engine runs the same image. And after its write of the
+# terminal backend, the Engine's own terminal tool, reading the root profile's config afresh as an Agent's command does,
+# runs a command in the Company's work sandbox: the managed configuration keeps the backend (scripts/engine-managed.yml).
+[[ $(first_engine_id) == "$engine_id" && $(docker inspect -f '{{.Image}}' "$engine_id") == "$engine_image" ]] || fail 'the Engine runs the image it ran before the update route was asked'
+ran=$(docker exec -u hermes -e HERMES_HOME=/opt/data "$engine_id" /opt/hermes/.venv/bin/python -c \
+  'import json; from tools.terminal_tool import terminal_tool; print(json.loads(terminal_tool("hostname", task_id="dashboard-refusals"))["output"].strip().splitlines()[-1])') \
+  || fail 'the Engine runs a command after the dashboard wrote its terminal backend'
+[[ -n $ran && $ran == "$(docker exec gtmworks-sandbox-first hostname)" ]] || fail "after a write of the terminal backend from the dashboard, a command runs in the work sandbox (ran on: $ran)"
 # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
 # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes
 # it only from the install network's bridge gateway, where every connection from this machine arrives from
@@ -2025,9 +2035,8 @@ while read -r name id; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine ]] || fail "the updated install runs the Engine $name"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$(engine_value ".engines/$slug" VOLUME)" ]] || fail "the Engine $name keeps its own volume"
-  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/hermes/config.yaml"}}{{.RW}}{{end}}{{end}}' "$engine") == false ]] \
-    && docker exec "$engine" grep -qx '  backend: ssh' /etc/hermes/config.yaml && docker exec "$engine" grep -qx '  ssh_sync_files: false' /etc/hermes/config.yaml \
-    || fail "the Engine $name is pinned to its sandbox, with no file sync"
+  engine_pinned "$engine" && docker exec "$engine" grep -qx '  ssh_sync_files: false' /etc/hermes/config.yaml \
+    || fail "the Engine $name is pinned to its sandbox, with no file sync and no tool an Agent never gets"
   [[ $(docker inspect -f '{{range $n, $_ := .NetworkSettings.Networks}}{{println $n}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$(engine_value ".engines/$slug" NETWORK)" "gtmworks-work-$slug" | sort) ]] \
     || fail "the Engine $name joins its own network and its work network only"
   for part in sandbox exit; do
