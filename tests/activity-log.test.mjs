@@ -472,6 +472,8 @@ test('a visit to the Engine dashboard, a change made there and a refused action 
  for (const [kind, en, ar] of [['engineKey', 'show a key', 'يشوف مفتاح'], ['hermesUpdate', 'update the Engine', 'يحدّث المحرك'],
   ['backupImport', 'import a backup', 'يستورد نسخة احتياطية'], ['agentProfile', 'make, rename or delete an Agent', 'يعمل وكيل أو يغيّر اسمه أو يمسحه']]) {
   const refused = describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { refused: kind } });
+  // Its words name the Engine or an Agent: English keeps their capitals inside the sentence.
+  assert.equal(refused.act[1].proper, true, kind);
   assert.deepEqual(['en', 'ar'].map(language => say(language, refused)), [`tried to ${en} on the Engine dashboard and was refused`, `حاول ${ar} في لوحة تحكم المحرك واترفض`], kind);
  }
  assert.deepEqual(describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { refused: 'later' } }).act, ['logActOther']);
