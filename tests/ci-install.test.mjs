@@ -491,12 +491,14 @@ test('tell_engine hands the profile folder and the memories it wrote to the Engi
 // Spec #831 (#833): a board worker's dangerous command runs because the Engine's managed scope says approve, and the
 // proof reads it from inside each Engine, where the Engine reads it, never from the checkout. A stand-in `docker exec`
 // answers with a managed file: the install's own holds, and one with no approvals, one that denies, one that names the
-// setting under another key and an Engine docker cannot reach each fail.
+// setting under another key and an Engine docker cannot reach each fail. Its temp folder (the next test) is the test's own
+// short folder, so only the managed file decides here.
 test('engine_board_settings holds only for an Engine whose managed scope approves a board worker\'s dangerous command', () => {
   const dir = mkdtempSync(`${tmpdir()}/board-settings-`);
   try {
     writeFileSync(`${dir}/docker`, [
-      '#!/bin/sh', '[ "$1" = exec ] && [ "$2" = some-engine ] && [ "$3" = cat ] && [ "$4" = /etc/hermes/config.yaml ] || exit 2',
+      '#!/bin/sh', 'if [ "$1 $2 $3 $4 $5 $6" = "exec -u hermes some-engine sh -c" ]; then TMPDIR=$SCRATCH sh -c "$7"; exit; fi',
+      '[ "$1" = exec ] && [ "$2" = some-engine ] && [ "$3" = cat ] && [ "$4" = /etc/hermes/config.yaml ] || exit 2',
       '[ -f "$MANAGED" ] || exit 1', 'cat "$MANAGED"', '',
     ].join('\n'));
     chmodSync(`${dir}/docker`, 0o755);
@@ -504,7 +506,7 @@ test('engine_board_settings holds only for an Engine whose managed scope approve
       if (managed !== null) writeFileSync(`${dir}/managed.yml`, managed);
       else rmSync(`${dir}/managed.yml`, { force: true });
       const out = spawnSync('bash', ['-c', 'set -o pipefail; . scripts/ci-install-lib.sh; engine_board_settings some-engine'], {
-        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MANAGED: `${dir}/managed.yml` },
+        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MANAGED: `${dir}/managed.yml`, SCRATCH: dir },
       });
       assert.ok(out.status === 0 || out.status === 1, out.stderr);
       return out.status === 0;
@@ -516,6 +518,42 @@ test('engine_board_settings holds only for an Engine whose managed scope approve
     assert.equal(holds(`${terminal}approvals:\n  cron_mode: approve\n`), false, 'another approval is not the board worker\'s');
     assert.equal(holds(`approvals:\n  cron_mode: deny\nterminal:\n  single_query_mode: approve\n`), false, 'the key under another section');
     assert.equal(holds(null), false, 'an Engine whose managed file docker cannot read');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// #833: a board worker's ssh control socket goes under the temp folder its Engine sets, which must be short enough for a
+// Unix socket path and exist for the Engine's own user before the gateway starts. The proof asks the Engine itself, as
+// its user: a stand-in `docker exec -u hermes` runs the proof's own question with TMPDIR set to the test's folder. The
+// install's managed file is the stand-in's answer to the first question, so only the temp folder decides.
+test('engine_board_settings holds only for an Engine whose own user has a short temp folder it can write', () => {
+  const dir = mkdtempSync(`${tmpdir()}/s-`);
+  try {
+    writeFileSync(`${dir}/docker`, [
+      '#!/bin/sh',
+      'if [ "$1 $2 $3 $4" = "exec some-engine cat /etc/hermes/config.yaml" ]; then cat scripts/engine-managed.yml; exit; fi',
+      '[ "$1 $2 $3 $4 $5 $6" = "exec -u hermes some-engine sh -c" ] || exit 2',
+      'if [ -n "$ENGINE_TMPDIR" ]; then TMPDIR=$ENGINE_TMPDIR sh -c "$7"; else env -u TMPDIR sh -c "$7"; fi', '',
+    ].join('\n'));
+    chmodSync(`${dir}/docker`, 0o755);
+    const holds = scratch => {
+      const out = spawnSync('bash', ['-c', 'set -o pipefail; . scripts/ci-install-lib.sh; engine_board_settings some-engine'], {
+        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, ENGINE_TMPDIR: scratch },
+      });
+      assert.ok(out.status === 0 || out.status === 1, out.stderr);
+      return out.status === 0;
+    };
+    const short = `${dir}/scratch`;
+    mkdirSync(short);
+    // A board worker's own profile scratch, the folder Hermes picks when TMPDIR is unset: 52 characters before the
+    // control folder and the socket's name, which take the path past Linux's 108 bytes.
+    const profile = `${dir}/profiles/ag-${'0'.repeat(32)}/cache/scratch`;
+    mkdirSync(profile, { recursive: true });
+    assert.equal(holds(short), true, 'a short folder the Engine\'s user writes');
+    assert.equal(holds(''), false, 'no TMPDIR: every board worker takes its profile\'s scratch');
+    assert.equal(holds(`${dir}/missing`), false, 'a TMPDIR that is not there: Python falls back to /tmp');
+    assert.equal(holds(profile), false, 'a folder as long as a profile\'s scratch');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

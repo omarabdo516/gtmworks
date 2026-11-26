@@ -93,6 +93,7 @@ done. Title: … Assignee: @delta … Result: <summary>`. It also woke on `crash
 | `approvals.single_query_mode: approve` | `scripts/engine-managed.yml`, mounted read-only at the managed scope (`/etc/hermes/config.yaml`) of every Company's Engine, the first one's, one `gtmworks company add` makes and one `gtmworks update` brings up | a worker's Run is single-query (`gateway/session_kanban.py`) and refuses a dangerous command by default (section 3). The managed scope is applied per leaf after a profile's own config, so a profile's `approvals.unattended_mode` stays its own and a profile's write of `single_query_mode: deny` changes nothing |
 | `kanban` offered, never disabled | every profile's `platform_toolsets.api_server`, written by the worker (`lib/agent-toolsets.mjs`, `everyAgentGets`), no longer in `noAgentGets` | the Kanban tools are offered to Runs started through the Run API, and a board worker keeps its lifecycle tools (section 4). It cannot be a managed setting, which would replace each Agent's whole list. A child Run never gets it: the Engine keeps `kanban` from sub-agents (`childToolsets`) |
 | `kanban.dispatch_in_gateway`, `kanban.review_dispatch`, `kanban.dispatch_interval_seconds` | not written | the dispatcher and the review dispatch stay on, every 60 s, as Hermes ships them |
+| `TMPDIR: /opt/data/cache/scratch` | the Engine service's environment in `scripts/engine-template.yml`, so every Engine an install makes or updates has it; the Engine's start makes the folder before the gateway | a worker's ssh control socket otherwise lands under its profile's scratch, past a Unix socket's 108 bytes (section 8, "A worker's first command") |
 
 Why the board's tools pass ADR 0020's rule that no tool reads a path an Agent chooses on the Engine: `kanban_attach`
 takes the file's bytes, not a path, and a declared artifact (`kanban_complete` and `kanban_request_review`'s
@@ -129,6 +130,29 @@ A person's return while the Engine's own tick has started a reviewing Agent on t
 `running` keeps the Card in review (`_set_status_direct` resumes a reviewer's Run to `review`), so the check first stops
 the reviewer's Run (`POST /tasks/{id}/reclaim`) and prints what the Card was after it (`reviewer_stopped`). A pass
 (`PATCH status: done`) is forced over an open Run and needs no stop.
+
+### A worker's first command
+
+On the real Engine (CI run 45854207378, the `"step":"kanban"` lines of install-open-design) a board worker's first
+command failed: `SSH connection failed: unix_listener: path
+"/opt/data/profiles/ag-<32 hex>/cache/scratch/hermes-ssh/<16 hex>.sock.<16 random>" too long for Unix domain socket`.
+The ssh backend keeps its ControlMaster socket in `tempfile.gettempdir()/hermes-ssh` (`tools/environments/ssh.py`). A
+worker runs re-homed to its Agent's profile, and `hermes_constants.apply_scratch_tmp_env` points `TMPDIR` at that
+profile's `cache/scratch` unless a temp variable is already set ("a temp var the user set is respected"). A profile's
+name is 35 characters (`ag-` or `co-` and 32 hex), so the socket's path is about 118 bytes, past Linux's 108. A
+Conversation's commands worked because they run under the root profile's scratch.
+
+The fix is ADR 0022's first rung, a setting: the Engine service's environment sets `TMPDIR=/opt/data/cache/scratch`,
+the root profile's own scratch, which the gateway already used, so Conversations keep their folder and only the
+workers move; the socket's path under it is about 73 bytes. A fresh volume has no `cache/scratch` and Python's
+`tempfile` passes over a `TMPDIR` that is not there, so the Engine's start makes it, `0700` and the Engine's user's,
+before the gateway (measured on the pinned image: `hermes:hermes`, and `tempfile.gettempdir()` returns it). The lead's
+hand-run pinned Engine with `TMPDIR` set put the worker's control folder there. A Card's workspace and attachments are
+under the board's own folders (`hermes_cli/kanban_db.py`, `workspaces_root`), not the temp folder, so they do not move.
+
+`engine_board_settings` asks every Engine the proof checks, as the Engine's user, for a `TMPDIR` that is there,
+writable and at most 50 characters, Hermes's own budget for a temp root that holds sockets (`SOCKET_TMPDIR_MAX_LEN`),
+so a later change to the template cannot drop it; `tests/bundled-hermes.test.mjs` pins the value and the start step.
 
 ### Its time
 

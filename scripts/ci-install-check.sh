@@ -1138,7 +1138,8 @@ sandbox_files=$(grep -vx /tmp/gtmworks-scan <<< "$sandbox_files" | sort -u) || t
 sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
 [[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
 # The Engine's own Kanban board (spec #831, #833, ADR 0033 item 2), with settings alone and the image unmodified: every
-# Engine of the install, the new Company's included, holds the board worker's setting in its managed scope. On the first
+# Engine of the install, the new Company's included, holds the board worker's setting in its managed scope and the short
+# temp folder its ssh control socket needs (engine_board_settings). On the first
 # Company's Engine, once the area has made its second Agent as agents-sandbox does, a Card given to that Agent is started
 # by the dispatcher after one tick the check asks for, runs a command that writes in the work sandbox and a command the
 # Engine marks dangerous, stops on a question, goes on after a person's comment and a move to ready, is sent for review,
@@ -1150,7 +1151,7 @@ sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name aut
 engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail "the first Company's second Agent moves to a profile of its own"
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
-  engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope"
+  engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
 done
 kanban_marker="kanban-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 engine_node "$engine_key" - kanban "$kanban_marker" < scripts/check-install-profiles.mjs | tee kanban-proof.log \
@@ -1676,7 +1677,7 @@ hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
 # The Engine the update brought up holds the board worker's setting in its managed scope (spec #831, #833), which the
 # previous release never wrote.
-engine_board_settings "$engine" || fail "the updated Engine approves a board worker's dangerous command in its managed scope"
+engine_board_settings "$engine" || fail "the updated Engine approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
 ! publishes_host_port "$engine" || fail 'the Engine publishes no host port'
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | grep . | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
@@ -2199,7 +2200,7 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
-  engine_board_settings "$engine" || fail "the updated Engine $name approves a board worker's dangerous command in its managed scope"
+  engine_board_settings "$engine" || fail "the updated Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
