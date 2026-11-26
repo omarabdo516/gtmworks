@@ -7,7 +7,7 @@ import { i18n } from '../lib/i18n.mjs';
 
 // Settings → Models part by part (#791, ADR 0030): each part the Engine backs is its own read after the section is drawn.
 // RS Learning's Engine holds an Anthropic key and its models. The Engine's sign-in read is held ten seconds: the section
-// opens at once with the default model and speech-to-text, and the Providers list says it is being read until it lands.
+// opens at once with speech-to-text, and the Providers list and the model choices say they are being read until it lands.
 // A part whose read then fails keeps its last good read and says it is read again; with none it shows its own line.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
@@ -50,17 +50,18 @@ for(const [language,t] of [['en',en],['ar',ar]] as const) for(const width of [14
   fake.settings.managedDelay=(method,path)=>signInRead(method,path)?10000:null;
   const opened=Date.now();
   await page.goto('/c/rs-learning/settings?section=models');
-  // The parts the held read does not back fill in long before it answers.
-  await expect(section(page,'md-h-default').getByText('claude-opus-4-6').first()).toBeVisible({timeout:6000});
+  // The part the held read does not back fills in long before it answers; the Providers list and the model choices
+  // (whose offers read the same accounts) each say they are being read.
   await expect(section(page,'md-h-stt')).toBeVisible({timeout:6000});
   const reading=page.locator('.sov .panel-empty',{hasText:t('settingsPartReading')});
-  await expect(reading).toBeVisible();
+  await expect(reading).toHaveCount(2);
   expect(Date.now()-opened,'the section did not wait for the held read').toBeLessThan(9000);
-  await reading.scrollIntoViewIfNeeded();
+  await reading.first().scrollIntoViewIfNeeded();
   await page.screenshot({path:testInfo.outputPath(`models-part-reading-${language}-${width}.png`)});
-  // The held read lands and the list takes the line's place.
+  // The held read lands and each part takes its line's place.
   await expect(reading).toHaveCount(0,{timeout:20000});
   await expect(page.locator('#md-providers, section[aria-labelledby="md-h-pv"]').first()).toBeVisible();
+  await expect(section(page,'md-h-default').getByText('claude-opus-4-6').first()).toBeVisible();
  });
 }
 
