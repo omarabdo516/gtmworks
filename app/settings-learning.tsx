@@ -15,7 +15,8 @@ import { SettingsIcon } from './settings-icons';
 // over its Skill ledger (the PR names the gap).
 type T=ReturnType<typeof i18n>['t'];
 
-export function LearningSection({t,slug,company,canManage,owner,data,readAt}:{t:T,slug:string,company:string,canManage:boolean,owner:boolean,data:CompanyLearning|null,readAt:number}) {
+// `reading`: the Engine's read is still on its way (#898), so each part the read fills says so instead of being unread.
+export function LearningSection({t,slug,company,canManage,owner,data,readAt,reading=false}:{t:T,slug:string,company:string,canManage:boolean,owner:boolean,data:CompanyLearning|null,readAt:number,reading?:boolean}) {
  const found=data?.state==='found'?data:null;
  const agents=found?.agents??null;
  const rules=found?.rules??[];
@@ -31,9 +32,10 @@ export function LearningSection({t,slug,company,canManage,owner,data,readAt}:{t:
   <section className="dp-sec ln-sugg" aria-labelledby="ln-h-sug"><Label id="ln-h-sug" info={t('settingsLearnSuggestHint')}>{t('settingsLearnSuggestions')}</Label></section>
   {/* The Company's mode and each Agent's are drawn on the page, so a saved mode is held there with no read (#663). Only
       the fields the modes need cross to the page, not each Agent's learned Skills. */}
-  <LearningModes company={company} owner={owner} readAt={readAt} agents={agents?.map(({id,name,own,shared,mode,follow})=>({id,name,own,shared,mode,follow}))??null}/>
+  {reading?<div className="panel-card"><p className="panel-empty">{t('settingsPartReading')}</p></div>
+   :<LearningModes company={company} owner={owner} readAt={readAt} agents={agents?.map(({id,name,own,shared,mode,follow})=>({id,name,own,shared,mode,follow}))??null}/>}
   <section className="dp-sec" aria-labelledby="ln-h-rec"><Label id="ln-h-rec">{t('settingsLearnRecent')}{total>0&&<> <span className="muted num">{total}</span></>}</Label>
-   {!found?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
+   {!found?<div className="panel-card"><p className="panel-empty">{t(reading?'settingsPartReading':'settingsLearnUnread')}</p></div>
     :total===0?<div className="panel-card"><p className="panel-empty">{t('settingsLearnNone')}</p></div>
     :<ol className="panel-card ln-list">
      {rules.map(rule=><li key={rule.id} className={`ln-row${rule.removed?' is-off':''}`}>
@@ -56,7 +58,7 @@ export function LearningSection({t,slug,company,canManage,owner,data,readAt}:{t:
       </div></li>)}
     </ol>}</section>
   <section className="dp-sec" aria-labelledby="ln-h-lessons"><Label id="ln-h-lessons">{t('settingsLearnLessons')}{lessons.length>0&&<> <span className="muted num">{lessons.length}</span></>}</Label>
-   {!found?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
+   {!found?<div className="panel-card"><p className="panel-empty">{t(reading?'settingsPartReading':'settingsLearnUnread')}</p></div>
     :lessons.length===0?<div className="panel-card"><p className="panel-empty">{t('settingsLearnNoLessons')}</p></div>
     :<ul className="panel-card ln-list">{lessons.map(lesson=><li key={lesson.id} className="ln-row">
       <span className="ln-ic" aria-hidden="true"><SettingsIcon name="check"/></span>

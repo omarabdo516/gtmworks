@@ -15,6 +15,8 @@
  "stateConnected": "Connected",
  "stateAttention": "Needs attention",
  "stateOff": "Not connected",
+ "stateChecking": "Checking…",
+ "reading": "Reading…",
  "manage": "Manage",
  "manageLabel": "Manage {0}",
  "connect": "Connect",
