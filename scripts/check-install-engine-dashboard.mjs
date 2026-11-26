@@ -3,8 +3,9 @@
 // Probe B's gate check (docs/engine-probes/engine-dashboard.md) on the product's own gate:
 // - the Owner loads the dashboard's first page, an inner page, the code its first page names, a lazily loaded page's
 //   code at the root /assets/ for the page that asks for it, an API route, and a socket through gtmworks's web server;
-// - a Manager, a Contributor and a Viewer of the same Company, made here, and a signed-out person each get the missing
-//   page there (the answer for a Company that does not exist) on a page, a code file and an API route, and no socket;
+// - a Manager, a Contributor and a Viewer of the same Company, an Owner of another Company only, all made here, and a
+//   signed-out person each get the missing page there (the answer for a Company that does not exist) on a page, a code
+//   file and an API route, and no socket;
 // - no answer to any of them holds the Engine's key (ENGINE_KEY, given by name);
 // - the dashboard's live parts close with the Role (#870): a second Owner, made here, opens the chat, its terminal and
 //   the board's event stream beside the first Owner's; within five seconds of the second Owner's Role being changed every
@@ -20,7 +21,7 @@
 import assert from 'node:assert/strict';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 const origin=process.env.APP_ORIGIN, anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, service=process.env.SUPABASE_SERVICE_ROLE_KEY;
 const email=process.env.SIGN_IN_EMAIL, password=process.env.SIGN_IN_PASSWORD, engineKey=process.env.ENGINE_KEY;
@@ -156,6 +157,17 @@ for(const role of ['manager','contributor','viewer']) {
  await json('/rest/v1/members',{method:'POST',headers:asService,body:JSON.stringify({company_id:company,person_id:made.id,role})});
  people.push([`a ${role}`,await cookieOf(address,secret)]);
 }
+// An Owner of another Company only: an Owner, but not of this Company.
+{
+ const address='dashboard-other-owner@example.com', secret='dashboard-other-owner-password';
+ const made=await json('/auth/v1/admin/users',{method:'POST',headers:asService,body:JSON.stringify({email:address,password:secret,email_confirm:true})});
+ await json('/rest/v1/people',{method:'POST',headers:{...asService,Prefer:'resolution=ignore-duplicates'},body:JSON.stringify({id:made.id,name:'other owner'})});
+ // A Company needs an Engine record; this one's is never asked, as its Owner is refused here before any Engine is.
+ const [engine]=await json('/rest/v1/company_engines',{method:'POST',headers:{...asService,Prefer:'return=representation'},body:JSON.stringify({address:'http://127.0.0.1:9',key_encrypted:'never-asked'})});
+ const [other]=await json('/rest/v1/companies',{method:'POST',headers:{...asService,Prefer:'return=representation'},body:JSON.stringify({id:randomUUID(),slug:'dashboard-other-company',name:'Another Company',engine_id:engine.id})});
+ await json('/rest/v1/members',{method:'POST',headers:asService,body:JSON.stringify({company_id:other.id,person_id:made.id,role:'owner'})});
+ people.push(['an Owner of another Company only',await cookieOf(address,secret)]);
+}
 people.push(['a signed-out person','']);
 for(const [who,cookie] of people) {
  for(const path of [prefix,`${prefix}/sessions`,entry,`${prefix}/api/status`]) {
@@ -167,7 +179,7 @@ for(const [who,cookie] of people) {
  assert.equal((await get(`${prefix}/api/auth/ws-ticket`,{cookie,method:'POST'})).status,404,`${who} mints no socket ticket`);
  assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,cookie),404,`${who} opens no socket`);
 }
-console.log('A Manager, a Contributor, a Viewer and a signed-out person each got the missing page and no socket');
+console.log('A Manager, a Contributor, a Viewer, an Owner of another Company only and a signed-out person each got the missing page and no socket');
 
 // The live parts close with the Role (#870): the chat, its terminal and the board's event stream of a second Owner.
 const second=await (async()=>{
@@ -224,7 +236,8 @@ console.log(`The chat, the terminal and the board stream of an Owner made a Mana
 // names where gtmworks does it; the update route leaves the Engine's version as it was; writing a key stays open, and the
 // Engine's key, written into the root profile's .env as gtmworks writes it into every Agent's, is shown by no route: not
 // by a reveal, and not inside a backup archive the Engine made, downloaded by either route that serves one; and a write
-// of the terminal backend is answered and has no effect. Where the next command runs is the job's to read from the host.
+// of the terminal backend is answered and has no effect, as is a write of the file tools' write root, which the Engine
+// refuses (#893). Where the next command runs is the job's to read from the host.
 /** @param {string} method @param {string} path @param {unknown} [body] */
 async function call(method,path,body) {
  const answer=await fetch(`${origin}${prefix}${path}`,{method,redirect:'manual',headers:{cookie:owner,origin,...(body===undefined?{}:{'content-type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
@@ -271,7 +284,9 @@ await refusedAs('engineKey','GET',`/api/files/download?path=${encodeURIComponent
 const terminal=await call('PUT','/api/config',{config:{terminal:{backend:'local'}}});
 assert.equal(terminal.status,200,`a write of the terminal backend is answered: HTTP ${terminal.status} ${terminal.text.slice(0,200)}`);
 assert.equal((await call('GET','/api/config')).json?.terminal?.backend,'ssh','the terminal backend stays the work sandbox\'s');
-console.log(`On Hermes ${version}, the update, an import, a profile made and one deleted, a key shown and a backup downloaded were each refused, and the version stayed; a key was written; the terminal backend stayed ssh`);
+const writeRoot=await call('PUT','/api/env',{key:'HERMES_WRITE_SAFE_ROOT',value:'/'});
+assert.equal(writeRoot.status,400,`the file tools' write root is not written: HTTP ${writeRoot.status} ${writeRoot.text.slice(0,200)}`);
+console.log(`On Hermes ${version}, the update, an import, a profile made and one deleted, a key shown and a backup downloaded were each refused, and the version stayed; a key was written; the terminal backend stayed ssh and the write root stayed the work folder`);
 
 for(const answer of seen) assert.ok(!answer.includes(engineKey),`no answer holds the Engine's key: ${answer.slice(0,120)}`);
 console.log(`None of ${seen.length} answers held the Engine's key`);
