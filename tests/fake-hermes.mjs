@@ -47,8 +47,11 @@ export function screenFrame(grab) {
 // page's path, with the absolute code addresses rewritten under the prefix a reverse proxy names (X-Forwarded-Prefix) and
 // that prefix given to the page as __HERMES_BASE_PATH__; its code at /assets/, where the second page's code is asked
 // for at the root, as the dashboard's lazily loaded pages ask (Probe B, docs/engine-probes/engine-dashboard.md); an API
-// route, /api/status; and a socket, /api/ws, opened with a single-use ticket from POST /api/auth/ws-ticket. Every
-// request needs the Engine's key, as the gated dashboard does. Answers whether the request was the dashboard's.
+// route, /api/status; and its live parts (#870), each a socket opened with a single-use ticket from
+// POST /api/auth/ws-ticket: the chat, /api/ws, which says gateway.ready; its terminal, /api/pty, which writes a prompt;
+// and the Kanban board's event stream, /api/plugins/kanban/events, which reports each Card made with
+// POST /api/plugins/kanban/tasks. Every request needs the Engine's key, as the gated dashboard does. Answers whether the
+// request was the dashboard's.
 const dashboardPage=prefix=>`<!doctype html><html><head><meta charset="utf-8"><title>Hermes Agent - Dashboard</title><script>window.__HERMES_BASE_PATH__=${JSON.stringify(prefix)};</script><script type="module" src="${prefix}/assets/index.js"></script></head><body><div id="root"></div></body></html>`;
 const dashboardCode=`const base=window.__HERMES_BASE_PATH__||'';
 const root=document.getElementById('root');
@@ -71,7 +74,7 @@ function dashboardAnswer(settings,request,response) {
  const url=new URL(request.url||'/','http://management');
  const path=url.pathname;
  const page=path==='/'||path==='/sessions'||path.startsWith('/sessions/');
- if(!page&&!path.startsWith('/assets/')&&path!=='/api/status'&&path!=='/api/auth/ws-ticket') return false;
+ if(!page&&!path.startsWith('/assets/')&&path!=='/api/status'&&path!=='/api/auth/ws-ticket'&&path!=='/api/plugins/kanban/tasks') return false;
  const prefix=String(request.headers['x-forwarded-prefix']??'').replace(/\/$/,'');
  settings.dashboardRequests.push({method:request.method||'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix});
  const answer=(status,type,body)=>{ response.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'}); response.end(body); };
@@ -81,6 +84,15 @@ function dashboardAnswer(settings,request,response) {
  else if(path==='/assets/sessions.js') answer(200,'text/javascript',dashboardSessions);
  else if(path==='/api/status') answer(200,'application/json',JSON.stringify({version:settings.version}));
  else if(path==='/api/auth/ws-ticket'&&request.method==='POST') { const ticket=randomUUID(); settings.dashboardTickets.add(ticket); answer(200,'application/json',JSON.stringify({ticket})); }
+ else if(path==='/api/plugins/kanban/tasks'&&request.method==='POST') {
+  const chunks=[]; request.on('data',chunk=>chunks.push(chunk));
+  request.on('end',()=>{
+   let title=''; try { title=String(JSON.parse(Buffer.concat(chunks).toString('utf8')).title??''); } catch { /* no body */ }
+   const task={id:randomUUID(),title};
+   for(const socket of settings.dashboardSockets) if(socket.path==='/api/plugins/kanban/events') socket.send(JSON.stringify({events:[{kind:'created',task}],cursor:Date.now()}));
+   answer(200,'application/json',JSON.stringify({task}));
+  });
+ }
  else answer(404,'application/json','{"error":"not found"}');
  return true;
 }
@@ -186,7 +198,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The Engine's own dashboard (#869): every request to its pages, code and API, with the key and the cookies it came with
   // and the prefix it was served under, and every socket it opened. See dashboardAnswer.
   dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string}[]} */([]),
-  dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardSockets:/** @type {Set<import('ws').WebSocket>} */(new Set()),
+  dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardSockets:/** @type {Set<import('ws').WebSocket&{path:string}>} */(new Set()),
   screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human',viewer?:string|null}>} */(new Map()),
   screenCalls:/** @type {{method:string,params:any,token:string|null}[]} */([]),screenStartDelay:0,screenPictureUrl:/** @type {string|null} */(null),screenGrabs:0,
   // #713: the live stream (/api/display/ws, hermes_cli/web_routers/display.py): every ticket display.observe minted, and
@@ -1153,10 +1165,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  const sockets=new WebSocketServer({noServer:true});
  management.on('upgrade',(request,socket,head)=>{
   const url=new URL(request.url||'/','http://management');
-  // The dashboard's socket (#869), opened with a ticket the dashboard minted, used once.
-  if(url.pathname==='/api/ws'&&settings.dashboardTickets.delete(url.searchParams.get('ticket')??'')) {
+  // The dashboard's sockets (#869, #870), each opened with a ticket the dashboard minted, used once.
+  if(['/api/ws','/api/pty','/api/plugins/kanban/events'].includes(url.pathname)&&settings.dashboardTickets.delete(url.searchParams.get('ticket')??'')) {
    settings.dashboardRequests.push({method:'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix:String(request.headers['x-forwarded-prefix']??'')});
-   sockets.handleUpgrade(request,socket,head,ws=>{ settings.dashboardSockets.add(ws); ws.on('close',()=>settings.dashboardSockets.delete(ws)); ws.send(JSON.stringify({type:'gateway.ready'})); });
+   sockets.handleUpgrade(request,socket,head,ws=>{
+    const live=Object.assign(ws,{path:url.pathname});
+    settings.dashboardSockets.add(live); ws.on('close',()=>settings.dashboardSockets.delete(live));
+    if(url.pathname==='/api/ws') ws.send(JSON.stringify({type:'gateway.ready'}));
+    else if(url.pathname==='/api/pty') ws.send('\x1b[1mHermes\x1b[0m > ');
+   });
    return;
   }
   if(url.pathname==='/api/display/ws') { sockets.handleUpgrade(request,socket,head,ws=>displayStream(ws,url.searchParams.get('display_ticket')??'')); return; }
