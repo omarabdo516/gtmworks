@@ -1,0 +1,68 @@
+/* New card (spec #831, #836; design-reference-card/index.html: #newcard, .modal--sm.modal--fit, .nc-form, .nc-field,
+   .nc-title, .nc-row, .nc-pick, #nc-bolt, .set-input, .set-err, .modal__foot--end): the reference's native dialog, as tall
+   as its form, over the board. The Assignee is the reference's own menu, opened below its button; the dialog lets it
+   spill over its edge so a long team list is never cut. */
+.gw.modal.nc-dlg {
+  --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px;
+  width: min(560px, calc(100vw - 32px)); height: fit-content; max-height: min(820px, calc(100dvh - 48px)); overflow: visible;
+}
+.gw.modal.nc-dlg::backdrop { background: var(--gw-bg-scrim); }
+.gw.modal.nc-dlg:not([open]) { display: none; }
+.gw.modal.nc-dlg :where(h2, p) { margin: 0; letter-spacing: normal; text-transform: none; }
+.gw.modal.nc-dlg .modal__inner { display: flex; flex-direction: column; max-height: inherit; }
+.gw.modal.nc-dlg .modal__inner > * { flex: none; }
+.gw.modal.nc-dlg .modal__body { padding: var(--s2) var(--s6) var(--s4); }
+.gw.modal.nc-dlg .modal__foot { border-end-start-radius: var(--gw-r-lg); border-end-end-radius: var(--gw-r-lg); }
+.gw.nc-dlg .nc-form { display: grid; gap: var(--s4); }
+.gw.nc-dlg .nc-field { display: grid; gap: 6px; justify-items: stretch; }
+.gw.nc-dlg .set-input {
+  display: block; width: 100%; height: 34px; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none; box-shadow: none;
+  transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw.nc-dlg .set-input:focus { border-color: var(--gw-border-1); outline: 3px solid var(--gw-bg-active); outline-offset: 0; }
+.gw.nc-dlg .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw.nc-dlg .set-input[aria-invalid="true"] { border-color: var(--gw-danger-text); }
+.gw.nc-dlg .nc-title { height: 44px; font-size: var(--gw-fs-lg); font-weight: var(--gw-fw-semibold); }
+.gw.nc-dlg .nc-desc { height: auto; min-height: 96px; padding-block: 8px; line-height: 1.6; resize: vertical; }
+.gw.nc-dlg .nc-date { width: auto; height: 36px; flex: none; }
+.gw.nc-dlg .set-err { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw.nc-dlg .set-err[hidden] { display: none; }
+.gw.nc-dlg .nc-row { position: relative; display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+.gw.nc-dlg .nc-pick {
+  position: relative; display: inline-flex; align-items: center; gap: var(--s2); min-width: 0; max-width: 100%; min-height: 36px; padding: 0 var(--s3) 0 var(--s2);
+  border-radius: var(--gw-r-full); background: var(--gw-bg-tertiary); color: var(--gw-text-1); font-size: var(--gw-fs-sm);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw.nc-dlg .nc-pick::before { content: ""; position: absolute; inset: -4px 0; }
+.gw.nc-dlg .nc-pick > .gw-icon { width: 14px; height: 14px; color: var(--gw-text-3); flex: none; }
+.gw.nc-dlg .nc-pick[aria-expanded="true"] { background: var(--gw-bg-active); }
+.gw.nc-dlg .od-truncate { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw.nc-dlg .od-fill { flex: 1 1 0; min-width: 0; }
+.gw.nc-dlg .sym { display: inline-flex; align-items: center; flex: none; line-height: 1; }
+.gw.nc-dlg .sym--ok { color: var(--gw-accent); }
+.gw.nc-dlg #nc-bolt .gw-icon { width: 18px; height: 18px; }
+.gw.nc-dlg .cw-noone { width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; display: inline-block; flex: none; box-sizing: border-box; border: 1px solid var(--gw-border-1); }
+.gw.nc-dlg .menu.nc-menu { inset-inline: auto; inset-inline-start: 0; top: calc(100% + 4px); bottom: auto; min-width: 240px; max-width: 100%; max-height: min(320px, 50dvh); }
+.gw.nc-dlg .menu__item[aria-checked="true"] { font-weight: var(--gw-fw-medium); }
+.gw.nc-dlg .modal__foot--end { justify-content: flex-end; }
+.gw.nc-dlg .modal__foot--end .btn { min-width: 96px; }
+.gw.nc-dlg .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw.nc-dlg .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
+.gw.nc-dlg .circle-btn::before { content: ""; position: absolute; inset: -4px; }
+.gw.nc-dlg .circle-btn { position: relative; }
+/* A person's initial where an Agent shows its face. */
+.gw.nc-dlg .lg-av {
+  width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; flex: none; background: var(--gw-bg-active); box-sizing: border-box; border: 0.5px solid var(--gw-border-3);
+  color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-semibold); line-height: 1;
+}
+@media (hover: hover) {
+  .gw.nc-dlg .nc-pick:hover { background: var(--gw-bg-secondary-hover); }
+  .gw.nc-dlg .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
+}
+@media (max-width: 599px) {
+  .gw.modal.nc-dlg .modal__body { padding-inline: var(--s4); }
+  /* 44px touch targets on a phone (PRODUCT.md): the footer buttons keep the reference's 36px with an invisible band. */
+  .gw.nc-dlg .modal__foot--end .btn { position: relative; }
+  .gw.nc-dlg .modal__foot--end .btn::before { content: ""; position: absolute; inset: -4px 0; }
+}

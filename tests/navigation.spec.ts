@@ -7,7 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
 import { appOrigin } from './lane.mjs';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
@@ -22,14 +22,11 @@ test.beforeAll(async ({ browser }, testInfo) => {
   const context = await browser.newContext({ baseURL: appOrigin });
   try {
     const page = await context.newPage();
-    ensureRequestAgent();
-    // New card opens at its own address over the old board until the board makes Cards on the Engine (#836).
-    await signIn(page, 'omar@example.com', '/c/rs-learning/work/new');
+    // An old Card on its own page: New card makes its Cards on the Engine since #836.
+    await signIn(page, 'omar@example.com', '/c/rs-learning/home');
     const title = `بطاقة قياس الوارد ${randomUUID()}`;
-    await page.getByLabel('Message', { exact: true }).fill(title);
-    await page.getByRole('button', { name: "Create card" }).click();
+    const { path } = await oldCard(page, title);
     await expect(page.locator('.modal h2').first()).toHaveText(title);
-    const path = new URL(page.url()).pathname;
     expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
     inboxFixture = { title, path };
     await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
@@ -194,13 +191,11 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
 });
 
 test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
-  ensureRequestAgent();
-  // New card opens at its own address over the old board until the board makes Cards on the Engine (#836).
-  await signIn(page, 'omar@example.com', '/c/rs-learning/work/new');
-  await idle(page); // Home, the board and the inbox are prepared before any write.
+  // An old Card on its own page: New card makes its Cards on the Engine since #836.
+  await signIn(page, 'omar@example.com', '/c/rs-learning/home');
   const title = `بطاقة تحديث فوري ${Date.now()}`;
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button', { name: "Create card" }).click();
+  await oldCard(page, title);
+  await idle(page); // Home, the board and the inbox are prepared before any write.
   await expect(page.locator('.modal h2').first()).toHaveText(title);
   const cardPath = new URL(page.url()).pathname;
   const comment = `تعليق فوري ${Date.now()}`;

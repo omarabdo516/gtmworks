@@ -402,6 +402,14 @@
 .gw .sym__dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
 .gw .kcard > .kcard__foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; padding-top: 2px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .kt-face { display: inline-flex; flex: none; }
+/* A Card given to a Member shows that Member's initial where an Agent shows its face (#836); New card opens from the
+   board's tools, at their end (design-reference-card: .bt-new). */
+.gw .kt-face .lg-av {
+  width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; flex: none; background: var(--gw-bg-active); box-sizing: border-box; border: 0.5px solid var(--gw-border-3);
+  color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-semibold); line-height: 1;
+}
+.gw .board-view .bt-new { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; }
+.gw .board-view .bt-new .gw-icon { width: 16px; height: 16px; }
 .gw .kt-face .cw-noone { width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; display: inline-block; box-sizing: border-box; border: 1px solid var(--gw-border-1); }
 .gw .kt-metas { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--s3, 12px); flex: none; }
 .gw .kt-m { display: inline-flex; align-items: center; gap: 3px; }

@@ -2,7 +2,7 @@ import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 import { laneHermes } from './lane-hermes';
 import { inbox } from './lane.mjs';
 
@@ -14,15 +14,8 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const rs='10000000-0000-0000-0000-000000000001';
 
-async function newCard(page:Page,label:string) {
- ensureRequestAgent();
- await page.goto('/c/rs-learning/work/new');
- const title=`${label} ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:'Create card'}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- return {title,path:new URL(page.url()).pathname,id:Number(new URL(page.url()).pathname.split('/').pop())};
-}
+// An old Card, on its own page (New card makes its Cards on the Engine since #836).
+const newCard=(page:Page,label:string)=>oldCard(page,`${label} ${Date.now()}`);
 // A card that is being drawn again after a move can be read between columns (null); the loop below waits for it to land.
 const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };

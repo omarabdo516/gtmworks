@@ -83,14 +83,40 @@ function kanbanBoard() {
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
   /** @param {string} task @param {string} author @param {string} body */
   comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
+  // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
+  // a Card that is not archived, the Engine answers that Card again. `ready` unless asked for triage or a parent is not
+  // done, an assignee or none (hermes_cli/kanban_db_graph.py initial_task_state).
+  /** @param {Record<string,any>} body */
+  create(body) {
+   const key=typeof body.idempotency_key==='string'&&body.idempotency_key?body.idempotency_key:null;
+   const again=key&&tasks.find(task=>task.idempotency_key===key&&task.status!=='archived');
+   if(again) return again;
+   const parents=Array.isArray(body.parents)?body.parents:[];
+   const open=parents.some(parent=>tasks.find(task=>task.id===parent)?.status!=='done');
+   const made=this.task({title:String(body.title).trim(),body:body.body??null,assignee:body.assignee||null,tenant:body.tenant??null,idempotency_key:key,
+    status:body.triage?'triage':open?'todo':'ready'});
+   for(const parent of parents) links.push({parent_id:parent,child_id:made.id});
+   return made;
+  },
+  // One dispatcher tick (dispatch_once): every `ready` Card with an Agent is claimed and its worker spawned, so it is
+  // `running`; a Card with no Agent is never claimed. `ticks` counts the ticks asked for. The Engine's own tick runs
+  // every 60 s; the fake runs one only when it is asked, through POST /dispatch or a test calling this. Each claim is a
+  // `claimed` event, so a live board sees the Card start.
+  ticks:0,
+  dispatch() {
+   this.ticks++;
+   const spawned=tasks.filter(task=>task.status==='ready'&&task.assignee);
+   for(const task of spawned) { Object.assign(task,{status:'running',started_at:++clock,claim_lock:`fake:${task.id}`,current_run_id:clock}); event(task.id,'claimed',{assignee:task.assignee}); }
+   return {reclaimed:0,crashed:[],timed_out:[],auto_blocked:[],promoted:0,spawned:spawned.map(task=>[task.id,task.assignee,`/opt/data/kanban/workspaces/${task.id}`]),skipped_unassigned:[],skipped_nonspawnable:[]};
+  },
   // GET /board (get_board): every task not archived, in its status's column, each with its link, comment and child counts
   // and its latest Run's summary; the queue columns by priority then age, Done newest finished first.
-  board() {
+  board({archived=false}={}) {
    const counts=id=>({parents:links.filter(link=>link.child_id===id).length,children:links.filter(link=>link.parent_id===id).length});
    const progress=id=>{ const children=links.filter(link=>link.parent_id===id).map(link=>tasks.find(task=>task.id===link.child_id)).filter(Boolean);
     return children.length?{done:children.filter(child=>child.status==='done').length,total:children.length}:null; };
    const now=Math.floor(Date.now()/1000);
-   const columns=kanbanStatuses.map(name=>{
+   const columns=[...kanbanStatuses,...archived?['archived']:[]].map(name=>{
     const listed=tasks.filter(task=>task.status===name).map(task=>({...task,age:{created_age_seconds:now-task.created_at,started_age_seconds:task.started_at==null?null:now-task.started_at,
      time_to_complete_seconds:task.completed_at==null?null:task.completed_at-(task.started_at??task.created_at)},latest_summary:task.latest_summary??null,current_run_started_at:null,
      link_counts:counts(task.id),comment_count:comments.filter(comment=>comment.task_id===task.id).length,progress:progress(task.id),warnings:null}));
@@ -1148,7 +1174,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    // The Kanban board's routes (plugins/kanban/dashboard/plugin_api.py, mounted at /api/plugins/kanban), the default
    // board when no ?board= is named.
-   if(url.pathname==='/api/plugins/kanban/board'&&request.method==='GET') return send(response,200,settings.kanban.board());
+   if(url.pathname==='/api/plugins/kanban/board'&&request.method==='GET') return send(response,200,settings.kanban.board({archived:url.searchParams.get('include_archived')==='true'}));
    // A one-use ticket for a socket upgrade, 30 seconds (dashboard_auth/routes.py api_auth_ws_ticket), which the board's
    // event socket takes as `?ticket=` (#840).
    if(url.pathname==='/api/auth/ws-ticket'&&request.method==='POST') {
@@ -1156,6 +1182,25 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     settings.socketTickets.set(ticket,Date.now()+30000);
     return send(response,200,{ticket,ttl_seconds:30});
    }
+   // A Card made (create_task: an empty title is a 400) and its Agent changed (update_task's assign_task: "" clears it,
+   // and a Card running under a claim is refused 409), and one dispatcher tick asked for now (#836).
+   if(url.pathname==='/api/plugins/kanban/tasks'&&request.method==='POST') {
+    if(typeof body?.title!=='string'||!body.title.trim()) return send(response,400,{detail:'title is required'});
+    return send(response,200,{task:settings.kanban.create(body)});
+   }
+   const kanbanTask=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)$/);
+   if(kanbanTask&&request.method==='PATCH') {
+    const task=settings.kanban.tasks.find(found=>found.id===decodeURIComponent(kanbanTask[1]));
+    if(!task) return send(response,404,{detail:`task ${kanbanTask[1]} not found`});
+    if(typeof body?.assignee==='string') {
+     if(task.claim_lock&&task.status==='running') return send(response,409,{detail:`cannot reassign ${task.id}: currently running (claimed). Wait for completion or reclaim the stale lock first.`});
+     if(task.assignee!==(body.assignee||null)) task.consecutive_failures=0;
+     task.assignee=body.assignee||null;
+     settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
+    }
+    return send(response,200,{task});
+   }
+   if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
    send(response,404,{detail:'Not Found'});
   });
  };
