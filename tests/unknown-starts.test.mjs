@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { forgetListeners } from '../lib/engine/transport.mjs';
 import { startNotReached, startRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
@@ -16,7 +17,8 @@ const failing=code=>Object.assign(new TypeError('fetch failed'),{cause:{code}});
 test('a retry of an unknown start is never read as not started', async () => {
  const real=globalThis.fetch;
  const start={address:'http://127.0.0.1:8642',profile:'writer',key:'test-only-key',input:'Hello',sessionKey:'s',idempotencyKey:'k',retry:true};
- const answers=list=>{ const queue=[...list]; globalThis.fetch=async()=>{ const next=queue.shift(); if(next instanceof Error) throw next; return new Response(JSON.stringify(typeof next==='string'?{run_id:next}:{error:{message:'x'}}),{status:typeof next==='string'?202:next}); }; };
+ // Each scripted list starts on a listener with no health kept (the backoff has its own tests, engine-transport.test.mjs).
+ const answers=list=>{ forgetListeners(); const queue=[...list]; globalThis.fetch=async()=>{ const next=queue.shift(); if(next instanceof Error) throw next; return new Response(JSON.stringify(typeof next==='string'?{run_id:next}:{error:{message:'x'}}),{status:typeof next==='string'?202:next}); }; };
  try {
   answers([failing('ECONNREFUSED')]); assert.equal(await startRun(start),startUnknown,'nothing connected');
   for(const status of [400,401,409,429,500]) { answers([status]); assert.equal(await startRun(start),startUnknown,String(status)); }

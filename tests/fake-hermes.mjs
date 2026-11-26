@@ -67,7 +67,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,startDelay:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,openNow:0,openAtMost:0,answerDelay:0,startDelay:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -347,6 +347,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  };
  const memoryTitle=text=>{ const first=text.split('\n')[0].trim().replace(/^#+\s*/,''); return first.length>80?`${first.slice(0,80)}…`:first; };
  const server=createServer((request,response)=>{
+  // How many requests are open on this listener at once, and the most ever (#781), and a wait before each is read.
+  settings.openNow++; settings.openAtMost=Math.max(settings.openAtMost,settings.openNow);
+  response.on('close',()=>{ settings.openNow--; });
+  if(settings.answerDelay>0) { request.pause(); setTimeout(()=>request.resume(),settings.answerDelay); }
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    settings.requests.push({method:request.method,path:request.url,authorization:request.headers.authorization,session:request.headers['x-hermes-session-key'],idempotency:request.headers['idempotency-key']});
    const managed=settings.profiles.get(decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||''));

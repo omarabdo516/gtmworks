@@ -6,7 +6,7 @@ import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveGoodMornings } from '../lib/good-morning-runs.mjs';
 import { keepRunningRoutines } from '../lib/routine-runs.mjs';
-import { selfHosted as isSelfHosted } from '../lib/company-engine.mjs';
+import { selfHosted as isSelfHosted, enginePass } from '../lib/company-engine.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
@@ -27,7 +27,8 @@ const pause=every=>new Promise(resolve=>{ const end=Date.now()+every; const tick
 // The stack starts the worker beside the gateway and PostgREST (after a backup, an update), so the database may not answer
 // yet: wait up to a minute for one answer before the first pass. A database that never answers still fails every pass.
 for(let tries=60;tries>0&&!stopping;tries--) { const {error}=await db.rpc('setup_is_open').then(answer=>answer,error=>({error})); if(!error) break; await pause(1000); }
-const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work(); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
+// Each pass reads a Company's Engine record once (lib/company-engine.mjs enginePass, #781).
+const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await enginePass(work); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
 // A self-hosted install gives each company its own profile in the bundled Hermes and keeps its tools, and those of each
 // Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016), gives each company one shared Skills
 // folder that every one of its Agent profiles reads, holding the lessons its team approved (#122), writes each Agent's team rules into its profile's SOUL.md (#345), gives a main Agent still holding the old default soul the manager's (#434), and moves each Agent
