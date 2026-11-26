@@ -13,17 +13,22 @@ import type { StandingPermission } from '@/lib/standing-permissions.mjs';
 // and the rest of the details stay as they are.
 
 type Read<T>={state:'loading'}|{state:'failed'}|{state:'found',value:T};
+// A read that fails keeps what the part last read and is asked again after a pause, longer each time, while it is shown
+// (#898, ADR 0030); with nothing read yet it shows its own unread line meanwhile.
+const againAfter=[3000,10000,30000];
 function usePart<T>(url:string,parse:(body:unknown)=>T|null):[Read<T>,()=>void] {
  const [read,setRead]=useState<Read<T>>({state:'loading'}); const [asked,setAsked]=useState(0);
  useEffect(()=>{
-  const stopped=new AbortController();
-  // In the queue of four every Settings Engine read waits in (#898), here and in the details panel alike.
-  void settingsReads(()=>fetch(url,{cache:'no-store',signal:stopped.signal}),stopped.signal).then(async response=>{
+  const stopped=new AbortController(); let timer:ReturnType<typeof setTimeout>|undefined; let tries=0;
+  const ask=()=>{ void settingsReads(()=>fetch(url,{cache:'no-store',signal:stopped.signal}),stopped.signal).then(async response=>{
    const body=response.ok?await response.json() as unknown:null; if(!response.ok) await response.arrayBuffer().catch(()=>{});
    const value=body===null?null:parse(body);
-   setRead(value===null?{state:'failed'}:{state:'found',value});
-  }).catch(()=>{ if(!stopped.signal.aborted) setRead({state:'failed'}); });
-  return ()=>stopped.abort();
+   if(value!==null) { setRead({state:'found',value}); return; }
+   failed();
+  }).catch(()=>{ if(!stopped.signal.aborted) failed(); }); };
+  const failed=()=>{ setRead(was=>was.state==='found'?was:{state:'failed'}); timer=setTimeout(ask,againAfter[Math.min(tries++,againAfter.length-1)]); };
+  ask();
+  return ()=>{ stopped.abort(); clearTimeout(timer); };
  },[url,asked]); // eslint-disable-line react-hooks/exhaustive-deps
  return [read,useCallback(()=>setAsked(value=>value+1),[])];
 }

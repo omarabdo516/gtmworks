@@ -131,10 +131,12 @@ export function FocusReturn({prefix='sov-ag-'}:{prefix?:string}={}) {
 export function focusWhenDrawn(id:string,{within=15000,center=false}:{within?:number,center?:boolean}={}) {
  const focus=()=>{ const element=document.getElementById(id); if(!element) return false; element.focus(); if(center) element.scrollIntoView({block:'center'}); return true; };
  if(focus()) return ()=>{};
- const moved=()=>{ const active=document.activeElement; return !!active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName); };
- const watch=new MutationObserver(()=>{ if(moved()||focus()) stop(); });
+ // Entering a field ends the wait for good, even when the person then moves on to a button.
+ const entered=(event:FocusEvent)=>{ if(event.target instanceof HTMLElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) stop(); };
+ const watch=new MutationObserver(()=>{ if(focus()) stop(); });
  const timer=setTimeout(()=>stop(),within);
- const stop=()=>{ watch.disconnect(); clearTimeout(timer); };
+ const stop=()=>{ watch.disconnect(); clearTimeout(timer); document.removeEventListener('focusin',entered); };
+ document.addEventListener('focusin',entered);
  watch.observe(document.body,{childList:true,subtree:true});
  return stop;
 }

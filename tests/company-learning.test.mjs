@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
 import { readSkills, readLearningGraph } from '../lib/engine/skills.mjs';
 import { readAgentSettings, changeLearningMode, learningModeOf } from '../lib/engine-settings.mjs';
-import { readCompanyLearning } from '../lib/company-learning.mjs';
+import { readCompanyLearning, readStoredLearning } from '../lib/company-learning.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
@@ -206,6 +206,13 @@ test('what an Agent learned is read beside its mode: its rules including a remov
   const unread=await withDriver(DRIVER,{...driverAt(fake),read:async()=>({state:'unreachable',skills:null})},()=>withNoEngine(company,()=>readCompanyLearning(db,{company})));
   assert.deepEqual(unread.agents.map(agent=>[agent.name,agent.mode,agent.learned]),[['Lead',null,null],['Writer',null,null],['Helper',null,null]]);
   assert.equal(unread.rules.length,3,'the rules are the database\'s, readable without the Engine');
+  // What the database holds is read on its own, before the Engine (#898): the same Agents and rules, and no Engine call.
+  const asked=fake.settings.managementRequests.length;
+  const stored=await withDriver(DRIVER,driverAt(fake),()=>readStoredLearning(db,{company}));
+  assert.deepEqual(stored.agents.map(agent=>[agent.name,agent.own,agent.shared,agent.mode,agent.learned]),[['Lead',true,true,null,null],['Writer',true,false,null,null],['Helper',false,true,null,null]]);
+  assert.deepEqual(stored.rules,read.rules);
+  assert.deepEqual(stored.lessons,read.lessons);
+  assert.equal(fake.settings.managementRequests.length,asked,'the Engine is not asked');
  } finally { await fake.close(); }
 });
 

@@ -60,21 +60,22 @@ export function UsagePart({slug,company,period,asked}:{slug:string,company:strin
   </>}</>;
 }
 
-// How each Agent learns, and what it learned (#28): its mode from its own Engine profile, its rules, the Skills the
-// Engine's learning graph marks, and the Company's lessons. A read that fails leaves the service's own refusal on the
-// page, never an empty mode.
-export function LearningPart({slug,company,canManage,owner,asked}:{slug:string,company:string,canManage:boolean,owner:boolean,asked:number}) {
+// How each Agent learns, and what it learned (#28): the rules and lessons the database holds (`stored`, drawn with the
+// page), then each Agent's mode and the Skills the Engine's learning graph marks, from its own Engine profile. A read
+// that fails leaves the service's own refusal on the page, never an empty mode.
+export function LearningPart({slug,company,canManage,owner,stored,asked}:{slug:string,company:string,canManage:boolean,owner:boolean,stored:CompanyLearning|null,asked:number}) {
  const {t}=useI18n();
  const read=useSettingsPart<CompanyLearning>(partUrl(company,'learning'),asked,found);
- return <LearningSection t={t} slug={slug} company={company} canManage={canManage} owner={owner} data={read.data??null} readAt={read.readAt||asked} reading={reading(read)}/>;
+ const data=read.data?.state==='found'?read.data:stored;
+ return <LearningSection t={t} slug={slug} company={company} canManage={canManage} owner={owner} data={data??null} readAt={read.readAt||asked} reading={reading(read)}/>;
 }
 
 // One learned Skill's page (#181); a Skill this person has no page for opens Learning instead.
-export function SkillPagePart({slug,company,agent,skill,canManage,owner,asked}:{slug:string,company:string,agent:string,skill:string,canManage:boolean,owner:boolean,asked:number}) {
+export function SkillPagePart({slug,company,agent,skill,canManage,owner,stored,asked}:{slug:string,company:string,agent:string,skill:string,canManage:boolean,owner:boolean,stored:CompanyLearning|null,asked:number}) {
  const {t,language}=useI18n();
  const read=useSettingsPart<CompanySkillPage|null>(partUrl(company,'skillPage',{agent,skill}),asked,always);
  if(reading(read)) return <><Head title={skill}/><ReadingLine/></>;
- return read.data?<SkillPage t={t} slug={slug} rtl={language==='ar'} data={read.data}/>:<LearningPart slug={slug} company={company} canManage={canManage} owner={owner} asked={asked}/>;
+ return read.data?<SkillPage t={t} slug={slug} rtl={language==='ar'} data={read.data}/>:<LearningPart slug={slug} company={company} canManage={canManage} owner={owner} stored={stored} asked={asked}/>;
 }
 
 // Every Routine of every Agent the reader sees (#31), read from each Agent's own Engine profile; gtmworks keeps no copy.
@@ -107,5 +108,7 @@ export function KnowledgeText({company,part,title,canManage,edit,agents,asked}:{
   <div className="know-body" dir="auto">{knowledgeBlocks(body).map((block,index)=>block.kind==='p'?<p key={index}>{block.text}</p>
    :<ul key={index} className="know-ul">{block.items.map((item,at)=><li key={at}>{item}</li>)}</ul>)}</div>
  </>:<p className="panel-empty know-empty">{t(canManage?'knowEmptyManage':'knowEmptyRead')}</p>;
- return canManage&&parts?<KnowledgeEditor key={part} company={company} part={part} title={title} body={body}>{content}</KnowledgeEditor>:article(content);
+ // The editor opens only on this visit's own read of the text, never on one kept from before it: a save replaces the
+ // part with what the editor shows.
+ return canManage&&parts&&read.state==='read'?<KnowledgeEditor key={part} company={company} part={part} title={title} body={body}>{content}</KnowledgeEditor>:article(content);
 }

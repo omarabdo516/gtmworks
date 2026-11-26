@@ -5,3 +5,4 @@ export type LearningAgent={id:string,name:string,own:boolean,shared:boolean,foll
 export type LearningRule={id:string,agent:string,body:string,saidBy:string|null,saidByName:string|null,saidAt:string,removed:boolean,shared:boolean};
 export type CompanyLearning={state:'found'|'failed',agents:LearningAgent[]|null,rules:LearningRule[]|null,lessons:LearningRule[]|null};
 export function readCompanyLearning(db:SupabaseClient,request:{company:string}):Promise<CompanyLearning>;
+export function readStoredLearning(db:SupabaseClient,request:{company:string}):Promise<CompanyLearning>;

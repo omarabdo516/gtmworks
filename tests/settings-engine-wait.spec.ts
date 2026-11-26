@@ -90,9 +90,11 @@ test('with every management read held four seconds, each Settings page draws at 
 
 test('an open of an Agent\'s page fills in its About from the Engine, and the server writes its settings_opened line',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
+ // Only the lines this open writes: the log already holds the opens of the test before.
+ const from=(await readFile(serverLogOf(),'utf8').catch(()=>'')).length;
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${lead}`);
  await expect(page.locator('#set-desc')).toHaveValue('Runs the team.',{timeout:20000});
- const lines=async()=>(await readFile(serverLogOf(),'utf8').catch(()=>'')).split('\n').filter(entry=>entry.includes('"settings_opened"')&&entry.includes(company))
+ const lines=async()=>(await readFile(serverLogOf(),'utf8').catch(()=>'')).slice(from).split('\n').filter(entry=>entry.includes('"settings_opened"')&&entry.includes(company))
   .map(entry=>JSON.parse(entry.slice(entry.indexOf('{'))) as {section:string,render:string,ms:Record<string,number>});
  await expect.poll(async()=>(await lines()).some(entry=>entry.section==='agents'&&entry.render==='open'&&entry.ms.firstByte>=0&&entry.ms.done>=entry.ms.firstByte),{timeout:10000}).toBe(true);
 });

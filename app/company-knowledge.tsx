@@ -11,18 +11,23 @@ import { KnowledgeText } from './settings-section-parts';
 // Agents that read it. The text is the shared Skill company-knowledge in the Engine (#344), read for a Member only; who
 // last edited the part is the Company's log, read with the reader's own session (RLS). An Owner or a Manager gets the
 // editor, and check_company_knowledge checks the Role again. The text keeps its own direction.
-export async function CompanyKnowledge({slug,company,canManage,part:requested,asked}:{slug:string,company:string,canManage:boolean,part?:string,asked:number}) {
- const {t}=await getI18n(); const db=await supabase();
+// What gtmworks stores of the chosen part: its last edit and the Agents the reader sees. The overlay reads it with its
+// other database reads, before its first byte (#898); the text is the Engine's, read by the browser after the section is
+// drawn (ADR 0030: app/settings-section-parts.tsx).
+export type KnowledgeStored=Awaited<ReturnType<typeof readKnowledgeStored>>;
+export async function readKnowledgeStored(db:Awaited<ReturnType<typeof supabase>>,company:string,requested?:string) {
  const part=pickPart(requested);
- const title=t(knowledgeParts.find(([key])=>key===part)![1]);
- // Only what gtmworks stores is read here; the text is the Engine's, read by the browser after the section is drawn
- // (#898, ADR 0030: app/settings-section-parts.tsx).
  const [{data:edit,error},{data:agentRows}]=await Promise.all([
   db.from('company_log').select('actor_name,created_at').eq('company_id',company).eq('action','company_knowledge_changed').eq('details->>part',part).order('id',{ascending:false}).limit(1).maybeSingle(),
   db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',company).order('name')]);
  if(error) console.error('Company knowledge: last edit not read:',company,error.message);
+ return {part,edit:error?false as const:edit?{actor_name:edit.actor_name as string|null,created_at:edit.created_at as string}:null,agents:agentsMainFirst(agentRows||[])};
+}
+
+export async function CompanyKnowledge({slug,company,canManage,stored:{part,edit,agents},asked}:{slug:string,company:string,canManage:boolean,stored:KnowledgeStored,asked:number}) {
+ const {t}=await getI18n();
+ const title=t(knowledgeParts.find(([key])=>key===part)![1]);
  // The Agents this reader sees (RLS): a Member is not told of an Agent hidden from them.
- const agents=agentsMainFirst(agentRows||[]);
  // "Open the memory of {Agent}" (#193): the first Agent the reader sees that is not the main one, else the main Agent.
  const memAgent=memoryAgent(agents);
  return <>
@@ -31,6 +36,6 @@ export async function CompanyKnowledge({slug,company,canManage,part:requested,as
     {memAgent&&<Link className="link-btn" href={overlayHref(slug,'agents',{agent:memAgent.id,tab:'memory'})}>{t('knowOpenMemory',memAgent.name)}</Link>}</div></div>
   <div className="od-rail know-tabs" role="group" aria-label={t('knowPages')}>{knowledgeParts.map(([key,label])=>
    <Link key={key} replace className="chip" id={`know-tab-${key}`} href={overlayHref(slug,'knowledge',{part:key})} aria-pressed={key===part}>{t(label)}</Link>)}</div>
-  <KnowledgeText company={company} part={part} title={title} canManage={canManage} edit={error?false:edit?{actor_name:edit.actor_name,created_at:edit.created_at}:null} agents={agents.map(agent=>({id:agent.id}))} asked={asked}/>
+  <KnowledgeText company={company} part={part} title={title} canManage={canManage} edit={edit} agents={agents.map(agent=>({id:agent.id}))} asked={asked}/>
  </>;
 }

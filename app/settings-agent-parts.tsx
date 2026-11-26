@@ -92,10 +92,11 @@ export function VoiceSpeedPart({company,agent,canManage,asked}:{company:string,a
  return <AgentVoiceSpeed agent={agent} speed={voice?.state==='found'?voice.speed:null} editable={canManage&&voice?.state==='found'&&voice.own}/>;
 }
 
-// What the Agent may do without asking again (#166): an Engine that cannot be read, or a read still on its way, draws no
-// section, as an empty list does.
+// What the Agent may do without asking again (#166): «Reading…» while its first read is on its way; an Engine that cannot
+// be read draws no section, as an empty list does.
 export function PermissionsPart({company,agent,canRevoke,asked}:{company:string,agent:string,canRevoke:boolean,asked:number}) {
  const read=useAgentPart<Permissions>(company,agent,'permissions',asked);
+ if(reading(read)) return <PartReading/>;
  return <StandingPermissions key={agent} company={company} agent={agent} permissions={read.data?.permissions??none} canRevoke={canRevoke} heading="h5"/>;
 }
 

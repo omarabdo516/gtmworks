@@ -24,13 +24,14 @@ import { MemberNote, AgentSaveBar, VoiceSettings } from './settings-lazy';
 import { AboutPart, HowPart, MorningPart, ThinkingPart, VoicePart, VoiceSpeedPart, PermissionsPart, SkillsPart } from './settings-agent-parts';
 import { SandboxNote, UsagePart, LearningPart, SkillPagePart, RoutinesPart } from './settings-section-parts';
 import { AgentMemoryPart } from './agent-details-parts';
+import { PartsReader } from './settings-part-read';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
 import { isolate } from '@/lib/bidi';
 import { inviteRoles as teamInviteRoles, roleDescription, orderMembers } from '@/lib/member-roles.mjs';
 import AppsSection from './settings-apps';
-import { CompanyKnowledge } from './company-knowledge';
+import { CompanyKnowledge, readKnowledgeStored } from './company-knowledge';
 import { AgentTabs } from './settings-agent-tabs';
 import { BackupSection } from './settings-backup';
 import { AboutSection } from './settings-about';
@@ -38,6 +39,7 @@ import { ProposalNote, ProposalMark } from './settings-proposal';
 import { readWaitingChange, readWaitingAgents, countWaitingChanges, waitingChangeHref } from '@/lib/agent-change-waiting.mjs';
 import { ownerNames } from '@/lib/company-owners.mjs';
 import { markSettingsOpen } from '@/lib/settings-open-timing';
+import { readStoredLearning } from '@/lib/company-learning.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -99,6 +101,11 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const owners=change&&!owner?await ownerNames(db,company.id).catch(failed<string[]>('Owners',[])):[];
  const pend=change&&<ProposalNote change={change} owner={owner} owners={owners} href={waitingChangeHref(slug,change,{person:userId,owner})}/>;
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
+ // What the database holds of Learning (#28): its Agents, their mode choices, the rules and the lessons, drawn before the
+ // Engine's modes and learned Skills arrive (#898). A read that fails leaves the section's own unread lines.
+ const storedLearning=section==='learning'?await readStoredLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
+ // Company knowledge's chosen part as gtmworks stores it: its last edit and the Agents that read it (#27).
+ const knowledge=section==='knowledge'?await readKnowledgeStored(db,company.id,query.part):null;
  // Every read this page awaits is the database's (ADR 0030), and all of them are done here.
  markSettingsOpen('reads',section);
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
@@ -112,10 +119,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   // Voice is the Owner's and the Managers' (#863): pickSection opens it for no other Role, and only the Owner changes it.
   :section==='voice'&&canManage?<><Head title={t('settingsVoicePage')} info={t('settingsVoicePageSub')}/><VoiceSettings company={company.id} slug={slug} owner={owner}/></>
   :section==='usage'?<UsagePart slug={slug} company={company.id} period={query.period==='30'?30:7} asked={readAt}/>
-  :section==='learning'?(skillAsked?<SkillPagePart slug={slug} company={company.id} agent={query.agent!} skill={query.skill!} canManage={canManage} owner={owner} asked={readAt}/>:<LearningPart slug={slug} company={company.id} canManage={canManage} owner={owner} asked={readAt}/>)
+  :section==='learning'?(skillAsked?<SkillPagePart slug={slug} company={company.id} agent={query.agent!} skill={query.skill!} canManage={canManage} owner={owner} stored={storedLearning} asked={readAt}/>:<LearningPart slug={slug} company={company.id} canManage={canManage} owner={owner} stored={storedLearning} asked={readAt}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='routines'?<>{ro}<RoutinesPart company={company.id} canManage={canManage} asked={readAt}/></>
-  :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part} asked={readAt}/></>
+  :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} stored={knowledge!} asked={readAt}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
   // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
@@ -123,7 +130,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsParts company={company.id} companyName={company.name} owner={owner} names={names} order={order} fallback={fallback} asked={readAt}/>}/>;
  // Nothing is left to wait for: the page's first bytes leave next.
  markSettingsOpen('firstByte');
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}>{page}</OverlayChrome>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}><PartsReader person={userId}/>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".

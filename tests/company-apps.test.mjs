@@ -156,6 +156,9 @@ test('the list is read without a test, each app on reads checking, and its own t
   const tested=await withDriver(DRIVER,driver,()=>testCompanyApp(someone.db,{company,app:'klaviyo'}));
   assert.deepEqual(tested,{state:'connected',agents:[{id:lead,state:'connected'},{id:writer,state:'attention'},{id:analyst,state:'off'},{id:helper,state:'connected'}]});
   assert.equal(await withDriver(DRIVER,driver,()=>testCompanyApp(someone.db,{company,app:'not a key'})),null);
+  // A test no Agent's own profile answered is no answer: the app reads checking and is tested again, never off.
+  const silent={...driver,read:async()=>({state:'unreachable',apps:null})};
+  assert.equal(await withDriver(DRIVER,silent,()=>testCompanyApp(someone.db,{company,app:'klaviyo'})),null);
  } finally { await fake.close(); }
 });
 

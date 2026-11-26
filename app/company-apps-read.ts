@@ -12,7 +12,9 @@ import { settingsReads } from '@/lib/settings-part-queue.mjs';
 // A sign-out and sign-in in another tab leaves this tab open; the next page the Shell draws names the new person, which
 // drops every copy held for the one before. A read for anyone else, an answer still on its way for them, or a change
 // a callback of theirs reports late, is neither asked for nor kept.
-type Held={apps:AppItem[]|null,at:number};
+// `list` names the read that listed these apps (#898): an app's test answers only the list whose read started it.
+type Held={apps:AppItem[]|null,at:number,list:number};
+let lists=0;
 export type Reader={company:string,person:string,language:string};
 const held=new Map<string,Held>();
 let readingFor:string|undefined;
@@ -45,25 +47,26 @@ export async function readApps(reader:Reader) {
  if(!current(reader)||(reader.person&&asked!==signIns)) return;
  const key=keyOf(reader);
  if(!apps&&held.get(key)?.apps) return;
- held.set(key,{apps,at:Date.now()});
+ const list=++lists;
+ held.set(key,{apps,at:Date.now(),list});
  listeners.forEach(listener=>listener());
  // Each app that is on reads `checking` until its own test answers (#898, ADR 0030): the list is drawn at once, each
  // test is its own request, in Settings' queue of four, and no row waits for another.
- for(const app of apps??[]) if(app.state==='checking') void testApp(reader,key,app.key,asked);
+ for(const app of apps??[]) if(app.state==='checking') void testApp(reader,key,app.key,asked,list);
 }
 
 type Tested={state:AppState,agents:{id:string,state:AppState|null}[]};
 // A test that fails is asked again after a pause, longer each time, a few times, while the app still reads `checking`.
 const testAgain=[3000,10000,30000];
-async function testApp(reader:Reader,key:string,app:string,asked:number,tries=0) {
+async function testApp(reader:Reader,key:string,app:string,asked:number,list:number,tries=0) {
  const answer=await settingsReads(()=>fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}&test=${encodeURIComponent(app)}`,{cache:'no-store'})
   .then(response=>response.ok?response.json() as Promise<Tested>:null)).catch(()=>null);
  if(!current(reader)||(reader.person&&asked!==signIns)) return;
  const entry=held.get(key);
- // A newer read already listed this app again; its own test answers it.
- if(!entry?.apps?.some(item=>item.key===app&&item.state==='checking')) return;
+ // A newer read listed the apps again: its own tests answer it, and this one's answer is dropped.
+ if(entry?.list!==list||!entry.apps?.some(item=>item.key===app&&item.state==='checking')) return;
  const tested=answer&&typeof answer.state==='string'&&Array.isArray(answer.agents)?answer:null;
- if(!tested) { if(tries<5) setTimeout(()=>void testApp(reader,key,app,asked,tries+1),testAgain[Math.min(tries,testAgain.length-1)]); return; }
+ if(!tested) { if(tries<5) setTimeout(()=>void testApp(reader,key,app,asked,list,tries+1),testAgain[Math.min(tries,testAgain.length-1)]); return; }
  const states=new Map(tested.agents.map(agent=>[agent.id,agent.state]));
  held.set(key,{...entry,apps:entry.apps.map(item=>item.key!==app?item:{...item,state:tested.state,agents:item.agents.map(agent=>states.has(agent.id)?{...agent,state:states.get(agent.id)??null}:agent)})});
  listeners.forEach(listener=>listener());
