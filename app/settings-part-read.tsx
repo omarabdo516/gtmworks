@@ -44,11 +44,15 @@ export const partUrl=(company:string,part:string,with_:Record<string,string|unde
 // a failed read, never one to keep.
 const first=<T,>(url:string):PartRead<T>=>{ const entry=keptOf(url); return {data:entry?.data as T|undefined,readAt:entry?.readAt??0,state:'reading',kept:!!entry}; };
 export function useSettingsPart<T>(url:string,asked:number,good:(data:T)=>boolean):PartRead<T> {
- // Each read belongs to its address: a part drawn again for another Agent or period never shows the one before's.
- const [held,setHeld]=useState<{url:string,read:PartRead<T>}>(()=>({url,read:first<T>(url)}));
- const read=held.url===url?held.read:first<T>(url);
- const setRead=(next:PartRead<T>|((was:PartRead<T>)=>PartRead<T>))=>setHeld(was=>({url,read:typeof next==='function'?next(was.url===url?was.read:first<T>(url)):next}));
+ // Each read belongs to its reader and its address: a part drawn again for another person, Agent or period never shows
+ // the one before's.
+ const id=`${readerOf}|${url}`;
+ const [held,setHeld]=useState<{id:string,read:PartRead<T>}>(()=>({id,read:first<T>(url)}));
+ const read=held.id===id?held.read:first<T>(url);
+ const setRead=(next:PartRead<T>|((was:PartRead<T>)=>PartRead<T>))=>setHeld(was=>({id,read:typeof next==='function'?next(was.id===id?was.read:first<T>(url)):next}));
  useEffect(()=>{
+  // The reader this read is made for, fixed when it is asked (PartsReader names the reader before any part draws).
+  const reader=readerOf;
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined; let tries=0; let leave=()=>{};
   // A failed read keeps the last good one: the one this part shows, even past the minute, else the one this browser
   // kept; with none, the part shows what the Engine answered (its own unread line).
@@ -61,13 +65,14 @@ export function useSettingsPart<T>(url:string,asked:number,good:(data:T)=>boolea
    const shared=share(url,round); leave=shared.leave;
    void shared.answer.then(body=>{
     if(stopped) return;
-    if(body&&good(body.data as T)) { kept.set(keyOf(url),{data:body.data,readAt:body.readAt,at:Date.now()}); setRead({data:body.data as T,readAt:body.readAt,state:'read',kept:true}); return; }
+    // Kept under the reader who asked: a read that lands after another person signed in is never theirs.
+    if(body&&good(body.data as T)) { if(readerOf===reader) kept.set(`${reader}|${url}`,{data:body.data,readAt:body.readAt,at:Date.now()}); setRead({data:body.data as T,readAt:body.readAt,state:'read',kept:true}); return; }
     fail(body?.data as T|undefined);
    });
   };
   ask(String(asked));
   return ()=>{ stopped=true; clearTimeout(timer); leave(); };
- },[url,asked]); // eslint-disable-line react-hooks/exhaustive-deps
+ },[id,asked]); // eslint-disable-line react-hooks/exhaustive-deps
  return read;
 }
 
