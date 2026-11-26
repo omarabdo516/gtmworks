@@ -110,6 +110,9 @@ const fakeModel=async()=>{
  await new Promise(resolve=>server.listen(8080,'0.0.0.0',resolve));
  return server;
 };
+// A profile pointed at the fake model, as the other checks point theirs; a config write, never a restart.
+const pointAtFakeModel=name=>manage(`/api/config?profile=${encodeURIComponent(name)}`,{method:'PUT',
+ body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
 const run=async(name,input,session)=>{
  const started=await (await api(`/p/${encodeURIComponent(name)}/v1/runs`,{method:'POST',body:JSON.stringify({input,...(session?{session_id:session}:{})})})).json();
  assert.ok(started.run_id,JSON.stringify(started));
@@ -140,6 +143,8 @@ if(step==='make') {
  const model=await fakeModel();
  try {
   const owner=`install-owner-${marker}`, other=`install-other-${marker}`;
+  // The checks before this one leave the main Agent's profile on another provider; its Runs here ask the fake model.
+  assert.equal((await pointAtFakeModel(profile)).status,200);
   assert.equal((await markOwnerSession(connection,{session:owner,person:`owner-${marker}`,seconds:600})).state,'marked');
   const before=(await profiles()).map(one=>one.name);
   const name=`Install Writer ${marker.slice(-6)}`;
@@ -155,8 +160,7 @@ if(step==='make') {
   assert.deepEqual(forbiddenOf(tools),[],`${made.profile} offers no tool no Agent gets`);
   assert.deepEqual([...tools].sort(),[...fixedToolsets()].sort(),`${made.profile} offers exactly the fixed set`);
   // The new profile answers a Run at once, with no restart: it is pointed at the fake model as the check points each.
-  const pointed=await manage(`/api/config?profile=${made.profile}`,{method:'PUT',body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
-  assert.equal(pointed.status,200);
+  assert.equal((await pointAtFakeModel(made.profile)).status,200);
   const first=await run(made.profile,'Hello, new Agent.');
   assert.equal(first.status,'completed',JSON.stringify(first).slice(0,400));
   // The same name again is refused with its reason.
