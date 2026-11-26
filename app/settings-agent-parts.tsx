@@ -8,6 +8,7 @@ import type { StandingPermission } from '@/lib/standing-permissions.mjs';
 import type { AgentSkillRow } from './settings-agent-form';
 import { StandingPermissions } from './standing-permissions';
 import { AgentAbout, AgentInstructions, AgentInstructionsReadOnly, AgentSkills, AgentVoice, AgentEffort, AgentMorning, AgentVoiceSpeed, AgentModel } from './settings-lazy';
+import { focusWhenDrawn } from './settings-overlay-frame';
 import { partUrl, useSettingsPart, foundRead as found, firstReading as reading, PartReading, type PartRead } from './settings-part-read';
 
 // The parts of an Agent's page in Settings that its own Engine profile keeps (#161, #162, #166, #176, #179, #180, #182,
@@ -50,12 +51,12 @@ export function MorningPart({company,agent,canManage,focus,asked}:{company:strin
  const read=useAgentPart<MorningRead|{state:'failed'}>(company,agent,'morning',asked);
  const morning=read.data?.state==='found'?read.data as Extract<MorningRead,{state:'found'}>:null;
  const target=focus&&canManage&&morning?(morning.routine?.on?'set-ck-time':'set-ck-on'):null;
+ // A person who has moved into a field meanwhile keeps it; the row's own controls are drawn a moment after the read.
  useEffect(()=>{
   if(!target) return;
-  // A person who has moved into a field meanwhile keeps it.
   const active=document.activeElement;
   if(active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
-  const element=document.getElementById(target); element?.focus(); element?.scrollIntoView({block:'center'});
+  return focusWhenDrawn(target,{within:3000,center:true});
  },[target]);
  if(reading(read)) return <PartReading/>;
  return <AgentMorning agent={agent} editable={canManage&&!!morning} morning={morning?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null}/>;

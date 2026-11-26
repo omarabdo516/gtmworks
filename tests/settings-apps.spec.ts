@@ -62,6 +62,8 @@ async function sheetMatches(page:Page,section:Awaited<ReturnType<typeof catalogu
  await page.locator('#btn-apps').click();
  await expect(sheetOf(page).locator('#apps-q')).toBeFocused();
  await expect(sheetOf(page).locator('.app-card')).toHaveCount(34);
+ // The list shows at once and each app that is on reads "Checking…" until its own test answers (#898).
+ await expect(sheetOf(page).locator('.app__state',{hasText:'Checking…'})).toHaveCount(0);
  expect(await catalogueOf(sheetOf(page))).toEqual(section);
 }
 

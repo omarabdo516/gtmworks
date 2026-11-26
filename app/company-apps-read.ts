@@ -39,8 +39,8 @@ const current=({person}:Reader)=>!person||person===readingFor;
 export async function readApps(reader:Reader) {
  if(!current(reader)) return;
  const asked=signIns;
- // The list is one of a page's Engine reads, in Settings' queue of four (#898), as each app's test is.
- const apps=await settingsReads(()=>fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}`,{cache:'no-store'}))
+ // The list is read untested, so it answers at once (#898); each app's test then waits in Settings' queue of four.
+ const apps=await fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}`,{cache:'no-store'})
   .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.apps)?body.apps as AppItem[]:null).catch(()=>null);
  if(!current(reader)||(reader.person&&asked!==signIns)) return;
  const key=keyOf(reader);

@@ -7,14 +7,16 @@ import { signIn } from './sign-in';
 import { serverLogOf } from './lane.mjs';
 import { i18n } from '../lib/i18n.mjs';
 
-// Settings never waits on the Engine (#898, ADR 0030). The fake Engine holds every management read five seconds: each
-// Settings page still draws what gtmworks stores with a first byte under half a second, each part the Engine backs says
-// it is being read, and fills in when its read lands. One page never has more than four Engine reads open at once.
+// Settings never waits on the Engine (#898, ADR 0030). The fake Engine holds every management read four seconds (the
+// issue's five, less a second: a call's own deadline is five, lib/engine/transport.mjs, and a read held past it is an
+// Engine that did not answer, not one that answered late): each Settings page still draws what gtmworks stores with a
+// first byte under half a second, each part the Engine backs says it is being read, and fills in when its read lands.
+// One page never has more than four Engine reads open at once.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const co=`co-${company.replaceAll('-','')}`;
 const lead=randomUUID();
-const held=5000;
+const held=4000;
 const en=i18n('en').t;
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 
@@ -41,12 +43,13 @@ async function firstByte(page:Page,address:string) {
  const timing=response!.request().timing();
  return timing.responseStart-timing.requestStart;
 }
-// The most Engine-backed reads of Settings open at once in this page.
+// The most Engine-backed reads of Settings open at once in one page load: a load drops what the page before it left open.
 function countOpen(page:Page) {
- let open=0; const seen={most:0};
- const part=(url:string)=>url.includes('/api/settings-parts?')||/\/api\/company-apps\?.*test=/.test(url);
- page.on('request',request=>{ if(part(request.url())) { open++; seen.most=Math.max(seen.most,open); } });
- const done=(request:{url():string})=>{ if(part(request.url())) open--; };
+ const open=new Set<unknown>(); const seen={most:0};
+ const part=(url:string)=>url.includes('/api/settings-parts?')||/\/api\/company-apps\?.*test=/.test(url)||/\/api\/(voice-settings|agent-memory)\?/.test(url);
+ page.on('framenavigated',frame=>{ if(frame===page.mainFrame()) open.clear(); });
+ page.on('request',request=>{ if(part(request.url())) { open.add(request); seen.most=Math.max(seen.most,open.size); } });
+ const done=(request:unknown)=>{ open.delete(request); };
  page.on('requestfinished',done); page.on('requestfailed',done);
  return seen;
 }
@@ -63,7 +66,7 @@ const pages:{name:string,address:string,stored:(page:Page)=>ReturnType<Page['loc
  {name:'Apps',address:'/c/rs-learning/settings?section=apps',stored:page=>page.locator('#sov-h'),filled:page=>page.locator('#apps-q')},
 ];
 
-test('with every management read held five seconds, each Settings page draws at once and fills in when the Engine answers',async({page})=>{
+test('with every management read held four seconds, each Settings page draws at once and fills in when the Engine answers',async({page})=>{
  test.setTimeout(240000);
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=account');
