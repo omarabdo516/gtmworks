@@ -1,4 +1,6 @@
 export const callLimit:number;
+export const backoffFrom:number;
+export const backoffTo:number;
 export const bodyLimit:number;
 export function isHermesAddressAllowed(address:string):boolean;
 export type EngineListener='api'|'management';

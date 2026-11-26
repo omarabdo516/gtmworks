@@ -57,7 +57,8 @@ for(const [language,t] of [['en',en],['ar',ar]] as const) for(const width of [14
   await expect(reading).toHaveCount(2);
   expect(Date.now()-opened,'the section did not wait for the held read').toBeLessThan(9000);
   await reading.first().scrollIntoViewIfNeeded();
-  await page.screenshot({path:testInfo.outputPath(`models-part-reading-${language}-${width}.png`)});
+  // The picture of the loading part goes into the report (#791: Arabic and English at 1440 and 390).
+  await testInfo.attach(`models-part-reading-${language}-${width}`,{body:await page.screenshot(),contentType:'image/png'});
   // The held read lands and each part takes its line's place.
   await expect(reading).toHaveCount(0,{timeout:20000});
   await expect(page.locator('#md-providers, section[aria-labelledby="md-h-pv"]').first()).toBeVisible();
