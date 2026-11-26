@@ -27,6 +27,7 @@ test.beforeAll(async({},testInfo)=>{
  for(const name of profiles) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{stt:{provider:'openai'}},credentials:{},env:{VOICE_TOOLS_OPENAI_KEY:key}});
  query(`update public.people set language='en' where id in ('${omar}','${manager}')`);
  query(`do $$ begin
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${writer}','${company}',true);
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${co}'),
    ('${writer}','${company}','${randomUUID()}','Writer','Writing',false,'${own}');
   insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values ('${company}','${co}',true,true)
