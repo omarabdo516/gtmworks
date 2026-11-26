@@ -90,6 +90,11 @@ test('through the gate, the dashboard\'s chat, its terminal and the board\'s eve
   await expect.poll(()=>terminalSocket.frames.length).toBeGreaterThan(0);
   await makeCard(owner,'A Card the board reports');
   await expect.poll(()=>told(boardSocket,'A Card the board reports')).toBe(true);
+  // No browser reached the Engine itself: each socket the Engine saw came through gtmworks, with the Engine's key, which
+  // no browser holds, under the Company's path, and with none of gtmworks's cookies.
+  const upgrades=fake.settings.dashboardRequests.filter(request=>/^\/api\/(ws|pty|plugins\/kanban\/events)\?/.test(request.path));
+  expect(upgrades).toHaveLength(3);
+  for(const request of upgrades) expect([request.authorization,request.prefix,request.cookie??'']).toEqual([`Bearer ${fake.settings.key}`,prefix,'']);
  } finally { await owner.close(); }
 });
 
