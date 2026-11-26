@@ -19,9 +19,16 @@ cd "$work/src"
 # shellcheck source=../../../scripts/ci-install-lib.sh
 . scripts/ci-install-lib.sh
 fail_prefix='probe failed: '
+# remove_install leaves each Engine's screen-driver container (scripts/engine-template.yml), which holds the Engine's
+# data volume, so that volume outlives the removal; both go here, so the install the archive goes into is empty.
+gone_with_install() {
+  docker ps -aq --filter 'name=^gtmworks-screen-driver-' | xargs -r docker rm -f > /dev/null
+  docker volume ls -q --filter 'name=^gtmworks-' | xargs -r docker volume rm > /dev/null
+}
 done_with() {
   status=$?
   if [ -f .env.install ]; then remove_install > /dev/null 2>&1 || true; fi
+  gone_with_install > /dev/null 2>&1 || true
   cd "$repo"
   git worktree remove --force "$work/src" > /dev/null 2>&1 || true
   rm -rf "$work"
@@ -83,9 +90,13 @@ grep -q "^engines/first/profiles/$profile/plugin-data/$PLUGIN/data.db$" "$work/a
 
 # Emptied, installed again and restored by the install's own commands, as the proof's backup areas do.
 remove_install > /dev/null 2>&1 || fail 'remove the install'
+say "left after remove_install: $(docker ps -a --format '{{.Names}}' | grep '^gtmworks-' | tr '\n' ' ')$(docker volume ls -q | grep '^gtmworks-' | tr '\n' ' ')"
+gone_with_install
 rm -f .env.install
 install_source "$work/reinstall.log" > /dev/null || { tail -40 "$work/reinstall.log" >&2; fail 'the fresh install before the restore'; }
-say "a fresh, empty install: the plugin's folder $(docker exec "$(first_engine_id)" sh -c "test -d /opt/data/profiles/$profile/plugins/$PLUGIN && echo present || echo absent")"
+fresh=$(docker exec "$(first_engine_id)" sh -c "test -d /opt/data/profiles/$profile && echo present || echo absent")
+say "a fresh, empty install: the main Agent's profile folder $fresh"
+[ "$fresh" = absent ] || fail 'the install the archive goes into is empty'
 sh scripts/install.sh restore "$archive" > "$work/restore.log" 2>&1 || { cat "$work/restore.log" >&2; fail 'sh scripts/install.sh restore'; }
 engine_healthy "$(first_engine_id)" 180 || fail 'the restored Engine is healthy'
 key=$(first_engine_key)
