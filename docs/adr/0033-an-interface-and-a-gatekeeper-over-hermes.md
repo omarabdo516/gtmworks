@@ -31,6 +31,7 @@ Not built yet. The code, `GLOSSARY.md` and the tests describe today's product un
 **The rule.** What Agents do and keep lives in the Engine, and gtmworks shows it. gtmworks stores only what is about people: who they are, their Role, and what they may see. The gatekeeper is the part of gtmworks that stands before each Company's Engine: sign-in, membership, Role, and the log of who did what.
 
 1. **A Conversation's messages are kept in the Engine only.** gtmworks keeps one row for each Conversation: whose it is. Condition: Probe A of spec #822 passes. The last 50 messages of a 2 000-message session come back from a busy Engine in under 0.5 s at p95; between 0.5 s and 1 s the question goes to Omar; over 1 s it fails and this item goes back to him with the number.
+   - Probe A passed on 2026-11-26: 19 ms at p95, busy, on Hermes v0.23.0 ([conversation-read](../engine-probes/conversation-read.md)).
 2. **The board is the Engine's Kanban board.** gtmworks adds two things: a Member as a Card's Assignee, and the publishing date.
    - The statuses are the Engine's eight. How they are grouped on the screen is Omar's to draw. There is no Live column: published is done, with the publishing date on the Card.
    - A review works as Hermes does it: an Agent or a person passes the work or sends it back, and the Card shows who. The Engine records no identity on a write, so when a person reviews, gtmworks writes their name on the Engine's record. The line "an Agent never approves" ends; "Approval" and "Version" leave the product's words and the review stays.
