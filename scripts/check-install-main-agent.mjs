@@ -49,8 +49,11 @@ if(step==='settled') {
 }
 
 // The Company whose Engine is the first one, and its main Agent's profile there, from the records the worker reads.
-const {data:companies,error}=await service.from('companies').select('id,name').order('id');
+// Only a Company with an active Owner has a main Agent's profile (company_profile_work); the backup area's seed adds
+// Companies on the same Engine with none.
+const {data:owned,error}=await service.from('members').select('company_id').eq('role','owner').is('removed_at',null);
 assert.equal(error,null,JSON.stringify(error));
+const companies=[...new Set(owned.map(row=>row.company_id))].sort().map(id=>({id}));
 let company=null, record=null;
 for(const one of companies) { const found=await engineOf(one.id,service); if(found?.address===process.env.HERMES_ADDRESS) { company=one; record=found; break; } }
 assert.ok(company&&record,'a Company runs on the first Engine');
