@@ -11,7 +11,7 @@ const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // The sections in their groups (#612): Company, Agents and Engine, then Backups, Your account and About on their own.
 // Backup is the Owner's alone (#33).
-const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Usage','Backups','Your account','About'];
+const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Voice','Usage','Backups','Your account','About'];
 const staffSections=sections.filter(section=>section!=='Backups');
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
@@ -316,7 +316,7 @@ const surfaces={
 const roleViews=[
  {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name'],members:['.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
  {role:'Manager',email:'manager@example.com',sections:staffSections,readOnly:false,movesMain:false,company:['.ro-text'],members:['.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
- {role:'Contributor',email:'reviewer@example.com',sections:staffSections.filter(section=>section!=='Usage'),readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)'],members:['.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
+ {role:'Contributor',email:'reviewer@example.com',sections:staffSections.filter(section=>section!=='Usage'&&section!=='Voice'),readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)'],members:['.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
  {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account','About'],readOnly:true,movesMain:false,company:null,members:null,agents:['.ro-note'],agent:['.ro-note']},
 ];
 

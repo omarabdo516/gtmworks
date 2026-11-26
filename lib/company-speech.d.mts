@@ -5,3 +5,6 @@ export const deepgramCommand:string;
 export type CompanySpeech={provider:SpeechProvider|null,missing:{agent:string|null,name:string|null}[]|null};
 export function readCompanySpeech(db:SupabaseClient,request:{company:string}):Promise<CompanySpeech>;
 export function changeCompanySpeech(db:SupabaseClient,request:{company:string,provider?:unknown,intent:unknown,value?:unknown}):Promise<{status:number,body:(CompanySpeech&{failed:{agent:string|null,name:string|null}[]})|{error:string}}>;
+export type CompanyVoice={provider:SpeechProvider|null,keys:SpeechProvider[]|null,language:string|null,model:string|null,prompt:string|null,trimSilence:boolean|null,languages:string[]|null,models:string[]|null};
+export function readCompanyVoice(db:SupabaseClient,request:{company:string}):Promise<CompanyVoice>;
+export function changeCompanyVoice(db:SupabaseClient,request:{company:string,language?:unknown,model?:unknown,prompt?:unknown,trimSilence?:unknown}):Promise<{status:number,body:(CompanyVoice&{failed:{agent:string|null,name:string|null}[]})|{error:string}}>;

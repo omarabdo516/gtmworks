@@ -35,8 +35,8 @@ class FakeAudio {
  end() { for (const listener of this.ended) listener(); }
 }
 
-const read = (over: Record<string, unknown> = {}) => ({ state: 'found', own: true, language: 'en', speed: 1, provider: 'edge',
- voice: 'en-US-AriaNeural', voiceName: 'en-US-AriaNeural', list: null, speech: null, languages: ['ar', 'en', ''], ...over });
+const read = (over: Record<string, unknown> = {}) => ({ state: 'found', own: true, speed: 1, provider: 'edge',
+ voice: 'en-US-AriaNeural', voiceName: 'en-US-AriaNeural', list: null, ...over });
 
 // The Agent page as the server draws it: the Voice group and, in Advanced (#615), the speed, in one draft; the bar after
 // the panel, the toasts the page raises. Each test takes a new Agent, so the page's one draft starts from the read.
@@ -56,7 +56,7 @@ const speakAnswer = (dataUrl = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA')
  if (String(url).includes('agent-speak')) return answerFor({ dataUrl, mimeType: 'audio/mpeg' });
  const sent = JSON.parse(String(init?.body));
  const voice = sent?.changes?.voice ?? {};
- return answerFor({ saved: { voice: { language: voice.language ?? 'en', speed: Number(voice.speed ?? 1), voice: 'en-US-AriaNeural' } } });
+ return answerFor({ saved: { voice: { speed: Number(voice.speed ?? 1), voice: 'en-US-AriaNeural' } } });
 });
 
 afterEach(() => { FakeAudio.made = []; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -89,7 +89,7 @@ test('the sound ends on its own and the button reads Listen again', async () => 
  await expect.element(screen.getByRole('button', { name: 'Listen' })).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('changing the voice or the language stops the sound, and the section then waits to be saved', async () => {
+test('changing the voice stops the sound, and the section then waits to be saved; it has no listening language (#863)', async () => {
  vi.stubGlobal('Audio', FakeAudio);
  vi.stubGlobal('fetch', speakAnswer());
  const screen = await voicePage(read({ provider: 'elevenlabs', voice: '21m00Tcm4TlvDq8ikWAM', voiceName: 'Bella',
@@ -99,13 +99,14 @@ test('changing the voice or the language stops the sound, and the section then w
  await screen.getByRole('combobox', { name: 'Voice' }).selectOptions('pNInz6obpgDQGcFmaJgB');
  expect(FakeAudio.made[0].paused).toBe(1);
  await expect.element(screen.getByRole('button', { name: 'Listen' })).toBeDisabled();
- // Saved, Listen plays the saved voice again, and a new language stops it just the same.
+// Saved, Listen plays the saved voice again.
  await screen.getByRole('button', { name: 'Save', exact: true }).click();
  await expect.poll(() => document.getElementById('dp-savebar')?.hidden).toBe(true);
  await screen.getByRole('button', { name: 'Listen' }).click();
  await expect.poll(() => FakeAudio.made.length).toBe(2);
- await screen.getByRole('combobox', { name: 'Speaking language' }).selectOptions('ar');
- expect(FakeAudio.made[1].paused).toBe(1);
+ // The language every Agent listens in is the Company's, on Settings → Voice: no row of it here.
+ expect(document.getElementById('set-voice-lang')).toBeNull();
+ expect(screen.getByText('Speaking language').query()).toBeNull();
 });
 
 test('while the section has unsaved changes Listen is off with the line to save first, and the section says so in the hint', async () => {
@@ -210,16 +211,3 @@ test('an Engine that cannot speak says so where the sample is described', async 
  expect(FakeAudio.made.length).toBe(0);
 });
 
-// #430: on Deepgram, Arabic reads as Egyptian and the other Arabic variants are named in the page's language; there is
-// no "detect".
-test('an Agent on Deepgram picks Egyptian Arabic or another Arabic variant, named in the page\'s language', async () => {
- const languages = ['ar', 'ar-SA', 'en'];
- const screen = await voicePage(read({ speech: 'deepgram', language: 'ar', languages }));
- const options = () => [...document.querySelectorAll<HTMLOptionElement>('#set-voice-lang option')].map(option => [option.value, option.textContent]);
- await expect.element(screen.getByLabelText('Speaking language')).toHaveValue('ar');
- expect(options()).toEqual([['ar', 'Arabic (Egypt)'], ['ar-SA', 'Arabic (Saudi Arabia)'], ['en', 'English']]);
- await screen.unmount();
- await voicePage(read({ speech: 'deepgram', language: 'ar', languages }), 'ar');
- expect(options()[0]).toEqual(['ar', 'عربي (مصري)']);
- expect(options()[1][1]).toContain('السعودية');
-});

@@ -38,7 +38,7 @@ const renderNode = (node: React.ReactNode, language: 'en' | 'ar' = 'en') => rend
 // once and never drawn; the provider in use can be removed; a member reads which one is in use with no control.
 test('the Owner picks a speech-to-text provider with its key, Deepgram first; a member only reads it', async () => {
   const sent = stub({ provider: 'deepgram', missing: [] });
-  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: null, missing: [] }}/>);
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: null, keys: [], missing: [] }}/>);
   expect([...document.querySelectorAll('#md-stt .md-key')].map(row => row.id)).toEqual(['mdl-stt-row-deepgram', 'mdl-stt-row-elevenlabs', 'mdl-stt-row-openai', 'mdl-stt-row-groq']);
   await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
   await expect.element(screen.getByText(en.settingsSpeechDeepgram)).toBeVisible();
@@ -51,23 +51,52 @@ test('the Owner picks a speech-to-text provider with its key, Deepgram first; a 
   expect(document.body.textContent).not.toContain(key);
   expect(refresh).not.toHaveBeenCalled();
   await screen.unmount();
-  const used = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', missing: [{ agent: 'a-1', name: 'Writer' }] }}/>);
+  const used = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', keys: ['deepgram'], missing: [{ agent: 'a-1', name: 'Writer' }] }}/>);
   await expect.element(used.getByText(en.settingsSpeechInUse)).toBeVisible();
   await expect.element(used.getByText(new RegExp(en.settingsSpeechMissing))).toBeVisible();
   await used.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
   await expect.poll(() => sent.length).toBe(2);
   expect(sent[1]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'deepgram', intent: 'remove' } });
   await used.unmount();
-  await renderNode(<SpeechToText readAt={Date.now()} company={company} owner={false} data={{ provider: 'deepgram', missing: [] }}/>, 'ar');
+  await renderNode(<SpeechToText readAt={Date.now()} company={company} owner={false} data={{ provider: 'deepgram', keys: ['deepgram'], missing: [] }}/>, 'ar');
   expect(document.querySelector('#md-stt input')).toBeNull();
   expect(document.querySelector('#md-stt button:not(.info__btn)')).toBeNull();
   await expect.element(page.getByText(ar.settingsSpeechOwnerOnly)).toBeVisible();
   await expect.element(page.getByText(ar.settingsSpeechInUse)).toBeVisible();
 });
 
+// #862: a provider whose key the Engine holds says so; the Owner switches back to it with no new key, and removing
+// one that is not in use takes only its key.
+test('a speech-to-text provider with a saved key is chosen again with no key, and removing it leaves the one in use', async () => {
+  const sent = stub({ provider: 'deepgram', keys: ['deepgram', 'openai'], missing: [], failed: [] });
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'openai', keys: ['deepgram', 'openai'], missing: [] }}/>);
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-deepgram-state')!)).toHaveTextContent(en.settingsSpeechKeySaved);
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-openai-state')!)).toHaveTextContent(en.settingsSpeechInUse);
+  expect(document.getElementById('mdl-stt-elevenlabs-state')!.textContent).toBe('');
+  await screen.getByRole('button', { name: 'Use Deepgram Nova-3 with its saved key' }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'deepgram', intent: 'set' } });
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-deepgram-state')!)).toHaveTextContent(en.settingsSpeechInUse);
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-openai-state')!)).toHaveTextContent(en.settingsSpeechKeySaved);
+  await screen.unmount();
+  const removing = stub({ provider: 'deepgram', keys: ['deepgram'], missing: [], failed: [] });
+  const again = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', keys: ['deepgram', 'openai', 'groq'], missing: [] }}/>);
+  // Groq's key is its models' too, so it is removed only under Model provider keys.
+  expect(document.querySelector('#mdl-stt-row-groq .btn--secondary')).toBeNull();
+  await again.getByRole('button', { name: 'Remove the OpenAI key' }).click();
+  await expect.poll(() => removing.length).toBe(1);
+  expect(removing[0]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'openai', intent: 'remove' } });
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-deepgram-state')!)).toHaveTextContent(en.settingsSpeechInUse);
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-openai-state')!)).not.toHaveTextContent(en.settingsSpeechKeySaved);
+  await again.unmount();
+  await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'openai', keys: ['deepgram', 'openai'], missing: [] }}/>, 'ar');
+  await expect.element(page.getByText(ar.settingsSpeechKeySaved)).toBeVisible();
+  await expect.element(page.getByRole('button', { name: ar.settingsSpeechUseLabel.replace('{0}', 'Deepgram Nova-3') })).toBeVisible();
+});
+
 test('a speech-to-text change that misses an Agent names it and says to try again, with no success toast', async () => {
   stub({ provider: 'deepgram', missing: [], failed: [{ agent: 'a-1', name: 'Writer' }] });
-  const screen = await renderNode(<><ToastHost/><SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', missing: [] }}/></>);
+  const screen = await renderNode(<><ToastHost/><SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', keys: ['deepgram'], missing: [] }}/></>);
   await screen.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
   await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsSpeechNotReached.replace('{0}', 'Writer'));
   expect(screen.container.textContent).not.toContain(en.settingsModelsKeyRemoved);
@@ -395,7 +424,7 @@ test('a default that missed an Agent keeps its Retry when a newer choice then fa
 test('a speech-to-text key shows its provider in use with "Saving" at once, and a failed save goes back with its form open', async () => {
   const engine = heldAnswer();
   const speech = '20000000-0000-0000-0000-000000000663';
-  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, missing: [] }}/>);
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, keys: [], missing: [] }}/>);
   await page.elementLocator(document.querySelector('#mdl-stt-row-groq .link-btn')!).click();
   await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
   await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
@@ -408,13 +437,13 @@ test('a speech-to-text key shows its provider in use with "Saving" at once, and 
   expect(document.querySelector('#mdl-stt-groq-form')).not.toBeNull();
   await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
   await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
-  engine.answer(200, { provider: 'groq', missing: [{ agent: 'a-1', name: 'Writer' }], failed: [], savedAt: Date.now() });
+  engine.answer(200, { provider: 'groq', keys: ['groq'], missing: [{ agent: 'a-1', name: 'Writer' }], failed: [], savedAt: Date.now() });
   await expect.element(screen.getByText(en.settingsSpeechInUse)).toBeVisible();
   await expect.element(screen.getByText(new RegExp(en.settingsSpeechMissing))).toBeVisible();
   // Removing it says "Saving" on the row it leaves.
   await screen.getByRole('button', { name: 'Remove the Groq key' }).click();
   await expect.element(page.elementLocator(document.getElementById('mdl-stt-groq-state')!)).toHaveTextContent(en.settingsSaving);
-  engine.answer(200, { provider: null, missing: [], failed: [], savedAt: Date.now() });
+  engine.answer(200, { provider: null, keys: ['groq'], missing: [], failed: [], savedAt: Date.now() });
   await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
   expect(refresh).not.toHaveBeenCalled();
 });
@@ -422,7 +451,7 @@ test('a speech-to-text key shows its provider in use with "Saving" at once, and 
 test('a failed speech-to-text key leaves another provider\'s form, opened while it saved, as it was', async () => {
   const engine = heldAnswer();
   const speech = '20000000-0000-0000-0000-000000000665';
-  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, missing: [] }}/>);
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, keys: [], missing: [] }}/>);
   await page.elementLocator(document.querySelector('#mdl-stt-row-deepgram .link-btn')!).click();
   await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
   await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();

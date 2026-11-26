@@ -82,7 +82,6 @@ test('the Owner finds every control in its group, changes one of each, saves onc
  await how.getByRole('switch',{name:'Good morning'}).click();
  await how.getByRole('combobox',{name:'Time'}).selectOption('8:30');
  await view.locator('#set-effort-high').click();
- await view.locator('#set-voice-lang').selectOption('ar');
  await view.getByText('Advanced',{exact:true}).click();
  await expect(view.locator('#set-advanced')).toHaveAttribute('open','');
  await view.getByRole('radio',{name:'1.25×'}).click();
@@ -96,7 +95,7 @@ test('the Owner finds every control in its group, changes one of each, saves onc
  expect(held.description).toBe('Runs the team and the weekly plan.');
  expect(held.soul).toContain('Lead the team.\nKeep posts short.');
  expect(held.config?.agent?.reasoning_effort).toBe('high');
- expect([held.config?.stt?.language,held.config?.tts?.speed]).toEqual(['ar',1.25]);
+ expect(held.config?.tts?.speed).toBe(1.25);
  const jobs=(fake.settings.cron.get(profile)??[]).filter(job=>job.name==='Good morning');
  expect(jobs.map(job=>[job.schedule.expr,job.state])).toEqual([['30 8 * * *','scheduled']]);
  expect(rows(`select count(*)::int as n from public.company_log where company_id='${company}' and action='agent_setting_changed' and agent_id='${lead}'`)[0].n).toBeGreaterThanOrEqual(5);
@@ -109,7 +108,6 @@ test('the Owner finds every control in its group, changes one of each, saves onc
  await expect(how.getByRole('switch',{name:'Good morning'})).toHaveAttribute('aria-checked','true');
  await expect(how.getByRole('combobox',{name:'Time'})).toHaveValue('8:30');
  await expect(view.locator('#set-effort-high')).toHaveAttribute('aria-checked','true');
- await expect(view.locator('#set-voice-lang')).toHaveValue('ar');
  await expect(view.locator('#set-advanced')).not.toHaveAttribute('open');
  await view.getByText('Advanced',{exact:true}).click();
  await expect(view.getByRole('radio',{name:'1.25×'})).toHaveAttribute('aria-checked','true');

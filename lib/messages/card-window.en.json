@@ -66,5 +66,18 @@
   "evDecomposed": "Split into cards",
   "evStatus": "Moved",
   "cwAssignBusy": "An Agent is working on this card now. Stop it first, then give it to someone else.",
-  "cwAssignFailed": "The assignee wasn’t changed. Try again."
+  "cwAssignFailed": "The assignee wasn’t changed. Try again.",
+  "cwFiles": "Files",
+  "cwAdd": "Add",
+  "cwAddFiles": "Add files",
+  "cwFileOpen": "Download {0}",
+  "cwFileNotNow": "Can’t be read now: the work sandbox is stopped.",
+  "cwFileUnservable": "This file isn’t in the Agent’s own folder, so it can’t be downloaded.",
+  "cwFileTooLarge": "“{0}” wasn’t added: a card’s file can be at most {1} MB.",
+  "cwFileAdding": "Adding “{0}”…",
+  "cwFilesAdding": "Adding {0} files…",
+  "cwFileAdded": "File added",
+  "cwFilesAdded": "{0} files added",
+  "cwFileFailed": "“{0}” wasn’t added. Try again.",
+  "cwFileNotAllowed": "You can read this card, not add to it."
 }

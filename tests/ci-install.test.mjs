@@ -559,6 +559,45 @@ test('engine_board_settings holds only for an Engine whose own user has a short 
   }
 });
 
+// Spec #831 (#843): the Agent working a Card opens a person's file where the Engine names it, so every Company's work
+// sandbox mounts the Engine's Kanban attachments folder, that one folder of the Engine's own data volume, read-only at
+// the Engine's own path, and its user cannot write there. The proof asks the host's Docker: a stand-in `docker` answers
+// for an Engine and its sandbox, and only the install's mount holds: none, one of another volume, the whole volume, one
+// the sandbox can write, and one whose folder the sandbox's own write reaches each fail.
+test('sandbox_card_files holds only for a sandbox that mounts its Engine\'s attachments folder alone, read-only, at the Engine\'s path', () => {
+  const dir = mkdtempSync(`${tmpdir()}/card-files-`);
+  try {
+    writeFileSync(`${dir}/docker`, [
+      '#!/bin/sh',
+      'case "$*" in',
+      '  "inspect -f {{.Name}} some-engine") echo /gtmworks-engine-first;;',
+      '  "inspect -f {{range .Mounts}}{{if eq .Destination \\"/opt/data\\"}}{{.Name}}{{end}}{{end}} some-engine") echo gtmworks-engine-first-data;;',
+      '  "inspect -f {{range .Mounts}}"*" gtmworks-sandbox-first") echo "$MOUNT";;',
+      '  "inspect -f {{range .HostConfig.Mounts}}"*" gtmworks-sandbox-first") echo "$SUBPATH";;',
+      '  "exec gtmworks-sandbox-first test -d /opt/data/kanban/attachments") exit 0;;',
+      '  "exec gtmworks-sandbox-first sh -c "*) exit "$WRITE";;',
+      '  *) exit 2;;',
+      'esac', '',
+    ].join('\n'));
+    chmodSync(`${dir}/docker`, 0o755);
+    const holds = ({ mount = 'volume gtmworks-engine-first-data false', subpath = 'kanban/attachments', write = 1 } = {}) => {
+      const out = spawnSync('bash', ['-c', 'set -o pipefail; . scripts/ci-install-lib.sh; sandbox_card_files some-engine'], {
+        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MOUNT: mount, SUBPATH: subpath, WRITE: String(write) },
+      });
+      assert.ok(out.status === 0 || out.status === 1, out.stderr);
+      return out.status === 0;
+    };
+    assert.equal(holds(), true, 'the install\'s own mount');
+    assert.equal(holds({ mount: '' }), false, 'no mount: the Agent cannot open a person\'s file');
+    assert.equal(holds({ mount: 'volume gtmworks-engine-second-data false' }), false, 'another Engine\'s folder');
+    assert.equal(holds({ mount: 'volume gtmworks-engine-first-data true' }), false, 'a mount the sandbox can write');
+    assert.equal(holds({ subpath: '' }), false, 'the Engine\'s whole volume, its keys with it');
+    assert.equal(holds({ write: 0 }), false, 'a folder the sandbox\'s write reaches');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Spec #831 (#833): the board's proof on the real Engine is one step of an area the proof already runs, never a job of
 // its own. It ran in agents-sandbox until that area reached its 12 minutes with the step still waiting (run 45841934073);
 // the open-design area, which used 5 of its 12, runs it after its own checks, once it has made the first Company's second
@@ -582,9 +621,13 @@ test('the Kanban check runs inside the open-design area after its own checks, an
     assert.equal(sandbox.includes(read), false, `agents-sandbox no longer reads ${read}`);
   }
   assert.match(design, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
+  assert.match(design, /for folder in \.engines\/\*\/; do[\s\S]*?sandbox_card_files "\$name"/, 'every Company\'s sandbox of the area holds the Engine\'s attachments folder (#843)');
+  // The worker opened the person's file in the sandbox and could not write beside it, read from the host's Docker (#843).
+  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt"', '"attachment_write":"refused"', '$kanban_marker-planted']) assert.ok(design.includes(read), read);
   for (const [name, update] of [['update', "sh install.sh update || fail 'release update'"], ['engines_update', "sh install.sh update || fail 'update every Company Engine'"]]) {
     const body = area(name, '\n}\n');
     const updated = body.indexOf(update);
     assert.ok(updated > 0 && body.indexOf('engine_board_settings', updated) > updated, `${name}: an Engine the update brought up holds the setting`);
+    assert.ok(body.indexOf('sandbox_card_files', updated) > updated, `${name}: a sandbox the update brought up holds the Engine's attachments folder`);
   }
 });

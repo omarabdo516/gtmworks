@@ -130,3 +130,37 @@ test('a Card given to a Member names the Member, the person who made it and its 
   assert.equal(agentCard.card.person,null);
  } finally { await fake.close(); }
 });
+
+// #843: a Card's files, both ways. A person's is a Kanban attachment on the Engine; an Agent's is named by a MEDIA line
+// in the summary or one of its comments and stays in the Agent's own work folder in the work sandbox. The Card lists
+// each by its name, an image as one, under who added it; no address, path or profile reaches the browser.
+test('a Card lists a person\'s files and the files its Agent named, and says when the Agent\'s cannot be read now', async () => {
+ const fake=await engineServing(company);
+ try {
+  const kanban=fake.settings.kanban;
+  const id=kanban.task({title:'Course reel',status:'done',assignee:profileOf(ads)}).id;
+  kanban.attach(id,{filename:'brief.pdf',body:'%PDF brief',content_type:'application/pdf',uploaded_by:'Omar Abdo'});
+  kanban.attach(id,{filename:'reference.png',body:'png',content_type:'image/png',uploaded_by:'Omar Abdo'});
+  kanban.run(id,{profile:profileOf(ads),status:'done',outcome:'completed',ended_at:3,
+   summary:`The reel is cut.\nMEDIA:/work/${profileOf(ads)}/reel/final.mp4\nMEDIA:/opt/data/auth.json`});
+  kanban.comment(id,profileOf(ads),`A still from it:\nMEDIA:/work/${profileOf(ads)}/reel/still.jpg`);
+  kanban.comment(id,'Omar Abdo','Looks good. MEDIA:/work/x.png stays as I wrote it.');
+  const read=await readCompanyCard(reader(),{company,card:id});
+  assert.equal(read.state,'found');
+  const files=read.card.files.map(file=>[file.name,file.from,file.image,file.state,'person' in (file.by??{})?file.by.person:file.by?.agent?.name??null]);
+  assert.deepEqual(files,[
+   ['brief.pdf','person',false,'ready','Omar Abdo'],['reference.png','person',true,'ready','Omar Abdo'],
+   ['final.mp4','summary',false,'ready','Ads'],['auth.json','summary',false,'unservable','Ads'],['still.jpg','comment',true,'ready','Ads']]);
+  assert.equal(new Set(read.card.files.map(file=>file.key)).size,5,'each file has a key of its own');
+  // The Agent's text is read without its tags; a person's comment as they wrote it.
+  assert.equal(read.card.summary,'The reel is cut.');
+  assert.deepEqual(read.card.comments.map(comment=>comment.body),['A still from it:','Looks good. MEDIA:/work/x.png stays as I wrote it.']);
+  assert.equal(read.card.runs.at(-1).summary,'The reel is cut.');
+  const sent=JSON.stringify(read);
+  for(const secret of ['reel/','/opt/data','stored_path',profileOf(ads),fake.settings.key]) assert.ok(!sent.includes(secret),secret);
+  // With the work sandbox stopped, the Agent's files are listed and cannot be read now; the person's still can.
+  fake.settings.sandboxDown=true;
+  const stopped=await readCompanyCard(reader(),{company,card:id});
+  assert.deepEqual(stopped.card.files.map(file=>file.state),['ready','ready','notNow','unservable','notNow']);
+ } finally { await fake.close(); }
+});
