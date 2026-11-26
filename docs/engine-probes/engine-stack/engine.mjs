@@ -54,3 +54,37 @@ export async function main(fn) {
  try { await fn(); }
  catch(error) { console.error(`PROBE FAILED: ${error instanceof EngineAnswer?error.message:error.stack||error}`); process.exit(1); }
 }
+
+// The host side a probe needs beside HTTP: restarting the Engine container and loading the host's cores. Neither reads
+// anything of Hermes's.
+import {execFileSync,spawnSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import {availableParallelism} from 'node:os';
+export const docker=(...args)=>execFileSync('docker',args,{encoding:'utf8'}).trim();
+export const cores=()=>availableParallelism();
+export const loadAverage=()=>Number(readFileSync('/proc/loadavg','utf8').split(' ')[0]);
+export async function restartEngine() {
+ docker('restart',engine.container);
+ const until=Date.now()+180000;
+ for(;;) {
+  const health=await api('/health').catch(()=>null);
+  const profiles=await manage('/api/profiles').catch(()=>null);
+  if(health?.status===200&&profiles?.status===200) return;
+  if(Date.now()>until) fail('the Engine answers after a restart',`${health?.status} ${profiles?.status}`);
+  await sleep(1000);
+ }
+}
+// One busy loop per core in a container of this stack (stack.sh down removes it), until the 1-minute load average
+// reaches the core count.
+export async function loadCores({timeout=240000}={}) {
+ const name=`${engine.container.replace(/-engine$/,'')}-load`;
+ spawnSync('docker',['rm','-f',name]);
+ docker('run','-d','--name',name,'--network','none','node:22.14.0-alpine3.21','sh','-c',
+  `for i in $(seq ${cores()}); do node -e 'for(;;){}' & done; wait`);
+ const until=Date.now()+timeout;
+ while(loadAverage()<cores()) {
+  if(Date.now()>until) fail('the host reaches a load average of its core count',`${loadAverage()} for ${cores()} cores`);
+  await sleep(2000);
+ }
+ return ()=>spawnSync('docker',['rm','-f',name]);
+}

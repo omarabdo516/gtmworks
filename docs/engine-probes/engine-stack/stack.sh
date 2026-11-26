@@ -8,7 +8,10 @@
 #   sh docs/engine-probes/engine-stack/stack.sh down <name>        remove every container, volume and network it made
 #   sh docs/engine-probes/engine-stack/stack.sh run <name> <cmd>   up, run <cmd> with the stack's env, then down,
 #                                                                  also when <cmd> fails or the run is interrupted
+#   sh docs/engine-probes/engine-stack/stack.sh exec <name> <cmd>  run <cmd> against a stack that is up, and leave it up
 #   sh docs/engine-probes/engine-stack/stack.sh check              the ticket's own check (#823)
+#
+# KEEP=1 with run leaves the stack up afterwards (for exec, then down).
 #
 # The env file (and the environment <cmd> gets) holds ENGINE_RUN (the Run API), ENGINE_MANAGE (the management
 # listener), ENGINE_KEY (the key this command made), ENGINE_CONTAINER, ENGINE_VOLUME, ENGINE_NETWORK, ENGINE_IMAGE.
@@ -42,9 +45,10 @@ names() {
 
 down() {
   names "$1"
-  docker rm -f "$ENG" "$MODEL" >/dev/null 2>&1 || true
+  # Every container of this stack, a probe's own helpers (probe-<name>-…) included.
+  docker ps -aq --filter "name=^probe-$NAME-" | xargs -r docker rm -f >/dev/null 2>&1 || true
   docker volume rm "$VOL" >/dev/null 2>&1 || true
-  docker network rm "$NET" >/dev/null 2>&1 || true
+  docker network ls -q --filter "name=^probe-$NAME-" | xargs -r docker network rm >/dev/null 2>&1 || true
   rm -f "$ENV_FILE"
 }
 
@@ -129,10 +133,19 @@ case "$command" in
     name=${2:?name}; shift 2
     trap 'exit 130' INT TERM
     up "$name"
-    trap 'down "$name"' EXIT
+    # KEEP=1 leaves the stack up for `exec` (a probe's seed is kept for the next try); stack.sh down removes it.
+    if [ "${KEEP:-0}" = 1 ]; then trap - EXIT; else trap 'down "$name"' EXIT; fi
     names "$name"
     set -a; . "$ENV_FILE"; set +a
     "$@"
+    ;;
+  exec)
+    # A command against a stack already up (KEEP=1 run, or up), which it leaves up.
+    name=${2:?name}; shift 2
+    names "$name"
+    [ -f "$ENV_FILE" ] || { echo "no stack $name is up" >&2; exit 1; }
+    set -a; . "$ENV_FILE"; set +a
+    exec "$@"
     ;;
   check) exec sh "$HERE/check.sh";;
   *) sed -n '2,20p' "$0" >&2; exit 2;;

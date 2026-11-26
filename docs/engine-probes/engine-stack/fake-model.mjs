@@ -6,13 +6,18 @@
 //   CALL <tool> <json arguments>    call that tool first; several CALL lines are called in order, one per turn
 //   REPLY <text>                    answer with this text once every CALL is done (default: "fake reply")
 //
+// A request that offers no tools (the Engine's title or compaction call) gets a one-line summary.
+//
 // Every request is kept, and GET /requests on port 8080 gives the newest 50 (tool names offered, last message), so a
 // probe can show which tools a Run was offered.
 import {createServer} from 'node:http';
 
 const kept=[];
 const text=content=>typeof content==='string'?content:Array.isArray(content)?content.map(part=>part?.text||'').join('\n'):'';
-const plan=messages=>{
+const plan=(messages,tools)=>{
+ // A request that offers no tools is the Engine's own side call (a title, a compaction summary): it gets a short text and
+ // never a tool call, even when the transcript it summarises holds CALL lines.
+ if(!tools?.length) return {delay:0,call:null,reply:'Earlier turns, summarised.'};
  const at=messages.findLastIndex(message=>message.role==='user');
  const lines=text(messages[at]?.content).split('\n').map(line=>line.trim());
  const delay=Number(lines.find(line=>line.startsWith('DELAY '))?.slice(6))||0;
@@ -32,12 +37,15 @@ const server=createServer((request,response)=>{
  let raw=''; request.on('data',chunk=>{ raw+=chunk; }); request.on('end',async()=>{
   if(!request.url.endsWith('/chat/completions')) { response.writeHead(404); return response.end(); }
   const body=JSON.parse(raw||'{}');
-  const {delay,call,reply}=plan(body.messages||[]);
+  const {delay,call,reply}=plan(body.messages||[],body.tools);
   kept.push({at:Date.now(),tools:(body.tools||[]).map(tool=>tool.function?.name),last:body.messages?.at(-1)});
   if(kept.length>500) kept.splice(0,kept.length-500);
   if(delay) await new Promise(resolve=>setTimeout(resolve,delay*1000));
   const finish=call?'tool_calls':'stop';
-  const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
+  // Usage near what a real provider counts (about four characters a token), so the Engine's context accounting and its
+  // compaction see the Conversation's real size.
+  const prompt=Math.ceil(raw.length/4);
+  const usage={prompt_tokens:prompt,completion_tokens:8,total_tokens:prompt+8};
   const message=call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply};
   if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message,finish_reason:finish}],usage})); }
   response.writeHead(200,{'Content-Type':'text/event-stream'});
