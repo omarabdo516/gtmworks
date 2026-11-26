@@ -158,47 +158,36 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await expect(page.locator('.stats strong').first()).toHaveText(String(count));
 });
 
-test('owner assigns a new Contributor agent through settings, the work list follows its rename, and demotion clears the key',async({page})=>{
+// Spec #695: the Members page gives nobody an agent role; a Member's rename follows in the work list, and an old role key
+// in the members' change log reads as the plain text it was stored with.
+test('the Members page offers no agent role, the work list follows a rename, and an old role key reads as stored',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/list');
  const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
  await expect(writerRow).toHaveCount(1);
- const current=writerRow.getByRole('link');
- await expect(current).toBeVisible();
- const cardPath=await current.getAttribute('href');
+ const cardPath=await writerRow.getByRole('link').getAttribute('href');
  const card=Number(cardPath!.split('/').pop());
  const person=randomUUID();
- const initialName=`وكيل اختبار مستقل ${person}`;
- const renamed='كاتب المحتوى بعد تغيير الاسم';
+ const initialName=`عضو اختبار مستقل ${person}`;
+ const renamed='عضو بعد تغيير الاسم';
  // Supabase CLI targets the local test database by default; never pass --remote.
  const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
- const [writer]=JSON.parse(query("select m.company_id,m.person_id from public.members m join public.companies c on c.id=m.company_id where c.slug='rs-learning' and m.agent_role='writer' and m.removed_at is null"));
+ const [writer]=JSON.parse(query("select m.company_id,m.person_id from public.members m join public.companies c on c.id=m.company_id join public.people p on p.id=m.person_id where c.slug='rs-learning' and p.name='وكيل المحتوى'"));
  try {
   query(`do $$ begin
-   update public.members set agent_role=null where company_id=${quote(writer.company_id)} and person_id=${quote(writer.person_id)};
    insert into auth.users(id) values (${quote(person)});
    insert into public.people(id,name) values (${quote(person)},${quote(initialName)});
    insert into public.members(company_id,person_id,role) values (${quote(writer.company_id)},${quote(person)},'contributor');
+   insert into public.member_audit(company_id,actor_id,actor_name,person_id,person_name,action,before_data,after_data) values (${quote(writer.company_id)},'20000000-0000-0000-0000-000000000001','Omar',${quote(person)},${quote(initialName)},'UPDATE','{"role":"contributor","agent_role":null}','{"role":"contributor","agent_role":"writer"}');
    update public.work_cards set next_actor=${quote(person)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
    end $$;`);
   await page.goto('/c/rs-learning/settings/members');
   const member=page.locator('.member-row').filter({has:page.locator('strong',{hasText:initialName})});
-  const picker=member.getByRole('combobox',{name:"Agent role",exact:true});
-  await expect(picker).toHaveValue('');
-  await expect(picker.locator('option')).toHaveText(["No agent role","Account manager","Writer","Designer","Critic"]);
-  await picker.selectOption('designer');
-  await member.getByRole('button',{name:"Save",exact:true}).click();
-  await expect(page.getByRole('status').filter({hasText:"This agent role is assigned to another active member in the company. Remove that assignment first."})).toHaveText("This agent role is assigned to another active member in the company. Remove that assignment first.");
-  expect(JSON.parse(query(`select agent_role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0].agent_role).toBeNull();
-  await picker.selectOption('writer');
-  await member.getByRole('button',{name:"Save",exact:true}).click();
-  await expect(page.getByRole('status').filter({hasText:"Change saved."})).toHaveText("Change saved.");
-  await expect(picker).toHaveValue('writer');
-  await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: No agent role to Writer'})).toHaveCount(1);
-  const [audit]=JSON.parse(query(`select actor_id,after_data->>'agent_role' as agent_role from public.member_audit where company_id=${quote(writer.company_id)} and person_id=${quote(person)} and action='UPDATE' order by id desc limit 1`));
-  expect(audit).toEqual({actor_id:'20000000-0000-0000-0000-000000000001',agent_role:'writer'});
+  await expect(member.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('contributor');
+  await expect(page.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
+  await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: — to writer'})).toHaveCount(1);
   await page.goto('/c/rs-learning/work/list');
   const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
-  // The next actor's name, beside its first letter as a person's (#697: a legacy role agent shows its name's first letter).
+  // The next actor's name, beside its first letter as a person's.
   const nextActor=assigned.locator('td').last().locator('span:not(.avatar)');
   await expect(assigned.locator('td').last().locator('.avatar')).toHaveText(Array.from(initialName)[0]);
   await expect(nextActor).toHaveText(initialName);
@@ -210,13 +199,11 @@ test('owner assigns a new Contributor agent through settings, the work list foll
   await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');
   await renamedMember.getByRole('button',{name:"Save",exact:true}).click();
   await expect(page.getByRole('status').filter({hasText:"Change saved."})).toHaveText("Change saved.");
-  await expect(renamedMember.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
-  expect(JSON.parse(query(`select role,agent_role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0]).toEqual({role:'viewer',agent_role:null});
+  expect(JSON.parse(query(`select role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0]).toEqual({role:'viewer'});
  } finally {
   query(`do $$ begin
    update public.work_cards set next_actor=${quote(writer.person_id)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
-   update public.members set agent_role=null,removed_at=now() where company_id=${quote(writer.company_id)} and person_id=${quote(person)};
-   update public.members set agent_role='writer' where company_id=${quote(writer.company_id)} and person_id=${quote(writer.person_id)};
+   update public.members set removed_at=now() where company_id=${quote(writer.company_id)} and person_id=${quote(person)};
    end $$;`);
  }
 });

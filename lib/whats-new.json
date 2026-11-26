@@ -1,5 +1,11 @@
 [
  {
+  "issue": 695,
+  "date": "2026-11-26",
+  "en": { "title": "The four old role agents are gone", "body": "The Account manager, Writer, Designer and Critic are no longer in menus, pickers or the Members page: New card goes to one of your Company's Agents, anyone who held a role by mistake is an ordinary Contributor again, and what those agents wrote keeps their names." },
+  "ar": { "title": "الوكلاء الأربعة القدام اتشالوا", "body": "مدير الحساب والكاتب والمصمم والناقد مبقوش في القوايم ولا الاختيارات ولا صفحة الأعضاء: البطاقة الجديدة بتروح لوكيل من وكلاء شركتك، واللي كان واخد دور منهم بالغلط رجع مساهم عادي، واللي الوكلاء دول كتبوه فضل بأساميهم." }
+ },
+ {
   "issue": 731,
   "date": "2026-11-25",
   "en": { "title": "A reply that ran out of usage names the accounts", "body": "When a reply stops because every account ran out of usage, the chat now names the accounts that ran out, by the names you gave them in Providers, beside when the usage resets." },

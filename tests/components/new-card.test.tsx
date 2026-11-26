@@ -62,7 +62,7 @@ for (const language of ['en', 'ar'] as const) for (const width of [1440, 390]) t
 // open it: the form is what this guards, and the template's checklist is supabase/tests/work.sql's.
 test('a card started with the reel template asks for that template and sends it', async () => {
  const props = workProps();
- const screen = await render(<LanguageProvider language="en"><NewCard slug="rs-learning" company="co-1" agents={[]} members={[{ person_id: 'p-1', people: { name: 'Omar' } }]} stage={1} fromRoute={false} workAction={props.workAction} onClose={() => {}}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><NewCard slug="rs-learning" company="co-1" agents={[]} stage={1} fromRoute={false} workAction={props.workAction} onClose={() => {}}/></LanguageProvider>);
  await userEvent.fill(screen.getByLabelText('Card title'), 'اختبار ريل');
  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Template/ }), 'reel');
  await screen.getByRole('button', { name: 'Create card' }).click();

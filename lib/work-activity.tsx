@@ -1,7 +1,6 @@
 'use client';
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { AgentFace } from '@/components/agent-face';
-import { useAgentIdentities } from './agent-identities-client';
 import { ChevronDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/paperclip/ui/dropdown-menu';
 import { useI18n } from '@/lib/i18n-client';
@@ -9,16 +8,10 @@ import Link from '@/lib/link';
 import { workDate } from './work-date.mjs';
 import { isThumbnail } from './attachments.mjs';
 import { columnLabel } from './board-columns.mjs';
-export type WorkMember={person_id:string,role?:'owner'|'manager'|'contributor'|'viewer',agent_role?:string|null,people:{name:string}|null};
+export type WorkMember={person_id:string,role?:'owner'|'manager'|'contributor'|'viewer',people:{name:string}|null};
 export type WorkActivity={id:number,card_id:number,action:string,details:Record<string,unknown>,created_at:string,actor_id:string|null,evidence:string|null,evidence_url?:string|null};
-function useAgentIdentity(id:string|null,members:WorkMember[]) {
- const identity=useAgentIdentities().find(agent=>agent.id===id);
- const member=members.find(member=>member.person_id===id);
- return identity||(member?.agent_role?{id:member.person_id,role:member.agent_role,name:member.people?.name||''}:undefined);
-}
-// A person, or one of the four legacy role agents, shows the first letter of its name (#697: the orb is a Company
-// Agent's face only).
-export function Avatar({id,members,nameVisible=false}:{id:string|null,members:WorkMember[],nameVisible?:boolean}) { const {t}=useI18n(); const agent=useAgentIdentity(id,members); const member=members.find(member=>member.person_id===id); const name=agent?.name||member?.people?.name||t('member'); return <span dir="auto" className="avatar" title={name} role="img" aria-label={name} aria-hidden={nameVisible||undefined}>{Array.from(name.trim())[0]||'؟'}</span>; }
+// A person shows the first letter of its name (#697: the orb is a Company Agent's face only).
+export function Avatar({id,members,nameVisible=false}:{id:string|null,members:WorkMember[],nameVisible?:boolean}) { const {t}=useI18n(); const member=members.find(member=>member.person_id===id); const name=member?.people?.name||t('member'); return <span dir="auto" className="avatar" title={name} role="img" aria-label={name} aria-hidden={nameVisible||undefined}>{Array.from(name.trim())[0]||'؟'}</span>; }
 export function MemberPicker({members,name,label,defaultValue,empty}:{members:WorkMember[],name:string,label:string,defaultValue?:string,empty?:string}) {
  const {language}=useI18n();
  const [choice,setValue]=useState(defaultValue);
@@ -39,16 +32,16 @@ const never=()=>()=>{};
 // The server cannot know the viewer's time zone, so it and the first browser render both draw UTC, hidden (globals.css);
 // once hydrated the zone is the viewer's own and the time shows.
 function ActivityTime({value}:{value:string}) { const {language}=useI18n(); const zone=useSyncExternalStore(never,()=>undefined,()=>'UTC'); return <time dateTime={value} data-utc={zone}>{workDate(value,language,{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>; }
-export function ActivityRow({activity:a,members,slug,showCard=false}:{activity:WorkActivity,members:WorkMember[],slug:string,showCard?:boolean}) { const {t,language}=useI18n(); const identity=useAgentIdentity(a.actor_id,members); const name=identity?.name||members.find(m=>m.person_id===a.actor_id)?.people?.name||t('member'); const d=a.details||{}; return <div className="detail-row"><Avatar id={a.actor_id} members={members} nameVisible/><div><strong dir="auto">{name}</strong><p>{activityText(a,t,language)}{showCard&&<> · <Link className="link" href={`/c/${slug}/work/board/${a.card_id}`}>{t('viewCard')}</Link></>}</p>{a.action==='comment_added'&&typeof d.body==='string'&&<p dir="auto" className="comment-body">{d.body}</p>}<ActivityTime value={a.created_at}/><Evidence a={a}/></div></div>; }
+export function ActivityRow({activity:a,members,slug,showCard=false}:{activity:WorkActivity,members:WorkMember[],slug:string,showCard?:boolean}) { const {t,language}=useI18n(); const name=members.find(m=>m.person_id===a.actor_id)?.people?.name||t('member'); const d=a.details||{}; return <div className="detail-row"><Avatar id={a.actor_id} members={members} nameVisible/><div><strong dir="auto">{name}</strong><p>{activityText(a,t,language)}{showCard&&<> · <Link className="link" href={`/c/${slug}/work/board/${a.card_id}`}>{t('viewCard')}</Link></>}</p>{a.action==='comment_added'&&typeof d.body==='string'&&<p dir="auto" className="comment-body">{d.body}</p>}<ActivityTime value={a.created_at}/><Evidence a={a}/></div></div>; }
 // One message in a card's conversation: who wrote it, whether that was a person or an agent, and the text in its own direction.
 export type WorkAttachment={id:number,card_id:number,comment_id:number,name:string,content_type:string};
 export const isMessage=(a:WorkActivity)=>a.action==='comment_added'&&typeof a.details?.body==='string';
 // A person's message on a Card is a note (#22): `note` draws its text, files and time when given (app/note-edit), and
 // `anchor` is what a mention in "Waiting on you" opens.
-export function MessageRow({activity:a,members,files=[],slug='',anchor,note}:{activity:WorkActivity,members:WorkMember[],files?:WorkAttachment[],slug?:string,anchor?:string,note?:(files:ReactNode,time:ReactNode)=>ReactNode}) { const {t}=useI18n(); const agent=useAgentIdentity(a.actor_id,members); const name=agent?.name||members.find(m=>m.person_id===a.actor_id)?.people?.name||t('member'); 
+export function MessageRow({activity:a,members,files=[],slug='',anchor,note}:{activity:WorkActivity,members:WorkMember[],files?:WorkAttachment[],slug?:string,anchor?:string,note?:(files:ReactNode,time:ReactNode)=>ReactNode}) { const {t}=useI18n(); const name=members.find(m=>m.person_id===a.actor_id)?.people?.name||t('member'); 
  const fileList=files.length>0&&<ul className="attachments">{files.map(f=>{ const href=`/c/${slug}/files/${f.id}`; return <li key={f.id}>{isThumbnail(f.content_type)?<a href={href} target="_blank" rel="noreferrer"><img src={href} alt={f.name}/></a>:<a dir="auto" href={href}>{f.name}</a>}</li>; })}</ul>;
  const time=<ActivityTime value={a.created_at}/>;
- return <li className="detail-row message" data-author={agent?'agent':'person'} id={anchor}><Avatar id={a.actor_id} members={members} nameVisible/><div><strong dir="auto">{name}</strong><span className="author-chip">{agent?t('agentLabel'):t('personLabel')}</span>{note&&!agent?note(fileList,time):<><p dir="auto" className="comment-body">{String(a.details.body)}</p>{fileList}{time}</>}<Evidence a={a}/></div></li>; }
+ return <li className="detail-row message" data-author="person" id={anchor}><Avatar id={a.actor_id} members={members} nameVisible/><div><strong dir="auto">{name}</strong><span className="author-chip">{t('personLabel')}</span>{note?note(fileList,time):<><p dir="auto" className="comment-body">{String(a.details.body)}</p>{fileList}{time}</>}<Evidence a={a}/></div></li>; }
 // The reply of an Agent a note called (#22), written in the log under that note, or the line that it is working on it.
 export function NoteReplyRow({name,face,body,at,working}:{name:string,face:string|null,body?:string,at?:string,working?:string}) { const {t}=useI18n();
  return <li className="detail-row message" data-author="agent">{face?<span className="note-face" aria-hidden="true"><AgentFace agent={face} size={24}/></span>:<span dir="auto" className="avatar" aria-hidden="true">{name.slice(0,1)}</span>}<div><strong dir="auto">{name}</strong><span className="author-chip">{t('agentLabel')}</span> <span className="note-act">{working?t('noteWorking'):t('logActNoteReply')}</span>

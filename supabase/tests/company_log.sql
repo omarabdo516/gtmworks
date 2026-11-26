@@ -15,10 +15,11 @@ select is((select concat_ws('|',actor_kind,actor_id::text,actor_name,subject,act
 insert into public.work_comments(company_id,card_id,body) values('10000000-0000-0000-0000-000000000001',(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'),'ملاحظة للسجل');
 select is((select concat_ws('|',actor_id::text,action,body) from public.company_log where source='work_comments' order by id desc limit 1),'20000000-0000-0000-0000-000000000001|note|ملاحظة للسجل','a Card comment is logged as a note with its author and text');
 select is((select count(*)::int from public.company_log where body='ملاحظة للسجل'),1,'a comment is logged once, not again as activity');
--- A change made by an Agent is logged as the Agent's.
+-- Spec #695: a Member once named for a role agent is a person, and so is every change it makes; an old row keeps the
+-- actor kind it was stored with.
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
 update public.work_cards set hook='خطاف الوكيل' where id=(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001');
-select is((select actor_kind from public.company_log where details->>'field'='hook' order by id desc limit 1),'agent','a Card change by an Agent is logged as the Agent''s');
+select is((select actor_kind from public.company_log where details->>'field'='hook' order by id desc limit 1),'person','a Card change by a Member once named for a role agent is logged as a person''s');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
 -- A Member change writes a row with the Member and what changed.

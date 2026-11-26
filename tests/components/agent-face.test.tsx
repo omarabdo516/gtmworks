@@ -7,7 +7,6 @@ import { AgentFace } from '@/components/agent-face';
 import { LooksProvider } from '@/lib/agent-looks-client';
 import { useReportRun } from '@/lib/live-runs';
 import { MemberPicker } from '@/lib/work-activity';
-import { AgentIdentitiesProvider } from '@/lib/agent-identities-client';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { CompanyLooks } from '@/lib/agent-looks';
 import '@/app/globals.css';
@@ -128,12 +127,13 @@ test('with reduced motion nothing moves, and the expression still changes', asyn
  expect(getComputedStyle(document.querySelector('.dot')!, '::after').display).toBe('none');
 });
 
-test('a legacy role agent shows its name\'s first letter, as a person does, and the card\'s assignee menu chooses it', async () => {
- const writer = { id: '30000000-0000-0000-0000-000000000001', role: 'writer', name: 'وكيل المحتوى' };
- const members = [{ person_id: '20000000-0000-0000-0000-000000000002', people: { name: 'Mona' } }, { person_id: writer.id, agent_role: 'writer', people: { name: writer.name } }];
- const screen = await render(<LanguageProvider language="en"><AgentIdentitiesProvider agents={[writer]}>
+// Spec #695: a Member whose name was an old role agent's is a person: the first letter of its name, never a face.
+test('a Member shows its name\'s first letter, and the card\'s assignee menu chooses it', async () => {
+ const writer = { id: '30000000-0000-0000-0000-000000000001', name: 'وكيل المحتوى' };
+ const members = [{ person_id: '20000000-0000-0000-0000-000000000002', people: { name: 'Mona' } }, { person_id: writer.id, people: { name: writer.name } }];
+ const screen = await render(<LanguageProvider language="en">
   <form><MemberPicker label="Add assignee" name="person" members={members}/></form>
- </AgentIdentitiesProvider></LanguageProvider>);
+ </LanguageProvider>);
  await screen.getByRole('button', { name: 'Add assignee' }).click();
  const option = page.getByRole('menuitemradio', { name: writer.name });
  await expect.element(option).toBeVisible();

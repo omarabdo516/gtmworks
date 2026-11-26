@@ -3,17 +3,17 @@ import { useRef, useSyncExternalStore } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
-import { roleAgents } from '@/lib/role-agents';
-import { MemberPicker, type WorkMember } from '@/lib/work-activity';
+import { MemberPicker } from '@/lib/work-activity';
+import type { CardAgent } from './board-show';
 import { CardDialog } from '@/app/card-dialog';
 import type { WorkAction } from './work';
 function Send({ready}:{ready:boolean}) { const {t}=useI18n(); const {pending}=useFormStatus(); return <button className="primary" disabled={!ready||pending}>{t('createCard')}</button>; }
 // Loaded only when a new card is started, so the board's first load stays small.
-// stage 0 is a message to an agent; a stage id is the quick form of that column (title and template).
-export default function NewCard({slug,company,agents:roster,members,stage,fromRoute,workAction,onClose}:{workAction:WorkAction,slug:string,company:string,agents:{person_id:string,role:string,granted:boolean}[],members:WorkMember[],stage:number,fromRoute:boolean,onClose:()=>void}) { const {t}=useI18n();
+// stage 0 is a message to one of the Company's Agents the reader sees; a stage id is the quick form of that column (title and template).
+export default function NewCard({slug,company,agents:roster,stage,fromRoute,workAction,onClose}:{workAction:WorkAction,slug:string,company:string,agents:CardAgent[],stage:number,fromRoute:boolean,onClose:()=>void}) { const {t}=useI18n();
  // One key per opened composer: a double click or a retried request is one card. The form cannot submit before React attaches its handler.
  const key=useRef(''); const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const agents=roleAgents.flatMap(role=>roster.filter(a=>a.granted&&a.role===role.key).map(a=>({person_id:a.person_id,people:{name:members.find(member=>member.person_id===a.person_id)?.people?.name||t(role.name)}})));
+ const agents=roster.map(a=>({person_id:a.id,people:{name:a.name}}));
  const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="company" value={company}/></>;
  const cancel=fromRoute&&!stage?<Link className="button" href={`/c/${slug}/work/board`}>{t('cancel')}</Link>:<button type="button" onClick={onClose}>{t('cancel')}</button>;
  return <CardDialog creating title={t('newCard')} returnTo={fromRoute?`/c/${slug}/work/board`:undefined} onClose={onClose}>{stage?
