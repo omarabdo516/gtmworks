@@ -92,8 +92,10 @@ const fakeModel=async()=>{
    if(last?.role==='tool') results.push(String(last.content));
    const content=last?.content;
    const text=typeof content==='string'?content:Array.isArray(content)?content.map(part=>typeof part?.text==='string'?part.text:'').join(''):'';
-   const asked=last?.role==='user'?/MAKE (\{.*\})/.exec(text):null;
-   const call=asked?{id:`call_${results.length}`,type:'function',function:{name:'tool_call',arguments:JSON.stringify({name:tool,arguments:JSON.parse(asked[1])})}}:null;
+   // The arguments are the one line after MAKE; anything the Engine added around the message is left out.
+   const asked=last?.role==='user'?/MAKE (\{[^\n]*?\})(?:\s|$)/.exec(text):null;
+   let args=null; try { args=asked?JSON.parse(asked[1]):null; } catch { args=null; }
+   const call=args?{id:`call_${results.length}`,type:'function',function:{name:'tool_call',arguments:JSON.stringify({name:tool,arguments:args})}}:null;
    const reply=call?null:`done: ${String(last?.content??'').slice(0,200)}`;
    const finish=call?'tool_calls':'stop', usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
    if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply},finish_reason:finish}],usage})); }
