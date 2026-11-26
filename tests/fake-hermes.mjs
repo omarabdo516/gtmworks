@@ -104,9 +104,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // `fileBytes` as the Engine's managed files routes write it (web_routers/files.py upload_managed_file); `/api/status`
   // says whether the gateway works a turn now (`gatewayBusy`); `/api/gateway/restart` counts in `restarts` and loads the
   // plugin of every profile that holds its plugin.yaml and names it in `plugins.enabled` (`pluginsLoaded`), whose Run
-  // API then offers the toolset `gtmworks`; the plugin's own route keeps each profile's Owner sessions in `ownerSessions`
+  // API then offers the toolset `gtmworks` with that plugin.yaml's description; the plugin's own route keeps each profile's Owner sessions in `ownerSessions`
   // and answers 404 Plugin not found on a profile that holds no plugin, as the dashboard does.
-  gatewayBusy:false,restarts:0,pluginsLoaded:/** @type {Set<string>} */(new Set()),
+  gatewayBusy:false,restarts:0,pluginsLoaded:/** @type {Map<string,string>} */(new Map()),
   ownerSessions:/** @type {Map<string,Map<string,{person:string,until:number}>>} */(new Map()),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
   // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser. The Engine's own
@@ -370,7 +370,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(status!==200) return send(response,status,{error:{message:request.headers.authorization}});
    const toolsetsPath=request.url.match(/^\/p\/([^/]+)\/v1\/toolsets$/);
    if(toolsetsPath&&!profileOf(decodeURIComponent(toolsetsPath[1]))&&settings.unknownProfiles.includes(decodeURIComponent(toolsetsPath[1]))) return send(response,404,{error:'Unknown or unconfigured profile'});
-   if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:[...configurable.map(name=>({name,enabled:enabled.includes(name)})),...appToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config),...(settings.pluginsLoaded.has(decodeURIComponent(toolsetsPath[1]))?[{name:'gtmworks',enabled:true,tools:['gtmworks_make_agent']}]:[])]}); }
+   if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:[...configurable.map(name=>({name,enabled:enabled.includes(name)})),...appToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config),...(settings.pluginsLoaded.has(decodeURIComponent(toolsetsPath[1]))?[{name:'gtmworks',label:'🔌 Gtmworks',description:settings.pluginsLoaded.get(decodeURIComponent(toolsetsPath[1])),enabled:true,tools:['gtmworks_make_agent']}]:[])]}); }
    // A session's sidebar flag (#674; api_server.py _handle_patch_session): archived on the profile's own sessions, a
    // session the profile does not keep is 404 session_not_found, and a field it does not take is refused.
    const sessionPatch=request.method==='PATCH'&&request.url.match(/^\/p\/([^/]+)\/api\/sessions\/([^/?]+)$/);
@@ -569,8 +569,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(url.pathname==='/api/status'&&request.method==='GET') return send(response,200,{version:settings.version,gateway_running:true,gateway_busy:settings.gatewayBusy,active_agents:settings.gatewayBusy?1:0});
    if(url.pathname==='/api/gateway/restart'&&request.method==='POST') {
     settings.restarts++;
-    settings.pluginsLoaded=new Set([...settings.profiles].filter(([name,held])=>settings.fileBytes.has(`/opt/data/profiles/${name}/plugins/gtmworks/plugin.yaml`)
-     &&Array.isArray(held.config?.plugins?.enabled)&&held.config.plugins.enabled.includes('gtmworks')).map(([name])=>name));
+    // Each loaded plugin's toolset carries the description its plugin.yaml held at the restart, as the Engine reports it.
+    settings.pluginsLoaded=new Map([...settings.profiles].filter(([name,held])=>settings.fileBytes.has(`/opt/data/profiles/${name}/plugins/gtmworks/plugin.yaml`)
+     &&Array.isArray(held.config?.plugins?.enabled)&&held.config.plugins.enabled.includes('gtmworks'))
+     .map(([name])=>[name,/^description: "(.*)"$/m.exec(Buffer.from(settings.fileBytes.get(`/opt/data/profiles/${name}/plugins/gtmworks/plugin.yaml`).body).toString())?.[1]??'']));
     return send(response,200,{ok:true,pid:4242,name:'gateway-restart'});
    }
    const pluginRoute=url.pathname.match(/^\/api\/plugins\/gtmworks\/(owner-sessions)$/);

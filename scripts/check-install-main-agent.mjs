@@ -17,7 +17,7 @@ import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 const {companyProfile,isAgentProfile,forbiddenOf,fixedToolsets}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
-const {releasePlugin,markOwnerSession,readOwnerSessions,readMainAgentPlugin}=await import(`${process.cwd()}/lib/engine/plugin.mjs`);
+const {releasePlugin,markOwnerSession,readOwnerSessions,readMainAgentPlugin,readOfferedPlugin}=await import(`${process.cwd()}/lib/engine/plugin.mjs`);
 
 const [step,marker]=process.argv.slice(2);
 const service=createClient('http://gateway:8080',process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -69,7 +69,8 @@ const route=`/api/plugins/gtmworks/owner-sessions?profile=${profile}`;
 // The plugin in place, file for file as this release ships it, and its toolset offered to the main Agent's Runs.
 const offered=async()=>{
  await until(`the worker places the plugin in ${profile}`,async()=>(await readMainAgentPlugin(connection)).state==='placed',240);
- await until(`the Engine offers the plugin's toolset to ${profile}`,async()=>(await toolsets(profile).catch(()=>[])).includes('gtmworks'),240);
+ // Offered at this release's revision: the running Engine loaded these files (lib/engine/plugin.mjs pluginRevision).
+ await until(`the Engine offers this release's plugin to ${profile}`,async()=>(await readOfferedPlugin(connection)).current===true,240);
  const files=(await releasePlugin()).map(file=>file.path);
  assert.ok(files.includes('__init__.py')&&files.includes('dashboard/plugin_api.py'),'the release ships the plugin');
  for(const other of (await profiles()).map(one=>one.name).filter(isAgentProfile)) assert.ok(!(await toolsets(other)).includes('gtmworks'),`${other} is offered no plugin tool`);

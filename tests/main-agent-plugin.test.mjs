@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { engineServing, withNoEngine } from './engine-records.mjs';
 import { companyProfile, toolConfig } from '../lib/agent-toolsets.mjs';
 import { provideProfile } from '../lib/engine/agents.mjs';
-import { releasePlugin } from '../lib/engine/plugin.mjs';
+import { releasePlugin, pluginRevision } from '../lib/engine/plugin.mjs';
 import { keepMainAgentPlugins } from '../lib/main-agent-plugin.mjs';
 import { checkAgentTools } from '../lib/company-profiles.mjs';
 import { companyEngine } from '../lib/engine/handle.mjs';
@@ -154,5 +154,30 @@ test('gtmworks marks a session of the main Agent\'s profile as an Owner\'s throu
   assert.equal(read.state,'found');
   assert.deepEqual(read.sessions.map(one=>[one.session,one.person]),[['conversation-1','owner-1']]);
   assert.ok(read.sessions[0].until>Date.now()/1000);
+ } finally { await fake.close(); }
+});
+
+test('plugin.yaml states the revision of the plugin\'s other files, which the Engine reports for what it loaded', async () => {
+ // A change to any file of the plugin changes its revision; plugin.yaml must then name the new one, or the worker could
+ // never tell a loaded earlier release from this one.
+ const files=await releasePlugin();
+ const yaml=files.find(file=>file.path==='plugin.yaml').data.toString();
+ assert.match(yaml,new RegExp(`^description: ".* Revision ${pluginRevision(files)}\\."$`,'m'),`plugin.yaml names revision ${pluginRevision(files)}`);
+ assert.notEqual(pluginRevision(files.map(file=>file.path==='marks.py'?{...file,data:Buffer.from('# changed')}:file)),pluginRevision(files));
+ assert.equal(pluginRevision(files.map(file=>file.path==='plugin.yaml'?{...file,data:Buffer.from('changed')}:file)),pluginRevision(files));
+});
+
+test('a new worker that finds this release\'s files in place and an earlier revision loaded restarts the Engine once', async () => {
+ // The worker wrote a changed plugin while the Engine was busy, and stopped before the Engine was free to restart: the
+ // files on disk are this release's and the Engine still runs the earlier ones.
+ const fake=await engineServing(company);
+ try {
+  await provided(fake,main);
+  await keepMainAgentPlugins(due(main),{});
+  fake.settings.pluginsLoaded.set(main,"gtmworks: the release before. Revision 000000000000.");
+  const restarts=fake.settings.restarts;
+  assert.deepEqual(await keepMainAgentPlugins(due(main),{}),{placed:0,restarted:1,offered:0});
+  assert.equal(fake.settings.restarts,restarts+1);
+  assert.deepEqual(await keepMainAgentPlugins(due(main),{}),{placed:0,restarted:0,offered:1});
  } finally { await fake.close(); }
 });
