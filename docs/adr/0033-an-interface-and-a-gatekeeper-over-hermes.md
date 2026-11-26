@@ -40,6 +40,12 @@ Not built yet. The code, `GLOSSARY.md` and the tests describe today's product un
 4. **The Owner opens the Engine's own dashboard** behind gtmworks's sign-in, in gtmworks's colours, for every Hermes page gtmworks does not show: messaging platforms, plugins, webhooks, logs, system. gtmworks draws its own screen only for what a team uses daily.
    - Settings are Hermes's own pages too (Omar, 2026-11-26, vault decision 0074, round 5): gtmworks's settings screens that show what a Hermes page shows (Providers and models, Routines, Skills, apps, an Agent's Engine settings, usage) are retired with the removals, and not before the dashboard of spec #866 is in use and Omar has tried it himself. The Conversation, the board, the Agents list and an Agent's Look stay gtmworks's own.
    - Accepted with it: those settings look as Hermes draws them in gtmworks's colours, not as the Settings and Providers designs Omar approved (vault decisions 0062 and 0063); they are the Owner's only, so a Manager no longer edits Skills or Routines; and what Hermes has not translated stays in English.
+   - Refused at the gate, because they break gtmworks itself (Omar, 2026-11-26, spec #866), each with a page that says gtmworks manages it and where; everything else is open:
+     - showing the Engine's own key. The route that shows a key cannot tell it from a model key, so showing any key is refused, and so is downloading a backup, which holds the key; writing keys stays open;
+     - updating Hermes away from the install's pin;
+     - importing a backup over the Engine's data;
+     - making, renaming or deleting a profile, so that gtmworks's list of Agents and the Engine's never disagree.
+   - The dashboard's sockets are carried by gtmworks's own web server (spec #866): within five seconds of a person's Role changing, their membership ending or their session ending, every dashboard socket they hold is closed and none reopens.
 5. **Owner, Manager, Contributor and Viewer keep fixed meanings.** Changing a Role's permissions for a Company and the separate Grants go.
    - Which Agents a Member talks to stays, in its simplest form (Omar, 2026-11-26, vault decision 0074, round 5, changing the answer that first removed it): the Agents are picked for each Member as they are today, as for a content writer who sees the content Agents and not the main Agent. An Agent not picked is not shown to that Member, and a Conversation with it is refused.
    - It is a convenience, not a wall. The board is shared: every Member sees every Agent's Cards.

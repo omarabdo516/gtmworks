@@ -1,5 +1,11 @@
 [
  {
+  "issue": 866,
+  "date": "2026-11-26",
+  "en": { "title": "Every agent engine setting, for Owners", "body": "An Owner opens gtmworks in Settings to reach the agent engine's own dashboard, in gtmworks's colours and your language, with every page and setting it has (messaging platforms, plugins, webhooks, MCP, config, logs and more), while showing a key, updating the engine, importing a backup and making or removing an Agent stay with gtmworks, and nobody else can open it." },
+  "ar": { "title": "كل إعدادات محرك الوكلاء، للمالك", "body": "المالك بيفتح gtmworks من الإعدادات ويوصل للوحة التحكم الخاصة بمحرك الوكلاء، بألوان gtmworks وبلغتك، فيها كل صفحاته وإعداداته (منصات الرسايل والإضافات والويب هوكس والـ MCP والإعدادات والسجلات وغيرهم)، أما إظهار المفاتيح وتحديث المحرك واسترجاع نسخة احتياطية وعمل وكيل أو شيله فبيفضلوا في gtmworks، ومحدش غير المالك يقدر يفتحها." }
+ },
+ {
   "issue": 791,
   "date": "2026-11-26",
   "en": { "title": "Providers settings open at once", "body": "Settings → Providers shows straight away and fills in each part as the agent engine answers it; a part the engine is slow on says it is reading, and one it cannot read keeps what it last showed." },
