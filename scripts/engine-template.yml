@@ -55,6 +55,10 @@ services:
       # left switched on, and the Engine records each move (#621): the same kind of hook, which fails the start if the
       # pinned text moved.
       - ./engine-pool-order.sh:/etc/cont-init.d/08-engine-pool-order:ro
+      # The Engine's own dashboard in gtmworks's colours (#872): gtmworks's theme where Hermes reads a user theme, and a
+      # hook that makes it the dashboard's default where the Engine's config names none, so an Owner's own pick is kept.
+      - ./engine-dashboard-theme.yaml:/opt/data/dashboard-themes/gtmworks.yaml:ro
+      - ./engine-dashboard-theme.sh:/etc/cont-init.d/09-engine-dashboard-theme:ro
       # The one way the listeners learn the address the install network gave this Engine: a hook that runs before s6
       # starts any service writes it into the container's environment, so the gateway and the dashboard bind there and
       # never to the wildcard address the sandbox's network could reach (#390).

@@ -10,6 +10,11 @@
 //   the board's event stream beside the first Owner's; within five seconds of the second Owner's Role being changed every
 //   one of theirs is closed and gets nothing after that line, the terminal included, a new one is refused, and the first
 //   Owner's board stream still reports the next Card.
+// - the dashboard is in gtmworks's colours and the Owner's language (#872): gtmworks's theme, light and dark, is the
+//   default of this new Company's Engine, with gtmworks's name where Hermes shows its wordmark, and paints its first
+//   page; the page is in the Owner's language and colour scheme, and in Arabic, right to left and dark on its next load
+//   once they changed both; a theme the Owner picks in the dashboard is theirs (the area then starts the Engine's theme
+//   hook again and finds the pick kept).
 //   APP_ORIGIN, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SIGN_IN_EMAIL, SIGN_IN_PASSWORD, ENGINE_KEY, and
 //   SUPABASE_URL where the sign-in and the database are not behind APP_ORIGIN (a local app, not an install).
 import assert from 'node:assert/strict';
@@ -38,8 +43,8 @@ async function sessionOf(who,secret) {
 const cookieOf=async(who,secret)=>(await sessionOf(who,secret)).cookie;
 // Every answer read here, so none is found to hold the Engine's key.
 const seen=[];
-async function get(path,{cookie='',referer='',method='GET',sent=undefined}={}) {
- const answer=await fetch(`${origin}${path}`,{method,redirect:'manual',body:sent===undefined?undefined:JSON.stringify(sent),headers:{...(cookie?{cookie}:{}),...(referer?{referer}:{}),...(method==='POST'?{origin}:{}),...(sent===undefined?{}:{'content-type':'application/json'})}});
+async function get(path,{cookie='',referer='',method='GET',json:sent=undefined}={}) {
+ const answer=await fetch(`${origin}${path}`,{method,redirect:'manual',body:sent===undefined?undefined:JSON.stringify(sent),headers:{...(cookie?{cookie}:{}),...(referer?{referer}:{}),...(method==='GET'?{}:{origin}),...(sent===undefined?{}:{'content-type':'application/json'})}});
  const body=await answer.text();
  seen.push(`${path} ${JSON.stringify([...answer.headers])} ${body}`);
  return {status:answer.status,body,type:answer.headers.get('content-type')??''};
@@ -112,6 +117,36 @@ assert.equal(ticket.status,200,`a socket ticket: HTTP ${ticket.status} ${ticket.
 assert.equal(await socketOpens(`${prefix}/api/ws?ticket=${encodeURIComponent(JSON.parse(ticket.body).ticket)}`,owner),101,'the Owner\'s socket opens through gtmworks');
 console.log(`The Owner of ${slug} opened the dashboard's first page, an inner page, their code, a lazily loaded page's code, an API route and a socket`);
 
+// gtmworks's theme is the default on this new Company's Engine, with no choice made by the Owner: the Engine lists it,
+// with each colour's light and dark value, and paints the first page with it before its code runs.
+const themes=JSON.parse((await get(`${prefix}/api/dashboard/themes`,{cookie:owner})).body);
+assert.equal(themes.active,'gtmworks',`gtmworks's theme is the dashboard's default: ${JSON.stringify(themes.active)}`);
+const ours=themes.themes.find(theme=>theme.name==='gtmworks')?.definition;
+const palette=ours?.palette;
+assert.match(ours?.customCSS??'',/content: "gtmworks";/,'the theme shows gtmworks\'s name where Hermes shows its wordmark');
+assert.equal(palette?.background?.hex,'light-dark(#fafafa, oklch(0.185 0 0))','the canvas, light and dark');
+assert.equal(palette?.midground?.hex,'light-dark(#262626, oklch(0.96 0 0))','the ink, light and dark');
+assert.match(first.body,/<style id="hermes-theme-bootstrap">[^<]*--background-base:light-dark\(#fafafa, oklch\(0\.185 0 0\)\)/,'the first paint is gtmworks\'s canvas');
+// The first page is in the Owner's language and colour scheme; once they change both, the next load follows them.
+const {language,theme}=(await json(`/rest/v1/people?select=language,theme&id=eq.${ownerId}`,{headers:asService}))[0];
+const marked=(page,lang,dir,scheme)=>{
+ assert.match(page.body,new RegExp(`<html lang="${lang}" dir="${dir}" style="color-scheme:${scheme}"`),`the page is marked ${lang}, ${dir}, ${scheme}`);
+ assert.ok(page.body.includes(`localStorage.setItem("hermes-locale","${lang}")`),`the dashboard is told the language ${lang}`);
+};
+marked(first,language==='ar'?'ar':'en',language==='ar'?'rtl':'ltr',{light:'light',dark:'dark'}[theme]??'light dark');
+try {
+ await json(`/rest/v1/people?id=eq.${ownerId}`,{method:'PATCH',headers:asService,body:JSON.stringify({language:'ar',theme:'dark'})});
+ const arabic=await get(prefix,{cookie:owner});
+ assert.equal(arabic.status,200);
+ marked(arabic,'ar','rtl','dark');
+ assert.match(arabic.body,/id="gtmworks-back"[^>]*>ارجع لـ gtmworks</,'the way back is in Arabic');
+} finally { await json(`/rest/v1/people?id=eq.${ownerId}`,{method:'PATCH',headers:asService,body:JSON.stringify({language,theme})}); }
+// A theme the Owner picks in the dashboard is theirs.
+const picked=await get(`${prefix}/api/dashboard/theme`,{cookie:owner,method:'PUT',json:{name:'mono'}});
+assert.equal(picked.status,200,`the Owner picks a theme: HTTP ${picked.status} ${picked.body.slice(0,200)}`);
+assert.equal(JSON.parse((await get(`${prefix}/api/dashboard/themes`,{cookie:owner})).body).active,'mono','the Owner\'s pick is the dashboard\'s theme');
+console.log('The dashboard is in gtmworks\'s theme by default, light and dark, in the Owner\'s language and colour scheme, Arabic right to left, and the Owner picked another theme');
+
 // Every other kind of person: a Manager, a Contributor and a Viewer of the same Company, and a signed-out person.
 const people=[];
 for(const role of ['manager','contributor','viewer']) {
@@ -152,7 +187,7 @@ async function liveParts(cookie,who) {
  }
  return {chat:opened[0],terminal:opened[1],board:opened[2],all:opened};
 }
-const card=async title=>{ const made=await get(`${prefix}/api/plugins/kanban/tasks`,{cookie:owner,method:'POST',sent:{title}}); assert.ok(made.status>=200&&made.status<300,`the Owner makes the Card "${title}" from the dashboard: HTTP ${made.status} ${made.body.slice(0,200)}`); };
+const card=async title=>{ const made=await get(`${prefix}/api/plugins/kanban/tasks`,{cookie:owner,method:'POST',json:{title}}); assert.ok(made.status>=200&&made.status<300,`the Owner makes the Card "${title}" from the dashboard: HTTP ${made.status} ${made.body.slice(0,200)}`); };
 const firstLive=await liveParts(owner,'first'), secondLive=await liveParts(second.cookie,'second');
 await until('the second Owner\'s terminal writes to them',()=>secondLive.terminal.text.length>0,30000);
 await card('A Card both board streams report');
