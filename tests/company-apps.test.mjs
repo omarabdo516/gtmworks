@@ -5,7 +5,7 @@ import { provideProfile } from '../lib/engine/agents.mjs';
 import { readApps, testApp, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/engine/apps.mjs';
 import { readUsage } from '../lib/engine/sessions.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
-import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentTools, readCompanyUsage, testAgentTool } from '../lib/company-apps.mjs';
+import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentSession, readAgentTools, readCompanyUsage, testAgentTool } from '../lib/company-apps.mjs';
 import { changeCompanyServer } from '../lib/company-servers.mjs';
 import { mergedState } from '../lib/app-catalogue.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
@@ -156,6 +156,27 @@ test('one Agent\'s apps are read from its own profile alone, by key; an Agent th
   assert.equal((await withDriver(DRIVER,driver,()=>readAgentApps(someone.db,{company,agent:lead})))?.amplitude,'connected');
   assert.equal(await withDriver(DRIVER,driver,()=>readAgentApps(someone.db,{company,agent:analyst})),null,'an Agent not listed for the person');
   assert.equal(await withDriver(DRIVER,{read:async()=>({state:'unreachable',apps:null})},()=>readAgentApps(someone.db,{company,agent:writer})),null);
+ } finally { await fake.close(); }
+});
+
+// #782: a Conversation's session is read on its Agent's profile as the Engine handle gives it to the reader. An Agent
+// hidden from them (company_app_agents does not list it) is not seen, from the handle, and the Engine is not asked.
+test('an Agent\'s session is read from its own profile as the reader sees it, and one hidden from them is not seen and never asked', async () => {
+ const fake=await engineServing(company);
+ try {
+  const at=Date.now()/1000;
+  fake.settings.sessions.set('s-writer',{profile:agentProfile(writer),messages:[{role:'user',content:'Plan the week',timestamp:at-5},{role:'assistant',content:'Done.',timestamp:at}]});
+  fake.settings.sessions.set('s-analyst',{profile:agentProfile(analyst),messages:[{role:'user',content:'Numbers',timestamp:at}]});
+  const sees=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow,writerRow]});
+  const read=await readAgentSession(sees.db,{company,agent:writer,session:'s-writer'});
+  assert.ok(read&&read!=='notSeen'&&read.turns.length===1,'the reader who sees Writer reads its session');
+  const asked=fake.settings.managementRequests.length;
+  assert.equal(await readAgentSession(sees.db,{company,agent:analyst,session:'s-analyst'}),'notSeen','Analyst is hidden from this reader');
+  assert.equal(fake.settings.managementRequests.length,asked,'nothing is asked of the Engine for a hidden Agent');
+  const ownerSees=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow,analystRow]});
+  const own=await readAgentSession(ownerSees.db,{company,agent:analyst,session:'s-analyst'});
+  assert.ok(own&&own!=='notSeen'&&own.turns.length===1,'the Owner, who sees every Agent, reads it');
+  assert.equal(await readAgentSession(ownerSees.db,{company,agent:writer,session:'s-analyst'}),null,'a session of another profile is not read on this one');
  } finally { await fake.close(); }
 });
 
