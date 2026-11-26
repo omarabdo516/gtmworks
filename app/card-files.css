@@ -1,0 +1,25 @@
+/* A Card's files (#843; design-reference-card: .cw-files, .cw-file, .cw-fls, .cw-fl, .ib--sm, .cwp__add) */
+.gw .cw .cw-files { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.gw .cw .cw-fls { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; width: 100%; }
+.gw .cw .cwp--chips > .cw-fls { flex: 1 1 0; min-width: 0; padding-block: 4px; }
+.gw .cw .cw-fl { display: grid; gap: 2px; justify-items: start; min-width: 0; max-width: 100%; }
+.gw .cw .cw-file { max-width: 100%; min-width: 0; color: var(--gw-text-1); }
+.gw .cw .cw-file bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: hover) { .gw .cw a.cw-file:hover { background: var(--gw-bg-secondary-hover); } }
+.gw .cw a.cw-file:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw .cw-file.is-off { color: var(--gw-text-3); cursor: default; }
+.gw .cw .cw-fl__note { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); padding-inline: 4px; }
+/* An image is a thumbnail of itself above its chip, as a reply's is (#708) */
+.gw .cw .cw-thumb img { max-width: min(100%, 220px); max-height: 140px; }
+.gw .cw .cwp__add { font-size: var(--gw-fs-sm); }
+.gw .cw .ib { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 36px; height: 36px; padding: 0 9px; flex: none;
+  border: 0; background: transparent; border-radius: var(--gw-r-full); color: var(--gw-text-2); cursor: pointer;
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out), color var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .cw .ib::before { content: ""; position: absolute; inset: -4px; }
+@media (hover: hover) { .gw .cw .ib:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+.gw .cw .ib:disabled { color: var(--gw-text-4, var(--gw-text-3)); background: transparent; cursor: default; }
+.gw .cw .ib:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw .ib--sm { min-width: 32px; height: 32px; padding: 0 7px; }
+.gw .cw .ib--sm::before { inset: -6px; }
+.gw .cw .ib--sm .gw-icon { width: 16px; height: 16px; }
+.gw .cw .cw-result .cw-files, .gw .cw .lg-body .cw-files { margin-top: var(--s1); }
