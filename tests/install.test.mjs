@@ -614,7 +614,7 @@ test('the install job proves a first-Owner link holds a Company, a fresh link en
   "grep -o 'http://[^[:space:]]*/first-owner#code=[a-f0-9]*'",
   'the link secret itself is stored nowhere',
   'the Company exists nowhere until its link is used',
-  'company list shows the Company waiting for its Owner',
+  'company list shows the Company waiting for its first Administrator',
   'a fresh link ends the earlier one',
   'check-install-owner-link.mjs',
   'the link makes the Company on its own Engine record',

@@ -48,7 +48,7 @@ A Manager's or Contributor's ask for a new Agent, which the main Agent prepares 
 _Avoid_: proposal, ticket
 
 **Request to open an Agent / طلب فتح وكيل**:
-A Manager's or Contributor's ask to work with an Agent hidden from them. When they ask the main Agent for work that belongs to such an Agent, the main Agent says that job belongs to an Agent they do not have, without naming it, and its card asks whether to request it from the person who chooses which Agents they work with. Their "Ask" puts it in the "Waiting on you" of the Administrator and of every Manager who sees that Agent; one of them opens it for them (that Member's switch for that Agent) or says no, and the answer comes back to the Member's Conversation.
+A Manager's or Contributor's ask to work with an Agent hidden from them. When they ask the main Agent for work that belongs to such an Agent, the main Agent says that job belongs to an Agent they do not have, without naming it, and its card asks whether to request it from the person who chooses which Agents they work with. Their "Ask" puts it in the "Waiting on you" of every Administrator and of every Manager who sees that Agent; one of them opens it for them (that Member's switch for that Agent) or says no, and the answer comes back to the Member's Conversation.
 _Avoid_: access ticket, permission request
 
 **Change proposal / اقتراح تغيير**:
@@ -71,7 +71,7 @@ One tool call the Engine reported for the Run behind an Agent's reply in a Conve
 _Avoid_: action, task, activity
 
 **Channel / قناة**:
-A conversation that a Company's Members and Agents share, where an Agent reads and replies only when a message calls it by name. A Company that works as a team has its general channel («عام»), which holds every Member; an Administrator or a Manager makes a team channel, for a campaign or a department, with the Members and Agents they choose, and changes both later. A Member outside a team channel does not see that it exists, the Administrator included. Inside a channel its Members see and call its Agents, even one hidden from them elsewhere; outside it nothing changes, and a direct Conversation with that Agent stays impossible. Each Member's unread count is the messages others wrote since they last opened it.
+A conversation that a Company's Members and Agents share, where an Agent reads and replies only when a message calls it by name. A Company that works as a team has its general channel («عام»), which holds every Member; an Administrator or a Manager makes a team channel, for a campaign or a department, with the Members and Agents they choose, and changes both later. A Member outside a team channel does not see that it exists, the Administrators included. Inside a channel its Members see and call its Agents, even one hidden from them elsewhere; outside it nothing changes, and a direct Conversation with that Agent stays impossible. Each Member's unread count is the messages others wrote since they last opened it.
 _Avoid_: room, group chat, thread
 
 **Engine / المحرك**:
@@ -79,11 +79,11 @@ The agent program that runs a Conversation's replies, today the Hermes that ship
 _Avoid_: model, provider, backend
 
 **Provider / مزوّد**:
-One way a Company's Engine reaches models: a subscription the Company signed in to, such as Claude or ChatGPT, or an API key, with the name the Administrator gives it, such as "Claude · Said". A Company may hold several, of one kind or of different kinds. They belong to the whole Company, never to one Agent: an Agent chooses a model, and the Engine chooses the Provider it reaches that model through, moving to the next one of the same kind, in the Administrator's order, when one runs out. Only the Administrator adds, orders or switches off a Provider. Each Provider lists the models it offers, and only the ones switched on are offered when a model is chosen.
+One way a Company's Engine reaches models: a subscription the Company signed in to, such as Claude or ChatGPT, or an API key, with the name an Administrator gives it, such as "Claude · Said". A Company may hold several, of one kind or of different kinds. They belong to the whole Company, never to one Agent: an Agent chooses a model, and the Engine chooses the Provider it reaches that model through, moving to the next one of the same kind, in the Administrators' order, when one runs out. Only an Administrator adds, orders or switches off a Provider. Each Provider lists the models it offers, and only the ones switched on are offered when a model is chosen.
 _Avoid_: account, subscription, key, connection
 
 **Fallback model / الموديل البديل**:
-The model a Company's Agents move to when every Provider of the model they chose has run out. There is none until the Administrator picks one, and with none an Agent never moves to another kind of Provider.
+The model a Company's Agents move to when every Provider of the model they chose has run out. There is none until an Administrator picks one, and with none an Agent never moves to another kind of Provider.
 _Avoid_: backup model, failover
 
 **Work sandbox / صندوق الشغل**:
@@ -193,7 +193,7 @@ A setting the install holds once for every Company, such as the address people r
 _Avoid_: global, system-wide, default
 
 **Lesson / درس**:
-A lasting rule a Contributor taught an agent, suggested for the whole team. It waits in "Waiting on you" for the company's Administrator and Managers; nothing reaches any agent until one approves it, when it lands in the shared Skill `team-lessons`, and a rejected lesson never does.
+A lasting rule a Contributor taught an agent, suggested for the whole team. It waits in "Waiting on you" for the company's Administrators and Managers; nothing reaches any agent until one approves it, when it lands in the shared Skill `team-lessons`, and a rejected lesson never does.
 _Avoid_: memory, note, feedback
 
 **Inbox / الوارد**:

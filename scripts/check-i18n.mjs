@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 // The Role is Administrator / أدمن (#902). The install owner (صاحب التثبيت) and the CLI's --owner flag are not the Role.
-const oldRoleName={en:/(?<!install |--)\b[Oo]wners?\b/,ar:/مالك(?:ًا|ون|ين|ي)?(?![\p{L}\u064B-\u0652])/u};
+const oldRoleName={en:/(?<![Ii]nstall\s+|--)\b[Oo]wners?\b/i,ar:/مالك(?:ًا|ون|ين|ي|ة|و|ها|ه|هم)?(?![\p{L}\u064B-\u0652])|صاحب (?:ال)?شركة/u};
 export function catalogueProblems(en, ar) {
  const problems=[];
  for(const key of new Set([...Object.keys(en),...Object.keys(ar)])) {

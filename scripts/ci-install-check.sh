@@ -619,8 +619,8 @@ first_hash=$(printf '%s' "${first_link#*#code=}" | sha256sum | cut -d' ' -f1)
 [[ $(db -c "select count(*) from public.company_owner_links where company_name='Linked Company' and secret_hash='$first_hash' and claimed_at is null") == 1 ]] || fail 'only the link secret is kept, hashed, and the link waits'
 [[ $(db -c "select count(*) from public.company_owner_links where secret_hash='${first_link#*#code=}'") == 0 ]] || fail 'the link secret itself is stored nowhere'
 [[ $(db -c "select count(*) from public.companies where name='Linked Company'") == 0 ]] || fail 'the Company exists nowhere until its link is used'
-sh scripts/install.sh company list | tee company-waiting.log || fail 'company list with a Company waiting for its Owner'
-grep -F "Company \"Linked Company\": waiting for its first Administrator (Engine http://gtmworks-engine-linked-company" company-waiting.log || fail 'company list shows the Company waiting for its Owner'
+sh scripts/install.sh company list | tee company-waiting.log || fail 'company list with a Company waiting for its first Administrator'
+grep -F "Company \"Linked Company\": waiting for its first Administrator (Engine http://gtmworks-engine-linked-company" company-waiting.log || fail 'company list shows the Company waiting for its first Administrator'
 sh scripts/install.sh company link 'Linked Company' > company-link-fresh.log 2>&1 || fail 'company link prints a fresh link'
 cat company-link-fresh.log
 second_link=$(grep -o 'http://[^[:space:]]*/first-owner#code=[a-f0-9]*' company-link-fresh.log | head -n 1)
