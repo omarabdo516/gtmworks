@@ -447,6 +447,19 @@ for service in web worker; do
 done
 docker exec "$(compose ps -q web)" node -e "fetch('http://$second_container:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
   || fail 'the recreated app reaches the second Engine'
+# #773: a healthy Engine is one gtmworks can read and write. With only its management listener stopped, by the image's
+# own supervisor, the Run listener still answers and Docker reports the Engine unhealthy (its health check's sixty
+# retries, five seconds apart); started again, the Engine is healthy again.
+engine_health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$second_container"; }
+[[ $(engine_health) == healthy ]] || fail 'the second Engine is healthy before its management listener stops'
+docker exec -u 0 "$second_container" /command/s6-svc -wD -d /run/service/dashboard || fail "stop only the second Engine's management listener"
+for _ in $(seq 90); do [[ $(engine_health) == unhealthy ]] && break; sleep 5; done
+[[ $(engine_health) == unhealthy ]] || fail 'an Engine whose management listener is stopped reports unhealthy'
+docker exec "$(compose ps -q web)" node -e "fetch('http://$second_container:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
+  || fail "the second Engine's Run listener answers while its management listener is stopped"
+docker exec -u 0 "$second_container" /command/s6-svc -u /run/service/dashboard || fail "start the second Engine's management listener again"
+for _ in $(seq 60); do [[ $(engine_health) == healthy ]] && break; sleep 2; done
+[[ $(engine_health) == healthy ]] || fail 'the second Engine is healthy again once its management listener answers'
 # From inside the second Engine's network the first Engine cannot be reached, and neither can any install service.
 docker run --rm --network "$second_network" node:22.14.0-alpine3.21 node --input-type=module -e "try { await fetch('http://gtmworks-engine-first:8642/health',{signal:AbortSignal.timeout(5000)}); process.exit(1); } catch { console.log('the other Engine is unreachable'); }" || fail 'one Engine cannot reach another'
 docker run --rm --network "$second_network" -e INSTALL_SERVICE_IPS="$(install_service_ips)" -v "$PWD/scripts:/check:ro" \
