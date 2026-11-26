@@ -8667,6 +8667,28 @@ $$;
 ALTER FUNCTION public.queued_conversations(just uuid, after uuid) OWNER TO postgres;
 
 --
+-- Name: queued_turn_start(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.queued_turn_start(conversation uuid, message_key uuid) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select case
+  when q.conversation_id is null then 'waiting'
+  when q.started_at is not null then 'started'
+  when q.failed_at is not null then case when q.model_refused then 'modelRefused' else 'failed' end
+  when r.conversation_id is null or r.abandoned_at is not null or r.start_unknown_at is not null then 'waiting'
+  else 'inFlight'
+ end
+ from (select 1) as one
+ left join public.conversation_queued_turns q on q.conversation_id=conversation and q.send_key=message_key
+ left join public.conversation_run_reservations r on r.conversation_id=conversation and r.send_key=message_key;
+$$;
+
+ALTER FUNCTION public.queued_turn_start(conversation uuid, message_key uuid) OWNER TO postgres;
+
+--
 -- Name: read_channel(uuid, bigint); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -21079,6 +21101,13 @@ GRANT ALL ON FUNCTION public.queued_conversations(just uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.queued_conversations(just uuid, after uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.queued_conversations(just uuid, after uuid) TO service_role;
+
+--
+-- Name: FUNCTION queued_turn_start(conversation uuid, message_key uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.queued_turn_start(conversation uuid, message_key uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.queued_turn_start(conversation uuid, message_key uuid) TO service_role;
 
 --
 -- Name: FUNCTION read_channel(ch uuid, through bigint); Type: ACL; Schema: public; Owner: postgres
