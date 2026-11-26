@@ -64,6 +64,10 @@ const paths = {
  alert: <><path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.5v.01"/></>,
  bolt: <path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>,
  hourglass: <><path d="M7 3.5h10M7 20.5h10"/><path d="M8 3.5c0 4.5 8 4.5 8 8.5s-8 4-8 8.5"/><path d="M16 3.5c0 4.5-8 4.5-8 8.5s8 4 8 8.5"/></>,
+ // A Card's Runs (design-reference-card: ICONS.play).
+ play: <path d="M8 5.5v13l10.5-6.5z"/>,
+ // A Card's publishing date (design-reference-card: ICONS.calendar).
+ calendar: <><rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></>,
  open: <><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></>,
 };
 export type ShellIconName = keyof typeof paths;

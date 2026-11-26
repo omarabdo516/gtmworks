@@ -1,6 +1,7 @@
 import { test, expect, freshSeed } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
-import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
+import { clickPath, idle, measureClick, measuredCard, median, type Timing } from './navigation-measure';
+import { laneHermes } from './lane-hermes';
 import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -17,8 +18,12 @@ const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 
 // deadline. Cleanup approves only that card, found by its own address and its run-unique title; each worker (a retry
 // starts a new one) cleans the card it created and nothing else.
 let inboxFixture: { title: string, path: string } | undefined;
+// The lane's fake Engine holds the one Card the measured path opens over the board (#835), at the id the path names.
+let engine: Awaited<ReturnType<typeof laneHermes>> | undefined;
 test.beforeAll(async ({ browser }, testInfo) => {
   freshSeed(testInfo);
+  engine = await laneHermes();
+  engine.settings.kanban.task({ id: measuredCard, title: 'Measured card', status: 'ready', body: '- [ ] Open it' });
   const context = await browser.newContext({ baseURL: appOrigin });
   try {
     const page = await context.newPage();
@@ -33,6 +38,7 @@ test.beforeAll(async ({ browser }, testInfo) => {
     await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
   } finally { await context.close(); }
 });
+test.afterAll(async () => { await engine?.close(); engine = undefined; });
 test.afterAll(async ({ browser }) => {
   const created = inboxFixture;
   if (!created) return;
@@ -152,9 +158,9 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
 });
 
 // #771, #739: a link loads its page only on intent. Loading the board renders no other page in the background; pointing
-// at a link prefetches its whole page, which the press then opens. Closing a Card's sheet over the visited board returns
-// with the Engine's Card window (#835).
-test('links prefetch only on intent: nothing in the background, and a pointed link\'s whole page', async ({ page: sessionPage }) => {
+// at a link prefetches its whole page, which the press then opens; opening and closing a Card's window over the visited
+// board (#835) asks the server for no page.
+test('links prefetch only on intent: nothing in the background, a pointed link\'s whole page, and closing reuses the visited board', async ({ page: sessionPage }) => {
   await signIn(sessionPage, 'manager@example.com', '/c/rs-learning/work/board');
   const page = await sessionPage.context().newPage();
   const prepared = new Map<string, string>();
@@ -179,12 +185,23 @@ test('links prefetch only on intent: nothing in the background, and a pointed li
   expect(prepared.get('/c/rs-learning/numbers'), 'page data, not a partial layout/loading shell').toContain('"content"');
   expect([...prepared.keys()], 'and only that one').toEqual(['/c/rs-learning/numbers']);
   await closeNavigation(page);
+  const requests: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.startsWith('/c/')) requests.push(request.url());
+  });
+  await page.locator(`#board-cols .kcard[data-card="${measuredCard}"] a`).click();
+  await expect(page.locator('.cw[open]')).toBeVisible();
+  await idle(page);
+  await page.getByRole('dialog').getByRole('button', { name: 'Close the card', exact: true }).click();
+  await expect(page.locator('.cw')).toHaveCount(0);
+  await idle(page);
+  expect(requests, 'opening a Card and returning to the board must make no company server request').toEqual([]);
 });
 
 test('reduced motion disables hover, veil and card animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
-  for (const step of clickPath.slice(0, 5)) {
+  for (const step of clickPath.slice(0, 7)) {
     const timing = await measureClick(page, step);
     expect(timing.longest).toBe(0);
   }

@@ -1,5 +1,6 @@
 'use client';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { BoardIcon } from '@/components/board-icon';
@@ -7,6 +8,7 @@ import { ShellIcon, type ShellIconName } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
 import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { cardColumns, columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-columns.mjs';
+import { CardWindow } from '@/app/card-window';
 import { followBoard } from '@/app/board-live';
 import '@/app/board.css';
 import type { MadeBoard } from './new-card';
@@ -88,6 +90,22 @@ export default function Board({company,slug,writer,creating=false}:{company:stri
  const [making,setMaking]=useState(creating&&writer); const opener=useRef<HTMLButtonElement>(null); const [made,setMade]=useState<string|null>(null);
  const cards=read.board?.cards??null; const main=read.board?.main??null;
  const base=`/c/${slug}/work`;
+ // A Card opens over the board at its own address (#835), which reloads, survives sign-in and is a link to share; opening
+ // and closing it only change the address, so the board stays as it was read. A history entry it adds carries no state of
+ // its own: Next.js's router takes one with its own state for its own navigation and would not follow the address.
+ const opened=useSearchParams().get('card'); const open=opened&&/^[A-Za-z0-9_-]{1,64}$/.test(opened)?opened:null;
+ const cardHref=(id:string)=>`${base}/board?card=${encodeURIComponent(id)}`;
+ // Each Card opened from here is one step of the browser's history, so Back closes it; closing goes back over every step
+ // the window took (a Card it waits for, opened from it), to the board as it was. A Card a link opened on load has no
+ // step to go back over: closing it puts the board's own address in its place.
+ const steps=useRef(0);
+ useEffect(()=>{ const moved=()=>{ steps.current=new URLSearchParams(location.search).has('card')?Math.max(0,steps.current-1):0; };
+  window.addEventListener('popstate',moved); return ()=>window.removeEventListener('popstate',moved); },[]);
+ const showCard=(id:string)=>{ history.pushState(null,'',cardHref(id)); steps.current+=1; };
+ const openCard=(event:MouseEvent<HTMLAnchorElement>,id:string)=>{ if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||event.button!==0) return; event.preventDefault(); showCard(id); };
+ const closeCard=()=>{ const id=open;
+  if(steps.current>0) { history.go(-steps.current); steps.current=0; } else history.replaceState(null,'',`${base}/board`);
+  if(id) requestAnimationFrame(()=>document.querySelector<HTMLElement>(`#board-cols .kcard[data-card="${CSS.escape(id)}"] a`)?.focus()); };
  const columnName=(column:string)=>t(columnLabel(column,writer));
  const symbolName=(symbol:CardSymbol)=>symbol.kind==='waits'&&symbol.count>1?t('symWaitsN',symbol.count):t(symbolKey[symbol.kind]);
  const cardView=(card:BoardCard)=>{
@@ -96,7 +114,7 @@ export default function Board({company,slug,writer,creating=false}:{company:stri
   const label=[card.title,columnName(card.column),card.symbol?symbolName(card.symbol):'',t('boardCardAssignee',who),card.comments?comments:''].filter(Boolean).join(' · ');
   const symbol=card.symbol&&symbols[card.symbol.kind];
   return <article key={card.id} className={`kcard card${made===card.id?' is-flash':''}`} data-card={card.id} aria-label={label}>
-   <span className="kt-head"><strong className="kcard__title authored-title" dir="auto">{card.title}</strong>
+   <span className="kt-head"><a className="kcard__title authored-title" dir="auto" href={cardHref(card.id)} onClick={event=>openCard(event,card.id)}><strong>{card.title}</strong></a>
     {card.symbol&&symbol&&<span className="kt-syms"><span className={`sym sym--${symbol.tone}`} data-sym={card.symbol.kind} role="img" aria-label={symbolName(card.symbol)} title={symbolName(card.symbol)}>
      {symbol.icon?<ShellIcon name={symbol.icon}/>:<span className="sym__dot"/>}{card.symbol.kind==='waits'&&card.symbol.count>1&&<span className="sym__n num" aria-hidden="true">{card.symbol.count}</span>}</span></span>}</span>
    <span className="kcard__foot">
@@ -127,6 +145,7 @@ export default function Board({company,slug,writer,creating=false}:{company:stri
     </section>;
    })}
   </div>
+  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} cardHref={cardHref} showCard={showCard} onBoard={answer=>{ if(answer.cards) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); }} onClose={closeCard}/>}
  {making&&<Suspense fallback={null}><NewCard company={company} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}
   onClose={()=>{ setMaking(false); if(creating&&window.location.pathname.endsWith('/work/new')) window.history.replaceState(window.history.state,'',`${base}/board`); opener.current?.focus(); }}/></Suspense>}
  </div></div>;
