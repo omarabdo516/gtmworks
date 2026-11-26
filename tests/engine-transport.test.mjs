@@ -82,6 +82,26 @@ test('a listener that timed out is asked less often by every caller until it ans
  } finally { logged.mock.restore(); await engine.close(); }
 });
 
+test('a call that cannot wait out a slow listener fails at once, even behind a call that waits, and none is sent to time out', async()=>{
+ const engine=await slowListener();
+ const logged=mock.method(console,'log',()=>{});
+ try {
+  const at={address:engine.address,key:'k'};
+  engine.state.delay=5000;
+  await failureOf(engineRequest(at,{path:'/health',deadline:50}));
+  engine.state.delay=0;
+  // One call waits out the 250 ms, holding the one turn a slow listener gives.
+  const waiting=engineRequest(at,{path:'/health',deadline:3000});
+  // Another, whose deadline would leave too little for the wire after that wait, does not queue behind it.
+  const began=Date.now();
+  const short=await failureOf(engineRequest(at,{path:'/health',deadline:400}));
+  assert.equal(short.cause,'timedOut'); assert.equal(short.sent,false);
+  assert.ok(Date.now()-began<60,`it failed at once (${Date.now()-began} ms)`);
+  assert.equal((await waiting).status,200);
+  assert.equal(engine.state.arrivals.length,2,'the short call was never sent');
+ } finally { logged.mock.restore(); await engine.close(); }
+});
+
 test('a listener nothing connects to is down, asked one call at a time by every caller, and back the moment it answers', async()=>{
  const engine=await listener();
  const logged=mock.method(console,'log',()=>{});
