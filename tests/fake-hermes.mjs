@@ -47,19 +47,22 @@ export function screenFrame(grab) {
 // Task): its statuses in column order, and its tasks as the Task dataclass holds them. A test puts a task on it with
 // `task(fields)` (an id `t_` and eight hex digits, as _new_task_id makes), links a child to the parent it waits for with
 // `link`, and comments with `comment`; `board()` is GET /board's answer. Each change is a row of its append-only
-// `events` (kanban_db.py task_events: an id, the task, its kind and payload), which the board's event socket tails; a test
-// moves a task to another status with `move`, as a worker or another person would, and records any other change with
-// `event`.
+// `events` (kanban_db.py task_events: an id, the task, its Run, its kind and payload), which the board's event socket
+// tails and GET /tasks/{id} lists; a test moves a task to another status with `move`, as a worker or another person
+// would, records any other change with `event`, and gives a task its Runs with `run` (the Run dataclass). A Card whole
+// is `detail(id)`, GET /tasks/{id}'s answer.
 export const kanbanStatuses=['triage','todo','scheduled','ready','running','blocked','review','done'];
 function kanbanBoard() {
  const tasks=/** @type {any[]} */([]);
  const links=/** @type {{parent_id:string,child_id:string}[]} */([]);
  const comments=/** @type {{id:number,task_id:string,author:string,body:string,created_at:number}[]} */([]);
- const events=/** @type {{id:number,task_id:string,run_id:string|null,kind:string,payload:any,created_at:number}[]} */([]);
+ const events=/** @type {{id:number,task_id:string,run_id:number|null,kind:string,payload:any,created_at:number}[]} */([]);
+ const runs=/** @type {any[]} */([]);
  let clock=Math.floor(Date.now()/1000);
- /** @param {string} task @param {string} kind @param {any} [payload] */
- const event=(task,kind,payload=null)=>{ events.push({id:events.length+1,task_id:task,run_id:null,kind,payload,created_at:++clock}); };
- return {tasks,links,comments,events,event,
+ /** @param {string} task @param {string} kind @param {any} [payload] @param {number|null} [run] */
+ const event=(task,kind,payload=null,run=null)=>{ events.push({id:events.length+1,task_id:task,run_id:run,kind,payload,created_at:++clock}); };
+ const summaryOf=id=>runs.filter(run=>run.task_id===id&&run.summary).at(-1)?.summary??tasks.find(task=>task.id===id)?.latest_summary??null;
+ return {tasks,links,comments,events,event,runs,
   /** @param {string} id @param {string} status */
   move(id,status) {
    const task=tasks.find(found=>found.id===id); if(!task) return;
@@ -78,6 +81,28 @@ function kanbanBoard() {
    tasks.push(task);
    event(task.id,'created',{assignee:task.assignee,status:task.status});
    return task;
+  },
+  /** @param {string} task @param {Record<string,any>} fields */
+  run(task,fields={}) {
+   const run={id:runs.length+1,task_id:task,profile:null,step_key:null,status:'running',claim_lock:null,claim_expires:null,worker_pid:null,max_runtime_seconds:null,
+    last_heartbeat_at:null,started_at:++clock,ended_at:null,outcome:null,summary:null,metadata:null,error:null,...fields};
+   runs.push(run);
+   return run;
+  },
+  // GET /tasks/{id} (get_task): the task with its full latest summary, its comments, events, attachments, links (each
+  // linked task's id, title and status), its children's results and its Runs; null for a task that is not there.
+  /** @param {string} id */
+  detail(id) {
+   const task=tasks.find(found=>found.id===id);
+   if(!task) return null;
+   const parents=links.filter(link=>link.child_id===id).map(link=>link.parent_id).sort();
+   const children=links.filter(link=>link.parent_id===id).map(link=>link.child_id).sort();
+   const linked=[...new Set([...parents,...children])].map(other=>tasks.find(found=>found.id===other)).filter(Boolean);
+   return {task:{...task,latest_summary:summaryOf(id),current_run_started_at:null},
+    comments:comments.filter(comment=>comment.task_id===id),events:events.filter(event=>event.task_id===id),attachments:[],
+    links:{parents,children},link_tasks:linked.map(other=>({id:other.id,title:other.title,status:other.status})),
+    child_results:children.map(child=>tasks.find(found=>found.id===child)).filter(Boolean).map(child=>({id:child.id,title:child.title,status:child.status,latest_summary:summaryOf(child.id),result:child.result})),
+    runs:runs.filter(run=>run.task_id===id)};
   },
   /** @param {string} parent @param {string} child */
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
@@ -118,7 +143,7 @@ function kanbanBoard() {
    const now=Math.floor(Date.now()/1000);
    const columns=[...kanbanStatuses,...archived?['archived']:[]].map(name=>{
     const listed=tasks.filter(task=>task.status===name).map(task=>({...task,age:{created_age_seconds:now-task.created_at,started_age_seconds:task.started_at==null?null:now-task.started_at,
-     time_to_complete_seconds:task.completed_at==null?null:task.completed_at-(task.started_at??task.created_at)},latest_summary:task.latest_summary??null,current_run_started_at:null,
+     time_to_complete_seconds:task.completed_at==null?null:task.completed_at-(task.started_at??task.created_at)},latest_summary:summaryOf(task.id)?.slice(0,200)??null,current_run_started_at:null,
      link_counts:counts(task.id),comment_count:comments.filter(comment=>comment.task_id===task.id).length,progress:progress(task.id),warnings:null}));
     if(name==='done') listed.sort((a,b)=>(b.completed_at??0)-(a.completed_at??0)||(b.id<a.id?-1:1));
     else listed.sort((a,b)=>b.priority-a.priority||a.created_at-b.created_at);
@@ -1189,6 +1214,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     return send(response,200,{task:settings.kanban.create(body)});
    }
    const kanbanTask=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)$/);
+   // One Card whole (get_task, #835): the task, its comments, events, links and Runs.
+   if(kanbanTask&&request.method==='GET') { const detail=settings.kanban.detail(decodeURIComponent(kanbanTask[1]));
+    return detail?send(response,200,detail):send(response,404,{detail:`task ${decodeURIComponent(kanbanTask[1])} not found`}); }
    if(kanbanTask&&request.method==='PATCH') {
     const task=settings.kanban.tasks.find(found=>found.id===decodeURIComponent(kanbanTask[1]));
     if(!task) return send(response,404,{detail:`task ${kanbanTask[1]} not found`});

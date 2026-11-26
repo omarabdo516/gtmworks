@@ -1,1 +1,1 @@
-| `navigation-path.test.mjs` | The measured navigation path keeps the Inbox and the Activity log. | 1.4 s | navigation.spec.ts | keep |
+| `navigation-path.test.mjs` | The measured navigation path keeps the Inbox and the Activity log, and opens and closes a Card's window on the Engine's board with the window's own motion as its allowance (#835). | 1.4 s | navigation.spec.ts | keep |
