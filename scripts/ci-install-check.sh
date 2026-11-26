@@ -1431,7 +1431,7 @@ docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PW
 # The Owner's Hermes dashboard on the pinned Engine (#869): the Owner just made opens its first page, an inner page, its
 # code at both addresses, an API route and a socket through the proxy and gtmworks's gate; a Manager, a Contributor, a
 # Viewer and a signed-out person get the missing page and no socket; no answer holds the Engine's key, given by name;
-# and the Engine still publishes no port on this machine.
+# and nothing of the Engine is reached on this machine but through the gate.
 engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ -n $engine_id ]] && ! publishes_host_port "$engine_id" || fail 'the Engine publishes no host port'
 ENGINE_KEY=$(first_engine_key) docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" \

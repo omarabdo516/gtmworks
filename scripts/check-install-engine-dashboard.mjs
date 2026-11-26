@@ -6,7 +6,8 @@
 // - a Manager, a Contributor and a Viewer of the same Company, made here, and a signed-out person each get the missing
 //   page there (the answer for a Company that does not exist) on a page, a code file and an API route, and no socket;
 // - no answer to any of them holds the Engine's key (ENGINE_KEY, given by name).
-//   APP_ORIGIN, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SIGN_IN_EMAIL, SIGN_IN_PASSWORD, ENGINE_KEY
+//   APP_ORIGIN, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SIGN_IN_EMAIL, SIGN_IN_PASSWORD, ENGINE_KEY, and
+//   SUPABASE_URL where the sign-in and the database are not behind APP_ORIGIN (a local app, not an install).
 import assert from 'node:assert/strict';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
@@ -18,17 +19,19 @@ assert.ok(origin&&anon&&service&&email&&password&&engineKey,'APP_ORIGIN, the two
 // The install runs self-hosted, where the app's sign-in keeps the session in this cookie (lib/supabase-settings.mjs).
 const cookieName='sb-gtmworks-auth-token';
 
+const api=process.env.SUPABASE_URL||origin;
 const asService={apikey:service,Authorization:`Bearer ${service}`,'content-type':'application/json'};
 async function json(path,init={}) {
- const answer=await fetch(`${origin}${path}`,init);
+ const answer=await fetch(`${api}${path}`,init);
  const text=await answer.text();
  assert.ok(answer.ok,`${init.method??'GET'} ${path}: HTTP ${answer.status} ${text.slice(0,300)}`);
  return text?JSON.parse(text):null;
 }
-async function cookieOf(who,secret) {
+async function sessionOf(who,secret) {
  const session=await json('/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:anon,'content-type':'application/json'},body:JSON.stringify({email:who,password:secret})});
- return `${cookieName}=base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}`;
+ return {person:session.user.id,cookie:`${cookieName}=base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}`};
 }
+const cookieOf=async(who,secret)=>(await sessionOf(who,secret)).cookie;
 // Every answer read here, so none is found to hold the Engine's key.
 const seen=[];
 async function get(path,{cookie='',referer='',method='GET'}={}) {
@@ -51,8 +54,9 @@ function socketOpens(path,cookie) {
  });
 }
 
-const owner=await cookieOf(email,password);
-const [{slug,id:company}]=await json('/rest/v1/companies?select=id,slug&order=created_at.asc&limit=1',{headers:asService});
+const {person:ownerId,cookie:owner}=await sessionOf(email,password);
+// The Owner's own Company: first run made one.
+const [{company,companies:{slug}}]=await json(`/rest/v1/members?select=company:company_id,companies(slug)&person_id=eq.${ownerId}&role=eq.owner&removed_at=is.null&limit=1`,{headers:asService});
 const prefix=`/c/${slug}/hermes`;
 const missing=await get('/c/no-such-company/hermes',{cookie:owner});
 assert.equal(missing.status,404,'a Company that does not exist has no dashboard');
