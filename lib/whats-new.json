@@ -1,5 +1,11 @@
 [
  {
+  "issue": 844,
+  "date": "2026-11-26",
+  "en": { "title": "Agents give each other work as Cards", "body": "Ask an Agent in a chat to give a job to another Agent, or type a job command such as /campaign, and it makes a Card on the board for that Agent; the chat shows one line naming the Card and its Agent that opens it, and the Agent that made it learns the result when the Card is done." },
+  "ar": { "title": "الوكلاء بيدّوا لبعض الشغل في بطاقات", "body": "لو طلبت من وكيل في محادثة يدّي شغلانة لوكيل تاني، أو كتبت أمر شغل زي /campaign، بيعمل بطاقة على اللوحة للوكيل ده؛ والمحادثة بتبيّن سطر واحد فيه البطاقة ووكيلها وبيفتحها، والوكيل اللي عملها بيعرف النتيجة لما البطاقة تخلص." }
+ },
+ {
   "issue": 863,
   "date": "2026-11-26",
   "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },
