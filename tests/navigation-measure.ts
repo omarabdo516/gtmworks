@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Request } from '@playwright/test';
 
 type Step = { name: string, link: string, path: string, content: string, search?: string, gone?: string, motion?: { shown: number, settled: number } };
 // Each step leaves from a sidebar entry the shell has (#8): Numbers opens its own page (#35) where Home used to be the
@@ -51,10 +51,33 @@ export async function idle(page: Page) {
   }, { names: faceAnimations, parts: faceTransitions, life: faceParts });
 }
 
+// The page requests (RSC) a page has on their way, from when it is first measured. Playwright's `networkidle` cannot
+// say this: it is a load state a document reaches once, so after the first quiet moment it answers at once (#810).
+const pageRequests = new WeakMap<Page, Set<Request>>();
+function pageRequestsOnTheirWay(page: Page) {
+  let open = pageRequests.get(page);
+  if (!open) {
+    const requests = new Set<Request>();
+    page.on('request', request => { if (request.headers()['rsc'] === '1') requests.add(request); });
+    const done = (request: Request) => { requests.delete(request); };
+    page.on('requestfinished', done);
+    page.on('requestfailed', done);
+    pageRequests.set(page, open = requests);
+  }
+  return open;
+}
+
 // Measure in the browser from the actual click event, excluding Playwright's actionability waits.
 // The same probe also runs against origin/main for the before/after evidence.
+// A link prepares its page when it is pointed at (lib/link, #771), so a prepared click points first and presses once
+// that page has wholly arrived: the request the pointing started has finished (lib/link's progress waits for the same
+// whole response). A link whose page is already prepared asks for nothing, and the press follows at once.
 export async function measureClick(page: Page, step: Step): Promise<Timing> {
+  const onTheirWay = pageRequestsOnTheirWay(page);
   await page.locator(step.link).hover();
+  // The pointer's prefetch starts in the browser within the frame it lands in.
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve))));
+  await expect.poll(() => onTheirWay.size, { message: `${step.name}: the page the pointer asked for arrives` }).toBe(0);
   await idle(page);
   await page.evaluate(({ step, names, parts, life }) => {
     const face = (animation: Animation) => { const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
