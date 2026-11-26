@@ -3,8 +3,9 @@ import '../../../numbers.css';
 import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { signedInUser, supabase } from '@/lib/supabase';
-import Shell from '@/app/shell';
+import type { supabase } from '@/lib/supabase';
+import { companyReader } from '@/lib/company-reader';
+import { ShellPage } from '@/app/shell-page';
 import { approvalQueue } from '@/lib/approval-queue';
 import { localeFor } from '@/lib/i18n.mjs';
 import { feedSince, parsePeriod, readNumbers } from '@/lib/numbers.mjs';
@@ -15,7 +16,6 @@ import { SystemMark } from '../log/icons';
 import { AgentFace } from '@/components/agent-face';
 import { NoApp, NumbersFigures, NumbersHead, WaitingRow } from './parts';
 import { NumbersPlaceholder } from './numbers-client';
-import { mustRead } from '@/lib/read-failed';
 
 // The Numbers page (#35, design-reference: renderDashboard). The four figures, the leads chart and the channel table
 // are read only from the Company's connected apps; "Waiting for your approval" and "What the agents did this week" are
@@ -26,28 +26,22 @@ import { mustRead } from '@/lib/read-failed';
 
 export default async function NumbersPage({params,searchParams}:{params:Promise<{slug:string}>,searchParams:Promise<{period?:string}>}) {
  const {t,language}=await getI18n(); const {slug}=await params; const period=parsePeriod((await searchParams).period);
- const db=await supabase(); const {data:{user}}=await signedInUser();
- if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/numbers${period==='30'?'?period=30':''}`)}`);
- const companies=mustRead(await db.from('companies').select('id,slug,name').order('name'),'companies'); const company=companies?.find(c=>c.slug===slug);
+ const reader=await companyReader(slug);
+ if(!reader) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/numbers${period==='30'?'?period=30':''}`)}`);
+ const {db,user,company,role}=reader;
  if(!company) notFound();
- const [{data:person},membershipRead]=await Promise.all([
-  db.from('people').select('name').eq('id',user.id).single(),
-  db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
- ]);
- const membership=mustRead(membershipRead,'membership');
  // Read beside the figures: the sidebar counts it once it arrives, and the figures list it.
- const queue=approvalQueue(db,company.id,user.id,membership?.role||'');
- const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
- return <Shell company={company} companies={companies||[]} personId={user.id} section="numbers" title={t('numbers')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={queue.then(({count})=>count)}>
+ const queue=approvalQueue(db,company.id,user.id,role);
+ return <><ShellPage approvals={queue.then(({count})=>count)}/>
   <main className="numbers-page">
    <div className="dash">
     <NumbersHead t={t} slug={slug} period={period}/>
     <Suspense key={period} fallback={<NumbersPlaceholder/>}>
-     <Figures db={db} company={company.id} slug={slug} period={period} writer={membership?.role!=='viewer'} queue={queue} t={t} language={language}/>
+     <Figures db={db} company={company.id} slug={slug} period={period} writer={role!=='viewer'} queue={queue} t={t} language={language}/>
     </Suspense>
    </div>
   </main>
- </Shell>;
+ </>;
 }
 
 type Db=Awaited<ReturnType<typeof supabase>>;

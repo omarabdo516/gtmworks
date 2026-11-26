@@ -4,8 +4,9 @@ import { after } from 'next/server';
 import { headers } from 'next/headers';
 import { renderKind } from '@/lib/diagnostics.mjs';
 import { getI18n } from '@/lib/i18n-server';
-import { signedInUser, supabase } from '@/lib/supabase';
-import Shell, { sidebarReads } from '@/app/shell';
+import { supabase } from '@/lib/supabase';
+import { companyReader } from '@/lib/company-reader';
+import { ShellPage } from '@/app/shell-page';
 import { approvalQueue } from '@/lib/approval-queue';
 import ConversationView, { ConversationLoaded, ConversationNotRead } from './conversation';
 import { OpenedHere } from '@/app/sidebar-live';
@@ -21,7 +22,6 @@ import { openOnVisit } from '@/lib/lead-opening.mjs';
 import { companyHasModel } from '@/lib/provider-keys.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { mustRead } from '@/lib/read-failed';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 // ?tab=<key> opens the Agent's details on that tab.
@@ -30,19 +30,15 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const db=await supabase();
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
- const [{t,language},{data:{user}},companiesRead,{data:found}]=await Promise.all([getI18n(),signedInUser(),
-  db.from('companies').select('id,slug,name,work_mode').order('name'),
+ const [{t,language},reader,{data:found}]=await Promise.all([getI18n(),companyReader(slug),
   uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at`).eq('id',id).maybeSingle():{data:null}]);
- if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
- const companies=mustRead(companiesRead,'companies');
- const company=companies?.find(c=>c.slug===slug);
+ if(!reader) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
+ const {user,company,role,personName}=reader;
  if(!company||!uuid.test(id)) notFound();
  const conversation=found?.company_id===company.id?found:null;
  if(!conversation) notFound();
  markOpen('frame',timing);
- // The sidebar's reads and what waits on this person go out now, beside the page's own: the Shell and the Agent's details
- // find them on their way (app/shell.tsx, lib/approval-queue.ts).
- sidebarReads(company.id).catch(()=>{});
+ // What waits on this person goes out now, beside the page's own: the Shell finds it on its way (lib/approval-queue.ts).
  const waitingCount=approvalQueue(db,company.id,user.id).then(({count})=>count);
  // Each step's time, written once the response has gone (docs/production-logs.md: chat_opened).
  // Whether it was a person's open, a prefetch or the page drawn again (#762).
@@ -66,46 +62,41 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // reads go out now with them, not after the frame's reads (decision 0042): they are the page's longest, and the page
  // has loaded only once they are drawn.
  const agentRead=conversation.agent_id?db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('id',conversation.agent_id).eq('company_id',company.id).maybeSingle():Promise.resolve({data:null});
- const membershipRead=db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
- const details=conversation.agent_id?agentDetails(db,{company:company.id,agent:conversation.agent_id,name:Promise.resolve(agentRead).then(({data})=>data?.name??''),slug,me:user.id,role:Promise.resolve(membershipRead).then(({data})=>data?.role||''),tab}).finally(()=>markOpen('details',timing)):null;
+ const details=conversation.agent_id?agentDetails(db,{company:company.id,agent:conversation.agent_id,name:Promise.resolve(agentRead).then(({data})=>data?.name??''),slug,me:user.id,role,tab}).finally(()=>markOpen('details',timing)):null;
  // Handed to the screen only while the Agent is attached; a detached Agent's details are read and dropped.
  details?.catch(()=>{});
  // Until then the chat is named as the sidebar names it (app/shell.tsx): the first line of its first message.
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
  // A first message that still waits for its Run (#764) names the chat as well, with the files sent with it.
- const [{data:stored},{data:waiting},{data:agent},{data:person},membershipAnswer,{data:writer}]=await Promise.all([
+ const [{data:stored},{data:waiting},{data:agent},{data:writer}]=await Promise.all([
   db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
   db.from('conversation_queued_turns').select('message,send_key').eq('conversation_id',id).order('queued_at').limit(1).maybeSingle(),
   agentRead,
-  db.from('people').select('name').eq('id',user.id).single(),
-  membershipRead,
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   db.rpc('conversation_can_write',{c:company.id}),
  ]);
  const waitingFiles=!stored&&waiting?(await db.from('conversation_attachments').select('name').eq('conversation_id',id).eq('send_key',waiting.send_key).order('position').limit(1)).data:null;
  const first=stored??(waiting&&{body:waiting.message,conversation_attachments:waitingFiles??[]});
- const membership=mustRead(membershipAnswer,'membership');
  markOpen('reads',timing);
  // #434: the Owner's empty Conversation with Lead (first run makes one) is where Lead opens the Company's first
  // Conversation, once the Company has a model (lib/lead-opening.mjs); the record is then read again with its message.
  // Only a Conversation with nothing in it asks, so every other open costs nothing more.
- if(!first&&agent?.is_default&&membership?.role==='owner') {
+ if(!first&&agent?.is_default&&role==='owner') {
   const {count}=await db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id);
   const opened=count===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
-   {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
+   {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:personName,lead:agent.name,companyName:company.name}):null;
   if(opened===id) { record.catch(()=>{}); record=readRecord(); }
  }
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
- const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const title=conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
  const tied=await tiedRead;
- return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
+ return <><ShellPage agentId={conversation.agent_id||undefined} approvals={waitingCount}/>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
   <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'}/></ConversationView></main>
- </Shell>;
+ </>;
 }
 
 // The chat once its record is read, streamed in place of the placeholder.

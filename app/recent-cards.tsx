@@ -1,5 +1,6 @@
 'use client';
 import { useI18n } from '@/lib/i18n-client';
+import { useShellPage } from '@/app/shell-page';
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from '@/lib/link';
 import { AuthoredTitle } from '@/lib/authored-title';
@@ -10,7 +11,8 @@ type Result={company:string,cards:Card[],error:boolean};
 // browser, leaving the streamed copy hidden in the page until React reveals it (#172).
 type Store={get:()=>Result|undefined,subscribe:(listener:()=>void)=>()=>void};
 const RecentCardsContext=createContext<Store>({get:()=>undefined,subscribe:()=>()=>{}});
-export function RecentCardsProvider({company,cardId,children}:{company:string,cardId?:number,children:ReactNode}) {
+export function RecentCardsProvider({company,children}:{company:string,children:ReactNode}) {
+ const {cardId}=useShellPage();
  const pending=useRef(Promise.resolve());
  const [store]=useState(()=>{
   let current:Result|undefined; const listeners=new Set<()=>void>();

@@ -21,8 +21,8 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  if(shown!==pathname) { setShown(pathname); setOpen(false); }
  const drawer=useRef<HTMLElement>(null); const content=useRef<HTMLDivElement>(null);
  // A new page fades in, as the reference's setView replays its view's fadeIn (app/shell.css .app-content.view-enter).
- // Each route draws its own frame, so a page of another route fades as its frame mounts; within one route (another
- // Agent's chat, the board's tabs) the class is taken off and put back before the new page paints. A redraw of the same
+ // The Company's layout draws the frame once (#789), so on every move to another page (another route, another Agent's
+ // chat, the board's tabs) the class is taken off and put back before the new page paints. A redraw of the same
  // page (a poll, a save, the details panel, a search change), a frame mounting again on the page it showed and a new
  // chat going on as its Conversation leave it alone (lib/page-fade).
  const [enters]=useState(()=>opensPage(pathname));

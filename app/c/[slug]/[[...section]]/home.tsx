@@ -5,7 +5,8 @@ import { getI18n } from '@/lib/i18n-server';
 import { AuthoredTitle } from '@/lib/authored-title';
 import { workDate } from '@/lib/work-date.mjs';
 import { AgentFace } from '@/components/agent-face';
-import { sidebarReads } from '@/app/shell';
+import { companyAgents } from '@/lib/sidebar.mjs';
+import { supabase } from '@/lib/supabase';
 import { ActivityRow, type WorkActivity, type WorkMember } from '@/lib/work-activity';
 import { currentAgentCard, homeCharts, metricValue, type HomeCard, type HomeStage } from '@/lib/home-data.mjs';
 async function Bars({values}:{values:{label:string,value:number}[]|null}) { const {t,language}=await getI18n();
@@ -14,7 +15,8 @@ async function Bars({values}:{values:{label:string,value:number}[]|null}) { cons
  return <ul className="chart-bars">{values.map(row=><li key={row.label}><span dir="auto">{/^\d{4}-\d{2}-\d{2}$/.test(row.label)?workDate(row.label,language):row.label}</span><span className="bar-track"><i style={{width:`${row.value/max*100}%`}}/></span><strong>{row.value}</strong></li>)}</ul>;
 }
 export default async function Home({slug,companyId,agentCards,cards,stages,activity,members,approvalCount}:{slug:string,companyId:string,agentCards:HomeCard[]|null,cards:HomeCard[]|null,stages:HomeStage[]|null,activity:WorkActivity[]|null,members:WorkMember[],approvalCount:number|null}) { const {t,language}=await getI18n();
- const [[agents]]=await sidebarReads(companyId);
+ // Home's own read of the Agents: the sidebar's reads stay with the layout's Shell (#789).
+ const agents=await companyAgents(await supabase(),companyId);
  const charts=homeCharts(cards,stages,activity);
  const recent=cards?.slice().sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id-a.id).slice(0,5);
  return <div className="home-dashboard">
