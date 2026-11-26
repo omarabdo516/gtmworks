@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
+import { noteRoute } from './engine-routes.mjs';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
@@ -106,6 +107,45 @@ function kanbanBoard() {
   },
   /** @param {string} parent @param {string} child */
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
+  // PATCH /tasks/{id} with a status (#842; plugin_api.py _patch_status, kanban_db.py archive_task, complete_task and
+  // _set_status_direct): `archived` closes an open Run as `reclaimed` (the Engine stops its worker) and frees every Card
+  // that waited for it; a move back from the archive is to triage, todo or ready (kanban_workflow.py ARCHIVED), and
+  // re-gates the Cards that wait for it; `done` completes a ready, running, blocked or review Card with its summary.
+  // Answers null when done, or the Engine's refusal. `delete` is DELETE /tasks/{id}, which gtmworks never asks.
+  /** @param {string} id @param {string} status @param {{summary?:string|null,result?:string|null}} [fields] @returns {{code:number,detail:string}|null} */
+  status(id,status,{summary=null,result=null}={}) {
+   const task=tasks.find(found=>found.id===id);
+   const satisfied=other=>links.filter(link=>link.child_id===other).every(link=>['done','archived'].includes(tasks.find(found=>found.id===link.parent_id)?.status));
+   const refused=detail=>({code:409,detail});
+   const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+   const children=links.filter(link=>link.parent_id===id).map(link=>tasks.find(found=>found.id===link.child_id)).filter(Boolean);
+   if(status==='running') return {code:400,detail:'running is set by the dispatcher'};
+   if(status==='archived') {
+    if(task.status==='archived') return refused(`status transition to 'archived' not valid from current state`);
+    if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',summary:'task archived with run still active',ended_at:++clock});
+    Object.assign(task,{status:'archived',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'archived',null,open?.id??null);
+   } else if(['triage','todo','ready'].includes(status)) {
+    if(status==='ready'&&!satisfied(id)) return refused(`Cannot move to 'ready': blocked by parent(s) not done`);
+    if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',summary:`status changed to ${status} (dashboard/direct)`,ended_at:++clock});
+    const reopened=['done','archived'].includes(task.status);
+    Object.assign(task,{status,claim_lock:null,claim_expires:null,worker_pid:null});
+    event(id,'status',{status,requested_status:status},open?.id??null);
+    if(reopened) for(const child of children) if(['ready','review','running','done'].includes(child.status)) { child.status='todo'; event(child.id,'status',{status:'todo'}); }
+   } else if(status==='done') {
+    if(!['ready','running','blocked','review'].includes(task.status)||!satisfied(id)) return refused(`status transition to 'done' not valid from current state`);
+    if(task.status!=='review'&&!summary?.trim()&&!result?.trim()&&!task.result?.trim()) return {code:400,detail:'completion needs a summary or a result'};
+    const closing=open??this.run(id,{status:'done'});
+    Object.assign(closing,{status:'done',outcome:'completed',summary:summary??result,ended_at:++clock});
+    Object.assign(task,{status:'done',result,completed_at:clock,claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'completed',null,closing.id);
+   } else return {code:400,detail:`unknown status: ${status}`};
+   // Cards that waited for this one go on once it is done or archived (recompute_ready).
+   for(const child of children) if(child.status==='todo'&&satisfied(child.id)) { child.status='ready'; event(child.id,'promoted',null); }
+   return null;
+  },
+  /** @param {string} id */
+  delete(id) { const at=tasks.findIndex(found=>found.id===id); if(at<0) return false; tasks.splice(at,1); return true; },
   /** @param {string} task @param {string} author @param {string} body */
   comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
   // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
@@ -161,6 +201,8 @@ function kanbanBoard() {
 export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) {
  // Run ids are unique across fakes, as Hermes's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
+ // Every route this fake is asked for, on either listener, once each, in the run's log (tests/engine-routes.mjs, #842).
+ const routes=new Set();
  // Each run's event stream (#141; api_server_runs.py _RunStream): its numbered events in memory, the last `backlogLimit`
  // of them kept, and the readers following it. A null event is the stream's end, as in the pinned release.
  const streams=/** @type {Map<string,{backlog:{seq:number,event:any}[],next:number,ended:boolean,readers:Set<import('node:http').ServerResponse>}>} */(new Map());
@@ -474,6 +516,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   if(settings.answerDelay>0) { request.pause(); setTimeout(()=>request.resume(),settings.answerDelay); }
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    settings.requests.push({method:request.method,path:request.url,authorization:request.headers.authorization,session:request.headers['x-hermes-session-key'],idempotency:request.headers['idempotency-key']});
+   noteRoute(routes,request.method||'GET',request.url||'');
    const managed=settings.profiles.get(decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||''));
    const key=managed?managed.key:settings.key;
    const status=key&&request.headers.authorization===`Bearer ${key}`?settings.status:401;
@@ -1226,8 +1269,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      task.assignee=body.assignee||null;
      settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
     }
+    if(typeof body?.status==='string') { const refused=settings.kanban.status(task.id,body.status,body); if(refused) return send(response,refused.code,{detail:refused.detail}); }
     return send(response,200,{task});
    }
+   if(kanbanTask&&request.method==='DELETE') return settings.kanban.delete(decodeURIComponent(kanbanTask[1]))?send(response,200,{ok:true}):send(response,404,{detail:'not found'});
    if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
    send(response,404,{detail:'Not Found'});
   });
@@ -1236,6 +1281,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  const management=createServer((request,response)=>{
   // What the management listener was asked (#782), as `requests` keeps the API listener's.
   settings.managed.push({method:request.method,path:request.url});
+  noteRoute(routes,request.method||'GET',request.url||'');
   // `managedFail` answers a request it names with that status (#782): one profile's read failing while the rest answer.
   const failing=settings.managedFail?.(request.method||'GET',request.url||'');
   if(failing) return send(response,failing,{detail:'Internal Server Error'});
