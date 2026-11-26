@@ -1,6 +1,6 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -21,6 +21,7 @@ import { i18n } from '../lib/i18n.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.

@@ -3,9 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { signIn } from './sign-in';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 // #343: a lesson an Agent learned reaches every Agent as the Company's shared skill team-lessons in Hermes, never a
 // skill row in gtmworks. A Contributor's lasting rule is sent to the Owner as a suggestion (agent_save_rule, as closing
