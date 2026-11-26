@@ -1,12 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { Duplex } from 'node:stream';
 import WebSocket from 'ws';
 import { engineServing } from './engine-records.mjs';
 import { withEngineContract } from '../lib/engine/handle.mjs';
 import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
-import { screenStreams, screenStreamPath, screenUpgrades } from '../lib/screen-stream.mjs';
+import { screenStreams, screenStreamPath } from '../lib/screen-stream.mjs';
 
 // #713, ADR 0029: the live stream of an Agent's Screen on gtmworks's own web server, against the fake Engine. The person
 // is the stream's `people` seam (in the app, the session cookie and the database): who they are when the socket opens,
@@ -222,19 +221,4 @@ test('an open socket whose session has run out is closed for the page to sign in
   at.may.level='signedOut';
   assert.equal(await live.closed(),4401);
  } finally { await at.close(); }
-});
-
-test('the web server takes the Screen\'s upgrade, leaves others to Next in development, and ends any other in production',()=>{
- const taken=[];
- const socket=()=>Object.assign(new Duplex({read(){},write(_chunk,_encoding,done){ done(); }}),{});
- const asked=path=>new URL(path,'http://gtmworks'), request=/** @type {any} */({});
- for(const dev of [true,false]) {
-  const route=screenUpgrades({dev,screen:(_request,_socket,_head,query)=>{ taken.push([dev,query.get('agent')]); }});
-  const screen=socket(), other=socket();
-  route(asked(`${screenStreamPath}?agent=a`),request,screen,Buffer.alloc(0));
-  route(asked('/_next/webpack-hmr'),request,other,Buffer.alloc(0));
-  assert.equal(screen.destroyed,false);
-  assert.equal(other.destroyed,!dev,dev?'hot reload is Next\'s':'nothing else upgrades');
- }
- assert.deepEqual(taken,[[true,'a'],[false,'a']]);
 });

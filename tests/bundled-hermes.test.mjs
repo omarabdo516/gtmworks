@@ -76,17 +76,38 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.deepEqual(engine.command.slice(0,2),['sh','-ec']);
  const start=engine.command[2].replaceAll('$$','$');
  assert.match(start,/exec hermes gateway run$/);
- // The key guard still runs before anything else: an Engine with no key refuses rather than serve.
+ // The key guard still runs before anything else: an Engine with no key refuses rather than serve, and makes nothing.
+ // A fresh volume has no cache/scratch, and Python's tempfile passes over a TMPDIR that is not there: after the guard and
+ // before the gateway the start makes the Engine's temp folder (below), the Engine's user's alone.
  const guard=start.slice(0,start.indexOf('exec hermes gateway run'));
- const started=key=>spawnSync('sh',['-ec',`${guard} echo gateway started`],{env:{PATH:process.env.PATH,API_SERVER_KEY:key},encoding:'utf8'});
- assert.equal(started('k'.repeat(64)).stdout,'gateway started\n');
- const refused=started('');
- assert.notEqual(refused.status,0);
- assert.equal(refused.stdout,'');
- assert.match(refused.stderr,/The Engine has no key/);
- // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it.
+ const home=mkdtempSync(join(tmpdir(),'engine-start-'));
+ const scratch=join(home,'cache','scratch');
+ const started=key=>spawnSync('sh',['-ec',`${guard} test -d "$TMPDIR" && echo gateway started`],{env:{PATH:process.env.PATH,API_SERVER_KEY:key,TMPDIR:scratch},encoding:'utf8'});
+ try {
+  const refused=started('');
+  assert.notEqual(refused.status,0);
+  assert.equal(refused.stdout,'');
+  assert.match(refused.stderr,/The Engine has no key/);
+  assert.throws(()=>statSync(scratch),/ENOENT/,'an Engine with no key makes no folder');
+  assert.equal(started('k'.repeat(64)).stdout,'gateway started\n');
+  assert.equal(statSync(scratch).mode&0o777,0o700);
+  assert.equal(started('k'.repeat(64)).stdout,'gateway started\n','an Engine whose folder is there starts as before');
+ } finally {
+  rmSync(home,{recursive:true,force:true});
+ }
+ // A board worker runs re-homed to its Agent's profile, and Hermes points its TMPDIR at that profile's scratch unless one
+ // is set: the ssh control socket under it ran past Linux's 108-byte limit for a Unix socket (#833, CI run 45854207378).
+ // The Engine sets the root profile's own scratch for every process, so the worker's socket path stays short.
+ assert.equal(engine.environment.TMPDIR,'/opt/data/cache/scratch');
+ const socket=folder=>Buffer.byteLength(`${folder}/hermes-ssh/${'0'.repeat(16)}.sock.${'0'.repeat(16)}`);
+ assert.ok(socket(engine.environment.TMPDIR)<108,'a control socket under it fits a Unix socket path');
+ assert.ok(socket(`/opt/data/profiles/ag-${'0'.repeat(32)}/cache/scratch`)>=108,'one under a profile\'s scratch did not');
+ // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it, and a board
+ // worker's dangerous command runs (spec #831, ADR 0033 item 2): a worker's Run is single-query, which refuses one by
+ // default. The dispatcher and the review dispatch are not named, so they stay as Hermes ships them, on.
  const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
- assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false}});
+ assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false},
+  approvals:{single_query_mode:'approve'}});
  // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
  // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
  // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is
@@ -423,9 +444,10 @@ test('the Engine management listener is on for web and worker with the Engine ke
  assert.equal(isHermesAddressAllowed('http://gtmworks-engine-first:9119'),true);
  // The public gateway proxies to the app, auth, rest and storage only.
  const gateway=readFileSync('scripts/install-nginx.conf','utf8');
- // The app takes two: its pages, and the Screen's live stream it carries itself (ADR 0029).
+ // The app takes two: its pages, and the WebSockets it carries itself, the Screen's live stream and the board's live
+ // changes (ADR 0029, #840).
  assert.deepEqual([...gateway.matchAll(/set \$\w+ ([\w-]+):\d+;/g)].map(match=>match[1]),['auth','rest','storage','web','web']);
- assert.match(gateway,/location = \/api\/display\/ws \{\s+set \$web web:3000;/);
+ assert.match(gateway,/location ~ \^\/api\/\(display\/ws\|board\/events\)\$ \{\s+set \$web web:3000;/);
  assert.doesNotMatch(gateway,/gtmworks-engine-first|9119|8642/);
  // The install job proves it on the real release: an Agent made through the contract, refused from outside.
  const install=installJob().steps.map(step=>step.run||'').join('\n');

@@ -1,6 +1,2 @@
-| `card-request.spec.ts` | A message to an agent makes one card in Ideas with its message, assignment and mode; the composer loads on open. | 8.6 s | — | keep (#218, case by case above) |
-
-## Cases
-
-| `card-request.spec.ts` "a message to an agent makes one card in Ideas with its message, assignment and mode, in both languages" | stays | A real save through the server: a message to an Agent makes exactly one Card in Ideas, also on a double click, with its message, its Agent and its mode, on the Card and the board, in both languages. |
-| `card-request.spec.ts` "the composer loads when it is opened and shows the page-opening bar while it arrives" | stays | Only the built app shows it: the composer is its own script, fetched when New card opens, and the page-opening bar shows while it arrives. |
+| `card-request.spec.ts` "a message to an agent makes one card in Ideas with its message, assignment and mode, in both languages" | removed | #836 replaced the old composer at /work/new with the Engine's New card (spec #831): a title, a description, an Assignee and a publishing date, one Card for a double press, proven by kanban-new-card.spec.ts and components/new-card.test.tsx. A message to an Agent that becomes a Card is #844's (an Agent makes Cards from a Conversation); a Card's mode has no Engine equivalent (ADR 0033). |
+| `card-request.spec.ts` "the composer loads when it is opened and shows the page-opening bar while it arrives" | removed | #836 replaced the old composer with the Engine's New card, which still loads only when it is opened (board.tsx) and is drawn whole by components/new-card.test.tsx; the board's own frame and its read are kanban-board.spec.ts's. |

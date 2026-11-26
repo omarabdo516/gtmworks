@@ -242,7 +242,9 @@ test('one profile that holds holds no other, and every profile is served however
  const write=async(/** @type {any} */ _,/** @type {{profile:string}} */ {profile})=>{ if(profile===profiles[0]) return held; served.add(profile); return {state:'written'}; };
  engineRecord(rulesCompany,{address:'http://hermes-two:8642',key:'k'});
  const pass=withDriver(rulesCalls,{write},()=>keepAgentRules(rulesDatabase(Object.fromEntries(profiles.map(profile=>[profile,[]]))),{memory:{marks:new Map(),drift:0},health:upkeepSchedule({write:()=>{}})}));
- await new Promise(resolve=>setTimeout(resolve,50));
+ // Every other profile is written while the first one still holds; a busy machine may take longer than a few
+ // milliseconds to get there, so the test waits for it, up to five seconds, rather than a fixed time.
+ for(const until=Date.now()+5000;served.size<149&&Date.now()<until;) await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(served.size,149,'every other profile was served while the first one held');
  release(); assert.deepEqual(await pass,{written:150});
 });
