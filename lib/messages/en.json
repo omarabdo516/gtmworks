@@ -1494,6 +1494,8 @@
   "settingsSpeechUnread": "Couldn’t read the speech-to-text provider right now.",
   "settingsVoiceArabicEgypt": "Arabic (Egypt)",
   "settingsSpeechNotReached": "The change did not reach {0}. Try again.",
+  "settingsSpeechKeySaved": "Key saved · not in use",
+  "settingsSpeechUseLabel": "Use {0} with its saved key",
   "updateReady": "Update ready",
   "updateReadyOut": "gtmworks {0} came out {1}.",
   "updateReadyFixes": "Fixes and improvements.",
