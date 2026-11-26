@@ -59,12 +59,16 @@ test('a press paints the page\'s loading frame inside the Shell before its data 
   const frame = page.locator('.app-content[aria-busy="true"]');
   await expect(frame).toBeVisible();
   await expect(frame.getByRole('status')).toHaveText('Opening page');
+  // One frame: the loading frame is drawn in the page's own top bar and content, never beside a second one.
+  await expect(page.locator('.topbar')).toHaveCount(1);
   await expect(page.locator('.sidebar .sb-nav')).toBeVisible();
   await expect(page.locator('.board'), 'the page left is out of sight at once').toBeHidden();
   await expect(page.locator('.log-page'), 'the page has not arrived').toHaveCount(0);
   release();
   await expect(page.locator('.log-page')).toBeVisible();
   await expect(frame).toHaveCount(0);
+  await expect(page.locator('.topbar')).toHaveCount(1);
+  await expect(page.locator('.app-content')).toHaveCount(1);
  } finally {
   release();
   await page.unrouteAll({ behavior: 'ignoreErrors' });

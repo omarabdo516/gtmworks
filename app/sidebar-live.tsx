@@ -1,5 +1,5 @@
 'use client';
-import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
@@ -19,8 +19,24 @@ const pollEvery=5000;
 // chats (null when that read failed: the list shown stays) and how many things wait on them. The page's own draw leaves
 // the last two to the Shell's props until the first poll answers.
 export type SidebarNow={channels:ChannelSummary[],agents:Record<string,AgentFaceState>,handed:ScreenHand[],chats?:SidebarChat[]|null,approvals?:number};
-type Live=SidebarNow&{refresh:()=>void};
-const Now=createContext<Live|null>(null);
+type Live=SidebarNow;
+// What the sidebar reads is a store, not a context value: a context whose value changes while a page still streams in
+// (a poll answer landing during the first load) makes React draw that page's part in the browser beside its streamed
+// copy (#172, #789). A store reaches only the parts that read it, once they are on the page.
+type LiveStore={get:()=>Live,subscribe:(listener:()=>void)=>()=>void,set:(live:Live)=>void};
+function liveStore(first:Live):LiveStore {
+ let current=first; const listeners=new Set<()=>void>();
+ return {get:()=>current,subscribe:listener=>{ listeners.add(listener); return ()=>{ listeners.delete(listener); }; },
+  set:live=>{ if(live===current) return; current=live; listeners.forEach(listener=>listener()); }};
+}
+const Now=createContext<{store:LiveStore,refresh:()=>void}|null>(null);
+const unsubscribed=()=>()=>{};
+// One part of what the sidebar last read, or `outside` beyond its reach (Settings, a test).
+function useLive<T>(pick:(live:Live)=>T,outside:T):T {
+ const store=useContext(Now)?.store;
+ const read=()=>store?pick(store.get()):outside;
+ return useSyncExternalStore(store?store.subscribe:unsubscribed,read,read);
+}
 
 // The sidebar's one poll (#699, spec #694): every 5 seconds while the tab is visible, and never while it is hidden, it
 // asks /api/sidebar for the channels and the Agents' states together, so the faces follow within 5 seconds with no page
@@ -52,10 +68,7 @@ export function SidebarLive({company,person,slug,channels:read,states,handed=noH
     try {
      // The poll names the reader it draws for: after another tab signed in as someone else, the route answers nothing.
      const response=await fetch(`/api/sidebar?company=${company}&person=${person}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(shownKey,answer.channels);
-      // An answer is no urgent update: one that lands while a page still streams in leaves its parts as they were drawn
-      // instead of drawing them again in the browser beside their streamed copy (#172).
-      startTransition(()=>setPolled(was=>kept(was,basis,answer))); } }
+     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(shownKey,answer.channels); setPolled(was=>kept(was,basis,answer)); } }
     } catch {}
    }
    if(!stopped) { clearTimeout(timer); timer=setTimeout(poll,pollEvery); }
@@ -72,8 +85,11 @@ export function SidebarLive({company,person,slug,channels:read,states,handed=noH
  const [done,setDone]=useState<ReadonlySet<number>>(()=>new Set());
  useEffect(()=>onHandDone(card=>{ setDone(was=>new Set(was).add(card)); ask.current(); }),[]);
  const open=useMemo(()=>done.size?now.handed.filter(hand=>!done.has(hand.card)):now.handed,[now.handed,done]);
- const live=useMemo(()=>({...now,handed:open,refresh}),[now,open,refresh]);
- return <Now value={live}>{slug&&<HandedToasts slug={slug} handed={now.handed}/>}{children}</Now>;
+ const live=useMemo(()=>({...now,handed:open}),[now,open]);
+ const [store]=useState(()=>liveStore(live));
+ useLayoutEffect(()=>{ store.set(live); },[store,live]);
+ const value=useMemo(()=>({store,refresh}),[store,refresh]);
+ return <Now value={value}>{slug&&<HandedToasts slug={slug} handed={now.handed}/>}{children}</Now>;
 }
 
 // A step an Agent hands over on its Screen while its person has the product open (#714; design-reference: scrHandOver's
@@ -113,24 +129,26 @@ function kept(was:{basis:SidebarNow,now:SidebarNow}|null,basis:SidebarNow,answer
 }
 
 // The reader's channels as the sidebar last read them.
-export const useSidebarChannels=()=>useContext(Now)?.channels??[];
+const noChannels:ChannelSummary[]=[];
+export const useSidebarChannels=()=>useLive(live=>live.channels,noChannels);
 // The reader's recent chats and the count of what waits on them as the sidebar's poll last read them; undefined until
 // it has answered, when the Shell's own read stands.
-export const useSidebarChats=()=>useContext(Now)?.chats;
-export const useSidebarApprovals=()=>useContext(Now)?.approvals;
+export const useSidebarChats=()=>useLive(live=>live.chats,undefined);
+export const useSidebarApprovals=()=>useLive(live=>live.approvals,undefined);
 // Asks the sidebar's poll at once.
 export const useSidebarRefresh=()=>useContext(Now)?.refresh;
 // The newest step this reader was handed on an Agent's Screen, as the sidebar last read it (#714), or null; outside the
 // sidebar's reach none. `ask` reads it again at once.
+const noAsk=()=>{};
 export function useScreenHand(agent:string):{hand:ScreenHand|null,ask:()=>void} {
- const live=useContext(Now);
- const hand=live?.handed.find(item=>item.agent===agent)??null;
- return {hand,ask:live?.refresh??(()=>{})};
+ const hand=useLive(live=>live.handed.find(item=>item.agent===agent)??null,null);
+ const ask=useContext(Now)?.refresh??noAsk;
+ return {hand,ask};
 }
 // An Agent's state for this reader as the sidebar last read it; `drawn` (the state the page was drawn with) outside the
 // sidebar's reach, as in Settings, or for an Agent it does not list.
 export function useAgentState(agent:string,drawn:AgentFaceState='idle'):AgentFaceState {
- return useContext(Now)?.agents[agent]??drawn;
+ return useLive(live=>live.agents[agent],undefined)??drawn;
 }
 // The one state an Agent's live face shows (lib/live-runs shownState): the sidebar's, with what the chat this person has
 // open knows of it, so the tile, the chat's head and the reply being worked on agree, and the words say the same.
@@ -138,7 +156,7 @@ function useShownState(agent:string|null|undefined,drawn:AgentFaceState='idle'):
  return shownState(useAgentState(agent??'',drawn),useChatKnows(agent));
 }
 export function useAgentStates():(agent:string)=>AgentFaceState|undefined {
- const agents=useContext(Now)?.agents;
+ const agents=useLive(live=>live.agents,undefined);
  return useCallback((agent:string)=>agents?.[agent],[agents]);
 }
 
@@ -165,7 +183,7 @@ export function SharedFace({agent,size}:{agent:string|null|undefined,size:number
 }
 
 export function OpenedHere({company,agent,place}:{company:string,agent?:string|null,place?:FailurePlace|null}) {
- const refresh=useContext(Now)?.refresh;
+ const refresh=useSidebarRefresh();
  const opened=agent||place?JSON.stringify({company,...(agent?{agent}:{}),...(place?{place}:{})}):null;
  useEffect(()=>{
   if(!opened||!refresh) return;

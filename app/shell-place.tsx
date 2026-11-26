@@ -1,5 +1,5 @@
 'use client';
-import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useSelectedLayoutSegments } from 'next/navigation';
 
 // Which page of the Company the Shell is drawn around (#789). The Shell lives in the Company's layout, which is not drawn
@@ -27,28 +27,45 @@ export function placeOf(segments:readonly string[]):Omit<Place,'chat'|'card'> {
 }
 export const chatSections=new Set(['chat','conversations','channels']);
 
-const PlaceContext=createContext<{place:Place,mark:(marks:Marks)=>void}>({place:{section:'home',chat:false},mark:()=>{}});
+// The place is a store, not a context value: a context whose value changes while a page still streams in (a page naming
+// its marks during the first load) makes React draw that page's part in the browser beside its streamed copy (#172).
+// The store reaches only the sidebar's parts that read it.
+type PlaceStore={get:()=>Place,subscribe:(listener:()=>void)=>()=>void,set:(place:Place)=>void};
+function placeStore(first:Place):PlaceStore {
+ let current=first; const listeners=new Set<()=>void>();
+ return {get:()=>current,subscribe:listener=>{ listeners.add(listener); return ()=>{ listeners.delete(listener); }; },
+  set:place=>{ if(place===current) return; current=place; listeners.forEach(listener=>listener()); }};
+}
+const home:Place={section:'home',chat:false};
+const outside=placeStore(home);
+const PlaceContext=createContext<{store:PlaceStore,mark:(marks:Marks)=>void}>({store:outside,mark:()=>{}});
 
 export function ShellPlace({lead,chatAgents,children}:Known&{children:ReactNode}) {
  const segments=useSelectedLayoutSegments();
  const key=segments.join('/');
  const [marked,setMarked]=useState<{key:string,marks:Marks}|null>(null);
- // The same place keeps the same object, so a page naming what the Shell already knew changes no context value: a
- // context that changes while a page still streams in would make React draw that page's part in the browser beside its
- // streamed copy (#172).
  const at=useMemo(()=>placeOf(key.split('/')),[key]);
  const marks=marked?.key===key?marked.marks:{};
  const agent=at.agent??marks.agent??(at.section==='chat'?lead:at.conversation?chatAgents[at.conversation]:undefined);
  const {section,conversation,channel}=at, card=marks.card;
+ // The same place keeps the same object, so a page naming what the Shell already knew redraws nothing.
  const place=useMemo<Place>(()=>({section,agent,conversation,channel,card,chat:chatSections.has(section)}),[section,agent,conversation,channel,card]);
- // A page naming the same marks again changes nothing, so its effect never draws the Shell twice.
- // A transition, for the same reason: an urgent update above a page still hydrating would draw it again in the browser.
- const mark=useCallback((marks:Marks)=>startTransition(()=>setMarked(was=>was?.key===key&&was.marks.agent===marks.agent&&was.marks.card===marks.card?was:{key,marks})),[key]);
- const value=useMemo(()=>({place,mark}),[place,mark]);
+ const [store]=useState(()=>placeStore(place));
+ useLayoutEffect(()=>{ store.set(place); },[store,place]);
+ // The marks belong to the page shown: the address they were named on is read when they are named, after the Shell has
+ // taken the new address (its layout effect runs before the page's effect).
+ const shown=useRef(key);
+ useLayoutEffect(()=>{ shown.current=key; },[key]);
+ const mark=useCallback((marks:Marks)=>setMarked(was=>{ const named=shown.current;
+  return was?.key===named&&was.marks.agent===marks.agent&&was.marks.card===marks.card?was:{key:named,marks}; }),[]);
+ const value=useMemo(()=>({store,mark}),[store,mark]);
  return <PlaceContext value={value}>{children}</PlaceContext>;
 }
 
-export const useShellPlace=()=>useContext(PlaceContext).place;
+export function useShellPlace() {
+ const {store}=useContext(PlaceContext);
+ return useSyncExternalStore(store.subscribe,store.get,store.get);
+}
 
 // What a page knows of its place that its address does not say: the Agent of its Conversation or chat, the Card it opens.
 export function PageMarks({agent,card}:Marks) {
