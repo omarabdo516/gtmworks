@@ -49,7 +49,7 @@ if(step==='settled') {
 }
 
 // The Company whose Engine is the first one, and its main Agent's profile there, from the records the worker reads.
-const {data:companies,error}=await service.from('companies').select('id,name').order('created_at');
+const {data:companies,error}=await service.from('companies').select('id,name').order('id');
 assert.equal(error,null,JSON.stringify(error));
 let company=null, record=null;
 for(const one of companies) { const found=await engineOf(one.id,service); if(found?.address===process.env.HERMES_ADDRESS) { company=one; record=found; break; } }

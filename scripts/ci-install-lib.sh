@@ -76,13 +76,15 @@ engine_listen_ports() {
 # Any argument after the installer's path is passed to `company add`, such as the sandbox limits (#396).
 second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com "${@:2}" && main_agent_plugin_settled; }
 # The worker places the main Agent's plugin in each Company's main Agent's profile and restarts that Engine once to load
-# it (#884): every check after first run and after a Company is added waits for it, so none meets the Engine mid-restart.
+# it (#884): every check after first run, after a Company is added and after an update to this release waits for it, so
+# none meets the Engine mid-restart.
 # An install of a release without the plugin (the release areas' older ones) has nothing to wait for.
 main_agent_plugin_settled() {
-  [ -f scripts/check-install-main-agent.mjs ] || return 0
+  local check="${root:-$PWD}/scripts/check-install-main-agent.mjs"
+  [ -f "$check" ] || return 0
   local web; web=$(compose ps -q web 2> /dev/null) || return 0
   [ -n "$web" ] && docker exec "$web" test -f /app/lib/engine/gtmworks-plugin/plugin.yaml 2> /dev/null || return 0
-  engine_node "$(first_engine_key)" - settled < scripts/check-install-main-agent.mjs
+  engine_node "$(first_engine_key)" - settled < "$check"
 }
 # The app image a source install runs, from its compose file's `web` service: CI loads the run's one build under this
 # tag and the release areas tag their test releases from it, so a tag change is made in that file alone (#411).
