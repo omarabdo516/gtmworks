@@ -14,9 +14,9 @@ vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 // Links stay on the test page: a new page is the pathname changing, as the app's router changes it. The frame stays, as
 // the Company's layout keeps it (#789); each route draws a page frame of its own (`segment`, its key).
 const stay = (event: { preventDefault: () => void }) => event.preventDefault();
-const frame = (segment = '', loading = false) => <LanguageProvider language="en"><Frame sidebar={<nav aria-label="Navigation">
+const frame = (segment = '') => <LanguageProvider language="en"><Frame sidebar={<nav aria-label="Navigation">
  <a href="#chats" onClick={stay}>Chats</a><a href="#board" onClick={stay}>Marketing board</a><button type="button">Account menu</button>
-</nav>}><PageFrame key={loading ? `${segment} loading` : segment} title="Home" loading={loading}>{loading ? <main className="page"/> : <main className="page"><a href="#card" onClick={stay}>A card on the page</a></main>}</PageFrame></Frame></LanguageProvider>;
+</nav>}><PageFrame key={segment} title="Home"><main className="page"><a href="#card" onClick={stay}>A card on the page</a></main></PageFrame></Frame></LanguageProvider>;
 const show = async (width: number) => { route.pathname = '/c/rs-learning/home'; await page.viewport(width, 900); return render(frame()); };
 
 const sidebar = () => document.querySelector<HTMLElement>('.sidebar')!;
@@ -123,36 +123,24 @@ test('a new page fades in once; a redraw, a frame drawn again on the same page a
  expect(getComputedStyle(sidebar()).opacity).toBe('1');
 });
 
-// A press draws the page's loading frame at once (#771): it is busy and does not fade; the page that replaces it fades
-// once, as any new page does.
-test('a loading frame does not fade, and the page that arrives in its place fades once', async () => {
- const screen = await show(1440);
- const starts = watchStarts(event => event.animationName);
- await settle();
- starts.length = 0;
- route.pathname = '/c/rs-learning/numbers';
- await screen.rerender(frame('numbers', true));
- expect(content().getAttribute('aria-busy')).toBe('true');
- await new Promise(resolve => setTimeout(resolve, 250));
- expect(starts, 'the loading frame').toEqual([]);
- await screen.rerender(frame('numbers'));
- await expect.poll(() => starts).toEqual(['gw-fade-in']);
- expect(content().hasAttribute('aria-busy')).toBe(false);
-});
-
-// #771: a press whose page has not landed after 100ms draws that page's loading frame in the page's place, inside the
-// same sidebar; the page left stays mounted out of sight, and the page that lands takes the frame's place. A press on
-// the page shown, or on Settings (drawn over the page), draws none.
+// #771: a press whose page has not landed after 100ms draws that page's loading frame in the page's own top bar and
+// content area, beside the same sidebar: one top bar, its title the pressed page's, the content busy; the page left
+// stays mounted out of sight. The page that lands takes the frame's place and fades in once; the loading frame itself
+// does not fade. A press on the page shown, or on Settings (drawn over the page), draws none.
 test('a press whose page is on its way draws its loading frame in the page\'s place until the page lands', async () => {
  const screen = await show(1440);
- const pageShown = () => getComputedStyle(document.querySelector('.app-content:not([aria-busy])')!).display !== 'none';
+ const starts = watchStarts(event => event.animationName);
+ const pageShown = () => getComputedStyle(document.querySelector('main.page')!).display !== 'none';
  setPageBeingOpened('/c/rs-learning/log');
  await new Promise(resolve => setTimeout(resolve, 50));
  expect(document.querySelector('.app-content[aria-busy]'), 'not before 100ms').toBeNull();
  const loading = screen.getByRole('status');
  await expect.element(loading).toHaveTextContent('Opening page');
  expect(document.querySelector('.app-content[aria-busy="true"]')).not.toBeNull();
+ expect(document.querySelectorAll('.topbar').length, 'one top bar').toBe(1);
  expect(document.querySelector('.topbar h1')!.textContent).toBe('Activity log');
+ await settle();
+ starts.length = 0;
  expect(pageShown()).toBe(false);
  expect(document.querySelector('a[href="#card"]'), 'the page left stays mounted').not.toBeNull();
  await expect.element(screen.getByRole('navigation', { name: 'Navigation' })).toBeVisible();
@@ -160,6 +148,7 @@ test('a press whose page is on its way draws its loading frame in the page\'s pl
  await screen.rerender(frame('log'));
  expect(document.querySelector('.app-content[aria-busy]'), 'the page landed').toBeNull();
  expect(pageShown()).toBe(true);
+ await expect.poll(() => starts, { message: 'the page that landed fades in once' }).toEqual(['gw-fade-in']);
  setPageBeingOpened(null);
  for (const pressed of ['/c/rs-learning/log', '/c/rs-learning/settings']) {
   setPageBeingOpened(pressed);
