@@ -39,7 +39,8 @@ const current=({person}:Reader)=>!person||person===readingFor;
 export async function readApps(reader:Reader) {
  if(!current(reader)) return;
  const asked=signIns;
- const apps=await fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}`,{cache:'no-store'})
+ // The list is one of a page's Engine reads, in Settings' queue of four (#898), as each app's test is.
+ const apps=await settingsReads(()=>fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}`,{cache:'no-store'}))
   .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.apps)?body.apps as AppItem[]:null).catch(()=>null);
  if(!current(reader)||(reader.person&&asked!==signIns)) return;
  const key=keyOf(reader);
@@ -52,13 +53,17 @@ export async function readApps(reader:Reader) {
 }
 
 type Tested={state:AppState,agents:{id:string,state:AppState|null}[]};
-async function testApp(reader:Reader,key:string,app:string,asked:number) {
- const tested=await settingsReads(()=>fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}&test=${encodeURIComponent(app)}`,{cache:'no-store'})
+// A test that fails is asked again after a pause, longer each time, a few times, while the app still reads `checking`.
+const testAgain=[3000,10000,30000];
+async function testApp(reader:Reader,key:string,app:string,asked:number,tries=0) {
+ const answer=await settingsReads(()=>fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}&test=${encodeURIComponent(app)}`,{cache:'no-store'})
   .then(response=>response.ok?response.json() as Promise<Tested>:null)).catch(()=>null);
- if(!tested||typeof tested.state!=='string'||!Array.isArray(tested.agents)||!current(reader)||(reader.person&&asked!==signIns)) return;
+ if(!current(reader)||(reader.person&&asked!==signIns)) return;
  const entry=held.get(key);
  // A newer read already listed this app again; its own test answers it.
  if(!entry?.apps?.some(item=>item.key===app&&item.state==='checking')) return;
+ const tested=answer&&typeof answer.state==='string'&&Array.isArray(answer.agents)?answer:null;
+ if(!tested) { if(tries<5) setTimeout(()=>void testApp(reader,key,app,asked,tries+1),testAgain[Math.min(tries,testAgain.length-1)]); return; }
  const states=new Map(tested.agents.map(agent=>[agent.id,agent.state]));
  held.set(key,{...entry,apps:entry.apps.map(item=>item.key!==app?item:{...item,state:tested.state,agents:item.agents.map(agent=>states.has(agent.id)?{...agent,state:states.get(agent.id)??null}:agent)})});
  listeners.forEach(listener=>listener());

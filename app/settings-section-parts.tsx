@@ -16,7 +16,7 @@ import { SkillPage } from './settings-skill-page';
 import { RoutinesSection } from './settings-routines';
 import { KnowledgeEditedAt, KnowledgeEditor } from './settings-lazy';
 import { UsageTable, UsageModels } from './usage-tables';
-import { partUrl, useSettingsPart, type PartRead } from './settings-part-read';
+import { partUrl, useSettingsPart, foundRead as found, firstReading as reading, PartReading as ReadingLine } from './settings-part-read';
 
 // The parts of Settings' Company sections that the Engine backs (#898, ADR 0030): the work sandbox's state, usage,
 // learning and a learned Skill's page, Routines and the Company knowledge text. Each section is drawn at once from what
@@ -24,9 +24,6 @@ import { partUrl, useSettingsPart, type PartRead } from './settings-part-read';
 // when the Engine does not answer.
 const always=()=>true;
 const noRoutines:AgentRoutines[]=[];
-const found=(data:{state?:string}|null|undefined)=>data?.state==='found';
-const reading=(read:PartRead<unknown>)=>read.state==='reading'&&!read.kept;
-function ReadingLine() { const {t}=useI18n(); return <div className="panel-card"><p className="panel-empty set-part-reading" role="status">{t('settingsPartReading')}</p></div>; }
 
 // The Company's work sandbox not answering (#398): one plain state in the existing notice style, and no control. The
 // Engine itself not answering leaves this unread; the models section names that.

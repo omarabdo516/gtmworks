@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { visibleSections } from '@/lib/settings-overlay.mjs';
 import { companyEngine } from '@/lib/engine/handle.mjs';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
@@ -38,29 +39,29 @@ const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'C
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
 type Db=Awaited<ReturnType<typeof supabase>>;
 type Ask={db:Db,company:string,role:string,person:string,agent:string,skill:string,days:7|30};
-const rank:Record<string,number>={viewer:0,contributor:1,manager:2,owner:3};
-// Each part: the lowest Role that opens its section, whether it needs an Agent (or a Skill), and its read.
-const parts:Record<string,{least:string,agent?:boolean,skill?:boolean,read:(ask:Ask)=>Promise<unknown>}>={
- signIns:{least:'viewer',read:({db,company})=>readCompanySignIns(db,{company})},
- models:{least:'viewer',read:({db,company,role})=>readCompanyModels(db,{company,owner:role==='owner'})},
- keys:{least:'viewer',read:({db,company})=>readCompanyKeys(db,service(),{company})},
- providers:{least:'viewer',read:({db,company})=>readProviderModels(db,{company})},
- speech:{least:'viewer',read:({db,company})=>readCompanySpeech(db,{company})},
+// Each part: the section it is drawn in (read only by a Role that section opens for), whether it needs an Agent (or a
+// Skill), and its read.
+const parts:Record<string,{section:string,agent?:boolean,skill?:boolean,read:(ask:Ask)=>Promise<unknown>}>={
+ signIns:{section:'models',read:({db,company})=>readCompanySignIns(db,{company})},
+ models:{section:'models',read:({db,company,role})=>readCompanyModels(db,{company,owner:role==='owner'})},
+ keys:{section:'models',read:({db,company})=>readCompanyKeys(db,service(),{company})},
+ providers:{section:'models',read:({db,company})=>readProviderModels(db,{company})},
+ speech:{section:'models',read:({db,company})=>readCompanySpeech(db,{company})},
  // Whether the Company's work sandbox answers (#398), from its own Engine's ssh backend.
- sandbox:{least:'contributor',read:async({company})=>{ try { return await (await companyEngine(company))?.on('default')?.files.sandbox()??{state:'unreachable'}; } catch { return {state:'unreachable'}; } }},
+ sandbox:{section:'company',read:async({company})=>{ try { return await (await companyEngine(company))?.on('default')?.files.sandbox()??{state:'unreachable'}; } catch { return {state:'unreachable'}; } }},
  // The token use of the period of every Company the reader manages (#347, #32).
- usage:{least:'manager',read:({person,days})=>managedUsage(person,days)},
- learning:{least:'contributor',read:({db,company})=>readCompanyLearning(db,{company}).catch(()=>({state:'failed',agents:null,rules:null,lessons:null}))},
- skillPage:{least:'contributor',agent:true,skill:true,read:({db,company,agent,skill,person})=>readCompanySkillPage(db,{company,agent,name:skill,person}).catch(()=>null)},
- routines:{least:'contributor',read:({db,company})=>readCompanyRoutines(db,{company}).catch(()=>({state:'failed',agents:null}))},
- knowledge:{least:'contributor',read:({db,company})=>readKnowledge(db,company).catch(()=>({state:'failed',parts:null}))},
- about:{least:'viewer',agent:true,read:({db,company,agent})=>readAgentAbout(db,{company,agent})},
- skills:{least:'viewer',agent:true,read:({db,company,agent})=>readAgentSkills(db,{company,agent})},
- how:{least:'viewer',agent:true,read:({db,company,agent})=>readAgentInstructions(db,{company,agent})},
- voice:{least:'viewer',agent:true,read:({db,company,agent})=>readAgentVoice(db,{company,agent})},
- permissions:{least:'viewer',agent:true,read:({db,company,agent})=>readAgentPermissions(db,{company,agent}).catch(()=>({state:'failed',permissions:null}))},
- agentModel:{least:'viewer',agent:true,read:({db,company,agent,role})=>readCompanyModels(db,{company,agent,owner:role==='owner'}).catch(()=>({models:null}))},
- morning:{least:'viewer',agent:true,read:({db,company,agent})=>readAgentMorning(db,{company,agent}).catch(()=>({state:'failed'}))},
+ usage:{section:'usage',read:({person,days})=>managedUsage(person,days)},
+ learning:{section:'learning',read:({db,company})=>readCompanyLearning(db,{company}).catch(()=>({state:'failed',agents:null,rules:null,lessons:null}))},
+ skillPage:{section:'learning',agent:true,skill:true,read:({db,company,agent,skill,person})=>readCompanySkillPage(db,{company,agent,name:skill,person}).catch(()=>null)},
+ routines:{section:'routines',read:({db,company})=>readCompanyRoutines(db,{company}).catch(()=>({state:'failed',agents:null}))},
+ knowledge:{section:'knowledge',read:({db,company})=>readKnowledge(db,company).catch(()=>({state:'failed',parts:null}))},
+ about:{section:'agents',agent:true,read:({db,company,agent})=>readAgentAbout(db,{company,agent})},
+ skills:{section:'agents',agent:true,read:({db,company,agent})=>readAgentSkills(db,{company,agent})},
+ how:{section:'agents',agent:true,read:({db,company,agent})=>readAgentInstructions(db,{company,agent})},
+ voice:{section:'agents',agent:true,read:({db,company,agent})=>readAgentVoice(db,{company,agent})},
+ permissions:{section:'agents',agent:true,read:({db,company,agent})=>readAgentPermissions(db,{company,agent}).catch(()=>({state:'failed',permissions:null}))},
+ agentModel:{section:'agents',agent:true,read:({db,company,agent,role})=>readCompanyModels(db,{company,agent,owner:role==='owner'}).catch(()=>({models:null}))},
+ morning:{section:'agents',agent:true,read:({db,company,agent})=>readAgentMorning(db,{company,agent}).catch(()=>({state:'failed'}))},
 };
 export async function GET(request:NextRequest) {
  try {
@@ -73,7 +74,7 @@ export async function GET(request:NextRequest) {
   if(!await routeAllowed(db,file,'GET',company,user.id)) return reply({error:'settingNotAllowed'},403);
   const {data:member}=await db.from('members').select('role').eq('company_id',company).eq('person_id',user.id).is('removed_at',null).maybeSingle();
   const role=String(member?.role??'');
-  if(!(role in rank)||rank[role]<rank[part.least]) return reply({error:'settingNotAllowed'},403);
+  if(!visibleSections(role).some(([key])=>key===part.section)) return reply({error:'settingNotAllowed'},403);
   const readAt=Date.now();
   return reply({data:await part.read({db,company,role,person:user.id,agent,skill,days:query.get('period')==='30'?30:7}),readAt});
  } catch { return reply({error:'settingFailed'},502); }

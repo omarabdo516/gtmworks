@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/lib/i18n-client';
 import { settingsReads } from '@/lib/settings-part-queue.mjs';
 
 // One part of Settings that the Engine backs (ADR 0030, #791, #898), read by the browser after its section is drawn
@@ -60,3 +61,8 @@ export function useSettingsPart<T>(url:string,asked:number,good:(data:T)=>boolea
  },[url,asked]); // eslint-disable-line react-hooks/exhaustive-deps
  return read;
 }
+
+// What the parts share: a read is good when the Engine found it; a part on its first read with nothing kept says so.
+export const foundRead=(data:{state?:string}|null|undefined)=>data?.state==='found';
+export const firstReading=(read:PartRead<unknown>)=>read.state==='reading'&&!read.kept;
+export function PartReading() { const {t}=useI18n(); return <div className="panel-card"><p className="panel-empty set-part-reading" role="status">{t('settingsPartReading')}</p></div>; }

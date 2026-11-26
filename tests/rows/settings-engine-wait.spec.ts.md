@@ -2,5 +2,5 @@
 
 ## Cases
 
-| `settings-engine-wait.spec.ts` "with every management read held five seconds, each Settings page draws at once and fills in when the Engine answers" | new | Only the whole app with a held fake Engine shows a page drawn before its Engine reads land, and how many of them a page opens at once. |
-| `settings-engine-wait.spec.ts` "an open of an Agent's page fills in its About from the Engine, and the server writes its settings_opened line" | new | The log line is written by the server once the response has gone; only the running app writes it. |
+| `settings-engine-wait.spec.ts` "with every management read held five seconds, each Settings page draws at once and fills in when the Engine answers" | stays | Only the whole app with a held fake Engine shows a page drawn before its Engine reads land, and how many of them a page opens at once. |
+| `settings-engine-wait.spec.ts` "an open of an Agent's page fills in its About from the Engine, and the server writes its settings_opened line" | stays | The log line is written by the server once the response has gone; only the running app writes it. |

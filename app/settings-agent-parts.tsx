@@ -8,7 +8,7 @@ import type { StandingPermission } from '@/lib/standing-permissions.mjs';
 import type { AgentSkillRow } from './settings-agent-form';
 import { StandingPermissions } from './standing-permissions';
 import { AgentAbout, AgentInstructions, AgentInstructionsReadOnly, AgentSkills, AgentVoice, AgentEffort, AgentMorning, AgentVoiceSpeed, AgentModel } from './settings-lazy';
-import { partUrl, useSettingsPart, type PartRead } from './settings-part-read';
+import { partUrl, useSettingsPart, foundRead as found, firstReading as reading, PartReading, type PartRead } from './settings-part-read';
 
 // The parts of an Agent's page in Settings that its own Engine profile keeps (#161, #162, #166, #176, #179, #180, #182,
 // #29), each read by the browser on its own after the page is drawn from what gtmworks stores (#898, ADR 0030): the page
@@ -19,19 +19,16 @@ type How={state:string,own:boolean,instructions:string,sectionChars:number,limit
 type Skills={state:string,own:boolean,skills:AgentSkillRow[]|null}|null;
 type Permissions={state:string,permissions:StandingPermission[]|null};
 export type AgentModelRead={models:{agents:{model:string|null,choice:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null};
-const found=(data:{state?:string}|null|undefined)=>data?.state==='found';
 const useAgentPart=<T,>(company:string,agent:string,part:string,asked:number,good:(data:T)=>boolean=found as (data:T)=>boolean):PartRead<T>=>useSettingsPart<T>(partUrl(company,part,{agent}),asked,good);
-const reading=(read:PartRead<unknown>)=>read.state==='reading'&&!read.kept;
 // One empty list for every draw: StandingPermissions treats a new list as the server's list drawn again.
 const none:StandingPermission[]=[];
 
 function Line({children}:{children:ReactNode}) { return <div className="panel-card"><p className="panel-empty">{children}</p></div>; }
-function Reading() { const {t}=useI18n(); return <p className="panel-empty set-part-reading" role="status">{t('settingsPartReading')}</p>; }
 
 // About is the Agent's profile description (#161): editable by the Owner and Managers on its own profile, once read.
 export function AboutPart({company,agent,name,canManage,asked}:{company:string,agent:string,name:string,canManage:boolean,asked:number}) {
  const read=useAgentPart<AboutRead|null>(company,agent,'about',asked);
- if(reading(read)) return <div className="panel-card"><Reading/></div>;
+ if(reading(read)) return <PartReading/>;
  const about=read.data;
  return canManage&&about?.state==='found'&&about.own?<AgentAbout agent={agent} name={name} description={about.description??''}/>
   :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>;
@@ -41,7 +38,7 @@ export function AboutPart({company,agent,name,canManage,asked}:{company:string,a
 export function HowPart({company,agent,name,owner,asked}:{company:string,agent:string,name:string,owner:boolean,asked:number}) {
  const {t}=useI18n();
  const read=useAgentPart<How>(company,agent,'how',asked);
- if(reading(read)) return <div className="panel-card"><Reading/></div>;
+ if(reading(read)) return <PartReading/>;
  const how=read.data;
  return owner&&how?.state==='found'&&how.own?<AgentInstructions agent={agent} name={name} instructions={how.instructions??''} sectionChars={how.sectionChars??0} limit={how.limit??20000}/>
   :<AgentInstructionsReadOnly instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>;
@@ -60,7 +57,7 @@ export function MorningPart({company,agent,canManage,focus,asked}:{company:strin
   if(active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
   const element=document.getElementById(target); element?.focus(); element?.scrollIntoView({block:'center'});
  },[target]);
- if(reading(read)) return <div className="panel-card"><Reading/></div>;
+ if(reading(read)) return <PartReading/>;
  return <AgentMorning agent={agent} editable={canManage&&!!morning} morning={morning?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null}/>;
 }
 
@@ -68,7 +65,7 @@ export function MorningPart({company,agent,canManage,focus,asked}:{company:strin
 export function ThinkingPart({company,agent,name,owner,asked}:{company:string,agent:string,name:string,owner:boolean,asked:number}) {
  const {t}=useI18n();
  const read=useAgentPart<AgentModelRead>(company,agent,'agentModel',asked,data=>data?.models!=null);
- if(reading(read)) return <div className="panel-card"><Reading/></div>;
+ if(reading(read)) return <PartReading/>;
  const mine=read.data?.models?.agents[0];
  if(!mine) return <Line>{t('settingsModelsUnread')}</Line>;
  return <>
@@ -82,7 +79,7 @@ export function ThinkingPart({company,agent,name,owner,asked}:{company:string,ag
 export function VoicePart({company,agent,personName,canManage,asked}:{company:string,agent:string,personName:string,canManage:boolean,asked:number}) {
  const {t}=useI18n();
  const read=useAgentPart<VoiceRead|null>(company,agent,'voice',asked);
- if(reading(read)) return <div className="panel-card"><Reading/></div>;
+ if(reading(read)) return <PartReading/>;
  const voice=read.data;
  return canManage&&voice?.state==='found'&&voice.own?<AgentVoice company={company} agent={agent} personName={personName} voice={voice}/>
   :<ul className="panel-card"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoice')}</span>
@@ -105,7 +102,7 @@ export function PermissionsPart({company,agent,canRevoke,asked}:{company:string,
 export function SkillsPart({company,agent,name,slug,learning,canManage,asked}:{company:string,agent:string,name:string,slug:string,learning:boolean,canManage:boolean,asked:number}) {
  const {t}=useI18n();
  const read=useAgentPart<Skills>(company,agent,'skills',asked);
- if(reading(read)) return <section className="dp-sec" aria-labelledby="set-h-skills"><h5 className="dp-label" id="set-h-skills"><span>{t('settingsSkills')}</span></h5><div className="panel-card"><Reading/></div></section>;
+ if(reading(read)) return <section className="dp-sec" aria-labelledby="set-h-skills"><h5 className="dp-label" id="set-h-skills"><span>{t('settingsSkills')}</span></h5><PartReading/></section>;
  const skills=read.data;
  return <AgentSkills agent={agent} name={name} slug={slug} learning={learning} skills={skills?.state==='found'?skills.skills:null} editable={canManage&&skills?.state==='found'&&skills.own}/>;
 }

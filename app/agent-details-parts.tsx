@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
+import { settingsReads } from '@/lib/settings-part-queue.mjs';
 import { AgentMemory, type AgentMemoryProps } from '@/app/agent-memory';
 import { StandingPermissions } from '@/app/standing-permissions';
 import type { MemoryNote } from '@/lib/engine.mjs';
@@ -16,7 +17,8 @@ function usePart<T>(url:string,parse:(body:unknown)=>T|null):[Read<T>,()=>void] 
  const [read,setRead]=useState<Read<T>>({state:'loading'}); const [asked,setAsked]=useState(0);
  useEffect(()=>{
   const stopped=new AbortController();
-  void fetch(url,{cache:'no-store',signal:stopped.signal}).then(async response=>{
+  // In the queue of four every Settings Engine read waits in (#898), here and in the details panel alike.
+  void settingsReads(()=>fetch(url,{cache:'no-store',signal:stopped.signal}),stopped.signal).then(async response=>{
    const body=response.ok?await response.json() as unknown:null; if(!response.ok) await response.arrayBuffer().catch(()=>{});
    const value=body===null?null:parse(body);
    setRead(value===null?{state:'failed'}:{state:'found',value});
