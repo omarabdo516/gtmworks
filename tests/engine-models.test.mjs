@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 // #158: an Agent's models are the Engine's own list for its profile, and a Run may run on one of them.
 const writer={soul:'',provider:'anthropic',model:'claude-opus-4-6',key:'test-only-key',config:{},credentials:{anthropic:'signed-in'},env:{OPENROUTER_API_KEY:'set'}};

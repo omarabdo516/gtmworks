@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withNoEngine, engineServing } from './engine-records.mjs';
 import { readAgentPermissions, revokeAgentPermission, standingEntry, standingLabel } from '../lib/standing-permissions.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // #166: an Agent's standing permissions are its own profile's entries in the Engine, each with who allowed it and when
 // from gtmworks's record; an Agent the reader does not see is not found, one on the Company's shared profile has none
@@ -10,7 +10,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const [ads,seo,lead]=['3b000000-0000-0000-0000-000000000011','3b000000-0000-0000-0000-000000000021','3b000000-0000-0000-0000-000000000031'];
 const hex=id=>id.replaceAll('-','');
 const adsProfile=`ag-${hex(ads)}`; const seoProfile=`ag-${hex(seo)}`; const shared=`co-${hex(company)}`;
-const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
 const profileOn=(fake,name,list)=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{command_allowlist:list},credentials:{}});
 const rows=[
  {agent:ads,name:'Ads',connection:'f1000000-0000-0000-0000-000000000011',profile:adsProfile,main:false,own:true},
@@ -52,64 +51,64 @@ test('an app\'s tool is named by the app and the tool, and anything else as the 
 });
 
 test('the rows are the Agent\'s own entries with who allowed each, none for an Agent on a shared profile, and none for one the reader does not see',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['mcp:meta-ads/create_campaign','recursive delete']); profileOn(fake,seoProfile,['mcp:wordpress/publish_post']); profileOn(fake,shared,['shared entry']);
   const {db}=session({grants:[{agent:ads,entry:'mcp:meta-ads/create_campaign',allowed_by:'Omar',allowed_at:'2026-11-20T10:00:00Z'},{agent:seo,entry:'recursive delete',allowed_by:'Mona',allowed_at:'2026-11-20T11:00:00Z'}]});
-  assert.deepEqual(await readAgentPermissions(db,{company,agent:ads,hermes:install(fake)}),{state:'found',permissions:[
+  assert.deepEqual(await readAgentPermissions(db,{company,agent:ads}),{state:'found',permissions:[
    {entry:'mcp:meta-ads/create_campaign',app:{key:'meta-ads',name:'Meta Ads'},tool:'create_campaign',allowedBy:'Omar',allowedAt:'2026-11-20T10:00:00Z'},
    {entry:'recursive delete',app:null,tool:null,allowedBy:null,allowedAt:null}]},'an entry with no record of who allowed it has no second line, even when another Agent has one');
-  assert.deepEqual((await readAgentPermissions(db,{company,agent:seo,hermes:install(fake)})).permissions?.map(each=>each.entry),['mcp:wordpress/publish_post']);
-  assert.deepEqual(await readAgentPermissions(db,{company,agent:lead,hermes:install(fake)}),{state:'found',permissions:[]},'a shared profile\'s list is not this Agent\'s');
-  assert.deepEqual(await readAgentPermissions(session({agents:[rows[1]]}).db,{company,agent:ads,hermes:install(fake)}),{state:'missing',permissions:null});
-  assert.equal((await readAgentPermissions(db,{company,agent:ads,hermes:null})).state,'noEngine');
-  assert.equal((await readAgentPermissions(db,{company,agent:'nope',hermes:install(fake)})).state,'invalid');
-  assert.deepEqual(await readAgentPermissions(session({grantsFail:true}).db,{company,agent:ads,hermes:install(fake)}),{state:'failed',permissions:null},'a record that cannot be read is never drawn as nobody');
+  assert.deepEqual((await readAgentPermissions(db,{company,agent:seo})).permissions?.map(each=>each.entry),['mcp:wordpress/publish_post']);
+  assert.deepEqual(await readAgentPermissions(db,{company,agent:lead}),{state:'found',permissions:[]},'a shared profile\'s list is not this Agent\'s');
+  assert.deepEqual(await readAgentPermissions(session({agents:[rows[1]]}).db,{company,agent:ads}),{state:'missing',permissions:null});
+  assert.equal((await withNoEngine(company,()=>readAgentPermissions(db,{company,agent:ads}))).state,'noEngine');
+  assert.equal((await readAgentPermissions(db,{company,agent:'nope'})).state,'invalid');
+  assert.deepEqual(await readAgentPermissions(session({grantsFail:true}).db,{company,agent:ads}),{state:'failed',permissions:null},'a record that cannot be read is never drawn as nobody');
   fake.settings.managementStatus=500;
-  assert.equal((await readAgentPermissions(db,{company,agent:ads,hermes:install(fake)})).state,'unreachable');
+  assert.equal((await readAgentPermissions(db,{company,agent:ads})).state,'unreachable');
  } finally { await fake.close(); }
 });
 
 test('a revoke is asked of the database first, removes that one entry from that one profile and logs it once by its row\'s name',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','recursive delete']); profileOn(fake,seoProfile,['mcp:notion/create_page']);
   const {db,logged,asked}=session();
-  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'revoked',logged:true});
+  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page'}),{state:'revoked',logged:true});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.deepEqual(fake.settings.profiles.get(seoProfile).config.command_allowlist,['mcp:notion/create_page'],'another Agent keeps its own');
   assert.deepEqual(logged,[{c:company,agent:ads,permission:'Notion · create_page',entry:'mcp:notion/create_page'}]);
   assert.deepEqual(asked,['company_app_agents','check_permission_revoke','begin_permission_revoke','agent_permission_sending','agent_permission_inflight','note_permission_revoked','log_permission_revoked','end_permission_revoke']);
-  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'gone'});
+  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page'}),{state:'gone'});
   assert.equal(logged.length,1,'an entry already gone is not logged again');
  } finally { await fake.close(); }
 });
 
 test('a Role the database refuses, a hidden Agent or a malformed entry changes nothing and logs nothing',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['recursive delete']);
   const refused=session({refuse:'permissionNotAllowed'});
-  assert.deepEqual(await revokeAgentPermission(refused.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'notAllowed'});
+  assert.deepEqual(await revokeAgentPermission(refused.db,{company,agent:ads,entry:'recursive delete'}),{state:'notAllowed'});
   const hidden=session({agents:[]});
-  assert.deepEqual(await revokeAgentPermission(hidden.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'missing'});
+  assert.deepEqual(await revokeAgentPermission(hidden.db,{company,agent:ads,entry:'recursive delete'}),{state:'missing'});
   const odd=session();
-  assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:ads,entry:7,hermes:install(fake)}),{state:'invalid'});
-  assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:lead,entry:'recursive delete',hermes:install(fake)}),{state:'gone'},'nothing of a shared profile is revoked through another Agent');
+  assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:ads,entry:7}),{state:'invalid'});
+  assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:lead,entry:'recursive delete'}),{state:'gone'},'nothing of a shared profile is revoked through another Agent');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.deepEqual([...refused.logged,...hidden.logged,...odd.logged],[]);
   fake.settings.managementStatus=401;
-  assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'refused'});
+  assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:ads,entry:'recursive delete'}),{state:'refused'});
   assert.equal(odd.logged.length,0);
  } finally { await fake.close(); }
 });
 
 test('a revoke the Engine took is done even when its log row is refused, and says so to the server\'s log',async()=>{
- const fake=await fakeHermes(); const errors=[]; const error=console.error; console.error=line=>errors.push(line);
+ const fake=await engineServing(company); const errors=[]; const error=console.error; console.error=line=>errors.push(line);
  try {
   profileOn(fake,adsProfile,['recursive delete']);
   const {db,logged}=session({logFail:true});
-  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'revoked',logged:false});
+  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'recursive delete'}),{state:'revoked',logged:false});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
   assert.equal(logged.length,1);
   assert.deepEqual(errors.map(line=>JSON.parse(line).event),['standing_permission_log_failed']);
@@ -117,80 +116,80 @@ test('a revoke the Engine took is done even when its log row is refused, and say
 });
 
 test('what an Always allow may be adding right now is written back with the list, and two revokes at once never restore each other\'s entry',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['recursive delete','mcp:notion/create_page']);
   // A grant the Engine has not saved yet: the revoke writes it with the list.
   const {db}=session({inflight:['mcp:canva/create_design']});
-  assert.equal((await revokeAgentPermission(db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.equal((await revokeAgentPermission(db,{company,agent:ads,entry:'recursive delete'})).state,'revoked');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['mcp:notion/create_page','mcp:canva/create_design']);
   // Two revokes of the same profile at once: each one's entry stays gone.
   const both=session();
-  const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})]);
+  const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page'}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design'})]);
   assert.deepEqual(results.map(result=>result.state),['revoked','revoked']);
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
  } finally { await fake.close(); }
 });
 
 test('two grants taken just now and revoked together both stay revoked: the hold lasts until the log row is written (Codex on #499)',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
   const both=session({inflight:['mcp:notion/create_page','mcp:canva/create_design'],logDelay:300});
-  const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})]);
+  const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page'}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design'})]);
   assert.deepEqual(results.map(result=>result.state),['revoked','revoked']);
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the second revoke never writes the first one back');
  } finally { await fake.close(); }
 });
 
 test('a refused log row undoes nothing: another server process\'s next revoke never writes the entry back (CodeRabbit on #499)',async()=>{
- const fake=await fakeHermes(); const error=console.error; console.error=()=>{};
+ const fake=await engineServing(company); const error=console.error; console.error=()=>{};
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
   // One database, two server processes: the first one's log row is refused.
   const shared={noted:new Map()};
   const first=session({shared,inflight:['mcp:notion/create_page','mcp:canva/create_design'],logFail:true});
   const second=session({shared,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
-  assert.deepEqual(await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'revoked',logged:false});
-  assert.deepEqual(await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)}),{state:'revoked',logged:true});
+  assert.deepEqual(await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page'}),{state:'revoked',logged:false});
+  assert.deepEqual(await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design'}),{state:'revoked',logged:true});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the first entry stays revoked');
  } finally { console.error=error; await fake.close(); }
 });
 
 test('a revoke whose record cannot be kept changes nothing, and one the Engine does not take withdraws its record',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['recursive delete']);
   const noRecord=session({noteFail:true});
-  assert.deepEqual(await revokeAgentPermission(noRecord.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'failed'});
+  assert.deepEqual(await revokeAgentPermission(noRecord.db,{company,agent:ads,entry:'recursive delete'}),{state:'failed'});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete'],'the Engine is never touched');
   assert.equal(noRecord.asked.includes('log_permission_revoked'),false);
   assert.equal(noRecord.asked.at(-1),'end_permission_revoke','its hold still ends');
   const shared={noted:new Map()};
   const engineDown=session({shared}); fake.settings.managementStatus=500;
-  assert.equal((await revokeAgentPermission(engineDown.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'unreachable');
+  assert.equal((await revokeAgentPermission(engineDown.db,{company,agent:ads,entry:'recursive delete'})).state,'unreachable');
   assert.equal(shared.noted.has('recursive delete'),false,'the record is withdrawn, so its grant names its person again');
   assert.equal(engineDown.asked.includes('log_permission_revoked'),false);
  } finally { await fake.close(); }
 });
 
 test('a revoke waits for another one\'s hold, and says busy when it never ends; the hold always ends',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,['recursive delete']);
   const stuck=session({hold:{held:true}});
   const started=Date.now();
-  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete'}),{state:'busy'});
   assert.ok(Date.now()-started>=5000,'it waited for the hold');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete'],'nothing was written');
   const failing=session(); fake.settings.managementStatus=500;
-  assert.equal((await revokeAgentPermission(failing.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'unreachable');
+  assert.equal((await revokeAgentPermission(failing.db,{company,agent:ads,entry:'recursive delete'})).state,'unreachable');
   assert.equal(failing.asked.at(-1),'end_permission_revoke','a failed revoke ends its hold');
  } finally { await fake.close(); }
 });
 
 test('a revoke whose write may have landed keeps its record, so another server process never writes the entry back (CodeRabbit on #499)',async()=>{
- const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ const fake=await engineServing(company); const engineFetch=globalThis.fetch;
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
   const shared={noted:new Map()};
@@ -199,29 +198,29 @@ test('a revoke whose write may have landed keeps its record, so another server p
   // The first process's write lands, then its read-back fails.
   let written=false;
   globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { written=true; return engineFetch(url,init); } if(written) return new Response('down',{status:500}); return engineFetch(url,init); };
-  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'unreachable');
+  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page'})).state,'unreachable');
   globalThis.fetch=engineFetch;
   assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record is kept while the outcome is unknown');
   assert.equal(first.asked.includes('forget_permission_revoked'),false);
-  assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})).state,'revoked');
+  assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design'})).state,'revoked');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the first entry is not written back');
   // A read-back that still shows the entry is a sure failure: the record is withdrawn.
   profileOn(fake,adsProfile,['recursive delete']); fake.settings.staleConfig=true;
   const stale=session({shared});
-  assert.equal((await revokeAgentPermission(stale.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'failed');
+  assert.equal((await revokeAgentPermission(stale.db,{company,agent:ads,entry:'recursive delete'})).state,'failed');
   assert.equal(shared.noted.has('recursive delete'),false);
  } finally { globalThis.fetch=engineFetch; await fake.close(); }
 });
 
 test('a write that timed out before the Engine applied it keeps the record and the hold, so the late write never lets a later revoke restore the entry (CodeRabbit on #499)',async()=>{
- const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ const fake=await engineServing(company); const engineFetch=globalThis.fetch;
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
   const shared={noted:new Map()}; const hold={held:false};
   const first=session({shared,hold,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
   let late=null;
   globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { late=()=>engineFetch(url,init); return Promise.reject(new Error('timeout')); } return engineFetch(url,init); };
-  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'unreachable');
+  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page'})).state,'unreachable');
   globalThis.fetch=engineFetch;
   assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record stays');
   assert.equal(first.asked.includes('end_permission_revoke'),false,'the hold is left to end by itself');
@@ -231,20 +230,20 @@ test('a write that timed out before the Engine applied it keeps the record and t
   await late();
   hold.held=false;
   const second=session({shared,hold,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
-  assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})).state,'revoked');
+  assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design'})).state,'revoked');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the first entry is never written back');
  } finally { globalThis.fetch=engineFetch; await fake.close(); }
 });
 
 test('a write that timed out keeps the hold even when another writer took the entry out before the read-back (CodeRabbit on #499)',async()=>{
- const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ const fake=await engineServing(company); const engineFetch=globalThis.fetch;
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
   const shared={noted:new Map()}; const hold={held:false};
   const first=session({shared,hold});
   // The PUT times out while still pending; another writer removes the entry before the read-back.
   globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { fake.settings.profiles.get(adsProfile).config.command_allowlist=['mcp:canva/create_design']; return Promise.reject(new Error('timeout')); } return engineFetch(url,init); };
-  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'unreachable');
+  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page'})).state,'unreachable');
   globalThis.fetch=engineFetch;
   assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record stays');
   assert.equal(first.asked.includes('end_permission_revoke'),false,'the hold is not ended early');
@@ -253,50 +252,50 @@ test('a write that timed out keeps the hold even when another writer took the en
 });
 
 test('a revoke waits for an Always allow of the same entry still being delivered, and says busy rather than succeed while it is (Codex on #499)',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   // The answer settles while the revoke waits: the revoke then goes on.
   profileOn(fake,adsProfile,['recursive delete']);
   let checks=0;
   const settles=session({sending:()=>++checks<3?[{entry:'recursive delete',handed:false}]:[]});
-  assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete'})).state,'revoked');
   assert.equal(checks,3);
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
   // It never settles: busy, the Engine is never touched, and the hold ends.
   profileOn(fake,adsProfile,['recursive delete']);
   const stuck=session({sending:()=>[{entry:'recursive delete',handed:false}]});
-  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete'}),{state:'busy'});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.equal(stuck.asked.includes('note_permission_revoked'),false);
   assert.equal(stuck.asked.at(-1),'end_permission_revoke');
   // Another entry's answer withheld by the hold, not handed out, does not hold this revoke up, and is not written in.
   profileOn(fake,adsProfile,['recursive delete']);
   const other=session({sending:()=>[{entry:'mcp:notion/create_page',handed:false}]});
-  assert.equal((await revokeAgentPermission(other.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.equal((await revokeAgentPermission(other.db,{company,agent:ads,entry:'recursive delete'})).state,'revoked');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
  } finally { await fake.close(); }
 });
 
 test('a revoke waits for another entry\'s Always allow already handed to a closer, and never writes in one the Engine did not take (Codex on #499)',async()=>{
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   // B is handed out before the hold; its request then expires, so its delivery settles as gone and the Engine never took
   // it: the revoke of A writes the list without B.
   profileOn(fake,adsProfile,['recursive delete']);
   let checks=0;
   const settles=session({sending:()=>++checks<3?[{entry:'mcp:notion/create_page',handed:true}]:[]});
-  assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete'})).state,'revoked');
   assert.equal(checks,3,'it waited for the delivery to settle');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'B is not granted by the revoke');
   // A delivery that never settles: busy, and the Engine is never touched.
   profileOn(fake,adsProfile,['recursive delete']);
   const stuck=session({sending:()=>[{entry:'mcp:notion/create_page',handed:true}]});
-  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete'}),{state:'busy'});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   // An answer whose entry is unknown (a request kept before #166 recorded it) may be this very entry: it is waited for
   // too, even when not handed out.
   const unknown=session({sending:()=>[{entry:null,handed:false}]});
-  assert.deepEqual(await revokeAgentPermission(unknown.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(await revokeAgentPermission(unknown.db,{company,agent:ads,entry:'recursive delete'}),{state:'busy'});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
  } finally { await fake.close(); }
 });

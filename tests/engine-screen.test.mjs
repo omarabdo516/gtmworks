@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes, screenFrame } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 // #712: an Agent's Screen through the Engine contract, read over the management listener's /api/ws (display.status,
 // display.start, display.thumbnail): its state, a start and a start refused with its reason, and one picture or a

@@ -6,8 +6,7 @@ import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveGoodMornings } from '../lib/good-morning-runs.mjs';
 import { keepRunningRoutines } from '../lib/routine-runs.mjs';
-import { selfHosted as isSelfHosted } from '../lib/company-engine.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { selfHosted as isSelfHosted, enginePass } from '../lib/company-engine.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
@@ -27,7 +26,8 @@ const pause=every=>new Promise(resolve=>{ const end=Date.now()+every; const tick
 // The stack starts the worker beside the gateway and PostgREST (after a backup, an update), so the database may not answer
 // yet: wait up to a minute for one answer before the first pass. A database that never answers still fails every pass.
 for(let tries=60;tries>0&&!stopping;tries--) { const {error}=await db.rpc('setup_is_open').then(answer=>answer,error=>({error})); if(!error) break; await pause(1000); }
-const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work(); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
+// Each pass reads a Company's Engine record once (lib/company-engine.mjs enginePass, #781).
+const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await enginePass(work); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
 // A self-hosted install gives each company its own profile in the bundled Hermes and keeps its tools, and those of each
 // Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016), gives each company one shared Skills
 // folder that every one of its Agent profiles reads, holding the lessons its team approved (#122), writes each Agent's team rules into its profile's SOUL.md (#345), gives a main Agent still holding the old default soul the manager's (#434), and moves each Agent
@@ -48,7 +48,7 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // Which Routines each Agent runs now, so its face shows it working (#699); the database counts each set two minutes.
  loop('Running Routines',()=>keepRunningRoutines(db),15000),
  selfHosted&&loop('Hermes',async()=>{ await keepCompanyProfiles(db,{waiting}); await keepLeadSouls(db,{}); },2000),
- selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); await releaseKeyWaits(db,{waiting:keyWaits,driverFor:connection=>engineFor(connection)}); },2000),
+ selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await moveAgentProfiles(db,{waiting:moving}); await releaseKeyWaits(db,{waiting:keyWaits}); },2000),
  // What gtmworks writes into each profile (its team's lessons, its rules) is written when it changed, with a slow pass for
  // drift, and an Engine that does not answer is left alone a while (#772): its own loop, so a slow write never holds a
  // new Agent's profile or an Agent waiting for a model key.

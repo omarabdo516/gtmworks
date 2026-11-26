@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { forgetListeners } from '../lib/engine/transport.mjs';
 import { fakeHermes, noProviderError, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError, failedRunText, usageLimitFirstError, usageLimitError } from './fake-hermes.mjs';
-import { startRun, readRun, startNotReached, startUnknown } from '../lib/hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { startRun, readRun, startNotReached, startUnknown } from '../lib/engine/runs.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
 
@@ -64,7 +65,8 @@ test('after a lost answer every failure is unknown, and a gateway error is never
  const real=globalThis.fetch;
  const failing=code=>Object.assign(new TypeError('fetch failed'),{cause:{code}});
  const start={address:'http://127.0.0.1:8642',profile:'writer',key:'test-only-key',input:'Hello',sessionKey:'s',idempotencyKey:'k'};
- const answers=list=>{ const queue=[...list]; globalThis.fetch=async()=>{ const next=queue.shift(); if(next instanceof Error) throw next; return new Response(JSON.stringify({error:{message:'x'}}),{status:next}); }; };
+ // Each scripted list starts on a listener with no health kept (the backoff has its own tests, engine-transport.test.mjs).
+ const answers=list=>{ forgetListeners(); const queue=[...list]; globalThis.fetch=async()=>{ const next=queue.shift(); if(next instanceof Error) throw next; return new Response(JSON.stringify({error:{message:'x'}}),{status:next}); }; };
  try {
   answers([failing('UND_ERR_SOCKET'),failing('ECONNREFUSED')]); assert.equal(await startRun(start),startUnknown);
   answers([failing('UND_ERR_SOCKET'),400]); assert.equal(await startRun(start),startUnknown);

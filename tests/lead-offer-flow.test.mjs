@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { answerQuestion, closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -9,6 +11,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // request for a Contributor. The database's own rows are proved in supabase/tests/lead_offer.sql and the question
 // functions by question_cards.sql; this proves what the Run does with the answer.
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co','10000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 const company='10000000-0000-0000-0000-000000000001';
 const agent='a9000000-0000-0000-0000-000000000001';
 const conversation='c1000000-0000-0000-0000-000000000001';
@@ -21,14 +25,14 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
  const rpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{
   calls.push([name,args]);
   if(name==='conversation_agent') return ok(agent);
-  if(name==='reserve_conversation_turn') return ok({state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile:'writer',note:null});
+  if(name==='reserve_conversation_turn') return ok({state:'reserved',company:'co',connection:'f9000000-0000-0000-0000-000000000001',profile:'writer',note:null});
   if(name==='conversation_handover_agents') return ok([]);
   if(name==='pin_run') return ok({tools:null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
   if(name==='pin_lead_brief') return ok({...brief,role});
   if(name==='begin_turn_start') return ok(1);
   if(name==='send_conversation_message') return ok(true);
-  if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p1000000-0000-0000-0000-000000000001',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
+  if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p1000000-0000-0000-0000-000000000001',company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
   if(name==='track_run_question') {
    if(args.asking&&!args.ended&&!cards.some(card=>card.run===args.run&&card.question===args.asking.id)) cards.push({id:cards.length+1,run:args.run,question:args.asking.id,content:{question:args.asking.text,choices:args.asking.choices,multiple:args.asking.multiple},state:'open',at:args.read_started_at});
    return ok(cards.filter(card=>card.run===args.run&&card.state==='sending').map(card=>({card:card.id,question:card.question,answer:card.content.answer})));
@@ -58,20 +62,20 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
 }
 
 const start=async(/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {any} */ person,/** @type {any} */ service,/** @type {string} */ sendKey)=>
- sendMessage(person,service,{company,conversation,sendKey,agent,message:'We need Meta ads',hermes,engineFor:fake.engineFor});
+ withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey,agent,message:'We need Meta ads'}));
 
 test('an Owner answers "Make it" with a chip: the same Run goes on and makes the Agent once, and a second answer finds the first',async()=>{
  const fake=fakeEngine(); fake.settings.agentProfile='noModel'; await fake.engineFor({}).createAgent({name:'writer',instructions:''});
  fake.settings.questions=input=>input.includes('Meta ads')?[{text:'Make it?',choices:['Make it','Not now']}]:[];
  fake.settings.toolCalls=input=>input.includes('Meta ads')?[{id:'call-1',name:'create_agent',arguments:{template:'meta'}}]:[];
- const store=databases(fake,'owner'); const close=()=>closeOpenRuns(store.service,{hermes,conversation,engineFor:fake.engineFor});
+ const store=databases(fake,'owner'); const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(store.service,{conversation}));
  assert.deepEqual(await start(fake,store.person,store.service,'k1'),{conversation});
  assert.equal(await close(),0,'the Run waits on its question');
  const [{id:card}]=store.cards;
- const pick={company,conversation,card,choice:0,answerKey:'a1000000-0000-0000-0000-000000000001',hermes,engineFor:fake.engineFor};
- assert.deepEqual(await answerQuestion(store.person,store.service,pick),{state:'claimed'});
- assert.deepEqual(await answerQuestion(store.person,store.service,pick),{state:'claimed'},'the same click again is its own claim');
- assert.deepEqual(await answerQuestion(store.person,store.service,{...pick,choice:1,answerKey:'a1000000-0000-0000-0000-000000000002'}),{state:'taken'},'another click finds it answered');
+ const pick={company,conversation,card,choice:0,answerKey:'a1000000-0000-0000-0000-000000000001'};
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>answerQuestion(store.person,store.service,pick)),{state:'claimed'});
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>answerQuestion(store.person,store.service,pick)),{state:'claimed'},'the same click again is its own claim');
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>answerQuestion(store.person,store.service,{...pick,choice:1,answerKey:'a1000000-0000-0000-0000-000000000002'})),{state:'taken'},'another click finds it answered');
  assert.deepEqual(fake.answers.map(answer=>answer.text),['Make it'],'the chip reaches the waiting Run once');
  assert.ok(store.closed.has(fake.runs[0].id),'the answer closes the same Run');
  assert.equal(fake.runs.length,1,'the same Run went on; no second Run');
@@ -83,12 +87,12 @@ test('an Owner answers "Make it" with a chip: the same Run goes on and makes the
 test('a Contributor types the answer while the card is open: no new Run starts, the request is recorded, and no Agent is made',async()=>{
  const fake=fakeEngine(); fake.settings.questions=input=>input.includes('Meta ads')?[{text:'Ask Omar for it?',choices:['Ask Omar for it','Not now']}]:[];
  fake.settings.toolCalls=input=>input.includes('Meta ads')?[{id:'call-1',name:'request_agent',arguments:{template:'meta'}}]:[];
- const store=databases(fake,'contributor'); const close=()=>closeOpenRuns(store.service,{hermes,conversation,engineFor:fake.engineFor});
+ const store=databases(fake,'contributor'); const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(store.service,{conversation}));
  assert.deepEqual(await start(fake,store.person,store.service,'k1'),{conversation});
  assert.equal(await close(),0);
- const typed={company,conversation,sendKey:'k2',agent,message:'Ask Omar for it',hermes,engineFor:fake.engineFor};
- assert.deepEqual(await sendMessage(store.person,store.service,typed),{conversation,answered:true});
- assert.deepEqual(await sendMessage(store.person,store.service,typed),{conversation,answered:true},'the same key finds the same answer');
+ const typed={company,conversation,sendKey:'k2',agent,message:'Ask Omar for it'};
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(store.person,store.service,typed)),{conversation,answered:true});
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(store.person,store.service,typed)),{conversation,answered:true},'the same key finds the same answer');
  assert.deepEqual(fake.answers.map(answer=>answer.text),['Ask Omar for it']);
  assert.ok(store.closed.has(fake.runs[0].id),'the answer closes the same Run');
  assert.equal(fake.runs.length,1,'an answer starts no Run');

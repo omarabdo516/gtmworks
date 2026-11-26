@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSkills, writeSkill, setSkillEnabled, readLearningGraph } from '../lib/hermes.mjs';
+import { withDriver, engineServing } from './engine-records.mjs';
+import { readSkills, writeSkill, setSkillEnabled, readLearningGraph } from '../lib/engine/skills.mjs';
 import { readCompanySkills, readAgentSkills, changeCompanySkill, changeCompanySkillEnabled } from '../lib/company-skills.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 import { heldChanges } from './held-changes.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'read':'skills.read','write':'skills.write','enable':'skills.enable','learned':'skills.learned'};
 
 // The service behind the skills screen (#343, ADR 0011, ADR 0016): skills live only in Hermes. Each Agent's skills are
 // read from its own profile, the Company's shared ones (team-lessons) beside them; a member who may change skills
@@ -39,7 +41,7 @@ const profileOn=(fake,name,config={})=>fake.settings.profiles.set(name,{soul:'',
 const skillMd=(name,body='Do the thing.')=>`---\nname: ${name}\ndescription: Writes the Friday recap.\n---\n\n${body}\n`;
 
 test('each Agent\'s skills are its profile\'s, the shared ones marked shared', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const shared={skills:{external_dirs:[`/opt/data/profiles/${space}/skills`]}};
   for(const name of [companyProfile(company),agentProfile(writer)]) profileOn(fake,name,shared);
@@ -47,27 +49,26 @@ test('each Agent\'s skills are its profile\'s, the shared ones marked shared', a
   fake.settings.skills.set(space,new Map([['team-lessons',skillMd('team-lessons')]]));
   fake.settings.skills.set(agentProfile(writer),new Map([['weekly-recap',skillMd('weekly-recap')]]));
   const {db}=sessions(fake);
-  const read=await readCompanySkills(db,{company,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
+  const read=await withDriver(DRIVER,driverAt(fake),()=>readCompanySkills(db,{company}));
   assert.deepEqual(read,[
    {id:lead,name:'Lead',own:true,skills:[{name:'team-lessons',description:'Writes the Friday recap.',category:null,locked:false,provenance:'external',shared:true,enabled:true}]},
    {id:writer,name:'Writer',own:true,skills:[{name:'weekly-recap',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true},{name:'team-lessons',description:'Writes the Friday recap.',category:null,locked:false,provenance:'external',shared:true,enabled:true}]},
    {id:helper,name:'Helper',own:false,skills:[{name:'team-lessons',description:'Writes the Friday recap.',category:null,locked:false,provenance:'external',shared:true,enabled:true}]},
   ]);
-  const unread=await readCompanySkills(db,{company,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',skills:null})}});
+  const unread=await withDriver(DRIVER,{read:async()=>({state:'unreachable',skills:null})},()=>readCompanySkills(db,{company}));
   assert.deepEqual(unread?.map(agent=>agent.skills),[null,null,null],'a profile that cannot be read has no list, never an empty one');
  } finally { await fake.close(); }
 });
 
 test('a skill is written into the Agent\'s own profile, rewritten whole, and never over a shared one', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const shared={skills:{external_dirs:[`/opt/data/profiles/${space}/skills`]}};
   profileOn(fake,companyProfile(company),shared); profileOn(fake,agentProfile(writer),shared); profileOn(fake,space);
   fake.settings.skills.set(space,new Map([['team-lessons',skillMd('team-lessons')]]));
   const {db}=sessions(fake);
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
-  const change=(agent,content)=>changeCompanySkill(db,{company,agent,content,driver,hermes});
+  const change=(agent,content)=>withDriver(DRIVER,driver,()=>changeCompanySkill(db,{company,agent,content}));
   assert.deepEqual(await change(writer,skillMd('weekly-recap')),{state:'written',name:'weekly-recap'});
   assert.equal(fake.settings.skills.get(agentProfile(writer))?.get('weekly-recap'),skillMd('weekly-recap'),'the fake Hermes holds the write');
   assert.deepEqual(await change(writer,skillMd('weekly-recap','Three lines only.')),{state:'written',name:'weekly-recap'});
@@ -86,35 +87,34 @@ test('a skill is written into the Agent\'s own profile, rewritten whole, and nev
 });
 
 test('a Company with no Agent in the Engine yet has no skills, which is not a failure to read them', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const {db}=sessions(fake,{agents:[],target:false});
-  assert.deepEqual(await readCompanySkills(db,{company,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),[]);
+  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>readCompanySkills(db,{company})),[]);
   const {db:lost}=sessions(fake,{target:false});
-  assert.equal(await readCompanySkills(lost,{company,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),null,'Agents with no reachable profile cannot be read');
+  assert.equal(await withDriver(DRIVER,driverAt(fake),()=>readCompanySkills(lost,{company})),null,'Agents with no reachable profile cannot be read');
  } finally { await fake.close(); }
 });
 
 test('a write is checked and logged by the database, keeps Unix line endings, and never takes a shared name', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,agentProfile(writer)); profileOn(fake,companyProfile(company));
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const session=sessions(fake); const {db}=session;
   // A browser sends a form's textarea with CRLF line endings; the Engine reads a SKILL.md back with LF ones.
-  assert.deepEqual(await changeCompanySkill(db,{company,agent:writer,content:skillMd('weekly-recap').replaceAll('\n','\r\n'),driver,hermes}),{state:'written',name:'weekly-recap'});
+  assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkill(db,{company,agent:writer,content:skillMd('weekly-recap').replaceAll('\n','\r\n')})),{state:'written',name:'weekly-recap'});
   assert.equal(fake.settings.skills.get(agentProfile(writer))?.get('weekly-recap'),skillMd('weekly-recap'));
   assert.deepEqual(session.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'written'}],'the write is in the Company log');
   // The two shared skills' names are reserved, even before the shared folder holds them.
   for(const name of ['company-knowledge','team-lessons']) {
-   assert.deepEqual(await changeCompanySkill(db,{company,agent:lead,content:skillMd(name),driver,hermes}),{state:'shared',name});
+   assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkill(db,{company,agent:lead,content:skillMd(name)})),{state:'shared',name});
   }
   assert.equal(fake.settings.skills.get(companyProfile(company)),undefined,'no reserved name is written');
   // The database refuses a person below Manager, and a text that looks like a secret; nothing is written or logged.
   for(const [refuse,state] of [['skillNotAllowed','notAllowed'],['skillSecret','secret']]) {
    const refused=sessions(fake,{refuse});
-   assert.deepEqual(await changeCompanySkill(refused.db,{company,agent:writer,content:skillMd('other'),driver,hermes}),{state,name:'other'});
+   assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkill(refused.db,{company,agent:writer,content:skillMd('other')})),{state,name:'other'});
    assert.deepEqual(refused.logged,[]);
   }
   assert.equal(fake.settings.skills.get(agentProfile(writer))?.has('other'),false);
@@ -122,18 +122,17 @@ test('a write is checked and logged by the database, keeps Unix line endings, an
 });
 
 test('a skill is switched off and on for one Agent\'s own profile, checked and logged, never a shared one', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const shared={skills:{external_dirs:[`/opt/data/profiles/${space}/skills`]}};
   profileOn(fake,agentProfile(writer),shared); profileOn(fake,companyProfile(company),shared); profileOn(fake,space);
   fake.settings.skills.set(space,new Map([['team-lessons',skillMd('team-lessons')]]));
   fake.settings.skills.set(agentProfile(writer),new Map([['weekly-recap',skillMd('weekly-recap')]]));
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const session=sessions(fake); const {db}=session;
-  const toggle=(agent,name,enabled,on=db)=>changeCompanySkillEnabled(on,{company,agent,name,enabled,driver,hermes});
+  const toggle=(agent,name,enabled,on=db)=>withDriver(DRIVER,driver,()=>changeCompanySkillEnabled(on,{company,agent,name,enabled}));
   assert.deepEqual(await toggle(writer,'weekly-recap',false),{state:'changed',name:'weekly-recap'});
-  const writerSkills=async()=>(await readCompanySkills(db,{company,driver,hermes}))?.find(agent=>agent.id===writer)?.skills;
+  const writerSkills=async()=>(await withDriver(DRIVER,driver,()=>readCompanySkills(db,{company})))?.find(agent=>agent.id===writer)?.skills;
   assert.deepEqual((await writerSkills())?.map(({name,enabled})=>({name,enabled})),[{name:'weekly-recap',enabled:false},{name:'team-lessons',enabled:true}]);
   assert.deepEqual(await toggle(writer,'weekly-recap',true),{state:'changed',name:'weekly-recap'});
   assert.equal((await writerSkills())?.[0].enabled,true);
@@ -163,16 +162,15 @@ test('a skill is switched off and on for one Agent\'s own profile, checked and l
 // #370: a skill change the Engine holds always gets its one log row. A log the database does not take is retried, then
 // left held for the worker's pass; the person is told the change was made, and the pass never logs it twice.
 test('a skill write and a switch whose log fails are still made, and each ends with exactly one log row', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,agentProfile(writer));
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const retried=sessions(fake,{failLogs:1});
-  assert.deepEqual(await changeCompanySkill(retried.db,{company,agent:writer,content:skillMd('weekly-recap'),driver,hermes}),{state:'written',name:'weekly-recap'});
+  assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkill(retried.db,{company,agent:writer,content:skillMd('weekly-recap')})),{state:'written',name:'weekly-recap'});
   assert.deepEqual(retried.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'written'}],'a log taken on its retry is one row');
   const late=sessions(fake,{failLogs:3});
-  assert.deepEqual(await changeCompanySkillEnabled(late.db,{company,agent:writer,name:'weekly-recap',enabled:false,driver,hermes}),
+  assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkillEnabled(late.db,{company,agent:writer,name:'weekly-recap',enabled:false})),
    {state:'changed',name:'weekly-recap',logPending:true},'the Engine holds the switch, so it is never told as failed');
   assert.equal((await readSkills(driverTarget(fake,agentProfile(writer)))).skills.find(skill=>skill.name==='weekly-recap')?.enabled,false);
   assert.deepEqual(late.logged,[]);
@@ -182,14 +180,14 @@ test('a skill write and a switch whose log fails are still made, and each ends w
   assert.deepEqual(late.changes.logged.map(row=>row.unconfirmed),[true],'the pass says nobody confirmed it');
   // A switch the Engine refuses is dropped, so no pass ever logs it.
   const refused=sessions(fake);
-  assert.deepEqual(await changeCompanySkillEnabled(refused.db,{company,agent:writer,name:'missing',enabled:false,driver,hermes}),{state:'failed',name:'missing'});
+  assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkillEnabled(refused.db,{company,agent:writer,name:'missing',enabled:false})),{state:'failed',name:'missing'});
   assert.equal(refused.changes.held.size,0);
   assert.deepEqual(await logHeldAgentChanges(refused.db),{logged:0});
  } finally { await fake.close(); }
 });
 
 test('the Agent page reads that Agent\'s own profile only, leaves the team\'s and the essential skills out, and marks what it learned', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const shared={skills:{external_dirs:[`/opt/data/profiles/${space}/skills`]}};
   profileOn(fake,companyProfile(company),shared); profileOn(fake,agentProfile(writer),shared); profileOn(fake,space);
@@ -204,18 +202,17 @@ test('the Agent page reads that Agent\'s own profile only, leaves the team\'s an
   fake.settings.learnedSkills.set(agentProfile(writer),new Set(['weekly-recap']));
   const {db}=sessions(fake);
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
-  const read=await readAgentSkills(db,{company,agent:writer,driver,hermes});
+  const read=await withDriver(DRIVER,driver,()=>readAgentSkills(db,{company,agent:writer}));
   assert.deepEqual(read,{state:'found',own:true,skills:[
    {name:'weekly-recap',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true,learned:true},
    {name:'ads-brief',description:'Writes the Friday recap.',category:null,locked:false,provenance:'hub',shared:false,enabled:false,learned:false},
    {name:'report',description:'Writes the Friday recap.',category:'writing',locked:true,provenance:'bundled',shared:false,enabled:true,learned:false},
   ]},'the team\'s shared skill and the essential one are not on the Agent page');
   // Two Agents of one Company read their own lists, and the Agent on the shared profile reads the keeper's without a switch.
-  assert.deepEqual((await readAgentSkills(db,{company,agent:lead,driver,hermes}))?.skills.map(skill=>skill.name),['lead-only']);
-  assert.deepEqual(await readAgentSkills(db,{company,agent:helper,driver,hermes}),{state:'found',own:false,skills:[{name:'lead-only',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true,learned:false}]});
-  assert.equal(await readAgentSkills(db,{company,agent:'not-an-id',driver,hermes}),null);
-  const unread=await readAgentSkills(db,{company,agent:writer,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',skills:null}),learned:async()=>({state:'found',learned:[]})}});
+  assert.deepEqual((await withDriver(DRIVER,driver,()=>readAgentSkills(db,{company,agent:lead})))?.skills.map(skill=>skill.name),['lead-only']);
+  assert.deepEqual(await withDriver(DRIVER,driver,()=>readAgentSkills(db,{company,agent:helper})),{state:'found',own:false,skills:[{name:'lead-only',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true,learned:false}]});
+  assert.equal(await withDriver(DRIVER,driver,()=>readAgentSkills(db,{company,agent:'not-an-id'})),null);
+  const unread=await withDriver(DRIVER,{read:async()=>({state:'unreachable',skills:null}),learned:async()=>({state:'found',learned:[]})},()=>readAgentSkills(db,{company,agent:writer}));
   assert.deepEqual(unread,{state:'unreachable',own:true,skills:null});
  } finally { await fake.close(); }
 });

@@ -1,9 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readProviderKeys, setProviderKey, removeProviderKey, readHeldKeys, hermesEngine } from '../lib/hermes.mjs';
+import { engineServing, withDriver } from './engine-records.mjs';
+import { setProviderKey } from '../lib/engine/providers.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
 import { changeCompanyKey, readCompanyKeys } from '../lib/provider-keys.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'read':'providers.keys','held':'providers.heldKeys','set':'providers.setKey','remove':'providers.removeKey','keys':'providers.keys','signIns':'providers.signIns','options':'models.read'};
 
 // #299: once a Company holds a provider key, a later Agent waits on its own profile for the key instead of running on
 // Lead's, and a removed Agent's profile stays reachable by the next removal.
@@ -49,12 +52,9 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],f
  const calls=name=>asked.filter(call=>call.name===name).map(call=>call.args);
  return {db,service,asked,calls,waiting};
 }
-// The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
-const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
- return {read:(target,keys)=>readProviderKeys(at(target),keys),held:(target,keys)=>readHeldKeys(at(target),keys),
-  set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company,provider:'openrouter',driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'},...request});
-const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
+// A key change as the route makes it; a test may answer some driver calls its own way (`driver`).
+const change=(person,fake,{driver=null,...request})=>withDriver(DRIVER,driver,()=>changeCompanyKey(person.db,person.service,{company,provider:'openrouter',...request}));
+const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company});
 const engineOn=(fake,profile)=>hermesEngine({address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'});
 
 // Lead's create_agent call on Lead's profile, with the database's answers for a Company, and `answers` to other calls by
@@ -71,7 +71,7 @@ async function leadMakes(fake,answers={},lead=main) {
 }
 
 test('an Agent Lead makes after the key was set starts on a fresh profile of its own with the Company\'s key and a model, and waits for nothing (#660)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   await change(sessions(fake),fake,{intent:'set',value:known});
@@ -95,7 +95,7 @@ test('an Agent Lead makes after the key was set starts on a fresh profile of its
 });
 
 test('in a Company with a provider key and a subscription, an Agent Lead makes answers a turn on its own profile, on the model Lead runs on (#660)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   fake.settings.defaultCredentials.anthropic='test-only-claude-oauth';
@@ -118,7 +118,7 @@ test('in a Company with a provider key and a subscription, an Agent Lead makes a
 });
 
 test('a new profile that answers already on the Company\'s subscription is still given the Company\'s key, and keeps its model', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   await change(sessions(fake),fake,{intent:'set',value:known});
@@ -136,7 +136,7 @@ test('a new profile that answers already on the Company\'s subscription is still
 });
 
 test('a Company with no account that gives a model still makes the Agent waiting on its own profile, with nothing written to it', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   fake.settings.providerModels.openrouter=[];
@@ -149,7 +149,7 @@ test('a Company with no account that gives a model still makes the Agent waiting
 });
 
 test('a Company whose space the Engine does not serve yet still makes the Agent on its own profile, waiting, and writes it no key', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,main,writer);
   const {outcome,calls}=await leadMakes(fake);
@@ -161,7 +161,7 @@ test('a Company whose space the Engine does not serve yet still makes the Agent 
 });
 
 test('a set the Engine never answered is settled from what the space holds, read through the driver, before Lead makes an Agent', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
@@ -174,7 +174,7 @@ test('a set the Engine never answered is settled from what the space holds, read
 });
 
 test('the waiting Agent is listed for the Owner until the next set gives its own profile the key and model, then it runs there and never on Lead\'s', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   await change(sessions(fake),fake,{intent:'set',value:known});
@@ -196,7 +196,7 @@ test('the waiting Agent is listed for the Owner until the next set gives its own
 });
 
 test('a change is begun in the database before the Engine is asked anything, and a person who is not the Owner begins none', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   for(const request of [{intent:'set',value:known},{intent:'remove'}]) {
@@ -216,7 +216,7 @@ test('a change is begun in the database before the Engine is asked anything, and
 });
 
 test('a change ends in one finish as the Engine answered: a set holds the key, a removal lets it go, a refusal leaves it as it was, an unknown set waits marked unanswered, and an unknown removal or a set that threw before its write leaves the hold as it was', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
  try {
   made(fake,space,main,writer);
@@ -229,14 +229,14 @@ test('a change ends in one finish as the Engine answered: a set holds the key, a
   assert.deepEqual(await finished({intent:'remove'}),[200,1,ended(false)],'and so does one that found nothing to remove');
   assert.deepEqual(await finished({intent:'set',value:known,provider:'nosuch'}),[400,1,[{c:company,key_provider:'nosuch',now_held:null,reached:[],answered:null}]],'a refused set leaves it as it was, an earlier unanswered set as uncertain as it was');
   assert.deepEqual(await finished({intent:'set',value:'short'}),[400,1,ended(null,[],null)],'so does a value the driver refuses before any Engine write');
-  const silent={...pointedAt(fake),set:async()=>({state:'unreachable',model:null,profiles:null}),remove:async()=>({state:'unreachable',profiles:null})};
-  assert.deepEqual(await finished({intent:'set',value:known,driver:silent}),[503,1,ended(true,[],false)],'a set the Engine did not answer may be in the space, so later Agents wait, and its hold is marked unanswered');
-  const answering=state=>({...pointedAt(fake),set:async()=>({state,model:null,profiles:null})});
-  assert.deepEqual(await finished({intent:'set',value:known,driver:answering('failed')}),[502,1,ended(true,[],false)],'so may a set that failed after its write was sent');
-  assert.deepEqual(await finished({intent:'set',value:known,driver:answering('refused')}),[502,1,ended(null,[],null)],'a set the Engine refused wrote nothing');
+  const silent={set:async()=>({state:'unreachable',model:null,profiles:null}),remove:async()=>({state:'unreachable',profiles:null})};
+  assert.deepEqual(await withDriver(DRIVER,silent,()=>finished({intent:'set',value:known})),[503,1,ended(true,[],false)],'a set the Engine did not answer may be in the space, so later Agents wait, and its hold is marked unanswered');
+  const answering=state=>({set:async()=>({state,model:null,profiles:null})});
+  assert.deepEqual(await withDriver(DRIVER,answering('failed'),()=>finished({intent:'set',value:known})),[502,1,ended(true,[],false)],'so may a set that failed after its write was sent');
+  assert.deepEqual(await withDriver(DRIVER,answering('refused'),()=>finished({intent:'set',value:known})),[502,1,ended(null,[],null)],'a set the Engine refused wrote nothing');
   const spaceless=()=>{ const person=sessions(fake); const rpc=person.db.rpc; person.db.rpc=async(name,args)=>name==='company_key_profiles'?{data:[],error:null}:rpc(name,args); return person; };
   assert.deepEqual(await finished({intent:'set',value:known},spaceless()),[409,1,ended(null,[],null)],'and so did a set with no space to write to');
-  assert.deepEqual(await finished({intent:'remove',driver:silent}),[503,1,ended(null,[],null)],'a removal it did not answer never marks the hold unanswered, and leaves it as it was');
+  assert.deepEqual(await withDriver(DRIVER,silent,()=>finished({intent:'remove'})),[503,1,ended(null,[],null)],'a removal it did not answer never marks the hold unanswered, and leaves it as it was');
   const broken=()=>{ const person=sessions(fake); const rpc=person.db.rpc; person.db.rpc=async(name,args)=>{ if(name==='company_key_profiles') throw new Error('down'); return rpc(name,args); }; return person; };
   assert.deepEqual(await finished({intent:'set',value:known},broken()),['threw',1,ended(null,[],null)],'a set that threw before it asked the Engine to write leaves the hold as it was');
   assert.deepEqual(await finished({intent:'remove'},broken()),['threw',1,ended(null,[],null)],'a removal that threw leaves the hold as it was');
@@ -245,7 +245,7 @@ test('a change ends in one finish as the Engine answered: a set holds the key, a
 });
 
 test('a change the database could not begin writes nothing to the Engine and asks the Owner to try again, so an Agent made meanwhile finds the key nowhere', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
  try {
   made(fake,space,main,writer);
@@ -262,7 +262,7 @@ test('a change the database could not begin writes nothing to the Engine and ask
 });
 
 test('only the Owner\'s read settles the holds to what the space holds, naming only the providers whose name reads', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer);
   const owner=sessions(fake);
@@ -275,14 +275,14 @@ test('only the Owner\'s read settles the holds to what the space holds, naming o
   await change(owner,fake,{intent:'remove'});
   await read(owner,fake);
   assert.deepEqual(owner.calls('settle_provider_key_holds').at(-1),{c:company,held:[]});
-  const odd={...pointedAt(fake),read:async()=>({state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'Not a provider',label:'Odd',set:true},{provider:'deepseek',label:'DeepSeek',set:false}],lacking:[],leftover:[],unread:[]})};
-  await readCompanyKeys(owner.db,owner.service,{company,driver:odd,hermes:{address:fake.address,key:'test-only-key'}});
+  const odd={read:async()=>({state:'found',keys:[{provider:'openrouter',label:'OpenRouter',set:true},{provider:'Not a provider',label:'Odd',set:true},{provider:'deepseek',label:'DeepSeek',set:false}],lacking:[],leftover:[],unread:[]})};
+  await withDriver(DRIVER,odd,()=>readCompanyKeys(owner.db,owner.service,{company}));
   assert.deepEqual(owner.calls('settle_provider_key_holds').at(-1),{c:company,held:['openrouter']},'a provider name that does not read is never sent');
  } finally { await fake.close(); }
 });
 
 test('a set that gives no profile a model ends no wait, and a change the database could not finish changes nothing in the answer', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer,later);
   const extra=[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'}];
@@ -301,7 +301,7 @@ test('a set that gives no profile a model ends no wait, and a change the databas
 });
 
 test('a written set is finished even when its first finish fails or a late round throws, naming the profiles the Engine wrote', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  const printed=[]; const kept=console.error; console.error=(...args)=>{ printed.push(args.map(String).join(' ')); };
  try {
   made(fake,space,main,writer,later);
@@ -314,9 +314,9 @@ test('a written set is finished even when its first finish fails or a late round
   assert.deepEqual(printed,['Provider key change not finished XX000']);
   const late=`ag-e${tail}`;
   made(fake,late);
-  const throwing={...pointedAt(fake),set:async(target,key)=>{ if(key.profilesOnly) throw new Error('down'); return pointedAt(fake).set(target,key); }};
+  const throwing={set:async(target,key)=>{ if(key.profilesOnly) throw new Error('down'); return setProviderKey(target,key); }};
   const thrown=sessions(fake,{extra,waits:[later,late]});
-  assert.equal((await change(thrown,fake,{intent:'set',value:known,driver:throwing})).status,200,'a late round that threw is a failed round of a set that took');
+  assert.equal((await withDriver(DRIVER,throwing,()=>change(thrown,fake,{intent:'set',value:known}))).status,200,'a late round that threw is a failed round of a set that took');
   assert.deepEqual(thrown.calls('finish_provider_key_change'),[ended],'it leaves the change finished, with the profiles written before it');
   assert.deepEqual([...thrown.waiting],[late]);
   assert.deepEqual(thrown.calls('record_unfinished_provider_key'),[{c:company,key_provider:'openrouter',missed:[late]}],'and the late profile is kept as unfinished');
@@ -324,7 +324,7 @@ test('a written set is finished even when its first finish fails or a late round
 });
 
 test('an Agent made while a set was writing waits on a profile the set did not name, so the set gives it the key too, for at most three more rounds', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const late=`ag-e${tail}`;
   made(fake,space,main,writer,late);
@@ -341,7 +341,7 @@ test('an Agent made while a set was writing waits on a profile the set did not n
 });
 
 test('a late round writes only the late profiles, never the space again, one it could not write is kept as unfinished, and the answer names both', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const late=`ag-e${tail}`; const lost=`ag-7${tail}`;
   made(fake,space,main,writer,late,lost);
@@ -360,7 +360,7 @@ test('a late round writes only the late profiles, never the space again, one it 
 });
 
 test('when the finish after a late round fails, the set finishes once more naming the late profile too, so its wait ends', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const late=`ag-e${tail}`;
   made(fake,space,main,writer,late);
@@ -373,7 +373,7 @@ test('when the finish after a late round fails, the set finishes once more namin
 });
 
 test('the Owner\'s read during a key change answers at once and settles nothing, and once none is under way it forgets a removed Agent\'s profile left holding no key and keeps one holding a key or unread', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const other=`ag-f${tail}`; const missing=`ag-b${tail}`; const unread=`ag-9${tail}`;
   made(fake,space,main,writer,gone,other,unread);
@@ -382,8 +382,8 @@ test('the Owner\'s read during a key change answers at once and settles nothing,
   const removedRow=(profile,name)=>({profile,kind:'removed',agent:agentId(profile),name});
   const owner=sessions(fake,{extra:[removedRow(gone,'Old writer'),removedRow(other,'Old ads'),removedRow(missing,'Old SEO'),removedRow(unread,'Old design')]});
   let open; const gate=new Promise(resolve=>{ open=resolve; });
-  const gated={...pointedAt(fake),set:async(target,key)=>{ await gate; return pointedAt(fake).set(target,key); }};
-  const changing=changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:gated});
+  const gated={set:async(target,key)=>{ await gate; return setProviderKey(target,key); }};
+  const changing=withDriver(DRIVER,gated,()=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known}));
   let timer; const late=new Promise(resolve=>{ timer=setTimeout(()=>resolve('waited'),1000); });
   const during=await Promise.race([read(owner,fake),late]); clearTimeout(timer);
   assert.notEqual(during,'waited','the read never waits on the change under way');
@@ -402,7 +402,7 @@ test('the Owner\'s read during a key change answers at once and settles nothing,
 });
 
 test('a removed Agent\'s profile that holds the Company\'s live key is neither leftover nor forgotten, is left out of a set, and the next removal reaches it', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer,gone);
   await change(sessions(fake,{extra:[{profile:gone,kind:'agent',agent:agentId(gone),name:'Old writer'}]}),fake,{intent:'set',value:known});
@@ -429,7 +429,7 @@ test('a removed Agent\'s profile that holds the Company\'s live key is neither l
 });
 
 test('a set sends a removed Agent\'s profile nothing, so one left holding the old value of the key the Company holds reads as leftover by its name until a removal', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer,gone);
   await change(sessions(fake,{extra:[{profile:gone,kind:'agent',agent:agentId(gone),name:'Old writer'}]}),fake,{intent:'set',value:known});
@@ -448,7 +448,7 @@ test('a set sends a removed Agent\'s profile nothing, so one left holding the ol
 });
 
 test('after a removal, a removed Agent\'s profile left holding no key is forgotten, and one still holding a key, unread or not reached is kept', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const other=`ag-f${tail}`; const missing=`ag-b${tail}`; const unread=`ag-9${tail}`; const stuck=`ag-8${tail}`;
   made(fake,space,main,writer,gone,other,unread,stuck);
@@ -473,7 +473,7 @@ test('after a removal, a removed Agent\'s profile left holding no key is forgott
 });
 
 test('a removed Agent\'s profile a set missed is never waiting, and one the Engine cannot read is unknown', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,writer,gone);
   const extra=[{profile:gone,kind:'agent',agent:agentId(gone),name:'Old writer'}];
@@ -491,7 +491,7 @@ test('a removed Agent\'s profile a set missed is never waiting, and one the Engi
 });
 
 test('no key reaches an answer, a log line or a database call while a later Agent waits, runs, or a removed one is cleaned', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  const printed=[]; const kept={};
  for(const level of ['log','info','warn','error','debug']) { kept[level]=console[level]; console[level]=(...args)=>{ printed.push(args.map(String).join(' ')); }; }
  try {

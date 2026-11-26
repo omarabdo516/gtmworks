@@ -20,7 +20,7 @@ const suites = {
   database: {
     true: [
       /^supabase\//,
-      /^scripts\/(check-rls\.sql|verify-db(-session)?\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs|supabase-images\.sh)$/,
+      /^scripts\/(check-rls\.sql|schema-snapshot\.mjs|verify-db(-session)?\.mjs|local-db\.sh|local-default-privileges\.sql|bootstrap-owner\.mjs|supabase-images\.sh)$/,
       /^tests\/(db\.sh|pgtap\.mjs|verify-db-session-canary\.sql|[^/]*-migration\.mjs|bootstrap-db\.mjs|hosted-default-privileges\.mjs|sql-statements\.mjs)$/,
     ],
   },

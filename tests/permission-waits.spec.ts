@@ -1,4 +1,6 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { laneEngineRecords } from './spec-engine-records';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -7,6 +9,7 @@ import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
+test.beforeAll(()=>laneEngineRecords());
 
 // #165: a pending permission request (#163) is one item in "Waiting on you" of the person who can decide it, on the
 // board's first column, in the sidebar count and on Numbers, until it is allowed, refused or closed by the Engine. In a
@@ -18,7 +21,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const general='69000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
@@ -54,9 +56,9 @@ test('integration: a pending request is one item with its Agent and what it asks
  try {
   const {service,person}=await memberClient('reviewer@example.com');
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   const send=async(word:string)=>{
-   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:`Clean up the ${word}`,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:`Clean up the ${word}`}))).toEqual({conversation});
    expect(await close()).toBe(0);
    // A chat with no Card: its request is an item of its own (one with a Card is drawn as that Card, #146).
    query(`update public.work_cards set conversation_id=null where conversation_id='${conversation}'`);
@@ -142,8 +144,8 @@ test('integration: in a channel the request sits under the Agent\'s turn; the Me
  try {
   const caller=await memberClient('reviewer@example.com');
   const manager=await memberClient('manager@example.com');
-  const drive=()=>driveChannelRuns(caller.service,{hermes,channel:general,engineFor:fake.engineFor});
-  const sent=await postChannelMessage(caller.person,caller.service,{channel:general,sendKey:randomUUID(),message:'@Faye Clean up the exports',hermes,engineFor:fake.engineFor}) as {message:number};
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(caller.service,{channel:general}));
+  const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(caller.person,caller.service,{channel:general,sendKey:randomUUID(),message:'@Faye Clean up the exports'})) as {message:number};
   expect(await drive()).toEqual({started:0,closed:0});
   const [{id:request}]=JSON.parse(query(`select id from public.channel_permissions where message_id=${sent.message}`)) as {id:number}[];
 

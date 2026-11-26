@@ -5,8 +5,6 @@ import type { ReactNode } from 'react';
 import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
-import { supabaseConfig } from '@/lib/supabase-config';
-import { createClient } from '@supabase/supabase-js';
 import { AgentFace } from '@/components/agent-face';
 import { agentFaceStates, faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
 import { pickSection, pageReadAt, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
@@ -20,16 +18,11 @@ import { InfoTip } from './settings-info';
 import PasswordSettings from './password-settings';
 import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
 import { managedUsage, type UsageRow } from '@/lib/company-app-items';
-import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readProviderNames } from '@/lib/provider-names.mjs';
 import { readProviderOrder } from '@/lib/provider-order.mjs';
-import { engineOf } from '@/lib/company-engine.mjs';
-import { readWorkSandbox } from '@/lib/hermes.mjs';
+import { companyEngine } from '@/lib/engine/handle.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
 import { readFallbackModel } from '@/lib/fallback-model.mjs';
-import { readProviderModels } from '@/lib/provider-models.mjs';
-import { readCompanyKeys } from '@/lib/provider-keys.mjs';
-import { readCompanySpeech } from '@/lib/company-speech.mjs';
 import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
 import { readAgentSkills } from '@/lib/company-skills.mjs';
 import { readCompanyLearning } from '@/lib/company-learning.mjs';
@@ -38,7 +31,8 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { CompanyProviders, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, DefaultEffort, SpeechToText, DefaultModel, FallbackModel, EachAgent, AgentModel } from './settings-lazy';
+import { ModelsParts } from './settings-models-parts';
+import { MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -66,8 +60,6 @@ type Member={person_id:string,role:string,people:{name:string|null}|null};
 type Invitation={id:string,email:string,role:string};
 type Rule={id:string,body:string,said_by:string,said_at:string,teller:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
-// The service client the models section's Owner read settles key holds with (lib/provider-keys.mjs), as the route does.
-const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false}});
 
 // The settings overlay (#26; reference: dialog#sov in design-reference/app.js, renderSov). It is route-backed:
 // /c/<slug>/settings opens it on the person's first section and ?section=…&agent=… opens any other state, so the
@@ -91,24 +83,16 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // Open invitations are rows of the same table (#185), with their own switches, until the person joins.
  const invitations:Invitation[]=section==='members'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
  const invitedAllowed=new Set(invitations.length?((await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`):[]);
- // The Company's model sign-in, read from the root profile of its own Engine (#384, ADR 0018), with that Engine's key,
- // after the database said the person is a member (company_engine_target).
- const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,profiles:null,signIns:null}; } })():null;
  // Whether the Company's work sandbox answers (#398), read once from its own Engine's ssh backend for the section that
  // says what every Agent can use. The Engine itself not answering leaves this unread; the models section names that.
- const workSandbox=section==='company'?await (async()=>{ try { return await readWorkSandbox(await engineOf(company.id)); } catch { return {state:'unreachable' as const}; } })():null;
- // The Company's default model, each Agent's own and the Owner's model choices (#29), and the providers the Engine takes a
- // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
- const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
+ const workSandbox=section==='company'?await (async()=>{ try { return await (await companyEngine(company.id))?.on('default')?.files.sandbox()??{state:'unreachable' as const}; } catch { return {state:'unreachable' as const}; } })():null;
+ // Settings → Models draws what gtmworks stores here and reads each part the Engine backs from the browser (#791, ADR
+ // 0030; app/settings-models-parts.tsx): the sign-ins, the model choices, the keys, each Provider's models and speech.
  // The Company's Fallback model (#622), read for every Member; undefined when unread.
  const fallback=section==='models'?await readFallbackModel(db,company.id).catch(()=>undefined):undefined;
  const names=section==='models'?await readProviderNames(db,company.id):{};
  // The Owner's order of the Providers and which are switched off (#619), read for every Member; null when unread.
  const order=section==='models'?await readProviderOrder(db,company.id):null;
- const keys=section==='models'?await (async()=>{ try { return await readCompanyKeys(db,service(),{company:company.id}); } catch { return null; } })():null;
- // Each Provider's models with the Owner's switch (#620), read for every Member, who sees them read-only.
- const providerModels=section==='models'?await readProviderModels(db,{company:company.id}).catch(()=>null):null;
- const speech=section==='models'?await readCompanySpeech(db,{company:company.id}).catch(()=>({provider:null,missing:null})):null;
  // The token use of the period, read from each Company's Agents' profiles in the bundled Engine (#347, #32): the
  // Owner and the Managers see every Company they manage, the same read the database checks.
  const usageRows=section==='usage'?await managedUsage(userId,query.period==='30'?30:7):[];
@@ -176,13 +160,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='backup'&&owner?<BackupSection t={t}/>
   // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
   :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
-  :<SoonSection t={t} section={section} ro={ro} providers={<CompanyProviders company={company.id} companyName={company.name} owner={owner} keys={keys} models={providerModels} names={names} order={order}
-     subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,accounts:subscriptions&&'accounts' in subscriptions?subscriptions.accounts:null,noEngine:subscriptions?.noEngine===true}}/>}
-    speech={<SpeechToText company={company.id} owner={owner} data={speech} readAt={readAt}/>}
-    defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default} readAt={readAt}/>:null}
-    fallbackModel={models?.models&&fallback!==undefined?<FallbackModel company={company.id} owner={owner} model={fallback} options={models.models.default.options} readAt={readAt}/>:null}
-    eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models} readAt={readAt}/>:null}
-    defaultEffort={<DefaultEffort/>}/>;
+  :<SoonSection t={t} section={section} ro={ro} models={<ModelsParts company={company.id} companyName={company.name} owner={owner} names={names} order={order} fallback={fallback} asked={readAt}/>}/>;
  // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
  // switch while the message is off and Time cannot take the focus.
  const morningFocus=query.focus==='time'&&morning?.state==='found'&&canManage?(morning.routine?.on?'set-ck-time':'set-ck-on'):undefined;
@@ -416,11 +394,10 @@ function AccountSection({t,theme,personName,role,roleName,companyName,company,me
 
 // The company's sections whose features come later (#29–#33): each keeps the reference's heading, its explanation and
 // its parts in place, empty and marked "Soon", with no sample figures. Learning (#28) has its own section.
-function SoonSection({t,section,ro,providers,speech,defaultModel,fallbackModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,providers:ReactNode,speech:ReactNode,defaultModel:ReactNode,fallbackModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
+function SoonSection({t,section,ro,models}:{t:T,section:OverlaySection,ro:ReactNode,models:ReactNode}) {
  // The Company's Providers, list and details (#617), then the defaults every Agent starts with and speech-to-text below
  // the list, as the approved Providers layout puts them (spec #610).
  if(section==='models') return <><Head title={t('settingsModels')} info={t('settingsModelsSub')}/>{ro}
-  {providers}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
-  {fallbackModel}{defaultEffort}{eachAgent}{speech}</>;
+  {models}</>;
  return null;
 }

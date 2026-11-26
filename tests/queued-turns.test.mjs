@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { startQueuedTurns } from '../lib/conversation-runs.mjs';
 
 // #68: a start that waits on a slow engine holds up no other Conversation's waiting turn, and the queue is read page by
 // page behind a stable cursor so a page of ready Conversations never hides the next one.
 const hermes={address:'http://127.0.0.1:9',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co']) engineRecord(company,hermes);
 const connection='f9000000-0000-0000-0000-000000000001';
 
 // The run layer's database, as startQueuedTurns reads it: a page of waiting Conversations, each with one claimable turn.
@@ -39,7 +43,7 @@ test('a slow engine start on one Conversation does not delay another Conversatio
  const firstStarted=new Promise(resolve=>{ reached=resolve; });
  const starts=[];
  const engineFor=()=>({start:async run=>{ starts.push(run.conversation); if(run.conversation==='c1') { reached(); await held; } return `run_${run.conversation}`; }});
- const pending=startQueuedTurns(service,{hermes,engineFor});
+ const pending=withEngineContract(engineFor,()=>startQueuedTurns(service,{}));
  await firstStarted;
  // One turn of the event loop: the second Conversation is claimed and its start sent while the first still waits.
  await new Promise(resolve=>setImmediate(resolve));
@@ -57,7 +61,7 @@ test('queued turns page through every waiting Conversation behind a stable curso
  }});
  const started=[];
  const engineFor=()=>({start:async run=>{ started.push(run.conversation); return `run_${run.conversation}`; }});
- assert.equal(await startQueuedTurns(service,{hermes,engineFor}),501);
+ assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(service,{})),501);
  assert.equal(started.length,501);
  assert.deepEqual(calls.map(call=>call.after),[null,all[499]],'the next page starts after the last Conversation of the first');
 });
@@ -93,12 +97,12 @@ for(const model of [null,{provider:'openrouter',model:'openai/gpt-5.5'}]) {
  test(`a stopped Engine leaves a queued turn${model?' sent with a model':''} due, and its next start is a first attempt a refusal fails`, async () => {
   const {state,service}=counted({model}); const starts=[]; let answer=/** @type {any} */(notReached);
   const engineFor=()=>({start:async run=>{ starts.push(run); return answer; }});
-  assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0,'nothing connected to the Engine');
+  assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(service,{})),0,'nothing connected to the Engine');
   assert.deepEqual(state.released,[{conversation:'c1',message_key:'k-c1',attempt:1}],'so its attempt is handed back');
   assert.deepEqual(state.failed,[],`and the turn is not failed${model?', nor its model refused':''}`);
   assert.equal(state.kept,0,'nor kept as unknown');
   answer=null;
-  assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0,'the Engine runs again and refuses the start');
+  assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(service,{})),0,'the Engine runs again and refuses the start');
   assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[['c1:k-c1',false],['c1:k-c1',false]],'both are sent as a first attempt');
   assert.deepEqual(state.failed,[[refusal,{conversation:'c1',message_key:'k-c1',attempt:1}]],'so the refusal fails the turn for its first attempt');
   assert.equal(state.released.length,1,'a refusal reached the Engine and is not handed back');
@@ -108,11 +112,11 @@ for(const model of [null,{provider:'openrouter',model:'openai/gpt-5.5'}]) {
 test('a queued start that may have reached the Engine keeps its attempt and is retried with the same key', async () => {
  const {state,service}=counted(); const starts=[]; let answer=/** @type {any} */({state:'unknown'});
  const engineFor=()=>({start:async run=>{ starts.push(run); return answer; }});
- await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)});
+ await withEngineContract(engineFor,()=>startQueuedTurns(service,{}));
  assert.deepEqual(state.released,[],'an unknown outcome is never handed back');
  assert.equal(state.kept,1,'it is kept as unknown');
  answer='run-1';
- assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),1);
+ assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(service,{})),1);
  assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[['c1:k-c1',false],['c1:k-c1',true]],'the second is the same request, as a retry');
  assert.deepEqual(state.failed,[]);
 });
@@ -125,7 +129,7 @@ test('a turn claimed as a retry whose earlier attempt was handed back is sent, a
  const claimed=service.rpc;
  service.rpc=async(name,given)=>name==='claim_conversation_turn'?{data:[{company:'co',agent:'a',person:'p',send_key:'k-c1',message:'Hello',connection,profile:'writer',note:null,retry:true}],error:null}:claimed(name,given);
  const engineFor=()=>({start:async run=>{ starts.push(run); return run.retry?{state:'unknown'}:notReached; }});
- assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0);
+ assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(service,{})),0);
  assert.deepEqual(starts.map(start=>start.retry),[false],'begin_turn_start answered attempt 1, so it is no retry');
  assert.deepEqual(state.released,[{conversation:'c1',message_key:'k-c1',attempt:1}],'and the unreached start is handed back');
  assert.equal(state.kept,0,'never kept as unknown');

@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { supabaseConfig } from '@/lib/supabase-config';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { engineOf, onProfile } from '@/lib/company-engine.mjs';
-import { engineFor } from '@/lib/engine.mjs';
+import { agentEngine, seenAgents } from '@/lib/engine/handle.mjs';
 import { bodyLengthRefused } from '@/lib/attachments.mjs';
 
 // Voice dictation (#160): one recording becomes text on the Engine, for the Agent the Member is writing to, on that
@@ -17,22 +14,20 @@ const file = 'app/api/dictation/route.ts';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const maxBody=Math.ceil(25*1024*1024/3)*4+2048;
-// The Engine record is readable by the server role alone (#380).
-const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 
 // The Agent whose profile transcribes: the one named, or the Company's main Agent for a channel. Both are read under the
 // caller's own session, so an Agent or channel they cannot see reads as absent.
+// The Agent whose profile listens: the one named, or in a channel the main Agent, as the reader sees it (the Engine handle).
 async function spokenFor(db:Awaited<ReturnType<typeof supabase>>,company:string,body:{agent?:unknown,channel?:unknown}) {
+ let agent=body.agent;
  if(body.channel!==undefined) {
   if(typeof body.channel!=='string'||!uuid.test(body.channel)) return null;
   const {data:channel}=await db.from('channels').select('id').eq('id',body.channel).eq('company_id',company).maybeSingle();
   if(!channel) return null;
-  const {data}=await db.from('hermes_agents').select('id,profile').eq('company_id',company).eq('is_default',true).maybeSingle();
-  return data as {id:string,profile:string}|null;
+  agent=(await seenAgents(db,company))?.find(row=>row.main===true)?.agent;
  }
- if(typeof body.agent!=='string'||!uuid.test(body.agent)) return null;
- const {data}=await db.from('hermes_agents').select('id,profile').eq('company_id',company).eq('id',body.agent).maybeSingle();
- return data as {id:string,profile:string}|null;
+ if(typeof agent!=='string'||!uuid.test(agent)) return null;
+ return agentEngine(db,{company,agent});
 }
 
 async function respond(request:NextRequest) {
@@ -51,13 +46,12 @@ async function respond(request:NextRequest) {
   const {data:company}=await db.from('companies').select('id,slug').eq('id',body.company).maybeSingle();
   if(!company) return reply({error:'dictationNotFound'},404);
   const agent=await spokenFor(db,body.company,body);
-  if(!agent) return reply({error:'dictationNotFound'},404);
+  if(!agent||agent.state==='missing'||agent.state==='invalid') return reply({error:'dictationNotFound'},404);
   if(!await routeAllowed(db,file,request.method,body.company,user.id)) return reply({error:'dictationNotAllowed'},403);
-  const connection=onProfile(agent.profile,body.company,await engineOf(body.company,service()));
-  if(!connection) return reply({error:'dictationNotFound'},404);
-  const engine=engineFor(connection);
+  const engine=agent.engine?.speech;
+  if(!engine) return reply({error:'dictationNotFound'},404);
   if(!writing) {
-   const read=await engine.dictation?.()??{state:'failed',language:null};
+   const read=await engine.dictation();
    return reply({language:read.state==='found'?read.language:null});
   }
   if(typeof body.dataUrl!=='string'||!body.dataUrl.startsWith('data:audio/')) return reply({error:'dictationInvalid'},400);

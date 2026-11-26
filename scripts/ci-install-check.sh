@@ -2058,7 +2058,7 @@ while read -r company profile address; do
   container=${address#*://}; container=${container%%:*}; slug=${container#gtmworks-engine-}; file="before-sandbox-${company//-/}"
   [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$profile/$file.md") == "$file" ]] || fail "the update copies the old Library file of $company into its Agent's folder"
   [[ $(docker exec "$container" cat "/opt/data/profiles/$profile/workspace/$file.md") == "$file" ]] || fail "the update leaves the old Library file of $company on its Engine"
-  compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const {listAgentFiles}=await import('/app/lib/hermes.mjs'); const read=await listAgentFiles({...await engineOf('$company'),profile:'$profile'}); console.log(read.state, (read.entries||[]).map(entry=>entry.name).join(' '));" < /dev/null \
+  compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const {listAgentFiles}=await import('/app/lib/engine/files.mjs'); const read=await listAgentFiles({...await engineOf('$company'),profile:'$profile'}); console.log(read.state, (read.entries||[]).map(entry=>entry.name).join(' '));" < /dev/null \
     | grep -qE "^found (.* )?$file\.md( |\$)" || fail "the Library of $company's Agent lists the file it made before the update"
   while read -r other _; do
     [[ $other == "$slug" ]] && continue
@@ -2562,7 +2562,7 @@ for attempt in $(seq 1 240); do
   sleep 1
 done
 compose exec -T web node --input-type=module -e "
-  const {engineOf}=await import('/app/lib/company-engine.mjs'); const {readToolsets}=await import('/app/lib/hermes.mjs'); const {toolsDiffer,companyProfile}=await import('/app/lib/agent-toolsets.mjs');
+  const {engineOf}=await import('/app/lib/company-engine.mjs'); const {readToolsets}=await import('/app/lib/engine/agents.mjs'); const {toolsDiffer,companyProfile}=await import('/app/lib/agent-toolsets.mjs');
   const engine=await engineOf('$company'); const read=await readToolsets({address:engine.address,key:engine.key,profile:companyProfile('$company')});
   console.log(read.state,(read.toolsets||[]).join(' ')); if(read.state!=='found'||toolsDiffer(read.toolsets,{subagents:false})) process.exit(1);" < /dev/null \
   || fail "the Company profile's Engine offers the one fixed set of tools after the cutover"

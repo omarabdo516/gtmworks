@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { driveChannelRuns } from '../lib/channel-runs.mjs';
 import { channelHandOverSpec, channelToolSpecTexts, toolSpecTexts } from '../lib/agent-tools.mjs';
 
@@ -9,6 +11,8 @@ import { channelHandOverSpec, channelToolSpecTexts, toolSpecTexts } from '../lib
 // channel, never Writer itself, as the database lists them (channel_handover_targets, proved in
 // supabase/tests/channel_any_agent_handovers.sql). The text is the one pin_channel_run pins, so a retry sends it again.
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['10000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 const message=7;
 const channel='c4760000-0000-0000-0000-000000000001';
 const writerProfile='ag-a4760000000000000000000000000003';
@@ -36,7 +40,7 @@ function database(listed=others) {
 test('a channel Run of an Agent that is not the main one is offered hand_to_agent naming the Company\'s other Agents, in the channel or not, with their jobs, pinned with the Run',async()=>{
  const stores=database(); const starts=/** @type {any[]} */([]);
  const engine={start:async(/** @type {any} */ request)=>{ starts.push(request); return null; }};
- const drive=()=>driveChannelRuns(/** @type {any} */(stores.service),{hermes,engineFor:()=>/** @type {any} */(engine),channel});
+ const drive=()=>withEngineContract(()=>/** @type {any} */(engine),()=>driveChannelRuns(/** @type {any} */(stores.service),{channel}));
  await drive();
  assert.deepEqual(stores.given.channel_handover_targets,[{message}],'the list is the database\'s, for this message\'s Run');
  const hand=starts[0].tools.find((/** @type {any} */ tool)=>tool.name==='hand_to_agent');
@@ -57,7 +61,7 @@ test('a channel Run of an Agent that is not the main one is offered hand_to_agen
 test('a channel Run with no other Agent of the Company to hand to is offered no hand_to_agent, and the card tools keep their own text',async()=>{
  const stores=database([]); const starts=/** @type {any[]} */([]);
  const engine={start:async(/** @type {any} */ request)=>{ starts.push(request); return null; }};
- await driveChannelRuns(/** @type {any} */(stores.service),{hermes,engineFor:()=>/** @type {any} */(engine),channel});
+ await withEngineContract(()=>/** @type {any} */(engine),()=>driveChannelRuns(/** @type {any} */(stores.service),{channel}));
  assert.equal('hand_to_agent' in stores.given.pin_channel_run[0].specs,false,'nothing is asked of the database to pin a tool with no target');
  assert.deepEqual(starts[0].tools.map((/** @type {any} */ tool)=>tool.name),['show_draft']);
  const texts=toolSpecTexts();

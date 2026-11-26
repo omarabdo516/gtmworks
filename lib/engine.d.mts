@@ -1,4 +1,4 @@
-import type { RunUsage } from './hermes.mjs';
+import type { RunUsage } from './engine/runs.mjs';
 export type EngineConnection={address:string,profile:string,key:string,managementAddress?:string};
 export type JsonSchemaObject={type:'object',properties:Record<string,unknown>,required?:string[],additionalProperties?:boolean};
 export type ToolSpec={name:string,description:string,parameters:JsonSchemaObject};
@@ -48,7 +48,7 @@ export type ProfileApps={state:'found',apps:{key:string,state:import('./app-cata
 export type Transcription={state:'transcribed',text:string}|{state:'unavailable'|'refused'|'unreachable'|'failed'};
 // The language an Agent's profile listens in (`stt.language`); null when the profile detects it itself.
 export type DictationSettings={state:'found',language:string|null}|{state:'refused'|'unreachable'|'failed',language:null};
-export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
+export type ProviderKeys={state:'found',keys:import('./engine/providers.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
 // An Agent's memory (#350), read from its own profile: its notes, each with the Engine's id and its text, never a skill.
 export type MemoryNote={id:string,text:string};
 export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
@@ -112,6 +112,5 @@ export type ScreenViewer={
 };
 export type ScreenViewerOpen={state:'open',viewer:ScreenViewer}|{state:'asleep'|'missing'|'unreachable'};
 export type ScreenPicture={state:'found',type:string,body:Uint8Array}|{state:'asleep'|'withheld'|'failed'|'missing'|'unreachable'};
-export function engineFor(connection:EngineConnection):Engine;
 export type RunEnd='completed'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'stopped'|'lost';
 export function endOf(run:Pick<RunState,'state'|'reply'|'noModel'|'modelRefused'>):RunEnd|null;

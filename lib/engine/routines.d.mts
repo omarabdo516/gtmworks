@@ -1,0 +1,11 @@
+export function readRoutines(connection:import('../engine.mjs').EngineConnection):Promise<import('../engine.mjs').RoutineList>;
+export function isRoutineSchedule(schedule:unknown):boolean;
+export function createRoutine(connection:import('../engine.mjs').EngineConnection,routine:{name:string,prompt:string,schedule:string,timezone?:string|null,paused?:boolean}):Promise<import('../engine.mjs').RoutineChange>;
+export function changeRoutine(connection:import('../engine.mjs').EngineConnection,change:{id:string,schedule:string,timezone?:string|null}):Promise<import('../engine.mjs').RoutineChange>;
+export function pauseRoutine(connection:import('../engine.mjs').EngineConnection,routine:{id:string}):Promise<import('../engine.mjs').RoutineChange>;
+export function resumeRoutine(connection:import('../engine.mjs').EngineConnection,routine:{id:string}):Promise<import('../engine.mjs').RoutineChange>;
+export function triggerRoutine(connection:import('../engine.mjs').EngineConnection,routine:{id:string}):Promise<import('../engine.mjs').RoutineChange>;
+export function deleteRoutine(connection:import('../engine.mjs').EngineConnection,routine:{id:string}):Promise<{state:'deleted'|'missing'|'refused'|'unreachable'|'failed'|'busy'}>;
+export function readRoutineReplies(connection:import('../engine.mjs').EngineConnection,routine:{id:string,limit?:number}):Promise<{state:'found',runs:{at:string|null,reply:string|null}[]}|{state:'missing'|'refused'|'unreachable'|'failed',runs:null}>;
+export function readRoutineRuns(connection:import('../engine.mjs').EngineConnection,routine:{id:string,limit?:number}):Promise<{state:'found',full:boolean,runs:{session:string,startedAt:string,endedAt:string}[]}|{state:'missing'|'refused'|'unreachable'|'failed',runs:null}>;
+export function readRunReply(connection:import('../engine.mjs').EngineConnection,session:string):Promise<{state:'found',reply:string|null}|{state:'missing'|'refused'|'unreachable',reply:null}>;

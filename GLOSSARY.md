@@ -75,7 +75,7 @@ A conversation that a Company's Members and Agents share, where an Agent reads a
 _Avoid_: room, group chat, thread
 
 **Engine / المحرك**:
-The agent program that runs a Conversation's replies, today the Hermes that ships inside the install (ADR 0010). gtmworks talks to every engine through one engine contract (start a run with an idempotency key, read its state, usage and steps, stop it); a driver is the code that speaks the contract for one engine. gtmworks writes no model loop of its own. Each Company has its own Engine, kept apart from every other Company's.
+The agent program that runs a Conversation's replies, today the Hermes that ships inside the install (ADR 0010). gtmworks reaches a Company's Engine through one handle (`lib/engine/handle.mjs`, ADR 0031), by capability: Runs through the engine contract (start a run with an idempotency key, read its state, usage and steps, stop it), and the Agent's profile, skills, memory, apps, providers and the rest each as their own capability; a driver is the code that speaks to one engine behind it. gtmworks writes no model loop of its own. Each Company has its own Engine, kept apart from every other Company's.
 _Avoid_: model, provider, backend
 
 **Provider / مزوّد**:

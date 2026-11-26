@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { answerChannelQuestion, driveChannelRuns, markChannelHandDone } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -9,6 +11,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // database's own rules, per Role and for everyone outside the channel, are in supabase/tests/channel_question_hand_cards.sql.
 const hermes = { address: 'http://hermes:8642', key: 'test-only-key' };
 const company = '10000000-0000-0000-0000-000000000001';
+// The Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+engineRecord(company, hermes);
 const channel = '69000000-0000-0000-0000-000000000001';
 
 /** The channel Run functions of one channel, as #149 keeps them, with the question's claim and the hand's press. */
@@ -27,7 +31,7 @@ function runDatabase() {
   rpc: async (/** @type {string} */ name, /** @type {any} */ args) => {
    if (name === 'channel_runs_due') {
     return { data: runs.filter(run => run.outcome === null && (args.just_message == null || run.message === args.just_message))
-      .map(run => ({ message: run.message, run: run.run_id, profile: run.profile, ordinal: run.ordinal })), error: null };
+      .map(run => ({ message: run.message, run: run.run_id, profile: run.profile, ordinal: run.ordinal, company })), error: null };
    }
    if (name === 'begin_channel_start') {
     const next = row(); if (!next) return { data: [], error: null };
@@ -107,11 +111,11 @@ test('a question no card can settle is answered empty and keeps no card, so the 
   fake.settings.questions = () => [question];
   fake.settings.reply = () => 'Done with what I had.';
   const db = runDatabase();
-  const waited = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+  const waited = await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {}));
   assert.deepEqual(waited, { started: 1, closed: 0 }, `${what}: the Run is asked and nothing closes it yet`);
   assert.deepEqual(fake.answers.map(answer => answer.text), [''], `${what}: it is answered with nothing`);
   assert.deepEqual([...db.cards.values()], [], `${what}: no card waits for the team`);
-  const closed = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+  const closed = await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {}));
   assert.deepEqual(closed, { started: 0, closed: 1 }, `${what}: the same Run goes on to its reply`);
   assert.deepEqual(db.replies.map(reply => reply.body), ['Done with what I had.'], `${what}: and the reply lands`);
  }
@@ -122,7 +126,7 @@ test('a channel question is kept as the team card, not answered with nothing, an
  fake.settings.questions = () => [{ text: '  Which angle first?\n', choices: ['Graduates', 'Parents'] }];
  fake.settings.reply = (input, answers) => `Reply to ${input} (${answers.join(', ')})`;
  const db = runDatabase();
- const first = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+ const first = await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {}));
  assert.deepEqual(first, { started: 1, closed: 0 }, 'the Run is asked and waits on its question');
  assert.deepEqual([...db.cards.values()].map(card => [card.content.question, card.content.choices, card.state]), [['Which angle first?', ['Graduates', 'Parents'], 'open']], 'the question is kept once, as the card keeps it');
  assert.deepEqual(fake.answers, [], 'nothing is answered with nothing, so no answer is never a yes');
@@ -130,15 +134,15 @@ test('a channel question is kept as the team card, not answered with nothing, an
  // Two Members pick at once, each with their own key: one claim is kept, the other is told it was taken.
  const work = queued();
  const answers = await Promise.all([
-  answerChannelQuestion(db.member('p-3'), /** @type {any} */(db), { company, channel, card: 1, choice: 1, answerKey: 'a1000000-0000-0000-0000-000000000001', hermes, engineFor: fake.engineFor, later: work.later }),
-  answerChannelQuestion(db.member('p-5'), /** @type {any} */(db), { company, channel, card: 1, choice: 0, answerKey: 'a1000000-0000-0000-0000-000000000002', hermes, engineFor: fake.engineFor, later: work.later }),
+  withEngineContract(fake.engineFor,()=>answerChannelQuestion(db.member('p-3'), /** @type {any} */(db), {company,channel,card: 1,choice: 1,answerKey: 'a1000000-0000-0000-0000-000000000001',later: work.later})),
+  withEngineContract(fake.engineFor,()=>answerChannelQuestion(db.member('p-5'), /** @type {any} */(db), {company,channel,card: 1,choice: 0,answerKey: 'a1000000-0000-0000-0000-000000000002',later: work.later})),
  ]);
  assert.deepEqual(answers.map(answer => answer.state).sort(), ['claimed', 'taken'], 'the first answer wins and a second, by anyone, changes nothing');
  await work.settle();
  assert.equal(fake.answers.length, 1, 'one answer reaches the Engine');
  assert.equal(fake.answers[0].text, db.cards.get(1)?.content.answer, 'and it is the one the record kept');
  assert.equal(db.cards.get(1)?.state, 'answered', 'the card reads answered for everyone');
- const closed = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+ const closed = await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {}));
  assert.deepEqual(closed, { started: 0, closed: 1 }, 'the same Run goes on to its reply');
  assert.deepEqual(db.replies.map(reply => reply.body), [`Reply to Omar: @Ads plan it (${db.cards.get(1)?.content.answer})`]);
 });
@@ -147,17 +151,17 @@ test('a channel Run is offered the handed step, and "Done it" is kept once and s
  const fake = fakeEngine();
  fake.settings.toolCalls = () => [{ id: 'call_hand', name: 'hand_over', arguments: { title: 'Publish the article', line: 'The draft is ready in WordPress', app: 'WordPress', rows: [] } }];
  const db = runDatabase();
- const driven = await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor });
+ const driven = await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {}));
  assert.deepEqual(driven, { started: 1, closed: 1 });
  const hand = [...db.cards.values()].find(card => card.state === 'open');
  assert.ok(hand, 'the step is kept open for the team');
  assert.equal(hand.content.app, 'WordPress');
 
  const work = queued();
- const pressed = await markChannelHandDone(db.member('p-3'), /** @type {any} */(db), { company, channel, card: hand.id, hermes, engineFor: fake.engineFor, later: work.later });
+ const pressed = await withEngineContract(fake.engineFor,()=>markChannelHandDone(db.member('p-3'), /** @type {any} */(db), {company,channel,card: hand.id,later: work.later}));
  assert.equal(pressed.first, true);
  await work.settle();
- const second = await markChannelHandDone(db.member('p-5'), /** @type {any} */(db), { company, channel, card: hand.id, hermes, engineFor: fake.engineFor, later: work.later });
+ const second = await withEngineContract(fake.engineFor,()=>markChannelHandDone(db.member('p-5'), /** @type {any} */(db), {company,channel,card: hand.id,later: work.later}));
  assert.equal(second.first, false, 'a second press by another Member changes nothing');
  await work.settle();
  assert.equal(db.runs.length, 2, 'one Run of the channel picks the step up');
@@ -173,16 +177,16 @@ test('a channel question where several may be picked keeps its card, and the pic
  fake.settings.questions = () => [{ text: 'Which audiences?', choices: ['Parents', 'Students', 'Teachers'], multiple: true }];
  fake.settings.reply = (input, answers) => `Reply to ${input} (${answers.map(answer => JSON.stringify(answer)).join(', ')})`;
  const db = runDatabase();
- assert.deepEqual(await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor }), { started: 1, closed: 0 }, 'the Run waits on its question');
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {})), { started: 1, closed: 0 }, 'the Run waits on its question');
  assert.deepEqual([...db.cards.values()].map(card => [card.content.choices, card.content.multiple, card.state]), [[['Parents', 'Students', 'Teachers'], true, 'open']], 'the question keeps its card for the team');
  assert.deepEqual(fake.answers, [], 'nothing is answered with nothing');
 
  const work = queued();
- const answered = await answerChannelQuestion(db.member('p-3'), /** @type {any} */(db), { company, channel, card: 1, picks: [0, 2], answerKey: 'a1000000-0000-0000-0000-000000000003', hermes, engineFor: fake.engineFor, later: work.later });
+ const answered = await withEngineContract(fake.engineFor,()=>answerChannelQuestion(db.member('p-3'), /** @type {any} */(db), {company,channel,card: 1,picks: [0, 2],answerKey: 'a1000000-0000-0000-0000-000000000003',later: work.later}));
  assert.deepEqual(answered, { state: 'claimed' }, 'the Member sends the picks as one answer');
  await work.settle();
  assert.deepEqual(fake.answers.map(answer => answer.text), [['Parents', 'Teachers']], 'the Engine takes the picked choices\' texts');
  assert.equal(db.cards.get(1)?.state, 'answered', 'the card reads answered for everyone');
- assert.deepEqual(await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor }), { started: 0, closed: 1 }, 'the same Run goes on to its reply');
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(db), {})), { started: 0, closed: 1 }, 'the same Run goes on to its reply');
  assert.deepEqual(db.replies.map(reply => reply.body), ['Reply to Omar: @Ads plan it (["Parents","Teachers"])']);
 });

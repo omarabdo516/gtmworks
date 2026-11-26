@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { driveGoodMornings, dayIn } from '../lib/good-morning-runs.mjs';
-import { createRoutine, triggerRoutine, readRoutineRuns, readRunReply, pauseRoutine, resumeRoutine } from '../lib/hermes.mjs';
+import { createRoutine, triggerRoutine, readRoutineRuns, readRunReply, pauseRoutine, resumeRoutine } from '../lib/engine/routines.mjs';
 import { morningMarker } from '../lib/morning-schedule.mjs';
 import { morningTitle } from '../lib/good-morning-title.mjs';
 import { i18n } from '../lib/i18n.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
+import { engineServing } from './engine-records.mjs';
 
 // The morning message (#183): each finished run of #182's daily job, on the main Agent's own Engine profile, is read back
 // by the worker and recorded once, with the Routine results of the night before it from every Agent of the Company.
@@ -13,10 +13,11 @@ const company='10000000-0000-0000-0000-000000000001';
 const [lead,ads]=['3a000000-0000-0000-0000-000000000001','3a000000-0000-0000-0000-000000000011'];
 const hex=id=>id.replaceAll('-','');
 const leadProfile=`ag-${hex(lead)}`, adsProfile=`ag-${hex(ads)}`;
-const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
+const install=fake=>({address:fake.address,profile:'default',key:'test-only-key'});
 const at=(fake,profile)=>({...install(fake),profile});
 const profileOn=(fake,name)=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
-async function engine() { const fake=await fakeHermes(); profileOn(fake,leadProfile); profileOn(fake,adsProfile); return fake; }
+// The Company's Engine, as its record names it.
+async function engine() { const fake=await engineServing(company); profileOn(fake,leadProfile); profileOn(fake,adsProfile); return fake; }
 // #182's job: the marker heads its prompt.
 const dailyJob=fake=>createRoutine(at(fake,leadProfile),{name:'Good morning',prompt:`${morningMarker}\nWrite the morning summary.`,schedule:'0 9 * * *',timezone:'Africa/Cairo'});
 
@@ -68,8 +69,7 @@ function service({agents=[{id:lead,profile:leadProfile,is_default:true,name:'Lea
 test('each finished run of the job is recorded once with its greeting and the night\'s Routine results; a paused job records none', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake);
-  const {db,recorded}=service(); const options={engineOf:async()=>hermes};
+  const {db,recorded}=service(); const options={};
   assert.equal(await driveGoodMornings(db,options),0,'no job, nothing to read');
   const {routine:morning}=await dailyJob(fake);
   const {routine:pausing}=await createRoutine(at(fake,adsProfile),{name:'Ad-pause routine',prompt:'Pause an ad past EGP 50 a lead',schedule:'0 * * * *'});
@@ -107,7 +107,7 @@ test('each finished run of the job is recorded once with its greeting and the ni
 test('a night the Engine could not read in full holds the morning for a later pass, and after an hour it goes with what was read', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake); const {db,recorded}=service();
+  const {db,recorded}=service();
   const {routine:morning}=await dailyJob(fake);
   const {routine:ads1}=await createRoutine(at(fake,adsProfile),{name:'Ad-pause routine',prompt:'Pause',schedule:'0 * * * *'});
   fake.settings.cronReply=job=>job.name==='Ad-pause routine'?'Paused the Video 2 ad':'Good morning.';
@@ -116,18 +116,18 @@ test('a night the Engine could not read in full holds the morning for a later pa
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
   // The Ads profile's run history does not answer: nothing is recorded, so the run is read again later.
   let away=true;
-  const runs=async(connection,request)=>connection.profile===adsProfile&&away?{state:'unreachable',runs:null}:readRoutineRuns(connection,request);
-  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes,driver:{runs}}),0);
+  fake.settings.managedFail=(method,path)=>away&&/^\/api\/cron\/jobs\/[^/]+\/runs/.test(path)&&path.includes(adsProfile)?503:null;
+  assert.equal(await driveGoodMornings(db,{}),0);
   assert.deepEqual(recorded,[]);
   away=false;
-  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes,driver:{runs}}),1);
+  assert.equal(await driveGoodMornings(db,{}),1);
   assert.deepEqual(recorded[0].results.map(result=>result.line),['Paused the Video 2 ad'],'recorded once the night is whole');
   // An Engine away for over an hour: the next morning goes with what could be read.
   fake.settings.cronReply='Good morning again.';
   await new Promise(resolve=>setTimeout(resolve,5));
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
   away=true;
-  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes,driver:{runs},now:()=>new Date(Date.now()+2*3600*1000)}),1);
+  assert.equal(await driveGoodMornings(db,{now:()=>new Date(Date.now()+2*3600*1000)}),1);
   assert.deepEqual([recorded.at(-1).greeting,recorded.at(-1).results],['Good morning again.',[]]);
  } finally { await fake.close(); }
 });
@@ -135,15 +135,13 @@ test('a night the Engine could not read in full holds the morning for a later pa
 test('the night holds every run that ended since the previous morning, also one that started before it, and reads the Engine\'s whole list', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake); const {db}=service();
+  const {db}=service();
   const {routine:morning}=await dailyJob(fake);
   const {routine:often}=await createRoutine(at(fake,adsProfile),{name:'Every 15 minutes',prompt:'Check',schedule:'*/15 * * * *'});
   fake.settings.cronReply=job=>job.name==='Every 15 minutes'?'Checked the leads':'Good morning.';
   await triggerRoutine(at(fake,adsProfile),{id:often.id});
   await new Promise(resolve=>setTimeout(resolve,20));
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
-  const asked=[];
-  const runs=(connection,request)=>{ asked.push(request.limit); return readRoutineRuns(connection,request); };
   // The Routine's last start is earlier than the night: the previous morning was recorded after it started.
   const started=fake.settings.cron.get(adsProfile)[0].last_run_at;
   const {db:later,recorded:kept}=service();
@@ -151,52 +149,52 @@ test('the night holds every run that ended since the previous morning, also one 
   // Its run started before the previous morning and ended after it, so it is this night's.
   const session=[...fake.settings.sessions.entries()].find(([,found])=>found.profile===adsProfile);
   session[1].ended_at=Date.parse(started)/1000+0.005;
-  assert.equal(await driveGoodMornings(later,{engineOf:async()=>hermes,driver:{runs}}),1);
+  assert.equal(await driveGoodMornings(later,{}),1);
   assert.deepEqual(kept[0].results.map(result=>result.line),['Checked the leads']);
-  assert.ok(asked.includes(100),'the whole list the Engine gives is read');
+  assert.ok(fake.settings.managed.some(request=>/\/api\/cron\/jobs\/[^/]+\/runs\?.*limit=100/.test(request.path??'')),'the whole list the Engine gives is read');
  } finally { await fake.close(); }
 });
 
 test('a Routine that runs more often between two mornings than the Engine lists keeps every result, each read once (#535)', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake); const {db,recorded,kept}=service();
+  const {db,recorded,kept}=service();
   const {routine:morning}=await dailyJob(fake);
   const {routine:often}=await createRoutine(at(fake,adsProfile),{name:'Every 15 minutes',prompt:'Check',schedule:'*/15 * * * *'});
   let count=0;
   fake.settings.cronReply=job=>job.name==='Every 15 minutes'?`Checked the leads ${++count}`:'Good morning.';
   // An Engine that lists only the newest 2 runs stands for the pinned one's 100: the night holds 6.
-  const asked=[];
-  const runs=(connection,request)=>{ asked.push(request.id); return readRoutineRuns(connection,{...request,limit:Math.min(request.limit,2)}); };
-  const replies=[];
-  const reply=(connection,session)=>{ replies.push(session); return readRunReply(connection,session); };
-  const options={engineOf:async()=>hermes,driver:{runs,reply},marks:new Map()};
+  fake.settings.cronRunsAtMost=2;
+  const listings=()=>fake.settings.managed.filter(request=>request.path?.startsWith(`/api/cron/jobs/${often.id}/runs`)).length;
+  const replies=()=>fake.settings.managed.map(request=>/^\/api\/sessions\/([^/]+)\/messages/.exec(request.path??'')?.[1]).filter(Boolean).map(session=>decodeURIComponent(/** @type {string} */(session)));
+  const options={marks:new Map()};
   for(let round=0;round<3;round++) {
    for(let each=0;each<2;each++) { await triggerRoutine(at(fake,adsProfile),{id:often.id}); await new Promise(resolve=>setTimeout(resolve,5)); }
    assert.equal(await driveGoodMornings(db,options),0,'no morning yet');
   }
   assert.equal(kept.length,6,'each run is kept as it ends');
   // A pass with no new run reads no list of that Routine again.
-  asked.length=0;
+  const listed=listings();
   await driveGoodMornings(db,options);
-  assert.ok(!asked.includes(often.id),'a Routine with no new run is not listed again');
+  assert.equal(listings(),listed,'a Routine with no new run is not listed again');
   await new Promise(resolve=>setTimeout(resolve,20));
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
   assert.equal(await driveGoodMornings(db,options),1);
   assert.deepEqual(recorded[0].results.map(result=>result.line).sort(),[1,2,3,4,5,6].map(n=>`Checked the leads ${n}`).sort(),'the whole night, not the newest 2');
   assert.ok(recorded[0].results.every(result=>result.agent===ads&&result.routine==='Every 15 minutes'));
-  const ofRoutine=replies.filter(session=>kept.some(row=>row.session===session&&row.routine_id===often.id));
+  const ofRoutine=replies().filter(session=>kept.some(row=>row.session===session&&row.routine_id===often.id));
   assert.equal(ofRoutine.length,new Set(ofRoutine).size,'each run\'s reply is read once');
   assert.ok(!kept.some(row=>row.routine_id===morning.id),'the daily job\'s own runs are not Routine results');
   // A restarted worker (no marks) lists each Routine again and reads no reply it kept already.
-  replies.length=0;
+  const read=replies().length;
   await driveGoodMornings(db,{...options,marks:new Map()});
-  assert.deepEqual(replies,[],'after a restart nothing kept is read again');
+  assert.equal(replies().length,read,'after a restart nothing kept is read again');
   // A full list with no finished run the worker can read (each still running) is nothing to keep, never a failed pass.
-  await triggerRoutine(at(fake,adsProfile),{id:often.id});
-  const empty=async()=>({state:'found',full:true,runs:[]});
-  assert.equal(await driveGoodMornings(db,{...options,driver:{runs:empty,reply}}),0);
-  assert.equal(await driveGoodMornings(db,{...options,driver:{runs:empty,reply}}),0,'a Routine kept whole before with an empty full list');
+  for(let each=0;each<2;each++) { await triggerRoutine(at(fake,adsProfile),{id:often.id}); await new Promise(resolve=>setTimeout(resolve,5)); }
+  for(const [id,found] of fake.settings.sessions) if(id.startsWith(`cron_${often.id}_`)&&found.started_at*1000>Date.now()-20) found.active=true;
+  for(const found of [...fake.settings.sessions].filter(([id])=>id.startsWith(`cron_${often.id}_`)).sort((a,b)=>b[1].started_at-a[1].started_at).slice(0,2).map(([,found])=>found)) found.active=true;
+  assert.equal(await driveGoodMornings(db,options),0);
+  assert.equal(await driveGoodMornings(db,options),0,'a Routine kept whole before with an empty full list');
  } finally { await fake.close(); }
 });
 
@@ -204,14 +202,14 @@ test('a keep the database refuses holds the morning, said in the server log, and
  const fake=await engine();
  const logged=[]; const error=console.error; console.error=(...args)=>logged.push(args.join(' '));
  try {
-  const hermes=install(fake); const {db,recorded,kept}=service();
+  const {db,recorded,kept}=service();
   const {routine:morning}=await dailyJob(fake);
   const {routine:ads1}=await createRoutine(at(fake,adsProfile),{name:'Ad-pause routine',prompt:'Pause',schedule:'0 * * * *'});
   fake.settings.cronReply=job=>job.name==='Ad-pause routine'?'Paused the Video 2 ad':'Good morning.';
   await triggerRoutine(at(fake,adsProfile),{id:ads1.id});
   await new Promise(resolve=>setTimeout(resolve,20));
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
-  const options={engineOf:async()=>hermes,marks:new Map()};
+  const options={marks:new Map()};
   db.keepFails=true;
   assert.equal(await driveGoodMornings(db,options),0,'held, not recorded without the night');
   assert.deepEqual([recorded,kept],[[],[]]);
@@ -231,7 +229,7 @@ test('a keep the database refuses holds the morning, said in the server log, and
 test('with a paused extra marked job left before it, the worker reads the one that is on, as Settings does', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake); const {db,recorded}=service();
+  const {db,recorded}=service();
   const {routine:extra}=await dailyJob(fake);
   const {routine:kept}=await dailyJob(fake);
   fake.settings.cronReply='Good morning from the extra.';
@@ -240,7 +238,7 @@ test('with a paused extra marked job left before it, the worker reads the one th
   fake.settings.cronReply='Good morning. Here is today.';
   await new Promise(resolve=>setTimeout(resolve,5));
   await triggerRoutine(at(fake,leadProfile),{id:kept.id});
-  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes}),1);
+  assert.equal(await driveGoodMornings(db,{}),1);
   assert.deepEqual(recorded.map(row=>row.greeting),['Good morning. Here is today.']);
  } finally { await fake.close(); }
 });
@@ -248,10 +246,10 @@ test('with a paused extra marked job left before it, the worker reads the one th
 test('a Routine merely named "Good morning" is not the daily job: only the marked one is read', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake); const {db,recorded}=service();
+  const {db,recorded}=service();
   const {routine}=await createRoutine(at(fake,leadProfile),{name:'Good morning',prompt:'Say good morning',schedule:'0 9 * * *'});
   await triggerRoutine(at(fake,leadProfile),{id:routine.id});
-  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes}),0);
+  assert.equal(await driveGoodMornings(db,{}),0);
   assert.deepEqual(recorded,[]);
  } finally { await fake.close(); }
 });

@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withNoEngine, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { downloadAgentFile, libraryRoot, listAgentFiles, readAgentFile, workSegments } from '../lib/hermes.mjs';
+import { downloadAgentFile, libraryRoot, listAgentFiles, readAgentFile, workSegments } from '../lib/engine/files.mjs';
 import { agentFileDownload, agentLibrary } from '../lib/agent-files.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // The Library of an Agent (#194, #395): one folder of the Agent's own folder in its Company's work folder, read through
 // the Engine and never copied into gtmworks. A Contributor or a Viewer is refused on the server, a hidden
@@ -20,14 +20,13 @@ const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
 // The Agent's own folder in the Company's work folder (#395): the Engine lists it on its read-only mount of the work
-// volume, and reads a file's bytes in the work sandbox, where the same folder is /work/<profile> (lib/hermes.mjs).
+// volume, and reads a file's bytes in the work sandbox, where the same folder is /work/<profile> (the Engine driver (lib/engine/)).
 const work=`/opt/data/work/${profile}`;
 const sandbox=`/work/${profile}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
 const clock=new Date(mtime*1000).toISOString();
-const hermes=()=>({address:process.env.BUNDLED_HERMES_URL,key:process.env.HERMES_API_KEY});
 
 const require=createRequire(import.meta.url);
 const [permissions,service,attachments]=[await import('../lib/route-permissions.mjs'),await import('../lib/agent-files.mjs'),await import('../lib/attachments.mjs')];
@@ -42,7 +41,7 @@ function load(file,imports,globals={}) {
 // A fake Engine with one Agent's profile and its own folder in the Company's work folder, which the sandbox makes at the
 // Agent's first command (sandbox/work-shell).
 async function engine() {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  for(const name of [profile,otherProfile]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.files.set(work,[]);
  return {fake,at:{address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'}};
@@ -373,8 +372,8 @@ test('the list route answers an Owner and a Manager, refuses a Contributor and a
   const {NextRequest}=require('next/server');
   // The service reaches the Engine as the app reaches the bundled one, with the fake's management listener where
   // port 9119 sits in an install.
-  const drivers={agentLibrary:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentLibrary(db,{...request,hermes:{...hermes(),managementAddress:fake.managementAddress}}),
-   agentFileDownload:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentFileDownload(db,{...request,hermes:{...hermes(),managementAddress:fake.managementAddress}})};
+  const drivers={agentLibrary:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentLibrary(db,{...request}),
+   agentFileDownload:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentFileDownload(db,{...request})};
   const route=(/** @type {any} */ db)=>load('app/api/agent-files/route.ts',{
    '@/lib/supabase':{supabase:async()=>db},
    '@/lib/route-permissions.mjs':permissions,
@@ -424,7 +423,7 @@ test('the download route serves the bytes as an attachment to an Owner and a Man
   fake.settings.fileBytes.set(`${work}/brief.md`,{body:'Sell it',type:'text/markdown'});
   process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
   const {NextRequest}=require('next/server');
-  const drivers={agentFileDownload:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentFileDownload(db,{...request,hermes:{...hermes(),managementAddress:fake.managementAddress}})};
+  const drivers={agentFileDownload:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentFileDownload(db,{...request})};
   const route=(/** @type {any} */ db)=>load('app/c/[slug]/agent-files/[agent]/route.ts',{
    '@/lib/supabase':{supabase:async()=>db},
    '@/lib/route-permissions.mjs':permissions,
@@ -481,27 +480,27 @@ test('the Library service reads one Agent\'s folder for the Company that sees it
   fake.settings.files.set(work,[{name:'reports',isFolder:true},{name:'brief.md',size:1,mtime}]);
   fake.settings.files.set(`${work}/reports`,[{name:'q3.csv',size:12,mtime},{name:'q4.csv',size:13,mtime:mtime+86400}]);
   // A folder's row carries how many files it holds and the day of the newest of them; a file's row carries neither.
-  assert.deepEqual(await agentLibrary(database().db,{company,agent,hermes:at}),{state:'found',entries:[
+  assert.deepEqual(await agentLibrary(database().db,{company,agent}),{state:'found',entries:[
    {name:'reports',isFolder:true,size:null,time:null,files:2,latest:new Date((mtime+86400)*1000).toISOString()},
    {name:'brief.md',isFolder:false,size:1,time:clock,files:null,latest:null},
   ]});
   // A folder that cannot be read keeps no count, which is not the same as Empty.
   fake.settings.filesUnreadable.add(`${work}/reports`);
-  assert.deepEqual((await agentLibrary(database().db,{company,agent,hermes:at})).entries?.[0],{name:'reports',isFolder:true,size:null,time:null,files:null,latest:null});
+  assert.deepEqual((await agentLibrary(database().db,{company,agent})).entries?.[0],{name:'reports',isFolder:true,size:null,time:null,files:null,latest:null});
   fake.settings.filesUnreadable.delete(`${work}/reports`);
-  assert.deepEqual(await agentLibrary(database({agents:[]}).db,{company,agent,hermes:at}),{state:'missing',entries:null});
-  assert.deepEqual(await agentLibrary(database({agents:[]}).db,{company:otherCompany,agent,hermes:at}),{state:'missing',entries:null});
-  assert.deepEqual(await agentLibrary(database().db,{company,agent,hermes:null}),{state:'missing',entries:null},'no Engine on a hosted install');
-  const file=await agentFileDownload(database().db,{company,agent,hermes:at,name:'brief.md'});
+  assert.deepEqual(await agentLibrary(database({agents:[]}).db,{company,agent}),{state:'missing',entries:null});
+  assert.deepEqual(await agentLibrary(database({agents:[]}).db,{company:otherCompany,agent}),{state:'missing',entries:null});
+  assert.deepEqual(await withNoEngine(company,()=>agentLibrary(database().db,{company,agent})),{state:'missing',entries:null},'no Engine on a hosted install');
+  const file=await agentFileDownload(database().db,{company,agent,name:'brief.md'});
   assert.equal(file.state,'found');
-  assert.deepEqual(await agentFileDownload(database({agents:[]}).db,{company,agent,hermes:at,name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await agentFileDownload(database({agents:[]}).db,{company,agent,name:'brief.md'}),{state:'missing'});
   // The generated images folder (#353) is the Library's second root, read for the Company that sees the Agent and only
   // there: it lists its images, and one of them downloads.
   fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
-  assert.deepEqual(await agentLibrary(database().db,{company,agent,root:'images',hermes:at}),{state:'found',entries:[{name:'promo.png',isFolder:false,size:8,time:clock,files:null,latest:null}]});
+  assert.deepEqual(await agentLibrary(database().db,{company,agent,root:'images'}),{state:'found',entries:[{name:'promo.png',isFolder:false,size:8,time:clock,files:null,latest:null}]});
   const before=fake.settings.managementRequests.length;
-  assert.deepEqual(await agentLibrary(database().db,{company,agent,root:'elsewhere',hermes:at}),{state:'invalid',entries:null});
-  assert.deepEqual(await agentFileDownload(database().db,{company,agent,root:'elsewhere',name:'promo.png',hermes:at}),{state:'invalid'});
+  assert.deepEqual(await agentLibrary(database().db,{company,agent,root:'elsewhere'}),{state:'invalid',entries:null});
+  assert.deepEqual(await agentFileDownload(database().db,{company,agent,root:'elsewhere',name:'promo.png'}),{state:'invalid'});
   assert.equal(fake.settings.managementRequests.length,before,'a root that is not one of the Library\'s never reaches the Engine');
  } finally { await fake.close(); }
 });

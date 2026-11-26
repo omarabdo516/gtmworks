@@ -5,7 +5,7 @@
 // It prints states and names only, never the key.
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-const {engineFor}=await import(`${process.cwd()}/lib/engine.mjs`);
+const {hermesEngine:engineFor}=await import(`${process.cwd()}/lib/engine/contract.mjs`);
 
 assert.ok(process.env.ENGINE_KEY,'the install key is in the web container');
 const connection={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',profile:'default',key:process.env.ENGINE_KEY};

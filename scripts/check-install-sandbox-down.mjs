@@ -14,7 +14,8 @@ import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const {companyProfile}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
-const {readSession,readWorkSandbox}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {readSession}=await import(`${process.cwd()}/lib/engine/sessions.mjs`);
+const {readWorkSandbox}=await import(`${process.cwd()}/lib/engine/files.mjs`);
 const {writeProof}=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
 const [step,marker]=process.argv.slice(2);
@@ -74,7 +75,7 @@ try {
  const send=async text=>{
   const conversation=randomUUID();
   const sendKey=randomUUID();
-  const result=await until('the Company ready for a run',async()=>{ const sent=await sendMessage(person,service,{person:user.id,company,conversation,sendKey,agent,message:text,hermes:engine}); return 'queued' in sent?null:sent; },180);
+  const result=await until('the Company ready for a run',async()=>{ const sent=await sendMessage(person,service,{person:user.id,company,conversation,sendKey,agent,message:text}); return 'queued' in sent?null:sent; },180);
   assert.deepEqual(result,{conversation});
   const body=await until('reply stored',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
   assert.ok(body.body.includes(reply),body.body);

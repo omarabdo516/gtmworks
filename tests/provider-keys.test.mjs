@@ -1,11 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withDriver } from './engine-records.mjs';
+import { engineRecord, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
-import { readProviderKeys, setProviderKey, removeProviderKey, hermesEngine } from '../lib/hermes.mjs';
+import { readProviderKeys, setProviderKey, removeProviderKey } from '../lib/engine/providers.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
 import { changeCompanyKey, readCompanyKeys, withCompanyKeys } from '../lib/provider-keys.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'read':'providers.keys','held':'providers.heldKeys','set':'providers.setKey','remove':'providers.removeKey','keys':'providers.keys','signIns':'providers.signIns','options':'models.read'};
 
 // #124: a Company's model-provider API key, passed by gtmworks straight to the Engine's profiles of that Company.
 const hex=n=>`10000000000000000000000000000${String(n).padStart(3,'0')}`;
@@ -147,15 +152,15 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   rpc:async(name,args)=>{ asked.push({name,args}); return {data:name==='finish_provider_key_change'?[]:null,error:null}; }};
  return {db,service,asked,logged};
 }
-// The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
-const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
- return {read:(target,keys)=>readProviderKeys(at(target),keys),set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'},...request});
-const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
+// One fake Engine serving both Companies, as each one's record names it; it takes a loopback address of its own, so the
+// driver finds its management listener on port 9119 there.
+const bothServing=async()=>{ const fake=await engineServing(first); engineRecord(second,fake); return fake; };
+const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',...request});
+const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company});
 const profileOf=path=>new URL(path,'http://engine').searchParams.get('profile')??/^\/api\/profiles\/([^/]+)\/model$/.exec(new URL(path,'http://engine').pathname)?.[1]??null;
 
 test('a set reaches the Company\'s space and its Agent profiles only, key before model, and names each Agent and whether it was written', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   madeCompany(fake,one); madeCompany(fake,two);
   fake.settings.modelNeedsKey=true;
@@ -232,7 +237,7 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
 });
 
 test('an Agent made after a key was set gets a fresh profile, waits on the Owner, and gets the key on the next set', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   madeCompany(fake,one);
   const owner=sessions(fake,{owner:true});
@@ -255,7 +260,7 @@ test('an Agent made after a key was set gets a fresh profile, waits on the Owner
 });
 
 test('only an active Owner sets or removes a key, checked on the server; every member reads only names and yes or no', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   madeCompany(fake,one);
   fake.settings.profiles.get(one.space).env={OPENROUTER_API_KEY:known};
@@ -281,27 +286,27 @@ test('only an active Owner sets or removes a key, checked on the server; every m
 });
 
 test('two changes of one Company\'s key run one after the other, and another Company\'s change does not wait', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   madeCompany(fake,one); madeCompany(fake,two);
   const owner=sessions(fake,{owner:true});
   const steps=[]; let open; const gate=new Promise(resolve=>{ open=resolve; });
   const held=name=>({set:async()=>{ steps.push(`${name} starts`); if(name==='A') await gate; steps.push(`${name} ends`); return {state:'written',model:null,profiles:{}}; }});
-  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:held(name),hermes:{address:fake.address,key:'test-only-key'}});
+  const changeAs=(name,company)=>withDriver(DRIVER,held(name),()=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known}));
   const a=changeAs('A',first); const b=changeAs('B',first); const other=changeAs('C',second);
   assert.equal((await other).status,200);
   assert.deepEqual(steps,['A starts','C starts','C ends'],'the second change of the first Company waits; the other Company does not');
   open();
   assert.deepEqual([(await a).status,(await b).status],[200,200]);
   assert.deepEqual(steps.slice(3),['A ends','B starts','B ends']);
-  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,driver:{set:async()=>{ throw new Error('down'); }},hermes:{address:fake.address,key:'test-only-key'}});
+  const failing=withDriver(DRIVER,{set:async()=>{ throw new Error('down'); }},()=>changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known}));
   await assert.rejects(failing);
   assert.equal((await changeAs('D',first)).status,200,'a change that threw does not hold the next');
  } finally { await fake.close(); }
 });
 
 test('no key reaches an answer, a log line or a database call, when the Engine takes it, refuses it or never answers', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  const printed=[]; const kept={};
  for(const level of ['log','info','warn','error','debug']) { kept[level]=console[level]; console[level]=(...args)=>{ printed.push(args.map(String).join(' ')); }; }
  try {

@@ -1,0 +1,5 @@
+export function readConfig(connection:import('../engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
+export function readSavedConfig(connection:import('../engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
+export function readConfigDefaults(connection:import('../engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
+export function readConfigSchema(connection:import('../engine.mjs').EngineConnection):Promise<{state:'found',schema:{fields:Record<string,{type?:string,options?:unknown[]}>,category_order?:string[]}}|{state:'refused'|'unreachable'|'failed',schema:null}>;
+export function writeConfig(connection:import('../engine.mjs').EngineConnection,config:Record<string,unknown>):Promise<{state:'written'|'refused'|'unreachable'|'failed'}>;

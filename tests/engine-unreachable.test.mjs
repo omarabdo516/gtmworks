@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeHermes } from './fake-hermes.mjs';
+import { withNoEngine, engineServing } from './engine-records.mjs';
 import { readCompanySignIns } from '../lib/company-sign-in.mjs';
 import { sendMessage } from '../lib/conversation-runs.mjs';
-import { readWorkSandbox } from '../lib/hermes.mjs';
+import { readWorkSandbox } from '../lib/engine/files.mjs';
 
 // A Company whose Engine is not running (#387): its Settings read one plain state (noEngine), and a message is kept as
 // "not sent" (#764) without starting or recording a Run. A later send on the same install works
@@ -40,16 +40,16 @@ function databases() {
 }
 
 test('an Engine that does not answer reads as noEngine, and a message to it stays, not sent, without a Run', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  const {db,service,calls}=databases();
  try {
   // Both the record's address (engineOf answered null) and an Engine that does not answer are the same one state.
-  assert.deepEqual(await readCompanySignIns(db,{company,hermes:null}),{profile:null,profiles:null,signIns:null,noEngine:true});
+  assert.deepEqual(await withNoEngine(company,()=>readCompanySignIns(db,{company})),{profile:null,profiles:null,signIns:null,noEngine:true});
   fake.settings.managementStatus=500;
-  assert.deepEqual(await readCompanySignIns(db,{company,hermes:hermesOf(fake)}),{profile:null,profiles:null,signIns:null,noEngine:true});
+  assert.deepEqual(await readCompanySignIns(db,{company}),{profile:null,profiles:null,signIns:null,noEngine:true});
 
   fake.settings.status=500;
-  const refused=await sendMessage(db,service,{company,conversation:'c',sendKey:'k-1',message:'Are you there?',hermes:hermesOf(fake)});
+  const refused=await sendMessage(db,service,{company,conversation:'c',sendKey:'k-1',message:'Are you there?'});
   assert.deepEqual(refused,{error:'conversationHermesFailed',status:502});
   // The message was stored first (#764) and its turn failed: it stays as "not sent", and no Run is recorded.
   assert.ok(calls.findIndex(call=>call.name==='queue_conversation_turn')<calls.findIndex(call=>call.name==='begin_turn_start'));
@@ -59,17 +59,17 @@ test('an Engine that does not answer reads as noEngine, and a message to it stay
 
   // When the Engine answers again the next send starts its Run, with no reload and nothing else changed.
   fake.settings.status=200;
-  assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k-2',message:'Are you there now?',hermes:hermesOf(fake)}),{conversation:'c'});
+  assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k-2',message:'Are you there now?'}),{conversation:'c'});
   assert.equal(fake.settings.runs.length,1);
   assert.equal(calls.filter(call=>call.name==='record_conversation_turn').length,1);
  } finally { await fake.close(); }
 });
 
 test('a Company with no Engine at all keeps the message, not sent, the same way, and keeps the Agent for the next one', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  const {db,service,calls}=databases();
  try {
-  assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k-3',message:'Hello',hermes:null}),{error:'conversationHermesFailed',status:502});
+  assert.deepEqual(await withNoEngine(company,()=>sendMessage(db,service,{company,conversation:'c',sendKey:'k-3',message:'Hello'})),{error:'conversationHermesFailed',status:502});
   assert.equal(calls.some(call=>call.name==='queue_conversation_turn'),true,'the message is stored');
   assert.equal(calls.some(call=>call.name==='record_conversation_turn'),false);
   assert.equal(fake.settings.runs.length,0);
@@ -79,7 +79,7 @@ test('a Company with no Engine at all keeps the message, not sent, the same way,
 // #398: the Company's work sandbox is a second container its Engine reaches over ssh. One read of the Engine's own ssh
 // workspace names whether it is there, and it answers the same way again once the container runs again, with no restart.
 test('a work sandbox that is not running reads as one state, and reads as running again once it answers', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   fake.settings.sandboxDown=true;
   assert.deepEqual(await readWorkSandbox(hermesOf(fake)),{state:'notRunning'});

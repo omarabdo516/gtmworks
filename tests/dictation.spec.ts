@@ -19,9 +19,13 @@ test.beforeAll(async ({}, testInfo) => {
  freshSeed(testInfo);
  fake = await laneHermes();
  fake.settings.transcriptionTranscript = 'Draft the launch note';
+ // The Company attached to its Engine, as the worker leaves it (ADR 0014): its own profile, which its Agent runs on, so
+ // the Agent is among those the Engine handle finds for a reader who sees it (company_app_agents).
+ query(`insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values ('${company}','co-${company.replaceAll('-','')}',true,true)
+  on conflict (company_id) do update set profile=excluded.profile`);
  query(`delete from public.hermes_agents where company_id='${company}' and name='Hidden writer'`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile)
-  values ('${randomUUID()}','${company}','${randomUUID()}','Hidden writer','Writes where nobody sees.',false,'dictation-hidden')`);
+  values ('${randomUUID()}','${company}','${randomUUID()}','Hidden writer','Writes where nobody sees.',false,'co-${company.replaceAll('-','')}')`);
 });
 test.afterAll(async () => { await fake?.close(); });
 

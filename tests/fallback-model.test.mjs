@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { withDriver } from './engine-records.mjs';
+import { engineRecord, withNoEngine } from './engine-records.mjs';
 import { chainFor, changeFallbackModel, fallbackPair, keepFallbackModels, logFallbackMove } from '../lib/fallback-model.mjs';
-import { readFallbackChain, writeFallbackChain } from '../lib/hermes.mjs';
+import { readFallbackChain, writeFallbackChain } from '../lib/engine/models.mjs';
 import { endOf } from '../lib/engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'read':'models.fallbackChain','write':'models.writeFallbackChain'};
 
 // #622 (spec #611): the Company's Fallback model is kept by the database and given to every profile its Agents run on;
 // the Engine walks it only once the chosen model's accounts ran out. The database and, but for the driver's own test,
@@ -12,6 +16,8 @@ import { fakeHermes } from './fake-hermes.mjs';
 const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const hermes={address:'http://127.0.0.1:8642',key:'test-only-key'};
+// Each Company's Engine record; each test answers the Engine's chain reads and writes itself, but the driver's own.
+engineRecord(company,hermes); engineRecord(other,hermes);
 const claude={provider:'anthropic',model:'claude-sonnet-4-6'};
 
 /** An Engine whose profiles hold the chains given, and the reads and writes it was asked. */
@@ -44,33 +50,33 @@ test('a choice is one provider/model as the pickers take it; None is an empty ch
 
 test('the Owner\'s choice is kept, then every profile an Agent runs on takes it at once', async () => {
  const db=owner(); const {calls,held,driver}=engine();
- const answer=await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',hermes,driver,access:enabled(true)});
+ const answer=await withDriver(DRIVER,driver,()=>changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',access:enabled(true)}));
  assert.deepEqual(answer,{status:200,body:{model:'anthropic/claude-sonnet-4-6',failed:[]}});
  const kept=()=>db.asked.filter(call=>call.name==='set_company_fallback_model');
  assert.deepEqual(kept()[0],{name:'set_company_fallback_model',args:{c:company,fallback_provider:'anthropic',fallback_model:'claude-sonnet-4-6'}});
  assert.deepEqual(Object.fromEntries(held),{'co-x':[claude],'ag-2':[claude]});
  // None empties every chain, so no Agent moves to another kind of Provider.
  calls.length=0;
- assert.deepEqual(await changeFallbackModel(db,{company,value:null,hermes,driver,access:enabled(true)}),{status:200,body:{model:null,failed:[]}});
+ assert.deepEqual(await withDriver(DRIVER,driver,()=>changeFallbackModel(db,{company,value:null,access:enabled(true)})),{status:200,body:{model:null,failed:[]}});
  assert.deepEqual(kept().at(-1),{name:'set_company_fallback_model',args:{c:company,fallback_provider:null,fallback_model:null}});
  assert.deepEqual(Object.fromEntries(held),{'co-x':[],'ag-2':[]});
  // A profile already holding the choice is read and not written again.
  calls.length=0;
- await changeFallbackModel(db,{company,value:null,hermes,driver,access:enabled(true)});
+ await withDriver(DRIVER,driver,()=>changeFallbackModel(db,{company,value:null,access:enabled(true)}));
  assert.deepEqual(calls.filter(call=>call[0]==='write'),[]);
 });
 
 test('a profile the Engine did not take the choice on is named by its Agents; the choice is still kept', async () => {
  const db=owner({agents:[{agent:'a1',name:'Lead',profile:'co-x'},{agent:'a2',name:'Writer',profile:'ag-2'},{agent:'a3',name:'Ads',profile:'ag-2'}]});
  const {driver}=engine({},{refuse:new Set(['ag-2'])});
- const answer=await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',hermes,driver,access:enabled(true)});
+ const answer=await withDriver(DRIVER,driver,()=>changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',access:enabled(true)}));
  assert.deepEqual(answer,{status:200,body:{model:'anthropic/claude-sonnet-4-6',failed:[{agent:'a2',name:'Writer'},{agent:'a3',name:'Ads'}]}});
  // An Agent list that cannot be read keeps nothing: the answer never says every Agent took it.
  const unread=owner({agents:null});
- assert.deepEqual(await changeFallbackModel(unread,{company,value:null,hermes,driver,access:enabled(true)}),{status:502,body:{error:'fallbackFailed'}});
+ assert.deepEqual(await withDriver(DRIVER,driver,()=>changeFallbackModel(unread,{company,value:null,access:enabled(true)})),{status:502,body:{error:'fallbackFailed'}});
  assert.equal(unread.asked.some(call=>call.name==='set_company_fallback_model'),false);
  // No Engine for the Company: every Agent is named, and the worker gives it the choice later.
- const none=await changeFallbackModel(owner(),{company,value:null,hermes:null,driver,access:enabled(true)});
+ const none=await withDriver(DRIVER,driver,()=>withNoEngine(company,()=>changeFallbackModel(owner(),{company,value:null,access:enabled(true)})));
  assert.equal(none.status,200);
 });
 
@@ -84,7 +90,7 @@ test('a model no Provider switched on or Providers that cannot be read, a malfor
   ['anthropic/claude-sonnet-4-6',enabled(true),{code:'42501'},{status:403,body:{error:'fallbackNotAllowed'}}],
   ['anthropic/claude-sonnet-4-6',enabled(true),{code:'XX000'},{status:502,body:{error:'fallbackFailed'}}]]) {
   const db=owner({error}); const {calls,driver}=engine();
-  assert.deepEqual(await changeFallbackModel(db,{company,value,hermes,driver,access}),answer,String(value));
+  assert.deepEqual(await withDriver(DRIVER,driver,()=>changeFallbackModel(db,{company,value,access})),answer,String(value));
   assert.deepEqual(calls,[],'the Engine is not asked');
   if(answer.status!==403&&!error) assert.deepEqual(db.asked,[],'nor the database');
  }
@@ -96,20 +102,20 @@ test('the worker gives each profile the Company\'s choice when it holds another,
  const work=[{company_id:company,provider:'anthropic',model:'claude-sonnet-4-6',profiles:['co-x','ag-1']},{company_id:other,provider:null,model:null,profiles:['co-y']}];
  const {calls,held,driver}=engine({'ag-1':[claude],'co-y':[{provider:'openrouter',model:'gpt-5.5'}]});
  const memory=new Map(); let now=1000;
- assert.equal(await keepFallbackModels(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now}),2);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepFallbackModels(worker(work),{memory,now:()=>now})),2);
  assert.deepEqual(Object.fromEntries(held),{'co-x':[claude],'ag-1':[claude],'co-y':[]},'a profile holding another chain, None\'s included, takes the Company\'s');
  assert.deepEqual(calls.filter(call=>call[0]==='write').map(call=>call[1]),['co-x','co-y']);
  // A minute later nothing is read again; a new Agent's profile is read at once.
  calls.length=0; now+=60000; work[0].profiles.push('ag-2');
- assert.equal(await keepFallbackModels(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now}),1);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepFallbackModels(worker(work),{memory,now:()=>now})),1);
  assert.deepEqual(calls.map(call=>call.slice(0,2)),[['read','ag-2'],['write','ag-2']]);
  // A changed choice is given to every profile at once.
  calls.length=0; work[0].provider=null; work[0].model=null;
- assert.equal(await keepFallbackModels(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now}),3);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepFallbackModels(worker(work),{memory,now:()=>now})),3);
  assert.deepEqual(held.get('ag-2'),[]);
  // Five minutes on, every profile is read again, and one changed behind gtmworks's back is put back.
  calls.length=0; now+=5*60000; held.set('co-x',[claude]);
- assert.equal(await keepFallbackModels(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now}),1);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepFallbackModels(worker(work),{memory,now:()=>now})),1);
  assert.deepEqual(calls.filter(call=>call[0]==='read').map(call=>call[1]).sort(),['ag-1','ag-2','co-x','co-y']);
  assert.deepEqual(held.get('co-x'),[]);
 });
@@ -118,11 +124,11 @@ test('the worker clears an older fallback_model, skips a Company with no Engine 
  const work=[{company_id:other,provider:'anthropic',model:'claude-sonnet-4-6',profiles:['co-y']},{company_id:company,provider:null,model:null,profiles:['co-x','ag-1']}];
  const {calls,driver}=engine({'co-x':[{provider:'openrouter',model:'gpt-5.5'}]},{legacy:new Set(['co-x']),refuse:new Set(['ag-1'])});
  const memory=new Map();
- assert.equal(await keepFallbackModels(worker(work),{memory,driver,engineFor:async id=>id===other?null:hermes}),1);
+ assert.equal(await withNoEngine(other,()=>withDriver(DRIVER,driver,()=>keepFallbackModels(worker(work),{memory}))),1);
  assert.deepEqual(calls.filter(call=>call[0]==='write'),[['write','co-x',{chain:[],legacy:true}]]);
  // A profile that could not be read is asked again at the next pass.
  calls.length=0;
- await keepFallbackModels(worker(work),{memory,driver,engineFor:async id=>id===other?null:hermes});
+ await withNoEngine(other,()=>withDriver(DRIVER,driver,()=>keepFallbackModels(worker(work),{memory})));
  assert.deepEqual(calls.map(call=>call.slice(0,2)),[['read','ag-1']]);
 });
 

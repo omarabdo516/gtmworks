@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -8,6 +10,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // small stand-in for the handover functions (supabase/tests/handovers.sql proves the real ones) that records what the
 // driver asked of it.
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co','10000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 const leadProfile='co-10000000000000000000000000000001';
 const targetProfile='ag-01000000000000000000000000000001';
 const conversation='c1000000-0000-0000-0000-000000000001';
@@ -29,7 +33,7 @@ function handover(overrides = {}) {
    // No Run Stop ended a handover on is left to stop (#478).
    if(name==='stopped_runs_open') return {data:[],error:null};
    if(name==='handover_runs_stopping') return {data:[],error:null};
-  if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,
+  if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,company:'10000000-0000-0000-0000-000000000001',
     conversation:row.conversation,run:row.state==='target'?row.target_run:row.state==='follow_up'?row.follow_up_run:null,
     profile:row.state==='waiting'||row.state==='target'?targetProfile:row.asker_profile,
     attempt:row.state==='returning'?row.return_attempts:row.target_attempts}]);
@@ -68,7 +72,7 @@ function engines() {
 
 // The worker's passes, one after another, until the handover is finished or the bound is reached.
 const drive=async(/** @type {any} */ service,/** @type {any} */ engineFor,/** @type {any} */ row,most=10)=>{
- for(let pass=0;pass<most&&row.state!=='done'&&row.state!=='failed';pass++) await driveHandovers(service,{hermes,engineFor});
+ for(let pass=0;pass<most&&row.state!=='done'&&row.state!=='failed';pass++) await withEngineContract(engineFor,()=>driveHandovers(service,{}));
 };
 
 test('Lead\'s handover runs the job on the target\'s own profile, then a follow-up Lead Run in the conversation\'s session reports what came of it',async()=>{
@@ -187,11 +191,11 @@ test('a start whose answer was lost is asked again with the same key, never fail
  const fake=fakeEngine(); const asked=/** @type {{idempotencyKey:string,input:string}[]} */([]);
  // The first start makes the Run and loses its answer; the next pass asks again with the same key.
  const lost=()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); await fake.engineFor({}).start(args); return {state:'unknown'}; }});
- await driveHandovers(service,{hermes,engineFor:lost});
+ await withEngineContract(lost,()=>driveHandovers(service,{}));
  assert.equal(row.state,'waiting','the next pass asks again');
  assert.equal(row.target_attempts,1);
  assert.equal(calls.filter(([name])=>name==='answer_handover').length,0,'an unknown start is neither recorded nor failed');
- await driveHandovers(service,{hermes,engineFor:()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return fake.engineFor({}).start(args); }})});
+ await withEngineContract(()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return fake.engineFor({}).start(args); }}),()=>driveHandovers(service,{}));
  assert.equal(row.state,'target','the retried start records the Run it made');
  assert.deepEqual(asked.map(start=>start.idempotencyKey),[`handover:${row.id}:target`,`handover:${row.id}:target`],'both starts ask for the same key');
  assert.equal(asked[0].input,asked[1].input,'and send the same job');
@@ -213,7 +217,7 @@ test('a leg claimed by begin_handover names the start\'s key and its own answer,
   if(name==='answer_handover') return {data:true,error:null};
   return {data:[],error:null};
  }};
- await driveHandovers(service,{hermes,engineFor:fake.engineFor});
+ await withEngineContract(fake.engineFor,()=>driveHandovers(service,{}));
  assert.deepEqual(fake.runs.map(run=>run.key),['handover:7:return'],'the key names the follow-up leg that was claimed');
  assert.deepEqual(calls.filter(([name])=>name==='answer_handover').map(([,args])=>args),
   [{h:7,attempt:1,leg:'returning',run:fake.runs[0].id}],'and the answer names that leg, and its attempt, with the Run');
@@ -247,12 +251,13 @@ for(const [what,engineOf] of /** @type {const} */([['a stopped Engine','notReach
   const {row,service,calls}=handover();
   const asked=/** @type {any[]} */([]);
   const engineFor=()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return null; }});
-  await driveHandovers(service,engineOf==='none'?{hermes:null,engineFor:/** @type {any} */(engineFor)}
-   :{hermes,engineFor:/** @type {any} */(()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return {state:'notReached'}; }}))});
+  if(engineOf==='none') engineRecord('10000000-0000-0000-0000-000000000001',null);
+  await withEngineContract(engineOf==='none'?/** @type {any} */(engineFor):/** @type {any} */(()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return {state:'notReached'}; }})),()=>driveHandovers(service,{}));
+  engineRecord('10000000-0000-0000-0000-000000000001',hermes);
   assert.deepEqual(calls.filter(([name])=>name==='release_handover_start').map(([,args])=>args),[{h:row.id,attempt:1,leg:'waiting'}],'its attempt is handed back');
   assert.equal(calls.filter(([name])=>name==='answer_handover').length,0,'and the leg is not answered as refused');
   assert.deepEqual([row.state,row.target_attempts],['waiting',0],'so it stays due, as never started');
-  await driveHandovers(service,{hermes,engineFor:/** @type {any} */(engineFor)});
+  await withEngineContract(engineFor,()=>driveHandovers(service,{}));
   assert.deepEqual(asked.map(start=>start.retry),engineOf==='none'?[false]:[false,false],'the next start is a first attempt');
   assert.deepEqual(calls.filter(([name])=>name==='answer_handover').map(([,args])=>args),[{h:row.id,attempt:1,leg:'waiting',run:null}],'so the Engine\'s refusal is answered for the first attempt, which fails the leg');
  });

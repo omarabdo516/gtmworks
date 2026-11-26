@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 // #346 on the fake Engine server, which serves a session's messages as the pinned release's management listener does
 // (hermes_cli/web_routers/sessions.py get_session_messages): a Run's steps are read from the session, never kept.

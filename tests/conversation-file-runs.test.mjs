@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -10,6 +12,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // storage failure that may pass leaves the turn for the next pass (#368). The database is a small stand-in
 // (supabase/tests/conversation_message_files.sql proves the real rules).
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co']) engineRecord(company,hermes);
 const conversation='c1000000-0000-0000-0000-000000000001';
 const connection='f9000000-0000-0000-0000-000000000001';
 const png=Buffer.from('a png, not really: the Engine is given the bytes and its own type').toString('base64');
@@ -67,7 +71,7 @@ function databases({has_files=false,retry=false,begin=null,files=[],download=nul
 }
 
 const send=(/** @type {ReturnType<typeof databases>} */ {db,service,keepFiles},/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {{images?:{content_type:string,base64:string}[],message?:string}} */ {images,...extra}={})=>
- sendMessage(db,service,{company:'co',conversation,sendKey:'k',message:'Look at these',hermes,engineFor:fake.engineFor,...(images?{keepFiles:keepFiles(images)}:{}),...extra});
+ withEngineContract(fake.engineFor,()=>sendMessage(db,service,{company:'co',conversation,sendKey:'k',message:'Look at these',...(images?{keepFiles:keepFiles(images)}:{}),...extra}));
 
 test('a message with images keeps them before its turn is stored, and its Run carries its text and one image part per file',async()=>{
  const fake=fakeEngine(); const stand=databases();
@@ -102,7 +106,7 @@ test('a retry of the same send is the same message, so it is the same Run',async
 test('a turn that waited carries its images when it starts, read from the Conversation’s files',async()=>{
  const fake=fakeEngine();
  const stand=databases({has_files:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes:Buffer.from('bytes of the image')}]});
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),1);
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),1);
  assert.deepEqual(stand.downloads,['co/conversations/c/q-0']);
  assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'Look at these'},imagePart('image/png',Buffer.from('bytes of the image').toString('base64'))]}]);
 });
@@ -110,7 +114,7 @@ test('a turn that waited carries its images when it starts, read from the Conver
 test('a turn with no files is read from nowhere, as before',async()=>{
  const fake=fakeEngine();
  const stand=databases({has_files:false,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes:'unused'}]});
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),1);
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),1);
  assert.deepEqual(stand.downloads,[]);
  assert.equal(fake.runs[0].input,'Look at these');
 });
@@ -119,10 +123,10 @@ test('a queued turn whose stored image is gone fails for its sender, and the nex
  const fake=fakeEngine();
  const stand=databases({has_files:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes:'the image is gone'}],download:'not found'});
  const failed=()=>stand.calls.filter(([name])=>name==='fail_conversation_turn');
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0,'the turn is failed, not started');
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),0,'the turn is failed, not started');
  assert.deepEqual(failed(),[['fail_conversation_turn',{conversation,message_key:'q',attempt:0}]],'its sender sees the line, and its reservation is released');
  assert.equal(fake.runs.length,0,'the Engine never starts the turn whose image is gone');
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),1);
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),1);
  assert.equal(fake.runs.length,1);
  assert.equal(fake.runs[0].input,'And this too','the Conversation’s next turn starts');
  assert.equal(failed().length,1,'the next turn is not failed');
@@ -132,7 +136,7 @@ test('a queued turn whose stored image is gone fails for its sender, and the nex
 // route gives its words back to the box.
 test('a send whose images cannot be kept stores no turn',async()=>{
  const fake=fakeEngine(); const stand=databases();
- const sent=await sendMessage(stand.db,stand.service,{company:'co',conversation,sendKey:'k',message:'Look at these',hermes,engineFor:fake.engineFor,keepFiles:async()=>({error:'conversationFailed'})});
+ const sent=await withEngineContract(fake.engineFor,()=>sendMessage(stand.db,stand.service,{company:'co',conversation,sendKey:'k',message:'Look at these',keepFiles:async()=>({error:'conversationFailed'})}));
  assert.deepEqual(sent,{error:'conversationFailed',status:500});
  assert.equal(stand.calls.some(([name,args])=>name==='queue_conversation_turn'&&!args.open_only),false);
  assert.equal(fake.runs.length,0);
@@ -145,7 +149,7 @@ test('a retried turn whose images were kept starts with the same images, as a re
  const engineFor=(/** @type {any} */ connection)=>{ const engine=fake.engineFor(connection); return {...engine,start:(/** @type {any} */ input)=>{ starts.push(input); return engine.start(input); }}; };
  const bytes='bytes of the image';
  const stand=databases({has_files:true,retry:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes}]});
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor}),1,'the retried turn starts');
+ assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(stand.service,{})),1,'the retried turn starts');
  assert.deepEqual(stand.downloads,['co/conversations/c/q-0']);
  assert.equal(starts[0].retry,true,'as a retry, which no answer but a run id settles');
  assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'Look at these'},imagePart('image/png',Buffer.from(bytes).toString('base64'))]}],'with the images it was sent with');
@@ -155,9 +159,9 @@ test('a retried turn whose images were kept starts with the same images, as a re
 test('a retried turn whose image is gone for outside reasons is never failed and never sent without it',async()=>{
  const fake=fakeEngine();
  const stand=databases({has_files:true,retry:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes:'gone'}],download:'not found'});
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0);
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),0);
  assert.equal(fake.runs.length,0,'no request with a changed body under the same key');
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0,'the database refuses to fail it, so it waits: it may hold a Run');
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),0,'the database refuses to fail it, so it waits: it may hold a Run');
  assert.equal(fake.runs.length,0);
 });
 
@@ -166,10 +170,10 @@ test('a storage error that may pass leaves the turn to be retried on the next pa
  const bytes='bytes of the image';
  const stand=databases({has_files:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes}],download:'fails once'});
  const failed=()=>stand.calls.filter(([name])=>name==='fail_conversation_turn');
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0,'the pass starts nothing');
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),0,'the pass starts nothing');
  assert.deepEqual(failed(),[],'a failure that may pass never fails the turn');
  assert.equal(fake.runs.length,0);
- assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),1,'the next pass starts it');
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(stand.service,{})),1,'the next pass starts it');
  assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'Look at these'},imagePart('image/png',Buffer.from(bytes).toString('base64'))]}]);
  assert.deepEqual(failed(),[]);
 });

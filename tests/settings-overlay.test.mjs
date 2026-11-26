@@ -160,8 +160,10 @@ test('the heaviest Agent is the one whose profile used the most tokens, and the 
 test('the overlay shows no invented figures: no prices, no sample usage or backups', () => {
   const source = readFileSync('app/settings-overlay.tsx', 'utf8');
   assert.doesNotMatch(source, /EGP|جنيه|MB|Opus|GPT|Gemini/);
-  // The Models section keeps one slot for the Company's Providers, its subscription sign-ins and keys (#3, #617).
-  assert.match(source, /<CompanyProviders /);
+  // The Models section keeps one slot for the Company's Providers, its subscription sign-ins and keys (#3, #617), drawn
+  // by its parts as each read lands (#791).
+  assert.match(source, /<ModelsParts /);
+  assert.match(readFileSync('app/settings-models-parts.tsx', 'utf8'), /<CompanyProviders /);
 });
 
 // Finding a setting by name (#613): only the sections the Role sees, by the name the interface language gives them.

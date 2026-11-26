@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { driveChannelRuns, driveNoteRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -20,6 +22,8 @@ test('a post the database refuses is answered as not allowed or not found, and s
 });
 
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co','10000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 
 // #148: a channel Run is offered show_draft and show_review, pinned at its first start (pin_channel_run) with the same
 // texts a Conversation's Run gets. A retry finds them pinned and sends exactly the same request.
@@ -36,7 +40,7 @@ test('a channel Run is started with its pinned draft and review tools, and a ret
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  const engine={start:async request=>{ starts.push(request); return attempts===1?{state:'unknown'}:`run-${attempts}`; }};
- const drive=()=>driveChannelRuns(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine)});
+ const drive=()=>withEngineContract(()=>/** @type {any} */(engine),()=>driveChannelRuns(/** @type {any} */(service),{}));
  assert.deepEqual(await drive(),{started:0,closed:0},'the first start may have happened');
  assert.deepEqual(await drive(),{started:1,closed:0},'so it is asked again with the same key');
  assert.equal(pins.length,2,'the pin is asked both times');
@@ -58,14 +62,14 @@ test('a channel Run shows its draft and review cards once, ignores a call that d
  ];
  const cards=[]; const closed=new Map();
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name==='channel_runs_due') return {data:[{message:9,run,profile:'ag-faye'}],error:null};
+  if(name==='channel_runs_due') return {data:[{message:9,run,profile:'ag-faye',company:'10000000-0000-0000-0000-000000000001'}],error:null};
   if(name==='track_channel_permission') return {data:[],error:null};
   if(name==='channel_show_card') { if(!cards.some(card=>card.run===args.run&&card.call===args.call)) cards.push(args); return {data:{state:'shown',card:cards.length},error:null}; }
   if(name==='close_channel_run') { if(closed.has(args.run)) return {data:false,error:null}; closed.set(args.run,args); return {data:true,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  const run=await fake.engineFor({}).start({conversation:'s-1',input:'Sara: @Faye draft the scripts',idempotencyKey:'channel:9'});
- const drive=()=>driveChannelRuns(/** @type {any} */(service),{hermes,engineFor:fake.engineFor});
+ const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(service),{}));
  assert.deepEqual(await drive(),{started:0,closed:1});
  assert.deepEqual(cards.map(card=>[card.run,card.call,card.kind,card.title]),[
   [run,'call_1','draft','December scripts'],[run,'call_2','review','Script review'],
@@ -94,7 +98,7 @@ test('a channel or note Run that failed for want of a model, credit, key or mode
   }};
   const engine={read:async()=>({reply:null,session:null,usage:null,toolCalls:[],...read})};
   const drive=kind==='channel'?driveChannelRuns:driveNoteRuns;
-  assert.deepEqual(await drive(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine)}),{started:0,closed:1});
+  assert.deepEqual(await withEngineContract(()=>/** @type {any} */(engine),()=>drive(/** @type {any} */(service),{})),{started:0,closed:1});
   return closed;
  };
  for(const kind of /** @type {const} */(['channel','note'])) {
@@ -133,12 +137,12 @@ for(const source of /** @type {const} */(['channel','note'])) {
  test(`a stopped Engine leaves a ${source} Run due, and its next start is a first attempt a refusal fails`,async()=>{
   const {state,service}=counted(source); const starts=[]; let answer=notReached;
   const engine={start:async request=>{ starts.push(request); return answer; }};
-  const options={hermes,engineFor:()=>/** @type {any} */(engine)};
-  assert.deepEqual(await drive(service,options),{started:0,closed:0},'nothing connected to the Engine');
+  const options=()=>withEngineContract(()=>/** @type {any} */(engine),()=>drive(service,{}));
+  assert.deepEqual(await options(),{started:0,closed:0},'nothing connected to the Engine');
   assert.deepEqual(state.released,[{message:7,attempt:1,...place}],'so its attempt is handed back');
   assert.deepEqual(state.answered,[],'and the Run is not answered as failed');
   answer=null;
-  assert.deepEqual(await drive(service,options),{started:0,closed:0},'the Engine runs again and refuses the start');
+  assert.deepEqual(await options(),{started:0,closed:0},'the Engine runs again and refuses the start');
   assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[[`${source}:7`,false],[`${source}:7`,false]],'both are sent as a first attempt');
   assert.deepEqual(state.answered,[{message:7,attempt:1,run:null,...place}],'so the refusal is answered for the first attempt, which fails the Run');
   assert.equal(state.released.length,1,'a refusal reached the Engine and is not handed back');
@@ -147,10 +151,12 @@ for(const source of /** @type {const} */(['channel','note'])) {
  test(`a ${source} Run that waited for a missing Engine is then sent as a first attempt`,async()=>{
   const {state,service}=counted(source); const starts=[];
   const engine={start:async request=>{ starts.push(request); return null; }};
-  assert.deepEqual(await drive(service,{hermes:null,engineFor:()=>/** @type {any} */(engine)}),{started:0,closed:0},'the Company has no Engine yet');
+  engineRecord('10000000-0000-0000-0000-000000000001',null);
+  assert.deepEqual(await withEngineContract(()=>/** @type {any} */(engine),()=>drive(service,{})),{started:0,closed:0},'the Company has no Engine yet');
   assert.deepEqual(state.released,[{message:7,attempt:1,...place}],'so the wait counts no attempt');
   assert.deepEqual(starts,[],'and nothing is sent');
-  await drive(service,{hermes,engineFor:()=>/** @type {any} */(engine)});
+  engineRecord('10000000-0000-0000-0000-000000000001',hermes);
+  await withEngineContract(()=>/** @type {any} */(engine),()=>drive(service,{}));
   assert.deepEqual(starts.map(start=>start.retry),[false],'once the Engine is there its start is a first one');
   assert.deepEqual(state.answered,[{message:7,attempt:1,run:null,...place}],'and its refusal fails the Run instead of retrying for a day');
  });
@@ -158,12 +164,12 @@ for(const source of /** @type {const} */(['channel','note'])) {
  test(`a ${source} start that may have reached the Engine keeps its attempt and is retried with the same key`,async()=>{
   const {state,service}=counted(source); const starts=[]; let answer=/** @type {any} */({state:'unknown'});
   const engine={start:async request=>{ starts.push(request); return answer; }};
-  const options={hermes,engineFor:()=>/** @type {any} */(engine)};
-  await drive(service,options);
+  const options=()=>withEngineContract(()=>/** @type {any} */(engine),()=>drive(service,{}));
+  await options();
   assert.deepEqual(state.released,[],'an unknown outcome is never handed back');
   assert.deepEqual(state.answered,[],'nor answered');
   answer='run-7';
-  assert.deepEqual(await drive(service,options),{started:1,closed:0});
+  assert.deepEqual(await options(),{started:1,closed:0});
   assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[[`${source}:7`,false],[`${source}:7`,true]],'the second is the same request, as a retry');
   assert.deepEqual(state.answered,[{message:7,attempt:2,run:'run-7',...place}]);
  });

@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { companyEngine } from '../lib/engine/handle.mjs';
+import { withDriver, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
-import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/hermes.mjs';
+import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
 import { engineSettings, engineOwnsSetting, settingsSchemaProblems, readSettings, writeSetting, readAgentSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
+// A profile's handle on the Company's Engine, as the settings reader and writer take it.
+const profileOf=async(/** @type {string} */ profile)=>/** @type {any} */(await companyEngine(company))?.on(profile);
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
 
 // The one list of Engine settings gtmworks reads and writes (#125, ADR 0016), pinned to the Engine release in the install
 // (ADR 0010). The fixture is picked from that release's own schema and defaults, so a setting the Engine does not have,
@@ -22,7 +27,6 @@ const agentProfile=id=>`ag-${hex(id)}`;
 const at=(object,key)=>key.split('.').reduce((found,part)=>found&&typeof found==='object'?found[part]:undefined,object);
 const setup=fake=>{ fake.settings.configDefaults=fixture.defaults; fake.settings.configSchema={fields:fixture.schema,category_order:[]}; };
 const profileOn=(fake,name,config={})=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config,credentials:{}});
-const connection=(fake,profile)=>({address:fake.address,managementAddress:fake.managementAddress,profile,key:fake.settings.key});
 const rows=[
  {agent:lead,name:'Lead',connection:'f1000000-0000-0000-0000-000000000011',profile:companyProfile(company),main:true,own:true},
  {agent:writer,name:'Writer',connection:'f1000000-0000-0000-0000-000000000021',profile:agentProfile(writer),main:false,own:true},
@@ -100,13 +104,13 @@ test('every listed setting has its label in both catalogues, without the Engine\
 });
 
 test('a profile reads back each listed setting with its type, choices, default, value, limits and place', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   profileOn(fake,agentProfile(writer),{delegation:{model:'openai/gpt-5.5',max_concurrent_children:3,reasoning_effort:'high',api_key:'sk-test-only-should-never-leave'},memory:{memory_enabled:false,memory_char_limit:3000},skills:{write_approval:true},display:{personality:'Warm'},timezone:'Africa/Cairo',stt:{language:'ar'},tts:{speed:1.5}});
   // The model is the profile's own, not the config's dict: the profile list answers provider/model (#29).
   Object.assign(fake.settings.profiles.get(agentProfile(writer)),{provider:'openrouter',model:'anthropic/claude-opus-4.6'});
-  const read=await readSettings(connection(fake,agentProfile(writer)));
+  const read=await readSettings(await profileOf(agentProfile(writer)));
   assert.equal(read.state,'found',JSON.stringify(read));
   const setting=key=>read.settings.find(found=>found.key===key);
   assert.deepEqual(
@@ -132,18 +136,18 @@ test('a profile reads back each listed setting with its type, choices, default, 
   // A setting held for the whole install is read from the root profile and marked so, and a listed key ending api_key is
   // dropped rather than returned.
   fake.settings.defaultConfig={model:'install-model'};
-  const install=await readSettings(connection(fake,agentProfile(writer)),{list:[{key:'model',where:'install',type:'string',label:'settingModel'},
+  const install=await readSettings(await profileOf(agentProfile(writer)),{root:await profileOf('default'),list:[{key:'model',where:'install',type:'string',label:'settingModel'},
    {key:'delegation.api_key',where:'profile',type:'string',label:'settingUnknown'}]});
   assert.deepEqual(install.settings.map(found=>({key:found.key,where:found.where,value:found.value})),[{key:'model',where:'install',value:'install-model'}]);
  } finally { await fake.close(); }
 });
 
 test('a write checks type, choices and limits first, sends only its own keys, and counts only a matching read-back', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   profileOn(fake,agentProfile(writer));
-  const connectionAt=connection(fake,agentProfile(writer));
+  const connectionAt=await profileOf(agentProfile(writer));
   const saved=await writeSetting(connectionAt,{setting:'delegation.max_concurrent_children',value:3});
   assert.equal(saved.state,'saved',JSON.stringify(saved));
   assert.deepEqual(saved.old,10);
@@ -170,7 +174,7 @@ test('a write checks type, choices and limits first, sends only its own keys, an
 });
 
 test('no Settings write reaches the terminal or the approvals: they are the work sandbox\'s, refused before the Engine is asked', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   profileOn(fake,agentProfile(writer));
@@ -179,26 +183,26 @@ test('no Settings write reaches the terminal or the approvals: they are the work
   // Engine's managed scope. A Settings write naming one is refused before the Engine is asked.
   for(const setting of ['terminal.backend','terminal.cwd','terminal.ssh_host','approvals.unattended_mode']) {
    assert.equal(engineOwnsSetting(setting),true,setting);
-   assert.deepEqual(await writeSetting(connection(fake,agentProfile(writer)),{setting,value:'local'}),{state:'owned'},setting);
+   assert.deepEqual(await writeSetting(await profileOf(agentProfile(writer)),{setting,value:'local'}),{state:'owned'},setting);
    const {db}=database();
-   assert.deepEqual(await changeCompanySetting(db,{company,setting,value:'local',hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)}),{state:'notAllowed'},setting);
+   assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeCompanySetting(db,{company,setting,value:'local'})),{state:'notAllowed'},setting);
   }
   assert.equal(requestsOf(fake,'PUT').length,before,'nothing reached the Engine');
  } finally { await fake.close(); }
 });
 
 test('a Company-wide write reaches every Agent profile and the shared space, names each Agent, and touches no other Company', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   for(const row of rows) profileOn(fake,row.profile);
   profileOn(fake,space); profileOn(fake,spaceOther);
   fake.settings.configWriteFail=new Set([agentProfile(writer)]);
   const {db,logged}=database();
-  const read=await readAgentSettings(db,{company,agent:lead,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  const read=await withDriver(DRIVER,driver(fake),()=>readAgentSettings(db,{company,agent:lead}));
   assert.deepEqual(read.agents.map(agent=>[agent.id,agent.settings.length]),[[lead,15]],'the service reads one Agent\'s profile');
   const before=requestsOf(fake,'PUT').length;
-  const changed=await changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  const changed=await withDriver(DRIVER,driver(fake),()=>changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400}));
   assert.equal(changed.state,'written',JSON.stringify(changed));
   assert.deepEqual(changed.agents,[
    {agent:lead,name:'Lead',written:true},
@@ -218,33 +222,33 @@ test('a Company-wide write reaches every Agent profile and the shared space, nam
    [helper,'memory.memory_char_limit',2200,2400],
   ],'one log row per changed Agent, with the setting and both values');
   // A per-Agent write is refused for an Agent sharing another Agent's profile, before the Engine is asked.
-  const refused=await changeCompanySetting(db,{company,agent:helper,setting:'memory.memory_char_limit',value:2600,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  const refused=await withDriver(DRIVER,driver(fake),()=>changeCompanySetting(db,{company,agent:helper,setting:'memory.memory_char_limit',value:2600}));
   assert.deepEqual(refused.state,'shared');
   assert.equal(requestsOf(fake,'PUT').length,paths.length+before,'no Engine write is sent');
   // A person below Owner changes nothing, before the Engine is asked.
-  const denied=await changeCompanySetting(database({owner:false}).db,{company,setting:'memory.memory_char_limit',value:2600,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  const denied=await withDriver(DRIVER,driver(fake),()=>changeCompanySetting(database({owner:false}).db,{company,setting:'memory.memory_char_limit',value:2600}));
   assert.deepEqual(denied.state,'notAllowed');
  } finally { await fake.close(); }
 });
 
 test('a change the Engine holds is not called logged when its log row fails, one Agent or the whole Company', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   for(const row of rows) profileOn(fake,row.profile);
   profileOn(fake,space);
-  const one=await changeCompanySetting(database({logFails:true}).db,{company,agent:writer,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  const one=await withDriver(DRIVER,driver(fake),()=>changeCompanySetting(database({logFails:true}).db,{company,agent:writer,setting:'memory.memory_char_limit',value:2400}));
   assert.equal(one.state,'written',JSON.stringify(one));
   assert.equal(one.logged,false,'the per-Agent path says the row is missing, as the Company-wide path does');
   assert.equal(fake.settings.profiles.get(agentProfile(writer)).config.memory.memory_char_limit,2400,'the Engine still holds the change');
-  const all=await changeCompanySetting(database({logFails:true}).db,{company,setting:'memory.memory_char_limit',value:2600,hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)});
+  const all=await withDriver(DRIVER,driver(fake),()=>changeCompanySetting(database({logFails:true}).db,{company,setting:'memory.memory_char_limit',value:2600}));
   assert.equal(all.state,'written',JSON.stringify(all));
   assert.equal(all.logged,false);
  } finally { await fake.close(); }
 });
 
 test('a Company-wide write sends every profile\'s write before the first one answers, so the change waits on one write, not on each in turn (#417)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   for(const row of rows) profileOn(fake,row.profile);
@@ -259,7 +263,7 @@ test('a Company-wide write sends every profile\'s write before the first one ans
   const timer=setTimeout(()=>open(),2000);
   const gated={...base,write:async(target,config)=>{ if(++entered===profiles) open(); await gate; return base.write(target,config); }};
   try {
-   const changed=await changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:gated});
+   const changed=await withDriver(DRIVER,gated,()=>changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400}));
    assert.equal(changed.state,'written',JSON.stringify(changed));
   } finally { clearTimeout(timer); open(); }
   assert.equal(arrived,profiles,'every Agent profile and the shared space are written at the same time');

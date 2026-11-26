@@ -1,10 +1,13 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
+test.beforeAll(()=>laneEngineRecords());
 
 // #153, the composer's "+" menu: whom it calls in a Conversation and in a channel, and a new chat's first message that
 // calls an Agent. The menu's own behaviour (focus, keys, the caret) is proven in tests/components/plus-menu.test.tsx.
@@ -16,7 +19,6 @@ const omar='20000000-0000-0000-0000-000000000001';
 const contributor='20000000-0000-0000-0000-000000000003';
 const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 const id=(n:number)=>`68153000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 // Faye's empty chat is the one open; Reach is the Agent called. Reach is hidden from the Contributor (مراجع). Reach was
 // made from the meta role and Sage from the writer role (#159); Faye was made by hand, so its role commands none.
@@ -60,7 +62,7 @@ const conversations:Record<string,string>={};
 test('integration: on the fake engine a first message from Faye\'s empty chat that calls @Reach starts the Conversation with Reach',async()=>{
  const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week'}))).toEqual({conversation});
  expect(agentOf(conversation)).toBe(reach);
  expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'@Reach plan the outreach week'}]);
 });
@@ -68,20 +70,20 @@ test('integration: on the fake engine a first message from Faye\'s empty chat th
 test('integration: on the fake engine a call of an Agent hidden from the Contributor changes nothing: the Conversation is Faye\'s',async()=>{
  const fake=fakeEngine(); const {service,person}=await session('reviewer@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week'}))).toEqual({conversation});
  expect(agentOf(conversation)).toBe(faye);
  expect(fake.runs.map(run=>run.input)).toEqual(['@Reach plan the outreach week']);
  conversations.contributor=conversation;
- await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+ await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
 });
 
 test('integration: on the fake engine an open Conversation keeps its Agent: a message that calls @Reach goes, as typed, to Faye',async()=>{
  const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch',hermes,engineFor:fake.engineFor})).toEqual({conversation});
- expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch'}))).toEqual({conversation});
+ expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
  // The open Conversation's composer names no Agent (app/conversation-thread.tsx).
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'@Reach take over the outreach',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'@Reach take over the outreach'}))).toEqual({conversation});
  expect(agentOf(conversation)).toBe(faye);
  expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch'},{conversation,input:'@Reach take over the outreach'}]);
  expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id`).map(row=>row.body)).toEqual(['Plan the launch','@Reach take over the outreach']);
@@ -126,9 +128,9 @@ test('integration: on the fake engine a command typed in an Agent\'s own Convers
  // Conversation starts Faye's one Run with the words as typed.
  const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
  const conversation=randomUUID();
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch',hermes,engineFor:fake.engineFor})).toEqual({conversation});
- expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
- expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'/campaign Launch the December ads',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch'}))).toEqual({conversation});
+ expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'/campaign Launch the December ads'}))).toEqual({conversation});
  expect(agentOf(conversation)).toBe(faye);
  expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch'},{conversation,input:'/campaign Launch the December ads'}]);
  expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id`).map(row=>row.body)).toEqual(['Plan the launch','/campaign Launch the December ads']);

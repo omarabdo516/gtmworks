@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withNoEngine, engineServing } from './engine-records.mjs';
+import { withDriver } from './engine-records.mjs';
 import { teamLessons, keepSharedSkills } from '../lib/shared-skills.mjs';
 import { knowledgeSkill, readKnowledge, saveKnowledge } from '../lib/company-knowledge-skill.mjs';
-import { provideSharedSpace, writeSharedSkill, shareSkills } from '../lib/hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
+import { provideSharedSpace, writeSharedSkill, shareSkills } from '../lib/engine/skills.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'provide':'skills.provideSpace','write':'skills.writeShared','share':'skills.share'};
 
 // One shared Skills folder per Company (#122, ADR 0016): the worker makes each Company's shared space once, writes the
 // lessons its Owners and Managers approved there as "team-lessons", and has every Agent profile of the Company read
@@ -15,6 +19,10 @@ const space=company=>`cs-${hex(company)}`;
 const folder=company=>`/opt/data/profiles/${space(company)}/skills`;
 const [lead,moved,made]=['co-'+hex(rs),'ag-a0000000000000000000000000000001','ag-a0000000000000000000000000000002'];
 const aleemLead='co-'+hex(aleem);
+// Both Companies' Engine records; a test with a fake Engine points them at it.
+for(const company of [rs,aleem]) engineRecord(company,{address:'http://127.0.0.1:9'});
+// One fake Engine serving both Companies, as each one's record names it.
+const bothServing=async(/** @type {any} */ options)=>{ const fake=await engineServing(rs,options); engineRecord(aleem,fake); return fake; };
 const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
 const skillOf=(fake,company)=>fake.settings.skills.get(space(company))?.get('team-lessons');
 const requests=fake=>fake.settings.managementRequests.map(request=>`${request.method} ${request.path}`);
@@ -50,11 +58,11 @@ function sharedDatabase(companies) {
 const profilesOn=(fake,names)=>{ for(const name of names) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}}); };
 
 test('a Company\'s shared space is made once, also by two workers at once, and no Run can start on it', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   profilesOn(fake,[lead]);
   const db=sharedDatabase({[rs]:{profiles:[lead],rules:[]}});
-  await Promise.all([keepSharedSkills(db,{hermes:install(fake)}),keepSharedSkills(db,{hermes:install(fake)})]);
+  await Promise.all([keepSharedSkills(db,{}),keepSharedSkills(db,{})]);
   assert.deepEqual([...fake.settings.profiles.keys()].filter(name=>name.startsWith('cs-')),[space(rs)],'one space');
   assert.deepEqual(db.spaces,new Map([[rs,folder(rs)]]));
   const made=fake.settings.managementRequests.filter(request=>request.method==='POST'&&request.path==='/api/profiles');
@@ -67,13 +75,13 @@ test('a Company\'s shared space is made once, also by two workers at once, and n
   assert.equal(fake.settings.runs.length,0);
   assert.equal(skillOf(fake,rs),teamLessons([]));
   const before=requests(fake).length;
-  await keepSharedSkills(db,{hermes:install(fake)});
+  await keepSharedSkills(db,{});
   assert.deepEqual(requests(fake).slice(before),[`GET /api/skills/content?profile=${space(rs)}&name=team-lessons`,`GET /api/skills/content?profile=${space(rs)}&name=company-knowledge`],'a made space is never made again');
  } finally { await fake.close(); }
 });
 
 test('the main Agent\'s, a new Agent\'s and a moved Agent\'s profiles read their Company\'s folder alone, auto-load the Skill and lock it', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   fake.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
   fake.settings.defaultCredentials['openai-codex']='root-codex-token';
@@ -83,7 +91,7 @@ test('the main Agent\'s, a new Agent\'s and a moved Agent\'s profiles read their
   for(const name of [made,moved]) assert.equal((await engine.provideAgent({name,instructions:'You write.',level:1})).state,'provided');
   const db=sharedDatabase({[rs]:{profiles:[made,moved,lead],rules:[]},[aleem]:{profiles:[aleemLead],rules:[]}});
   const pass=fake.settings.managementRequests.length;
-  assert.deepEqual(await keepSharedSkills(db,{hermes:install(fake)}),{made:2,written:2,shared:4});
+  assert.deepEqual(await keepSharedSkills(db,{}),{made:2,written:2,shared:4});
   const passed=fake.settings.managementRequests.slice(pass);
   for(const [company,profiles] of [[rs,[made,moved,lead]],[aleem,[aleemLead]]]) for(const profile of profiles) {
    const asked=passed.filter(request=>request.method==='PUT'&&request.path.endsWith(`?profile=${profile}`));
@@ -101,18 +109,18 @@ test('the main Agent\'s, a new Agent\'s and a moved Agent\'s profiles read their
   }
   assert.deepEqual([...db.shared].sort(),[made,moved,lead,aleemLead].sort());
   const before=requests(fake).length;
-  assert.deepEqual(await keepSharedSkills(db,{hermes:install(fake)}),{made:0,written:0,shared:0});
+  assert.deepEqual(await keepSharedSkills(db,{}),{made:0,written:0,shared:0});
   assert.deepEqual(requests(fake).slice(before).filter(request=>!request.startsWith('GET')),[],'a confirmed profile and an unchanged Skill are written nothing');
  } finally { await fake.close(); }
 });
 
 test('an approved lesson is in the Skill after one pass, once; a refused one never; a removed one is gone after the next', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   profilesOn(fake,[lead]);
   const rules=[{body:'From now on, write every Saudi ad in a light dialect',suggestion:'pending'},{body:'From now on, no emojis',suggestion:'pending'},{body:'Told directly',suggestion:null}];
   const db=sharedDatabase({[rs]:{profiles:[lead],rules}});
-  const pass=async()=>{ await keepSharedSkills(db,{hermes:install(fake)}); return skillOf(fake,rs); };
+  const pass=async()=>{ await keepSharedSkills(db,{}); return skillOf(fake,rs); };
   assert.equal(await pass(),teamLessons([]),'nothing waiting or told directly is written');
   rules[0].suggestion='approved';
   const approved=await pass();
@@ -125,25 +133,25 @@ test('an approved lesson is in the Skill after one pass, once; a refused one nev
 });
 
 test('writing twice, or with two workers at once, leaves the same text', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   profilesOn(fake,[lead]);
   const rules=[{body:'No emojis',suggestion:'approved'},{body:'Sign every reply',suggestion:'approved'}];
   const db=sharedDatabase({[rs]:{profiles:[lead],rules}});
-  await keepSharedSkills(db,{hermes:install(fake)});
+  await keepSharedSkills(db,{});
   rules.push({body:'Answer within the hour',suggestion:'approved'});
-  await Promise.all([keepSharedSkills(db,{hermes:install(fake)}),keepSharedSkills(db,{hermes:install(fake)})]);
+  await Promise.all([keepSharedSkills(db,{}),keepSharedSkills(db,{})]);
   const text=teamLessons(rules.map(rule=>rule.body));
   assert.equal(skillOf(fake,rs),text);
   const before=requests(fake).length;
-  await keepSharedSkills(db,{hermes:install(fake)});
+  await keepSharedSkills(db,{});
   assert.equal(skillOf(fake,rs),text);
   assert.deepEqual(requests(fake).slice(before).filter(request=>!request.startsWith('GET')),[],'the same text is not written again');
  } finally { await fake.close(); }
 });
 
 test('a space the Engine lost is forgotten, and made again with its Skill and its profiles on the next pass', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   profilesOn(fake,[lead]);
   const db=sharedDatabase({[rs]:{profiles:[lead],rules:[{body:'No emojis',suggestion:'approved'}]}});
@@ -163,13 +171,13 @@ test('a space the Engine lost is forgotten, and made again with its Skill and it
 });
 
 test('a profile with its own team-lessons keeps it and stays unconfirmed, and the space and the other profiles are kept', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   profilesOn(fake,[lead,made]);
   const own='---\nname: team-lessons\ndescription: The Agent\'s own\n---\nMine.\n';
   fake.settings.skills.set(made,new Map([['team-lessons',own]]));
   const db=sharedDatabase({[rs]:{profiles:[lead,made],rules:[]}});
-  for(let pass=0;pass<2;pass++) await keepSharedSkills(db,{hermes:install(fake)});
+  for(let pass=0;pass<2;pass++) await keepSharedSkills(db,{});
   assert.deepEqual(db.calls.filter(call=>call.startsWith('forget_shared_space')),[],'the space is never forgotten');
   assert.deepEqual([...db.shared],[lead],'only the profile that reads the shared Skill is confirmed');
   assert.equal(fake.settings.skills.get(made).get('team-lessons'),own,'the profile\'s own Skill is kept');
@@ -177,20 +185,20 @@ test('a profile with its own team-lessons keeps it and stays unconfirmed, and th
 });
 
 test('every profile also auto-loads the Company knowledge, company-knowledge, and holds it locked; the worker makes it empty once and never rewrites what people saved', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   profilesOn(fake,[lead]);
   const db=sharedDatabase({[rs]:{profiles:[lead],rules:[]}});
-  await keepSharedSkills(db,{hermes:install(fake)});
+  await keepSharedSkills(db,{});
   assert.equal(fake.settings.skills.get(space(rs)).get('company-knowledge'),knowledgeSkill({}));
   assert.deepEqual(fake.settings.profiles.get(lead).config.skills,{external_dirs:[folder(rs)],auto_load:['team-lessons','company-knowledge']});
   assert.ok(fake.settings.skillLocks.has(`${lead}:company-knowledge`));
   assert.deepEqual([...db.shared],[lead]);
-  const people={rpc:async(name,args)=>name==='check_company_knowledge'?{data:args.body,error:null}:{data:null,error:null}};
-  assert.equal(await saveKnowledge(people,install(fake),{company:rs,part:'voice',body:'Like a colleague.'}),'companyKnowledgeSaved');
+  const people={rpc:async(name,args)=>name==='check_company_knowledge'?{data:args.body,error:null}:name==='company_engine_target'?{data:[{profile:lead,profiles:[lead]}],error:null}:{data:null,error:null}};
+  assert.equal(await saveKnowledge(people,{company:rs,part:'voice',body:'Like a colleague.'}),'companyKnowledgeSaved');
   db.shared.clear();
-  await keepSharedSkills(db,{hermes:install(fake)});
-  assert.deepEqual((await readKnowledge(install(fake),rs)).parts,{voice:'Like a colleague.'},'saved knowledge is kept');
+  await keepSharedSkills(db,{});
+  assert.deepEqual((await readKnowledge(people,rs)).parts,{voice:'Like a colleague.'},'saved knowledge is kept');
  } finally { await fake.close(); }
 });
 
@@ -216,35 +224,35 @@ const row=(company,extra={})=>({company_id:company,profile:space(company),folder
 test('the worker makes the space, records it, writes the lessons, then shares each profile and records it; one Company never holds back another', async () => {
  const db=drivenDatabase([row(rs,{profiles:[{profile:made},{profile:lead}]}),row(aleem,{folder:folder(aleem)})],{fail:`record_shared_space ${rs}`});
  const logged=[]; const error=console.error; console.error=(...args)=>{ logged.push(args.join(' ')); };
- try { assert.deepEqual(await keepSharedSkills(db,{hermes:{address:'http://hermes:8642',profile:'default',key:'k'},driver:answering(db.log)}),{made:0,written:1,shared:1}); }
+ try { assert.deepEqual(await withDriver(DRIVER,answering(db.log),()=>keepSharedSkills(db,{})),{made:0,written:1,shared:1}); }
  finally { console.error=error; }
  assert.deepEqual(db.log,['shared_skills_work',`provide ${space(rs)}`,`record_shared_space ${rs}`,
   `write ${space(aleem)} 1`,`write ${space(aleem)} 0`,`share ${aleemLead} ${folder(aleem)} team-lessons`,`share ${aleemLead} ${folder(aleem)} company-knowledge`,`record_shared_skills ${aleemLead}`]);
  assert.deepEqual(logged,[`Shared Skills not kept: ${rs} record_shared_space refused`]);
 
  const ok=drivenDatabase([row(rs,{profiles:[{profile:made},{profile:lead}]})]);
- await keepSharedSkills(ok,{hermes:{address:'http://hermes:8642',profile:'default',key:'k'},driver:answering(ok.log,{share:profile=>profile===made?'refused':'shared'})});
+ await withDriver(DRIVER,answering(ok.log,{share:profile=>profile===made?'refused':'shared'}),()=>keepSharedSkills(ok,{}));
  assert.deepEqual(ok.log,['shared_skills_work',`provide ${space(rs)}`,`record_shared_space ${rs}`,`write ${space(rs)} 1`,`write ${space(rs)} 0`,
   `share ${made} ${folder(rs)} team-lessons`,`share ${made} ${folder(rs)} company-knowledge`,`share ${lead} ${folder(rs)} team-lessons`,`share ${lead} ${folder(rs)} company-knowledge`,`record_shared_skills ${lead}`],'a profile the Engine did not confirm is not recorded');
- assert.deepEqual(await keepSharedSkills(ok,{hermes:null,driver:answering(ok.log)}),{made:0,written:0,shared:0});
+ assert.deepEqual(await withDriver(DRIVER,answering(ok.log),()=>withNoEngine(rs,()=>keepSharedSkills(ok,{}))),{made:0,written:0,shared:0});
 });
 
 test('no profile is pointed at a folder whose Skill could not be written, and a lost space or Skill is forgotten', async () => {
  for(const state of ['failed','refused','unreachable']) {
   const db=drivenDatabase([row(rs,{folder:folder(rs)})]);
-  await keepSharedSkills(db,{hermes:{address:'http://hermes:8642',profile:'default',key:'k'},driver:answering(db.log,{write:()=>state})});
+  await withDriver(DRIVER,answering(db.log,{write:()=>state}),()=>keepSharedSkills(db,{}));
   assert.deepEqual(db.log,['shared_skills_work',`write ${space(rs)} 1`],state);
  }
  const lostSpace=drivenDatabase([row(rs,{folder:folder(rs)})]);
- await keepSharedSkills(lostSpace,{hermes:{address:'http://hermes:8642',profile:'default',key:'k'},driver:answering(lostSpace.log,{write:()=>'missing'})});
+ await withDriver(DRIVER,answering(lostSpace.log,{write:()=>'missing'}),()=>keepSharedSkills(lostSpace,{}));
  assert.deepEqual(lostSpace.log,['shared_skills_work',`write ${space(rs)} 1`,`forget_shared_space ${rs}`]);
  const lostSkill=drivenDatabase([row(rs,{folder:folder(rs),profiles:[{profile:made},{profile:lead}]})]);
- await keepSharedSkills(lostSkill,{hermes:{address:'http://hermes:8642',profile:'default',key:'k'},driver:answering(lostSkill.log,{share:()=>'missing'})});
+ await withDriver(DRIVER,answering(lostSkill.log,{share:()=>'missing'}),()=>keepSharedSkills(lostSkill,{}));
  assert.deepEqual(lostSkill.log,['shared_skills_work',`write ${space(rs)} 1`,`write ${space(rs)} 0`,`share ${made} ${folder(rs)} team-lessons`,`forget_shared_space ${rs}`]);
 });
 
 test('the driver asks the Engine about reserved names only, and a refused key is refused', async () => {
- const fake=await fakeHermes();
+ const fake=await bothServing();
  try {
   const hermes=install(fake);
   assert.deepEqual(await provideSharedSpace(hermes,{name:'co-'+hex(rs)}),{state:'failed',folder:null});

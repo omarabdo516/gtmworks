@@ -1,4 +1,6 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -9,7 +11,8 @@ import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templat
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
-import { engineFor as driverFor } from '../lib/engine.mjs';
+import { hermesHostOf } from './lane.mjs';
+import { hermesEngine as driverFor } from '../lib/engine/contract.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
 import { signIn } from './sign-in';
@@ -18,6 +21,7 @@ import { i18n } from '../lib/i18n.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -26,7 +30,6 @@ const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','stat
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342), or the lane's fake Hermes.
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 // Omar's own session (the company's Owner), as the conversation route receives it; and the service client the route
 // and the worker use.
@@ -75,13 +78,14 @@ test('integration: a message on the fake engine gets its slow reply stored once,
  const {service,person}=await clients(); const {agent,detach}=attachAgent();
  try {
   const conversation=randomUUID(); const sendKey=randomUUID();
-  const message={person:omar,company,conversation,sendKey,agent,message:'Plan the launch week',hermes,engineFor:fake.engineFor};
-  expect(await sendMessage(person,service,message)).toEqual({conversation});
+  const message={person:omar,company,conversation,sendKey,agent,message:'Plan the launch week'};
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,message))).toEqual({conversation});
   // A retried send (double click, a lost answer) is the same message and the same run.
-  expect(await sendMessage(person,service,message)).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,message))).toEqual({conversation});
   expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch week'}]);
-  expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  // The Company's Engine record names the lane's Engine, and its key (scripts/local-db.sh).
+  expect(fake.connections[0]).toMatchObject({address:`http://${hermesHostOf()}:8642`,key:'test-only-key'});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   // The reply is slow: the first pass finds the run still running.
   expect(await close()).toBe(0);
   expect(agentRows(conversation)).toEqual([]);
@@ -100,8 +104,8 @@ test('integration: on the fake engine a failed run and a stopped run end with th
  const {service,person}=await clients(); const {agent,detach}=attachAgent();
  try {
   const conversation=randomUUID();
-  const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const send=(message:string)=>withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}));
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   expect(await send('Stop this one')).toEqual({conversation});
   const engine=fake.engineFor({});
   expect(await engine.stop(fake.runs[0].id)).toBe(true);
@@ -139,15 +143,15 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const made=()=>JSON.parse(query(`select a.id,a.name,a.speciality,array_to_string(a.apps,'|') as apps,a.requested_by,a.created_at is not null as dated,a.is_default,a.profile from public.hermes_agents a where a.company_id='${company}' and a.id<>'${lead}'`));
  const {service,person}=await clients();
  const conversation=randomUUID();
- const ask=()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',hermes,engineFor:fake.engineFor});
- const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+ const ask=()=>withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads'}));
+ const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
  expect(await ask()).toEqual({conversation});
  expect(await close()).toBe(1);
  expect(made()).toEqual([]);
  await fake.engineFor({}).createAgent({name:profile,instructions:''});
  expect(await ask()).toEqual({conversation});
  const down=(connection:object)=>({...fake.engineFor(connection),readAgent:async()=>({state:'unreachable' as const,agent:null})});
- expect(await closeOpenRuns(service,{hermes,conversation,engineFor:down})).toBe(0);
+ expect(await withEngineContract(down,()=>closeOpenRuns(service,{conversation}))).toBe(0);
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
@@ -199,10 +203,10 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
 
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
- expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});
+ expect(await withEngineContract(fake.engineFor,()=>sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads'}))).toEqual({conversation:theirs});
  // #167: Meta Ads, made for the Owner above, is hidden from the Manager, so Lead is offered the card that asks for one.
  expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change','ask_to_open_agent']);
- expect(await closeOpenRuns(service,{hermes,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
+ expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation:theirs}))).toBe(1);
  expect(made()).toHaveLength(2);
 });
 
@@ -224,9 +228,9 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
  for(const [email,person] of [['manager@example.com',manager],['multi@example.com',contributor]]) {
   const {person:member}=await memberClient(email);
   const conversation=randomUUID(); conversations.push(conversation);
-  expect(await sendMessage(member,service,{person,company,conversation,sendKey:randomUUID(),agent:lead,message:asked,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(member,service,{person,company,conversation,sendKey:randomUUID(),agent:lead,message:asked}))).toEqual({conversation});
   // A reader and the worker close the run at once: one request is kept.
-  const close=()=>closeOpenRuns(service,{hermes,conversation,owner:person,engineFor:down});
+  const close=()=>withEngineContract(down,()=>closeOpenRuns(service,{conversation,owner:person}));
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
  }
@@ -257,8 +261,8 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
  try {
   const {service,person}=await clients();
   const conversation=randomUUID();
-  const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const send=(message:string)=>withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}));
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   expect(await send(rule)).toEqual({conversation});
   expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   // No Run is told the Company knowledge (#344): every profile auto-loads it as the shared Skill company-knowledge.
@@ -279,8 +283,8 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   // save_rule.
   const theirs=randomUUID();
   const {person:member}=await memberClient('multi@example.com');
-  const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
-  const closeTheirs=()=>closeOpenRuns(service,{hermes,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
+  const tell=(message:string)=>withEngineContract(fake.engineFor,()=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message}));
+  const closeTheirs=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation:theirs,owner:contributor}));
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
   expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   expect(fake.runs[2].instructions??'').not.toContain(rule);
@@ -332,9 +336,9 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
  try {
   const {service,person}=await memberClient('multi@example.com');
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{hermes,conversation,owner:contributor,engineFor:fake.engineFor});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation,owner:contributor}));
   for(const [index,message] of Object.keys(calls).entries()) {
-   expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message}))).toEqual({conversation});
    expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
@@ -375,12 +379,12 @@ test('integration: an Agent\'s reply that is only a draft closes done once, also
  try {
   const {service,person}=await clients();
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   const failed=async()=>{
    const {data:found}=await person.from('conversations').select(conversationColumns).eq('id',conversation).single();
    return (await conversationRecord(person as unknown as Parameters<typeof conversationRecord>[0],omar,company,found!)).failed;
   };
-  const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
+  const send=(message:string)=>withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}));
   expect(await send('Plan the campaign')).toEqual({conversation});
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
@@ -403,7 +407,7 @@ test('integration: an Agent\'s reply that is only a draft closes done once, also
   const run=fake.runs[2].id;
   expect((await runToolCall({db:service,engine:fake.engineFor({}),profile:'',conversation,run},{id:'call-0',name:'show_draft',arguments:plan})).state).toBe('shown');
   const gone=(connection:object)=>({...fake.engineFor(connection),read:async()=>({state:'failed' as const,reply:null,session:null,usage:null,toolCalls:[]})});
-  expect(await closeOpenRuns(service,{hermes,conversation,engineFor:gone})).toBe(1);
+  expect(await withEngineContract(gone,()=>closeOpenRuns(service,{conversation}))).toBe(1);
   expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' and run_id='${run}'`))).toEqual([{outcome:'failed'}]);
   expect(await failed()).toBe(true);
  } finally { detach(); }
@@ -432,9 +436,9 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   const {service,person}=await clients();
   const conversation=randomUUID();
   const send=async(message:string)=>{
-   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}))).toEqual({conversation});
    expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
-   expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+   expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it. The Card
   // is untied: a chat with no Card logs its review privately.
@@ -475,9 +479,9 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const {service,person}=await clients();
   const conversation=randomUUID();
   const send=async(message:string)=>{
-   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}))).toEqual({conversation});
    expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
-   expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+   expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it. The Card
   // is untied: a chat with no Card logs its Done it privately.
@@ -545,14 +549,13 @@ function attachHermes() {
 const handTitle='انشر المقال';
 async function handedStep(fake:Awaited<ReturnType<typeof fakeHermes>>) {
  // The lane's fake Hermes is the install's Hermes these sends reach (#342).
- const hermes={address:fake.address,key:fake.settings.key};
  const {service,person}=await clients(); const {agent,detach}=attachHermes();
  const conversation=randomUUID();
  // A message, sent as the route sends it, and its reply closed by whoever reads first (this test, the worker or the page).
  const send=async(message:string,replies=true)=>{
   const count=agentRows(conversation).length;
-  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message,hermes})).toEqual({conversation});
-  if(replies) await expect.poll(async()=>{ await closeOpenRuns(service,{hermes,conversation}); return agentRows(conversation).length; }).toBe(count+1);
+  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message})).toEqual({conversation});
+  if(replies) await expect.poll(async()=>{ await closeOpenRuns(service,{conversation}); return agentRows(conversation).length; }).toBe(count+1);
  };
  await send('Get the article out');
  const [{run_id:run}]=JSON.parse(query(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id limit 1`));
@@ -755,7 +758,7 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
  try {
   const {service,person}=await clients();
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   const read=async()=>{
    const {data:found}=await person.from('conversations').select(conversationColumns).eq('id',conversation).single();
    const record=await conversationRecord(person as unknown as Parameters<typeof conversationRecord>[0],omar,company,found!);
@@ -764,7 +767,7 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
     cards:message.cards?.map(card=>card.kind==='reply'&&card.card.kind==='question'?{state:card.card.state,answer:card.card.state==='answered'?card.card.answer:null}:card.kind)??null}))};
   };
   const waiting=async()=>((await person.rpc('waiting_list',{c:company})).data as {kind:string,title:string,asked_by:string,conversation_id:string}[]).filter(item=>item.kind==='question');
-  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Meta campaign',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Meta campaign'}))).toEqual({conversation});
   // The Run waits on its question: it is kept as an open card, waits in Omar's list, and the Run stays open.
   expect(await close()).toBe(0);
   expect(await close()).toBe(0);
@@ -775,12 +778,12 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
 
   // A pick: the claim, then the answer delivered once to the same Run, which goes on to its reply.
   const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
-  const pick={company,conversation,card:Number(card),choice:1,answerKey:randomUUID(),hermes,engineFor:fake.engineFor};
-  expect(await answerQuestion(person,service,pick)).toEqual({state:'claimed'});
+  const pick={company,conversation,card:Number(card),choice:1,answerKey:randomUUID()};
+  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,pick))).toEqual({state:'claimed'});
   expect(fake.answers).toEqual([{run:fake.runs[0].id,question:`${fake.runs[0].id}_q1`,text:angles[1]}]);
   // The same click again, and a click in a second tab, send nothing.
-  expect(await answerQuestion(person,service,pick)).toEqual({state:'claimed'});
-  expect(await answerQuestion(person,service,{...pick,choice:0,answerKey:randomUUID()})).toEqual({state:'taken'});
+  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,pick))).toEqual({state:'claimed'});
+  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,{...pick,choice:0,answerKey:randomUUID()}))).toEqual({state:'taken'});
   expect(fake.answers).toHaveLength(1);
   expect(fake.runs).toHaveLength(1);
   expect(agentRows(conversation)).toEqual([{body:`Reply to: Plan the Meta campaign (${angles[1]})`}]);
@@ -791,11 +794,11 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
    {author:'person',kind:'answer',body:angles[1],cards:null},{author:'agent',kind:null,body:`Reply to: Plan the Meta campaign (${angles[1]})`,cards:null}]});
 
   // Typed words while the next question is open are its answer: no Run starts and nothing is queued.
-  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Google campaign',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Google campaign'}))).toEqual({conversation});
   expect(await close()).toBe(0);
-  const typed={person:omar,company,conversation,sendKey:randomUUID(),agent,message:'الاتنين مع بعض',hermes,engineFor:fake.engineFor};
-  expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
-  expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
+  const typed={person:omar,company,conversation,sendKey:randomUUID(),agent,message:'الاتنين مع بعض'};
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,typed))).toEqual({conversation,answered:true});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,typed))).toEqual({conversation,answered:true});
   expect(fake.runs).toHaveLength(2);
   expect(fake.answers.map(answer=>answer.text)).toEqual([angles[1],'الاتنين مع بعض']);
   // Every message is stored as its turn first (#764): none is left waiting.
@@ -823,9 +826,9 @@ test('integration: a Contributor allows one request once and refuses another fro
  try {
   const {service,person}=await memberClient('reviewer@example.com');
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   const send=async(message:string)=>{
-   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message}))).toEqual({conversation});
    expect(await close()).toBe(0);
   };
   const cards=()=>JSON.parse(query(`select title,content,state,decided_by,decided_at from public.reply_cards where conversation_id='${conversation}' and kind='permission' order by id`));
@@ -896,8 +899,8 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
  const conversation=randomUUID();
  for(const template of Object.keys(roleTemplates)) {
   fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template}}];
-  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:`I want the ready-made ${template}`,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-  expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:`I want the ready-made ${template}`}))).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
  }
  const made=JSON.parse(query(`select a.id,a.template,a.name,a.speciality,array_to_string(a.apps,'|') as apps,a.instructions from public.lead_made_agents l join public.hermes_agents a on a.id=l.agent_id where l.conversation_id='${conversation}' order by l.created_at`));
  expect(made.map((agent:{template:string})=>agent.template)).toEqual(Object.keys(roleTemplates));
@@ -912,7 +915,7 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
   const theirs=randomUUID();
-  expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:writer.id,message:'Write about the tax diploma',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:writer.id,message:'Write about the tax diploma'}))).toEqual({conversation:theirs});
   expect(fake.runs.at(-1)).toMatchObject({conversation:theirs,instructions:`${writer.instructions}\n\n${noteInstructions('Answer in short points.')}`});
  } finally { query(`delete from public.member_notes where company_id='${company}'`); }
 });
@@ -922,9 +925,9 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
 // whose key is Lead's Connection key (the install key on a bundled install) and whose root profile has a model with a
 // sign-in that a new profile copies.
 async function ownProfiles(profile:string) {
- const hermes=await fakeHermes();
- hermes.settings.key='fake-engine-key';
- hermes.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:'fake-engine-key',config:{},credentials:{}});
+ // The lane's Engine, at the address the Company's Engine record names, with the record's key.
+ const hermes=await laneHermes();
+ hermes.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}});
  hermes.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
  hermes.settings.defaultCredentials['openai-codex']='root-codex-token';
  const fake=fakeEngine();
@@ -932,7 +935,7 @@ async function ownProfiles(profile:string) {
   const driver=driverFor({...connection,address:hermes.address,managementAddress:hermes.managementAddress});
   return {...fake.engineFor(connection),readAgent:driver.readAgent,provideAgent:driver.provideAgent,removeAgent:driver.removeAgent};
  };
- return {hermes,install:{address:hermes.address,key:'fake-engine-key'},fake,engineFor};
+ return {hermes,install:{address:hermes.address,key:'test-only-key'},fake,engineFor};
 }
 type MadeAgent={id:string,instructions:string,profile:string,derived:boolean,tools_confirmed:boolean|null,tools_pending:boolean|null};
 const madeBy=(conversation:string,lead:string,call='call-0'):MadeAgent[]=>JSON.parse(query(`select a.id,a.instructions,a.profile,
@@ -949,9 +952,9 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template:'writer'}}];
   const {service,person}=await clients();
   const conversation=randomUUID();
-  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',hermes:install,engineFor})).toEqual({conversation});
+  expect(await withEngineContract(engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer'}))).toEqual({conversation});
   // A reader and the worker close the run at once: both may carry the call out, and one Agent is made.
-  const close=()=>closeOpenRuns(service,{hermes:install,conversation,engineFor});
+  const close=()=>withEngineContract(engineFor,()=>closeOpenRuns(service,{conversation}));
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
   const made=madeBy(conversation,lead);
@@ -961,7 +964,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,derived:true,tools_confirmed:true,tools_pending:false});
   expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
   const kept=hermes.settings.profiles.get(own)!;
-  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',toolConfig({profile:own})]);
+  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'test-only-key',toolConfig({profile:own})]);
   const asked=managed(hermes);
   for(const step of ['POST /api/profiles',`PUT /api/env`,`PUT /api/config`,'GET /api/model/options']) expect([1,2]).toContain(asked.filter(request=>request===step).length);
   expect(asked.filter(request=>request.startsWith('DELETE'))).toEqual([]);
@@ -970,19 +973,22 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
 
   // The same run and call carried out again (a closer stopped before the close) answer the Agent without the Engine.
   const before=hermes.settings.managementRequests.length;
-  expect(await runToolCall({db:service,engine:engineFor({address:'http://127.0.0.1:9',profile,key:'fake-engine-key'}),profile,conversation,run:fake.runs[0].id},
+  expect(await runToolCall({db:service,engine:engineFor({address:hermes.address,profile,key:'test-only-key'}),profile,conversation,run:fake.runs[0].id},
    {id:'call-0',name:'create_agent',arguments:{template:'writer'}})).toEqual({state:'created',agent:agent.id});
-  expect(managed(hermes).slice(before)).toEqual([]);
+  // The lane's worker keeps its own upkeep on the same Engine on its own clock (the accounts, their switches, the config
+  // it reads each pass): those reads are not the call's.
+  const upkeep=new Set(['GET /api/credentials/pool','GET /api/credentials/pool/switches','GET /api/config']);
+  expect(managed(hermes).slice(before).filter(request=>!upkeep.has(request))).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
   // The worker gives the Agent's own profile its Company's shared folder before its first Run (#122).
-  await keepSharedSkills(service,{hermes:{address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'}});
+  await keepSharedSkills(service,{});
   const theirs=randomUUID();
-  expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',hermes:install,engineFor})).toEqual({conversation:theirs});
-  expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});
+  expect(await withEngineContract(engineFor,()=>sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma'}))).toEqual({conversation:theirs});
+  expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'test-only-key'});
   expect(fake.runs.at(-1)).toMatchObject({conversation:theirs});
   expect(fake.runs.at(-1)!.instructions,'no instructions are sent').toBeNull();
-  expect(await closeOpenRuns(service,{hermes:install,conversation:theirs,engineFor})).toBe(1);
+  expect(await withEngineContract(engineFor,()=>closeOpenRuns(service,{conversation:theirs}))).toBe(1);
   expect(agentRows(theirs)).toEqual([{body:'Reply to: Write about the tax diploma'}]);
  } finally { await hermes.close(); }
 });
@@ -1000,15 +1006,15 @@ test('integration: a profile that cannot be made, still offers a toolset that mu
   try {
    fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template:'writer'}}];
    const conversation=randomUUID();
-   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',hermes:install,engineFor})).toEqual({conversation});
-   expect(await closeOpenRuns(service,{hermes:install,conversation,engineFor})).toBe(1);
+   expect(await withEngineContract(engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer'}))).toEqual({conversation});
+   expect(await withEngineContract(engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
    const [agent]=madeBy(conversation,lead);
    expect(agent,why).toMatchObject({profile,derived:true,tools_confirmed:null});
    expect(managed(hermes).filter(request=>request.startsWith('DELETE')),why).toEqual([]);
    const theirs=randomUUID();
-   expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',hermes:install,engineFor})).toEqual({conversation:theirs});
+   expect(await withEngineContract(engineFor,()=>sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma'}))).toEqual({conversation:theirs});
    expect(fake.runs.at(-1)!.instructions,why).toBe(agent.instructions);
-   expect(await closeOpenRuns(service,{hermes:install,conversation:theirs,engineFor})).toBe(1);
+   expect(await withEngineContract(engineFor,()=>closeOpenRuns(service,{conversation:theirs}))).toBe(1);
    expect(agentRows(theirs),why).toEqual([{body:'Reply to: Write about the tax diploma'}]);
   } finally { await hermes.close(); }
  }
@@ -1026,8 +1032,8 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
   fake.settings.toolCalls=()=>[{id:'call-0',name:'create_agent',arguments:{template:'writer'}}];
   const {service,person}=await clients();
   const asked=randomUUID();
-  expect(await sendMessage(person,service,{person:omar,company,conversation:asked,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',hermes:install,engineFor})).toEqual({conversation:asked});
-  expect(await closeOpenRuns(service,{hermes:install,conversation:asked,engineFor})).toBe(1);
+  expect(await withEngineContract(engineFor,()=>sendMessage(person,service,{person:omar,company,conversation:asked,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer'}))).toEqual({conversation:asked});
+  expect(await withEngineContract(engineFor,()=>closeOpenRuns(service,{conversation:asked}))).toBe(1);
   const [agent]=madeBy(asked,lead);
   expect(agent).toMatchObject({profile,tools_confirmed:null});
   const own=`ag-${agent.id.replaceAll('-','')}`;
@@ -1041,23 +1047,22 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
 
   // Its own profile gets a model, standing in for the sign-in that lets it answer.
   Object.assign(hermes.settings.profiles.get(own)!,{provider:'openai-codex',model:'gpt-5.5'});
-  const bundled={address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'};
   // The worker makes the Company's shared space (#122), makes the Agent's own profile, which does not take the Agent
   // before it reads the space's folder, gives it that folder, and then moves the Agent.
-  await keepSharedSkills(service,{hermes:bundled});
-  expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBe(0);
-  await keepSharedSkills(service,{hermes:bundled});
-  expect((await moveAgentProfiles(service,{hermes:bundled,driver:driverFor(bundled)})).moved).toBeGreaterThanOrEqual(1);
+  await keepSharedSkills(service,{});
+  expect((await moveAgentProfiles(service)).moved).toBe(0);
+  await keepSharedSkills(service,{});
+  expect((await moveAgentProfiles(service)).moved).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(query(`select a.profile from public.hermes_agents a where a.id='${agent.id}'`))).toEqual([{profile:own}]);
   expect(JSON.parse(query(`select a.profile from public.hermes_agents a where a.id='${lead}'`))).toEqual([{profile}]);
   expect(record()).toEqual(before);
   expect(JSON.parse(query(`select action from public.company_log where agent_id='${agent.id}' and action='agent_own_space'`))).toEqual([{action:'agent_own_space'}]);
 
   const onEngine=(connection:{address:string,profile:string,key:string})=>driverFor({...connection,address:hermes.address,managementAddress:hermes.managementAddress});
-  expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'One more, shorter',hermes:install,engineFor:onEngine})).toEqual({conversation:theirs});
+  expect(await withEngineContract(onEngine,()=>sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'One more, shorter'}))).toEqual({conversation:theirs});
   expect(hermes.settings.requests.filter(request=>request.method==='POST').at(-1)?.path).toBe(`/p/${own}/v1/runs`);
   expect(hermes.settings.runs.at(-1)!.history).toEqual(before.map(({author,body}:{author:string,body:string})=>({role:author==='agent'?'assistant':'user',content:body})));
-  expect(await closeOpenRuns(service,{hermes:install,conversation:theirs,engineFor:onEngine})).toBe(1);
+  expect(await withEngineContract(onEngine,()=>closeOpenRuns(service,{conversation:theirs}))).toBe(1);
   expect(record()).toEqual([...before,{author:'person',body:'One more, shorter'},{author:'agent',body:'Reply to: One more, shorter'}]);
  } finally { await hermes.close(); }
 });
@@ -1072,8 +1077,8 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
  try {
   const conversation=randomUUID();
   const send=async(message:string)=>{
-   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}))).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
   };
   const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
   await send('Plan the launch week\nThree posts and one reel');
@@ -1139,7 +1144,6 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
 test('a Card follows Lead\'s handover: the Agent handed the work owns it and a second handover moves it, with the chat\'s line and the Card\'s Log',async({page,browser})=>{
  test.setTimeout(240000);
  const fake=await laneHermes();
- const hermes={address:fake.address,key:fake.settings.key};
  const {lead}=bundledLead();
  const {service,person}=await clients();
  const target=attachTarget('Salma','Runs the March launch.');
@@ -1155,7 +1159,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   :handoff('Salma','Plan the Meta ads for the March intake');
  // The handover's two Runs move here as well as in the worker (both reach the lane's one Hermes, and a leg is started
  // once), so the test never waits on the worker's next pass.
- const drive=async()=>{ await closeOpenRuns(service,{hermes,conversation}); await driveHandovers(service,{hermes,conversation}); };
+ const drive=async()=>{ await closeOpenRuns(service,{conversation}); await driveHandovers(service,{conversation}); };
  type Handover={id:number,state:string,to_agent:string,goal:string,target_outcome:string|null};
  const handovers=():Handover[]=>JSON.parse(query(`select id,state,to_agent,goal,target_outcome from public.agent_handovers where conversation_id='${conversation}' order by id`));
  const settle=async()=>expect.poll(async()=>{ await drive(); const rows=handovers(); return rows.length>0&&rows.every(row=>row.state==='done'||row.state==='failed'); },{timeout:60000}).toBe(true);
@@ -1165,7 +1169,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   language('en');
   await page.setViewportSize({width:1440,height:900});
   // One message to Lead, which hands the Meta ads to Salma.
-  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'Plan the March intake',hermes})).toEqual({conversation});
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'Plan the March intake'})).toEqual({conversation});
   await settle();
   expect(handovers().map(row=>({state:row.state,to_agent:row.to_agent,target_outcome:row.target_outcome})))
    .toEqual([{state:'done',to_agent:target.agent,target_outcome:'completed'}]);
@@ -1174,7 +1178,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   expect(rows(card.id)).toEqual([{actor_id:lead,actor_kind:'agent',agent_id:target.agent,action:'agent_handed_to',
    details:{agent_name:'Lead',to_name:'Salma',goal:'Plan the Meta ads for the March intake'}}]);
   // Closing the Runs again adds no Card and no row.
-  expect(await closeOpenRuns(service,{hermes,conversation})).toBe(0);
+  expect(await closeOpenRuns(service,{conversation})).toBe(0);
   expect(cards()).toHaveLength(1);
 
   // The chat says so under the handover's answer, and its pill opens the Card.
@@ -1203,7 +1207,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
 
   // A second handover in the same chat gives the same Card the other Agent, and its own row on the Card.
   language('en');
-  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'Now the launch email',hermes})).toEqual({conversation});
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'Now the launch email'})).toEqual({conversation});
   await expect.poll(async()=>{ await drive(); return handovers().length; },{timeout:60000}).toBe(2);
   await settle();
   expect(handovers().map(row=>({state:row.state,to_agent:row.to_agent}))).toEqual([{state:'done',to_agent:target.agent},{state:'done',to_agent:next.agent}]);
@@ -1230,7 +1234,6 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
 test('any Agent hands a job to another Agent of its Company, one hidden from the person included, and the chat draws both',async({page})=>{
  test.setTimeout(240000);
  const fake=await laneHermes();
- const hermes={address:fake.address,key:fake.settings.key};
  const salma=attachTarget('Salma','Writes the ad copy.');
  const tarek=attachTarget('Tarek','Reads the campaign numbers.');
  const reviewer='20000000-0000-0000-0000-000000000003';
@@ -1242,11 +1245,11 @@ test('any Agent hands a job to another Agent of its Company, one hidden from the
   :ask;
  const {service}=await clients();
  const {person}=await memberClient('reviewer@example.com');
- const drive=async()=>{ await closeOpenRuns(service,{hermes,conversation}); await driveHandovers(service,{hermes,conversation}); };
+ const drive=async()=>{ await closeOpenRuns(service,{conversation}); await driveHandovers(service,{conversation}); };
  const handed=()=>JSON.parse(query(`select from_agent,to_agent,state,target_outcome from public.agent_handovers where conversation_id='${conversation}'`));
  try {
-  expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent:salma.agent,message:'Write the March ad copy',hermes})).toEqual({conversation});
-  // The tool Salma's Run was sent, as the Engine reads it in the Run's instructions (lib/hermes.mjs), names the
+  expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent:salma.agent,message:'Write the March ad copy'})).toEqual({conversation});
+  // The tool Salma's Run was sent, as the Engine reads it in the Run's instructions (the Engine driver (lib/engine/)), names the
   // Company's other Agents, Tarek with its job among them, never Salma.
   const sent=fake.settings.runs.find(run=>JSON.stringify(run.input).includes('Write the March ad copy'));
   const offered=(sent?.instructions??'').split('\n- hand_to_agent: ')[1]??'';

@@ -1,5 +1,7 @@
 import { driveHandovers } from '../lib/handovers.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { engineRecord } from './engine-records.mjs';
 
 // The Handover tests' stand-in for the database (#477, #478): a small copy of the handover functions as 20270415990000
 // and 20270415995000 define them (supabase/tests/handover_chains.sql and handover_stop.sql prove the real ones). A call
@@ -10,6 +12,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // Agent runs on a profile of its own, routed by profile as the install's Hermes is.
 export const hermes={address:'http://hermes:8642',key:'test-only-key'};
 export const company='10000000-0000-0000-0000-000000000001';
+// The Company's Engine record, as the database holds it; the fakes of the contract answer for the Engine.
+engineRecord(company,hermes);
 export const team=/** @type {Record<string,{profile:string,job:string}>} */({
  Writer:{profile:'ag-04770000000000000000000000000013',job:'Posts and articles'},
  Ads:{profile:'ag-04770000000000000000000000000012',job:'Meta ads and their numbers'},
@@ -142,5 +146,5 @@ export const handOn=(/** @type {string} */ agent,/** @type {string} */ goal)=>[{
 /** The worker's passes, one after another, until every handover of the chain ended (or `until` holds), or the bound is
  * reached. @param {any} service @param {any} engineFor @param {any[]} rows @param {{most?:number,until?:()=>boolean}} [options] */
 export const drive=async(service,engineFor,rows,{most=40,until=()=>false}={})=>{
- for(let pass=0;pass<most&&!until()&&rows.some(row=>row.state!=='done'&&row.state!=='failed');pass++) await driveHandovers(service,{hermes,engineFor});
+ for(let pass=0;pass<most&&!until()&&rows.some(row=>row.state!=='done'&&row.state!=='failed');pass++) await withEngineContract(engineFor,()=>driveHandovers(service,{}));
 };

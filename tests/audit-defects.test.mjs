@@ -103,7 +103,7 @@ test('a Routine with a time zone the server does not know is refused when saved,
  assert.equal(routineZone('Mars/Phobos'), false);
  assert.equal(routineZone('Not a zone'), false);
  const { changeAgentRoutine } = await import('../lib/agent-routines.mjs');
- const answer = await changeAgentRoutine({ rpc: () => { throw new Error('the database is not asked'); } }, { company: '10000000-0000-4000-8000-000000000001', agent: '10000000-0000-4000-8000-000000000002', action: 'create', prompt: 'Send me the cost per lead', schedule: '0 9 * * *', timezone: 'Mars/Phobos', hermes: null });
+ const answer = await changeAgentRoutine({ rpc: () => { throw new Error('the database is not asked'); } }, {company: '10000000-0000-4000-8000-000000000001',agent: '10000000-0000-4000-8000-000000000002',action: 'create',prompt: 'Send me the cost per lead',schedule: '0 9 * * *',timezone: 'Mars/Phobos'});
  assert.deepEqual(answer, { state: 'zoneUnknown' });
  const { whenOf } = await import('../lib/routine-schedule.mjs');
  const t = i18n('en').t;

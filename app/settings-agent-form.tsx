@@ -30,7 +30,7 @@ export function AgentAbout({agent,name,description}:{agent:string,name:string,de
 // handler): the heading counts the switches that are on of all, the rows are the Engine's own order with its description,
 // and a skill the Engine says the Agent learned on its own carries the mark. Every switch is one key of the page's draft
 // (`skill:<name>` = on|off) and is saved with the bar; a person below Manager, or an Agent still on the Company's shared
-// profile, reads On and Off instead of a switch. The Engine's essential skill never reaches here (lib/hermes.mjs), and
+// profile, reads On and Off instead of a switch. The Engine's essential skill never reaches here (the Engine driver, lib/engine/), and
 // the Company's shared skills stay on the team's page. A learned Skill's mark carries "See the steps" (#181) for everyone
 // who has the Learning section: it opens that Skill's page there, and a draft that differs holds the page first.
 export type AgentSkillRow={name:string,description:string,enabled:boolean,learned:boolean};

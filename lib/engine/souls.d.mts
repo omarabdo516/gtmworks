@@ -1,0 +1,4 @@
+export type AgentInstructions={state:'found',instructions:string,sectionChars:number,limit:number}|{state:'missing'|'refused'|'unreachable'|'failed',instructions:string,sectionChars:number,limit:number};
+export function readAgentInstructions(connection:import('../engine.mjs').EngineConnection,name:string):Promise<AgentInstructions>;
+export function writeAgentInstructions(connection:import('../engine.mjs').EngineConnection,change:{profile:string,instructions:string}):Promise<{state:'written',instructions:string,sectionChars:number,limit:number}|{state:'tooLong'|'missing'|'refused'|'unreachable'|'failed',instructions:null,sectionChars:number,limit:number}>;
+export function writeSoulRules(connection:import('../engine.mjs').EngineConnection,change:{profile:string,rules:string[]}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;

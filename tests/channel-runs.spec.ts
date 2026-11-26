@@ -1,9 +1,13 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+import { hermesHostOf } from './lane.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
@@ -11,7 +15,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const channel='69000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
@@ -40,23 +43,24 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${told}','${company}','${omar}','${agent}','Faye')`);
  query(`insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id) values ('${company}','${agent}','Answer in English','${omar}','${told}','channel-rule','call-0')`);
  try {
-  const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
-  const plain=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team',hermes,engineFor:fake.engineFor});
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{channel}));
+  const plain=await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team'}));
   expect(plain).toEqual({message:expect.any(Number)});
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
   expect(runOf((plain as {message:number}).message)).toEqual([]);
 
-  const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week',hermes,engineFor:fake.engineFor};
-  const sent=await postChannelMessage(person,service,mention) as {message:number};
+  const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week'};
+  const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,mention)) as {message:number};
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
-  expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
+  // The Company's Engine record names the lane's Engine, and its key (scripts/local-db.sh).
+  expect(fake.connections[0]).toMatchObject({address:`http://${hermesHostOf()}:8642`,key:'test-only-key'});
   // The Agent's rules are in its profile's SOUL.md (#345), and no channel Run is told the Company knowledge (#344): the
   // profile auto-loads it as the shared Skill.
   expect(fake.runs[0].instructions??'').not.toContain('Answer in English');
   expect(fake.runs[0].instructions??'').not.toContain('## Brand voice');
   expect(await drive()).toEqual({started:0,closed:0});
-  expect(await postChannelMessage(person,service,mention)).toEqual(sent);
+  expect(await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,mention))).toEqual(sent);
   expect(fake.runs).toHaveLength(1);
   expect(repliesTo(sent.message)).toEqual([]);
   const passes=await Promise.all([drive(),drive()]);
@@ -76,21 +80,21 @@ test('integration: a start whose answer was lost is asked again with the same ke
  const {service,person}=await memberClient('omar@example.com'); const {detach}=attachAgent();
  try {
   const engine=fake.engineFor({});
-  const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser',hermes};
-  const lost=await postChannelMessage(person,service,{...post,engineFor:()=>({...engine,start:async()=>({state:'unknown'} as const)})}) as {message:number};
+  const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser'};
+  const lost=await withEngineContract(()=>({...engine,start:async()=>({state:'unknown'} as const)}),()=>postChannelMessage(person,service,{...post})) as {message:number};
   expect(lost).toEqual({message:expect.any(Number)});
-  const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{channel}));
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
   // #152: the post's own drive reads the page again after it starts the Run, so it is held open for that read and the
   // next drive closes it.
   fake.settings.pendingReads=1;
-  expect(await postChannelMessage(person,service,{...post,engineFor:fake.engineFor})).toEqual(lost);
+  expect(await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,{...post}))).toEqual(lost);
   expect(fake.runs.map(run=>run.key)).toEqual([`channel:${lost.message}`]);
   expect(await drive()).toEqual({started:0,closed:1});
   expect(repliesTo(lost.message)).toEqual([{author:'agent',author_name:'Faye',body:'Reply to: عمر: @Faye draft the teaser'}]);
 
-  const refused=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started',hermes,engineFor:()=>({...engine,start:async()=>null})}) as {message:number};
+  const refused=await withEngineContract(()=>({...engine,start:async()=>null}),()=>postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started'})) as {message:number};
   expect(runOf(refused.message)).toEqual([{agent_name:'Faye',outcome:'failed'}]);
   expect(await drive()).toEqual({started:0,closed:0});
   expect(repliesTo(refused.message)).toEqual([]);

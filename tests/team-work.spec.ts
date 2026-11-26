@@ -1,15 +1,17 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, sendMessage, startQueuedTurns, stopConversationRun } from '../lib/conversation-runs.mjs';
 import { routeAllowed } from '../lib/route-permissions.mjs';
 import { fakeEngine } from './fake-engine.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import noteEn from '../lib/messages/member-note.en.json' with { type: 'json' };
 import noteAr from '../lib/messages/member-note.ar.json' with { type: 'json' };
+test.beforeAll(()=>laneEngineRecords());
 
 // Team-work rules of 2026-11-13 (a, b, c, d, g) on the local database, through the same run layer the conversation
 // route and the worker use, with the fake engine (tests/fake-engine.mjs) in place of Hermes. A Conversation stays
@@ -21,7 +23,6 @@ const omar='20000000-0000-0000-0000-000000000001';
 const manager='20000000-0000-0000-0000-000000000002';
 const contributor='20000000-0000-0000-0000-000000000005';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 // A Member's own session, signed in by email link, and the service client the route and the worker use.
 async function memberClient(email:string) {
@@ -60,13 +61,13 @@ function attachFakeHermes() {
 
 test('integration: two sends while the Agent is busy run as two turns in order, each after the one before ends',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key}; fake.settings.pendingReads=1e9;
+ const fake=await laneHermes(); fake.settings.pendingReads=1e9;
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
   const conversation=randomUUID(); const keys=[randomUUID(),randomUUID(),randomUUID()];
-  const send=(index:number,message:string)=>sendMessage(person,service,{company,conversation,sendKey:keys[index],agent,message,hermes});
-  const step=async()=>{ await closeOpenRuns(service,{hermes,conversation}); await startQueuedTurns(service,{hermes,conversation}); };
+  const send=(index:number,message:string)=>sendMessage(person,service,{company,conversation,sendKey:keys[index],agent,message});
+  const step=async()=>{ await closeOpenRuns(service,{conversation}); await startQueuedTurns(service,{conversation}); };
   expect(await send(0,'Plan the launch week')).toEqual({conversation});
   expect(await send(1,'Add a teaser post')).toEqual({conversation,queued:true});
   expect(await send(2,'And a reminder')).toEqual({conversation,queued:true});
@@ -94,18 +95,18 @@ test('integration: two sends while the Agent is busy run as two turns in order, 
 // note it was first reserved with included (the fake Hermes, like the pinned release, refuses another body for a key).
 test('integration: a queued turn whose start answer was lost is asked again, not failed, and runs once',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key}; fake.settings.pendingReads=1e9;
+ const fake=await laneHermes(); fake.settings.pendingReads=1e9;
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   const conversation=randomUUID(); const second=randomUUID();
-  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'Plan the launch week',hermes})).toEqual({conversation});
-  expect(await sendMessage(person,service,{company,conversation,sendKey:second,agent,message:'Add a teaser post',hermes})).toEqual({conversation,queued:true});
+  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'Plan the launch week'})).toEqual({conversation});
+  expect(await sendMessage(person,service,{company,conversation,sendKey:second,agent,message:'Add a teaser post'})).toEqual({conversation,queued:true});
   fake.settings.loseStarts=2; fake.settings.pendingReads=0;
-  await closeOpenRuns(service,{hermes,conversation});
+  await closeOpenRuns(service,{conversation});
   // (The background worker may make the same attempt; either way the turn is not failed.)
-  await startQueuedTurns(service,{hermes,conversation});
+  await startQueuedTurns(service,{conversation});
   expect(JSON.parse(query(`select failed_at from public.conversation_queued_turns where send_key='${second}'`))).toEqual([{failed_at:null}]);
-  await expect.poll(async()=>{ await closeOpenRuns(service,{hermes,conversation}); await startQueuedTurns(service,{hermes,conversation}); return rows(conversation).length; },{timeout:30000}).toBe(4);
+  await expect.poll(async()=>{ await closeOpenRuns(service,{conversation}); await startQueuedTurns(service,{conversation}); return rows(conversation).length; },{timeout:30000}).toBe(4);
   expect(rows(conversation).map((row:{body:string})=>row.body)).toEqual(['Plan the launch week','Reply to: Plan the launch week','Add a teaser post','Reply to: Add a teaser post']);
   expect(fake.settings.runs.map(run=>run.input)).toEqual(['Plan the launch week','Add a teaser post']);
  } finally { detach(); await fake.close(); }
@@ -113,12 +114,12 @@ test('integration: a queued turn whose start answer was lost is asked again, not
 
 test('integration: a send whose answer was lost is kept as its sender\'s turn, and the worker\'s retry sends the note it was first reserved with',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key};
+ const fake=await laneHermes(); 
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
   const conversation=randomUUID(); const sendKey=randomUUID();
-  const send=()=>sendMessage(person,service,{company,conversation,sendKey,agent,message:'Plan the week',hermes});
+  const send=()=>sendMessage(person,service,{company,conversation,sendKey,agent,message:'Plan the week'});
   fake.settings.loseStarts=2;
   expect(await send()).toEqual({conversation,queued:true});
   expect(JSON.parse(query(`select abandoned_at, start_unknown_at is not null as marked from public.conversation_run_reservations where send_key='${sendKey}'`))).toEqual([{abandoned_at:null,marked:true}]);
@@ -128,7 +129,7 @@ test('integration: a send whose answer was lost is kept as its sender\'s turn, a
   expect([{conversation,queued:true},{conversation}]).toContainEqual(await send());
   // The worker asks again with the same key and the first request's body; Hermes names the run it started.
   // (The background worker may make the same attempt; either way it is one run.)
-  await expect.poll(async()=>{ await startQueuedTurns(service,{hermes,conversation}); return rows(conversation).filter((row:{author:string})=>row.author==='person').length; },{timeout:30000}).toBe(1);
+  await expect.poll(async()=>{ await startQueuedTurns(service,{conversation}); return rows(conversation).filter((row:{author:string})=>row.author==='person').length; },{timeout:30000}).toBe(1);
   expect(fake.settings.runs).toHaveLength(1);
   expect(fake.settings.runs[0].instructions).toContain('Answer in short points.');
   expect(rows(conversation).filter((row:{author:string})=>row.author==='person')).toHaveLength(1);
@@ -141,14 +142,14 @@ test('integration: stop is refused to another Contributor and works for a Manage
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachAgent();
  try {
   const conversation=randomUUID();
-  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'Write the long report',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'Write the long report'}))).toEqual({conversation});
   const other=(await memberClient('multi@example.com')).person;
-  expect(await stopConversationRun(other,{company,conversation,hermes,engineFor:fake.engineFor})).toMatchObject({code:'42501',message:'conversationStopNotAllowed'});
+  expect(await withEngineContract(fake.engineFor,()=>stopConversationRun(other,{company,conversation}))).toMatchObject({code:'42501',message:'conversationStopNotAllowed'});
   expect(fake.runs[0].stopped).toBe(false);
   const lead=(await memberClient('manager@example.com')).person;
-  expect(await stopConversationRun(lead,{company,conversation,hermes,engineFor:fake.engineFor})).toEqual({stopped:true});
+  expect(await withEngineContract(fake.engineFor,()=>stopConversationRun(lead,{company,conversation}))).toEqual({stopped:true});
   expect(fake.runs[0].stopped).toBe(true);
-  expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+  expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
   expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}'`))).toEqual([{outcome:'stopped'}]);
  } finally { detach(); }
 });
@@ -159,10 +160,10 @@ test('integration: a message to a person starts no run on the fake engine; a mes
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachAgent();
  try {
   const conversation=randomUUID();
-  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'@مدير can you check the budget first?',hermes,engineFor:fake.engineFor})).toEqual({conversation,addressed:true});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'@مدير can you check the budget first?'}))).toEqual({conversation,addressed:true});
   expect(fake.runs).toHaveLength(0);
   expect(JSON.parse(query(`select person_id,addressed_to,author_name from public.conversation_notes where conversation_id='${conversation}'`))).toEqual([{person_id:omar,addressed_to:manager,author_name:'عمر'}]);
-  expect(await sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'@Faye draft the budget post',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent,message:'@Faye draft the budget post'}))).toEqual({conversation});
   expect(fake.runs.map(run=>run.input)).toEqual(['@Faye draft the budget post']);
  } finally { detach(); }
 });
@@ -179,8 +180,8 @@ test('integration: a Member\'s note goes with their own runs only, nobody else r
   // Another Member reads no one else's note.
   expect((await b.person.from('member_notes').select('person_id,note')).data).toEqual([{person_id:contributor,note:'Write in Egyptian Arabic.'}]);
   const mine=randomUUID(); const theirs=randomUUID();
-  expect(await sendMessage(a.person,a.service,{company,conversation:mine,sendKey:randomUUID(),agent,message:'Plan the week',hermes,engineFor:fake.engineFor})).toEqual({conversation:mine});
-  expect(await sendMessage(b.person,b.service,{company,conversation:theirs,sendKey:randomUUID(),agent,message:'Plan my week',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(a.person,a.service,{company,conversation:mine,sendKey:randomUUID(),agent,message:'Plan the week'}))).toEqual({conversation:mine});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(b.person,b.service,{company,conversation:theirs,sendKey:randomUUID(),agent,message:'Plan my week'}))).toEqual({conversation:theirs});
   const [runA,runB]=fake.runs;
   expect(runA.instructions).toContain('Answer in short points.');
   expect(runA.instructions).not.toContain('Egyptian Arabic');

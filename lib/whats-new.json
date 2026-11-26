@@ -1,5 +1,11 @@
 [
  {
+  "issue": 791,
+  "date": "2026-11-26",
+  "en": { "title": "Providers settings open at once", "body": "Settings → Providers shows straight away and fills in each part as the agent engine answers it; a part the engine is slow on says it is reading, and one it cannot read keeps what it last showed." },
+  "ar": { "title": "إعدادات المزوّدين بتفتح على طول", "body": "الإعدادات ← المزوّدين بقت بتظهر على طول وكل جزء بيتملي لما محرك الوكلاء يرد عليه؛ والجزء اللي المحرك بطيء فيه بيقول إنه بيتقري، واللي مقدرش يتقري بيفضل باللي كان ظاهر آخر مرة." }
+ },
+ {
   "issue": 771,
   "date": "2026-11-26",
   "en": { "title": "A press opens its page at once", "body": "Pressing a link now shows the page's frame straight away, with the sidebar staying as it is, and the page fills in when it arrives; moving between pages no longer redraws the sidebar." },

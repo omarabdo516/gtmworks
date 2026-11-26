@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { readVoices, speakText, speakLimit } from '../lib/hermes.mjs';
+import { readVoices, speakText, speakLimit } from '../lib/engine/speech.mjs';
 
 // #162: an Agent's voice is its own Engine profile's settings, and the sample it hears is the Engine speaking with them.
 // The list of voices exists only for ElevenLabs (v0.23.0 hermes_cli/web_routers/audio.py 223-295); the sound is

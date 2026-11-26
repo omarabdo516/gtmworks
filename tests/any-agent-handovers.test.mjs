@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
-import { startUnknown } from '../lib/hermes.mjs';
+import { startUnknown } from '../lib/engine/runs.mjs';
 import { conversationHandOverSpec, conversationToolSpecTexts, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -11,6 +13,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // Ads with their jobs, never itself, as the database lists them (conversation_handover_agents, proved in
 // supabase/tests/handovers.sql). The text is the one pin_run pins, so a retry sends the same request.
 const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co']) engineRecord(company,hermes);
 const writer='a4750000-0000-0000-0000-000000000003';
 const others=[{name:'Ads',job:'Meta ads and their numbers'},{name:'Lead',job:'Runs the team'}];
 
@@ -35,7 +39,7 @@ function databases(listed=others) {
  return {db:{rpc:queued,from:()=>chain},service:{rpc:queued,from:()=>chain},given,team};
 }
 const send=(/** @type {ReturnType<typeof databases>} */ {db,service},/** @type {any} */ engineFor,sendKey='k1')=>
- sendMessage(db,service,{company:'co',conversation:'c4750000-0000-0000-0000-000000000001',sendKey,agent:writer,message:'Write the March ad copy',hermes,engineFor});
+ withEngineContract(engineFor,()=>sendMessage(db,service,{company:'co',conversation:'c4750000-0000-0000-0000-000000000001',sendKey,agent:writer,message:'Write the March ad copy'}));
 
 test('a Run of an Agent that is not the main one is offered hand_to_agent naming the Company\'s other Agents with their jobs, pinned with the Run',async()=>{
  const fake=fakeEngine(); const stores=databases(); const sent=/** @type {any[]} */([]);
@@ -54,7 +58,7 @@ test('a Run of an Agent that is not the main one is offered hand_to_agent naming
  // The text sent is the text pinned: a retry of the same send sends it again, whoever the team became meanwhile.
  assert.equal(JSON.stringify(hand),stores.given.pin_run[0].specs.hand_to_agent);
  stores.team.splice(0,stores.team.length,{name:'Critic',job:'Reviews'});
- assert.equal(await startQueuedTurns(stores.service,{hermes,engineFor}),1);
+ assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(stores.service,{})),1);
  assert.equal(sent.length,2,'the same send asked again');
  assert.deepEqual(sent[1].tools,sent[0].tools,'the retry sends the pinned tools unchanged');
 });

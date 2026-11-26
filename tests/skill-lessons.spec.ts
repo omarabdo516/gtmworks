@@ -3,8 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
+import { laneEngineRecords } from './spec-engine-records';
 import { signIn } from './sign-in';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 // #343: a lesson an Agent learned reaches every Agent as the Company's shared skill team-lessons in Hermes, never a
 // skill row in gtmworks. A Contributor's lasting rule is sent to the Owner as a suggestion (agent_save_rule, as closing
@@ -51,7 +53,7 @@ test('an approved lesson reaches the shared skill team-lessons in Hermes', async
  // The worker's pass, against the fake Engine.
  const value=status();
  const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
- await keepSharedSkills(service,{hermes:{address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:fake.settings.key}});
+ await keepSharedSkills(service);
  const lessons=fake.settings.skills.get(space)?.get('team-lessons');
  expect(lessons).toContain(`- ${approved}\n`);
  expect(lessons).not.toContain(waiting);

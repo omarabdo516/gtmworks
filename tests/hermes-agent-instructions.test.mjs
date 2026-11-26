@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readAgentInstructions, writeAgentInstructions, writeSoulRules } from '../lib/hermes.mjs';
+import { readAgentInstructions, writeAgentInstructions, writeSoulRules } from '../lib/engine/souls.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #176: an Agent's standing instructions are the text of its own profile's SOUL.md outside the gtmworks rules section

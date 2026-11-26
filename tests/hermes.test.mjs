@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { testHermes } from '../lib/hermes.mjs';
+import { testHermes } from '../lib/engine/version.mjs';
 
 test('Test connection authenticates the selected profile and reads the tested version',async()=>{
  const fake=await fakeHermes();

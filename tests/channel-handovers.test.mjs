@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveChannelRuns } from '../lib/channel-runs.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
@@ -9,6 +11,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // for the handover functions (supabase/tests/channel_handovers.sql proves the real ones) that records what the driver
 // asked of it.
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co','10000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 const leadProfile='co-10000000000000000000000000000001';
 const targetProfile='ag-01000000000000000000000000000001';
 const channel='c1500000-0000-0000-0000-000000000001';
@@ -31,7 +35,7 @@ function handover(overrides = {}) {
    // No Run Stop ended a handover on is left to stop (#478).
    if(name==='stopped_runs_open') return {data:[],error:null};
    if(name==='handover_runs_stopping') return {data:[],error:null};
-   if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,
+   if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,company:'10000000-0000-0000-0000-000000000001',
     conversation:row.conversation,run:row.state==='target'?row.target_run:row.state==='follow_up'?row.follow_up_run:null,
     profile:row.state==='waiting'||row.state==='target'?targetProfile:leadProfile,
     attempt:row.state==='returning'?row.return_attempts:row.target_attempts}]);
@@ -64,7 +68,7 @@ function engines() {
 
 // The worker's passes, one after another, until the handover is finished or the bound is reached.
 const drive=async(/** @type {any} */ service,/** @type {any} */ engineFor,/** @type {any} */ row,most=10)=>{
- for(let pass=0;pass<most&&row.state!=='done'&&row.state!=='failed';pass++) await driveHandovers(service,{hermes,engineFor,channel});
+ for(let pass=0;pass<most&&row.state!=='done'&&row.state!=='failed';pass++) await withEngineContract(engineFor,()=>driveHandovers(service,{channel}));
 };
 
 test('a channel handover runs the job on the target\'s own profile in the channel session, then Lead\'s follow-up in Lead\'s, and each end is kept once',async()=>{
@@ -93,7 +97,7 @@ test('a channel handover runs the job on the target\'s own profile in the channe
  assert.deepEqual(calls.filter(([name])=>name.startsWith('close_handover')).map(([name,args])=>[name,Object.keys(args).sort().join(',')]),
   [['close_handover_target','h,run,run_outcome,words'],['close_handover_follow_up','h,reply,run,run_outcome']]);
  // Closing again, or a second pass, stores nothing more.
- assert.deepEqual(await driveHandovers(service,{hermes,engineFor,channel}),{started:0,closed:0});
+ assert.deepEqual(await withEngineContract(engineFor,()=>driveHandovers(service,{channel})),{started:0,closed:0});
  assert.equal(wrote.length,1,'the record keeps one reply');
 });
 
@@ -106,14 +110,14 @@ test('a channel Run\'s hand_to_agent call is carried out once, for its message, 
  const kept=new Map();
  const closed=new Set();
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name==='channel_runs_due') return {data:[{message,run,profile:'ag-ads'}],error:null};
+  if(name==='channel_runs_due') return {data:[{message,run,profile:'ag-ads',company:'10000000-0000-0000-0000-000000000001'}],error:null};
   if(name==='track_channel_permission') return {data:[],error:null};
   if(name==='channel_hand_to_agent') { handed.push(args); kept.set(`${args.message}:${args.run}:${args.call}`,args); return {data:{state:'created',agent:'Ads'},error:null}; }
   if(name==='close_channel_run') { if(closed.has(args.run)) return {data:false,error:null}; closed.add(args.run); return {data:true,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  const run=await fake.engineFor({}).start({conversation:'s-1',input:'Omar: @Lead plan the ads',idempotencyKey:`channel:${message}`});
- const drive=()=>driveChannelRuns(/** @type {any} */(service),{hermes,engineFor:fake.engineFor,channel});
+ const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(/** @type {any} */(service),{channel}));
  assert.deepEqual(await drive(),{started:0,closed:1});
  assert.deepEqual([...kept.values()],[{message,run,call:'call_9',agent_name:'Ads',goal:'Plan the Meta ads',context:'EGP 9,000'}]);
  closed.delete(run);

@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withDriver, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { readSpeech, writeSpeech } from '../lib/hermes.mjs';
+import { readSpeech, writeSpeech } from '../lib/engine/speech.mjs';
 import { changeCompanySpeech, readCompanySpeech, deepgramCommand, deepgramArabic } from '../lib/company-speech.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'read':'speech.read','write':'speech.write'};
 
 // #430: the Company's speech-to-text provider, written by gtmworks to every profile of the Company in its Engine.
 const hex=n=>`10000000000000000000000000000${String(n).padStart(3,'0')}`;
@@ -36,12 +38,11 @@ function sessions({owner,removed=[]}) {
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,asked)=>readSpeech(at(target),asked),write:(target,change)=>writeSpeech(at(target),change)}; };
-const hermesOf=fake=>({address:fake.address,key:'test-only-key'});
-const change=(person,fake,request)=>changeCompanySpeech(person.db,{company,driver:pointedAt(fake),hermes:hermesOf(fake),...request});
-const read=(person,fake)=>readCompanySpeech(person.db,{company,driver:pointedAt(fake),hermes:hermesOf(fake)});
+const change=(person,fake,request)=>withDriver(DRIVER,pointedAt(fake),()=>changeCompanySpeech(person.db,{company,...request}));
+const read=(person,fake)=>withDriver(DRIVER,pointedAt(fake),()=>readCompanySpeech(person.db,{company}));
 
 test('an Owner sets Deepgram with a key: every profile holds the key and transcribes through the Engine\'s command provider, Arabic as Egyptian', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   madeCompany(fake,one); madeCompany(fake,two);
   const owner=sessions({owner:true});
@@ -66,7 +67,7 @@ test('an Owner sets Deepgram with a key: every profile holds the key and transcr
 
 for(const [provider,env] of [['elevenlabs','ELEVENLABS_API_KEY'],['openai','VOICE_TOOLS_OPENAI_KEY'],['groq','GROQ_API_KEY']]) {
  test(`an Owner sets ${provider}: every profile holds ${env} and the Engine's own ${provider} provider`, async () => {
-  const fake=await fakeHermes();
+  const fake=await engineServing(company);
   try {
    madeCompany(fake,one);
    const owner=sessions({owner:true});
@@ -80,7 +81,7 @@ for(const [provider,env] of [['elevenlabs','ELEVENLABS_API_KEY'],['openai','VOIC
 }
 
 test('a switch takes the previous key away, except Groq\'s model key, and an Arabic variant only Deepgram has goes back to Arabic', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   madeCompany(fake,one);
   const owner=sessions({owner:true});
@@ -109,7 +110,7 @@ test('a switch takes the previous key away, except Groq\'s model key, and an Ara
 });
 
 test('a removal takes the key from every profile, the removed Agents\' too, and leaves no provider; an Agent the set missed is named', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   const gone=`ag-c${hex(1).slice(1)}`;
   madeCompany(fake,one); made(fake,gone);
@@ -139,7 +140,7 @@ test('a removal takes the key from every profile, the removed Agents\' too, and 
 });
 
 test('only an Owner changes it, a provider outside the list or a bad key is refused, and none of it reaches the Engine', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   madeCompany(fake,one);
   assert.deepEqual(await change(sessions({owner:false}),fake,{provider:'deepgram',intent:'set',value:key}),{status:403,body:{error:'speechNotAllowed'}});
@@ -163,8 +164,8 @@ async function loadRoute(fake,owner=true) {
   '@/lib/supabase':{supabase:async()=>({...person.db,auth:{getUser:async()=>({data:{user:{id:'9a000000-0000-0000-0000-000000000001'}}})}})},
   '@/lib/app-origin.mjs':await import('../lib/app-origin.mjs'),
   '@/lib/route-permissions.mjs':{routeAllowed:async()=>true},
-  '@/lib/company-speech.mjs':{readCompanySpeech:(db,request)=>readCompanySpeech(db,{...request,driver:pointedAt(fake),hermes:hermesOf(fake)}),
-   changeCompanySpeech:(db,request)=>changeCompanySpeech(db,{...request,driver:pointedAt(fake),hermes:hermesOf(fake)})},
+  '@/lib/company-speech.mjs':{readCompanySpeech:(db,request)=>withDriver(DRIVER,pointedAt(fake),()=>readCompanySpeech(db,{...request})),
+   changeCompanySpeech:(db,request)=>withDriver(DRIVER,pointedAt(fake),()=>changeCompanySpeech(db,{...request}))},
  };
  runInNewContext(outputText,{exports,require:name=>imports[name]??require(name),URL,URLSearchParams,Error,Response,Request,Headers,process});
  return exports;
@@ -173,7 +174,7 @@ const {NextRequest}=require('next/server');
 const post=(route,body)=>route.POST(new NextRequest('http://app.test/api/speech-provider',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}));
 
 test('the route never answers the key back, and the key is removable', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   madeCompany(fake,one);
   const route=await loadRoute(fake);

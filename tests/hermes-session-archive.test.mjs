@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 // #674 on the fake Engine server, which marks a session archived as the pinned release's API listener does
 // (gateway/platforms/api_server.py _handle_patch_session, set_session_archived): the Conversation's own session, on its
