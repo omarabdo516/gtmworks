@@ -60,13 +60,16 @@ async function openAll(context:BrowserContext) {
  }
  return opened;
 }
-// A Card made on the board through the gate: the board's stream reports it to every open board socket.
-async function makeCard(context:BrowserContext,title:string) {
+// A Card made on the board through the gate: the board's stream reports it, by its id as Hermes does, to every open board
+// socket. Answers the Card's id.
+async function makeCard(context:BrowserContext,title:string):Promise<string> {
  const origin=new URL(test.info().project.use.baseURL!).origin;
  const made=await context.request.post(`${prefix}/api/plugins/kanban/tasks`,{headers:{origin},data:{title}});
  expect(made.status()).toBe(200);
+ return (await made.json()).task.id;
 }
-const told=(live:Live,title:string)=>live.frames.some(frame=>frame.includes(title));
+// Whether a board stream reported the Card: a `created` event for its id.
+const told=(live:Live,card:string)=>live.frames.some(frame=>(JSON.parse(frame).events??[]).some((event:{kind:string,task_id:string})=>event.kind==='created'&&event.task_id===card));
 async function signedIn(browser:import('@playwright/test').Browser,email:string) {
  const context=await browser.newContext();
  await signIn(await context.newPage(),email,'/c/rs-learning/settings');
@@ -88,8 +91,8 @@ test('through the gate, the dashboard\'s chat, its terminal and the board\'s eve
   const [chatSocket,terminalSocket,boardSocket]=await openAll(owner);
   await expect.poll(()=>chatSocket.frames.some(frame=>frame.includes('gateway.ready'))).toBe(true);
   await expect.poll(()=>terminalSocket.frames.length).toBeGreaterThan(0);
-  await makeCard(owner,'A Card the board reports');
-  await expect.poll(()=>told(boardSocket,'A Card the board reports')).toBe(true);
+  const card=await makeCard(owner,'A Card the board reports');
+  await expect.poll(()=>told(boardSocket,card)).toBe(true);
   // No browser reached the Engine itself: each socket the Engine saw came through gtmworks, with the Engine's key, which
   // no browser holds, under the Company's path, and with none of gtmworks's cookies.
   const upgrades=fake.settings.dashboardRequests.filter(request=>/^\/api\/(ws|pty|plugins\/kanban\/events)\?/.test(request.path));
@@ -109,9 +112,9 @@ test('an Owner whose Role is changed has every dashboard socket closed within fi
   await expect.poll(()=>fake.settings.dashboardSockets.size).toBe(3);
   // The second Owner's sockets stayed open through it, and still deliver.
   for(const live of secondSockets) expect(live.closedAt,`the second Owner's ${live.path}`).toBeNull();
-  await makeCard(second,'A Card after the change');
-  await expect.poll(()=>told(secondSockets[2],'A Card after the change')).toBe(true);
-  expect(told(firstSockets[2],'A Card after the change')).toBe(false);
+  const card=await makeCard(second,'A Card after the change');
+  await expect.poll(()=>told(secondSockets[2],card)).toBe(true);
+  expect(told(firstSockets[2],card)).toBe(false);
  } finally {
   query(`update public.members set role='owner' where company_id='${company}' and person_id='${omar}'`);
   await first.close(); await second.close();
