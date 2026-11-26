@@ -339,12 +339,13 @@ test('an account menu opened while the next page is still arriving stays open wh
   release();
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   await expect(page.locator('.modal')).toHaveCount(0);
-  // The page landed with a new shell, and the menu is still open on it.
-  await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
+  // The page landed in the same Shell, which the Company's layout keeps (#789), and the menu is still open on it.
+  expect(await shell!.evaluate(node=>node.isConnected)).toBe(true);
   await expect(menu).toBeVisible();
   await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,300)));
   expect(await page.evaluate(()=>(window as unknown as {rises:number}).rises),'rises from opening to the page that landed').toBe(1);
-  await expect(menu).toHaveCSS('animation-name','none');
+  // It does not rise again: the same menu stays open, its rise long over.
+  expect(await menu.evaluate(node=>node.getAnimations().filter(animation=>animation.playState==='running').length)).toBe(0);
   await menu.locator('[role=group] a[role=menuitem][href$="/home"]').click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
   await expect(menu).toHaveCount(0);
@@ -431,7 +432,8 @@ test('a menu open while its own page lands keeps the item that had focus',async(
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
   release();
   await expect(page.locator('.modal')).toHaveCount(0);
-  await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
+  // The Shell stays as the board lands (#789).
+  expect(await shell!.evaluate(node=>node.isConnected)).toBe(true);
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
   await page.keyboard.press('Escape');

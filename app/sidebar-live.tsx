@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
@@ -52,7 +52,10 @@ export function SidebarLive({company,person,slug,channels:read,states,handed=noH
     try {
      // The poll names the reader it draws for: after another tab signed in as someone else, the route answers nothing.
      const response=await fetch(`/api/sidebar?company=${company}&person=${person}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(shownKey,answer.channels); setPolled(was=>kept(was,basis,answer)); } }
+     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(shownKey,answer.channels);
+      // An answer is no urgent update: one that lands while a page still streams in leaves its parts as they were drawn
+      // instead of drawing them again in the browser beside their streamed copy (#172).
+      startTransition(()=>setPolled(was=>kept(was,basis,answer))); } }
     } catch {}
    }
    if(!stopped) { clearTimeout(timer); timer=setTimeout(poll,pollEvery); }
