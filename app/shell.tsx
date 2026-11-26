@@ -51,9 +51,6 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
   // A list whose read failed is null (#776): the sidebar keeps the one it shows (app/recent-chats, app/sidebar-live).
   id?channelSidebar(db,id).catch(()=>null):[],
-  id?db.rpc('can_manage_company',{target:id}).then(({data})=>!!data):false,
-  // Who can write a chat: "N" opens a new one for them (app/new-chat-key), and a Member asks Lead for an Agent.
-  !!id&&db.rpc('conversation_can_write',{c:id}).then(({data})=>data===true),
   agentIdentities(),
   companyLooks(db,id),
   // The steps handed to this reader on an Agent's Screen (#714): those the page is drawn with are no arrival for the toast.
@@ -71,10 +68,12 @@ type Company = {id:string,slug:string,name:string};
 // Which entry, Agent, Conversation and channel are open follows the page shown under it (app/shell-place). `personId` is
 // the signed-in person, for whom an Agent Lead made at their request is marked new until they open it (#13).
 // `approvalCount` may still be on its way (app/approvals-count.tsx).
-export default async function Shell({company,companies,personId,personName,role,owner=false,children,approvalCount=0}:{company?:Company,companies:Company[],personId:string,personName:string,role:string,owner?:boolean,children:ReactNode,approvalCount?:number|Promise<number>}) { const {t,theme,language}=await getI18n();
+// `manage` and `canWrite` are what the reader's Role lets them do (lib/company-reader): who can write a chat gets "N" for a
+// new one (app/new-chat-key), and a Member who writes asks Lead for an Agent.
+export default async function Shell({company,companies,personId,personName,role,owner=false,manage=false,canWrite=false,children,approvalCount=0}:{company?:Company,companies:Company[],personId:string,personName:string,role:string,owner?:boolean,manage?:boolean,canWrite?:boolean,children:ReactNode,approvalCount?:number|Promise<number|undefined>}) { const {t,theme,language}=await getI18n();
  const slug=company?.slug;
  const id=company?.id;
- const [[agents,states],conversations,workMode,channels,manage,canWrite,ids,looks,handed]=await sidebarReads(id);
+ const [[agents,states],conversations,workMode,channels,ids,looks,handed]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
  const chats=conversations&&chatsOf(conversations,t,language);
@@ -135,12 +134,12 @@ export default async function Shell({company,companies,personId,personName,role,
  const frame=<Frame sidebar={sidebar}>{children}</Frame>;
  // The apps sheet sits around the whole frame, so the sidebar, the account menu and every composer's "+" open it (#202).
  const framed=company?.id?<AppsSheetProvider company={company.id} person={personId} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
- const shown=question?<FirstRunGate question={question}>{framed}</FirstRunGate>:framed;
+ const shown=<FirstRunGate question={question}>{framed}</FirstRunGate>;
  // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153); the "@" list offers the
  // same Agents with the line under each name, their state and role (#154; design-reference: mentionMenu). Each Agent
  // carries the ready-made role it was made from, so the Commands can name it (#159).
  const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:states[id]??'idle'}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <ShellPlace lead={lead} chatAgents={chatAgents}><LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} person={personId} slug={company.slug} channels={channels} states={states} handed={handed}><RecentCardsProvider key={company.id} company={company.id}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider></ShellPlace>;
+ return <ShellPlace lead={lead} chatAgents={chatAgents}><LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} person={personId} slug={company.slug} channels={channels} states={states} handed={handed} drawnAgents={agents.map(agent=>agent.id)}><RecentCardsProvider key={company.id} company={company.id}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider></ShellPlace>;
 }

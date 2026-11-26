@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from '@/lib/link';
+import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
 import { faceStateWords, type AgentFaceState, type FailurePlace } from '@/lib/agent-face-states';
@@ -36,7 +37,7 @@ const channelsShown=new Map<string,ChannelSummary[]>();
 // The page read last recorded for each Company: a page's own list is kept once, so drawing it again never undoes a newer poll.
 const pageRead=new Map<string,ChannelSummary[]>();
 const inBrowser=typeof window!=='undefined';
-export function SidebarLive({company,person,slug,channels:read,states,handed=noHands,children}:{company:string,person:string,slug?:string,channels:ChannelSummary[]|null,states:Record<string,AgentFaceState>,handed?:ScreenHand[],children:ReactNode}) {
+export function SidebarLive({company,person,slug,channels:read,states,handed=noHands,drawnAgents,children}:{company:string,person:string,slug?:string,channels:ChannelSummary[]|null,states:Record<string,AgentFaceState>,handed?:ScreenHand[],drawnAgents?:string[],children:ReactNode}) {
  const shownKey=`${person}:${company}`;
  if(read&&inBrowser&&pageRead.get(shownKey)!==read) { pageRead.set(shownKey,read); channelsShown.set(shownKey,read); }
  const channels=useMemo(()=>read??(inBrowser?channelsShown.get(shownKey):undefined)??[],[read,shownKey]);
@@ -65,6 +66,11 @@ export function SidebarLive({company,person,slug,channels:read,states,handed=noH
   return ()=>{stopped=true;clearTimeout(timer);ask.current=()=>{};ended();};
  },[company,person,basis,shownKey]);
  const refresh=useCallback(()=>ask.current(),[]);
+ // An Agent the poll sees that the sidebar does not list (made from a Card, an approved request, another tab) draws the
+ // Shell again: it is drawn once by the Company's layout (#789), so no page move would bring the new tile.
+ const router=useRouter();
+ const unlisted=drawnAgents?Object.keys(now.agents).find(agent=>!drawnAgents.includes(agent)):undefined;
+ useEffect(()=>{ if(unlisted) router.refresh(); },[unlisted,router]);
  // A step "Done it" kept on this page leaves the Screen at once, and the poll is asked again (#714).
  const [done,setDone]=useState<ReadonlySet<number>>(()=>new Set());
  useEffect(()=>onHandDone(card=>{ setDone(was=>new Set(was).add(card)); ask.current(); }),[]);

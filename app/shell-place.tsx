@@ -25,7 +25,7 @@ export function placeOf(segments:readonly string[]):Omit<Place,'chat'|'card'> {
  if(first==='work'&&second==='board'&&third) return {section:'work/board'};
  return {section:parts.join('/')};
 }
-const chatSections=new Set(['chat','conversations','channels']);
+export const chatSections=new Set(['chat','conversations','channels']);
 
 const PlaceContext=createContext<{place:Place,mark:(marks:Marks)=>void}>({place:{section:'home',chat:false},mark:()=>{}});
 

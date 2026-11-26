@@ -4,10 +4,11 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { waitingLabel } from '@/lib/sidebar.mjs';
 
-// The pill's name: Approvals while its count is on its way, then how many things wait.
-const label=(t:(key:string,...values:unknown[])=>string,count?:number)=>{ const [key,...values]=count===undefined?['approvals']:waitingLabel(count); return t(key,...values); };
 import { useShellPlace } from './shell-place';
 import { useSidebarApprovals } from './sidebar-live';
+
+// The pill's name: Approvals while its count is on its way, then how many things wait.
+const label=(t:(key:string,...values:unknown[])=>string,count?:number)=>{ const [key,...values]=count===undefined?['approvals']:waitingLabel(count); return t(key,...values); };
 
 // The sidebar's count of what waits on the reader (app/approvals-count.tsx). When it is drawn again during a visit with a
 // higher count than before, it pops once (#131; design-reference: syncWaitMarks, .sb-count.is-pop); a page load, a count

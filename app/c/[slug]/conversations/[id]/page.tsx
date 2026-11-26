@@ -68,15 +68,14 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
  // A first message that still waits for its Run (#764) names the chat as well, with the files sent with it.
- const [{data:stored},{data:waiting},{data:agent},{data:writer},roleRead]=await Promise.all([
+ const [{data:stored},{data:waiting},{data:agent},roleRead]=await Promise.all([
   db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
   db.from('conversation_queued_turns').select('message,send_key').eq('conversation_id',id).order('queued_at').limit(1).maybeSingle(),
   agentRead,
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
-  db.rpc('conversation_can_write',{c:company.id}),
   readerRead,
  ]);
- const person=roleRead?.person, role=roleRead?.role||'';
+ const person=roleRead?.person, role=roleRead?.role||'', writer=!!roleRead?.canWrite;
  const waitingFiles=!stored&&waiting?(await db.from('conversation_attachments').select('name').eq('conversation_id',id).eq('send_key',waiting.send_key).order('position').limit(1)).data:null;
  const first=stored??(waiting&&{body:waiting.message,conversation_attachments:waitingFiles??[]});
  markOpen('reads',timing);

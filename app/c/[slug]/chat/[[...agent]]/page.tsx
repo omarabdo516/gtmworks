@@ -36,7 +36,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const agent=parts?visible.find(a=>a.id===parts[0]):visible.find(a=>a.is_default)||visible[0];
  if(parts&&!agent) notFound();
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
- const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
+ const writer=reader.canWrite;
  const owner=role==='owner';
  // Every Member who may write opens the gallery: the Owner adds a role there, a Manager or a Contributor asks for one (#189).
  const newAgent=(mode==='agent'||mode==='ready')&&!!agent?.is_default&&!!writer;

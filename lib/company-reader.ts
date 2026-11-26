@@ -14,18 +14,21 @@ export const companyOf=cache(async(slug:string)=>{
  return {user,companies,company:companies.find(c=>c.slug===slug)};
 });
 
-// Who reads a Company's page (#789): companyOf with their name and their Role there. Worked out once per request, so the
+// Who reads a Company's page (#789): companyOf with their name, their Role there and what it lets them do (manage the
+// Company, write in its chats; the database decides both). Worked out once per request, so the
 // Company's layout (its Shell) and the page under it share one read of each. A page that has more to read first starts
 // it beside its own reads and awaits it with them.
 export const companyReader=cache(async(slug:string)=>{
  const of=await companyOf(slug);
  if(!of) return null;
  const {user,company}=of;
- if(!company) return {...of,person:null,role:''};
+ if(!company) return {...of,person:null,role:'',manage:false,canWrite:false};
  const db=await supabase();
- const [{data:person},membershipRead]=await Promise.all([
+ const [{data:person},membershipRead,manage,canWrite]=await Promise.all([
   db.from('people').select('name').eq('id',user.id).single(),
   db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
+  db.rpc('can_manage_company',{target:company.id}).then(({data})=>!!data),
+  db.rpc('conversation_can_write',{c:company.id}).then(({data})=>data===true),
  ]);
- return {...of,person:person as {name:string}|null,role:String(mustRead(membershipRead,'membership')?.role||'')};
+ return {...of,person:person as {name:string}|null,role:String(mustRead(membershipRead,'membership')?.role||''),manage,canWrite};
 });

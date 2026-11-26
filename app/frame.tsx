@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { opensPage, pageShown } from '@/lib/page-fade';
-import { placeOf, useShellPlace } from './shell-place';
+import { chatSections, placeOf, useShellPlace } from './shell-place';
 import { usePageBeingOpened } from '@/lib/page-opening';
 import { sections } from '@/lib/navigation';
 
@@ -113,7 +113,7 @@ export function PageFrame({title,breadcrumb,loading=false,children}:{title:strin
  },[pathname,loading]);
  return <>
   <header className="topbar h-(--sz-60px) shrink-0 flex items-center gap-2 border-b border-border px-4 md:px-6" style={away?{display:'none'}:undefined}>
-   <button ref={loading?undefined:menu} type="button" className="mobile-menu circle-btn md:hidden" aria-label={t('openMenu')} aria-controls="sidebar" aria-expanded={open} onClick={()=>setOpen(true)}><ShellIcon name="menu"/></button>
+   <button ref={away?undefined:menu} type="button" className="mobile-menu circle-btn md:hidden" aria-label={t('openMenu')} aria-controls="sidebar" aria-expanded={open} onClick={()=>setOpen(true)}><ShellIcon name="menu"/></button>
    <div className="contents" inert={covered}>{breadcrumb??<div className="heading m-0 min-w-0"><h1 className="text-sm font-medium uppercase tracking-wide">{title}</h1></div>}</div>
   </header>
   <div ref={content} className={`app-content${enters?' view-enter':''} flex-1 min-h-0 overflow-auto`} inert={covered} aria-busy={loading||undefined} style={away?{display:'none'}:undefined}>{children}</div>
@@ -125,6 +125,6 @@ export function PageFrame({title,breadcrumb,loading=false,children}:{title:strin
 function PageLoading({path}:{path:string}) {
  const {t}=useI18n();
  const place=placeOf(path.split('/'));
- const known=['chat','conversations','channels'].includes(place.section)?'chats':place.section==='all-conversations'?'allConversations':place.section==='log'?'activityLog':place.section==='numbers'?'numbers':sections[place.section];
+ const known=chatSections.has(place.section)?'chats':place.section==='all-conversations'?'allConversations':place.section==='log'?'activityLog':place.section==='numbers'?'numbers':sections[place.section];
  return <PageFrame title={known?t(known):''} loading><main className="content"><span className="sr-only" role="status">{t('openingPage')}</span></main></PageFrame>;
 }
