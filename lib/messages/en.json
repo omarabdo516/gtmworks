@@ -1456,6 +1456,8 @@
   "settingsEffortMax": "Max",
   "settingsEffortUltra": "Ultra",
   "settingsModelsUnread": "Couldn’t read the model choices right now.",
+  "settingsPartReading": "Reading…",
+  "settingsPartReadAgain": "Couldn’t read this just now. Reading it again…",
   "settingsSkillSeeSteps": "See the steps",
   "settingsSkillPageOf": "A skill of {0}",
   "settingsSkillSteps": "Steps",
