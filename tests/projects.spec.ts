@@ -29,7 +29,7 @@ async function shoot(page:Page,name:string) {
  await page.setViewportSize({width:1280,height:720});
 }
 
-test('a project is created, a card is filed into it, and the board and list show only that card',async({page})=>{
+test('a project is created, a card is filed into it, and the list shows only that card',async({page})=>{
  await mkdir('test-results/screenshots',{recursive:true});
  await signIn(page,'omar@example.com','/c/rs-consultations/projects');
  // A company without projects shows the empty state.
@@ -57,13 +57,14 @@ test('a project is created, a card is filed into it, and the board and list show
  await expect(page.getByRole('form',{name,exact:true}).getByLabel('Project status')).toHaveValue('paused');
  await expect(page.getByRole('form',{name,exact:true}).getByLabel('Goal')).toHaveValue('Sell the spring course to returning students');
 
- // File one card into it from the card.
- await page.goto('/c/rs-learning/work/board');
- const total=await page.locator('.card').count();
+ // File one card into it from the card, opened from the work list. The board is the Engine's own Kanban board since
+ // spec #831, whose Cards take a Project name and filter by it with #837.
+ await page.goto('/c/rs-learning/work/list');
+ const total=await page.locator('tbody tr').count();
  expect(total).toBeGreaterThan(1);
- const title=(await page.locator('.card strong').first().innerText()).trim();
- await page.locator('.card a').first().click();
- await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
+ const first=page.locator('tbody tr').first().getByRole('link');
+ const title=(await first.innerText()).trim();
+ await first.click();
  await expect(page).toHaveURL(/\/work\/board\/\d+$/);
  const section=page.locator('[data-card-section=project]');
  await section.getByLabel('Project',{exact:true}).selectOption({label:name});
@@ -76,17 +77,13 @@ test('a project is created, a card is filed into it, and the board and list show
  await expect(page.locator('.card-stage-line')).toContainText(name);
  await expect(page.locator('.detail-row').filter({hasText:`Filed the card in ${name}`})).toHaveCount(1);
 
- // The board and the list filter by project.
- await page.goto('/c/rs-learning/work/board');
- await page.getByLabel('Project',{exact:true}).selectOption({label:name});
- await expect(page.locator('.card')).toHaveCount(1);
- await expect(page.locator('.card').first()).toContainText(title);
- await page.getByLabel('Project',{exact:true}).selectOption({label:'All projects'});
- await expect(page.locator('.card')).toHaveCount(total);
+ // The list filters by project.
  await page.goto('/c/rs-learning/work/list');
  await page.getByLabel('Project',{exact:true}).selectOption({label:name});
  await expect(page.locator('tbody tr')).toHaveCount(1);
  await expect(page.locator('tbody tr').first()).toContainText(title);
+ await page.getByLabel('Project',{exact:true}).selectOption({label:'All projects'});
+ await expect(page.locator('tbody tr')).toHaveCount(total);
 
  // The project page counts it.
  await page.goto('/c/rs-learning/projects');
@@ -99,12 +96,11 @@ test('a project is created, a card is filed into it, and the board and list show
    await page.goto('/c/rs-learning/projects');
    await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
    await shoot(page,`projects-page-${language}`);
-   await page.goto('/c/rs-learning/work/board');
+   await page.goto('/c/rs-learning/work/list');
    await page.locator('.work-filters').getByLabel({en:'Project',ar:'المشروع'}[language],{exact:true}).selectOption({label:name});
-   await expect(page.locator('.card')).toHaveCount(1);
-   await shoot(page,`projects-board-${language}`);
-   await page.locator('.card a').first().click();
-   await page.getByRole('dialog').getByRole('link',{name:{en:'Card details',ar:'تفاصيل البطاقة'}[language]}).click();
+   await expect(page.locator('tbody tr')).toHaveCount(1);
+   await shoot(page,`projects-list-${language}`);
+   await page.locator('tbody tr').first().getByRole('link').click();
    await expect(page).toHaveURL(/\/work\/board\/\d+$/);
    await expect(page.locator('[data-card-section=project] select')).toBeVisible();
    await shoot(page,`projects-card-${language}`);

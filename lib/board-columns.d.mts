@@ -1,6 +1,13 @@
 export declare const boardColumns: readonly ['waiting', 'ideas', 'planned', 'progress', 'live', 'done'];
 export type BoardColumn = typeof boardColumns[number];
 export declare const boardCardColumns: '*,wait:card_wait';
+/** The five columns of the Engine's board (spec #831), Waiting on you first. */
+export declare const cardColumns: readonly ['waiting', 'ideas', 'planned', 'progress', 'done'];
+export type CardColumn = typeof cardColumns[number];
+export declare function columnOfStatus(status: string): CardColumn | null;
+export type CardSymbol = {kind:'working'|'question'|'review'|'failed'} | {kind:'waits', count:number};
+export declare function cardSymbol(card: {status:string, failures:number, parents:number}): CardSymbol | null;
+export declare function orderCards<C extends {column:string, createdAt:number|null}>(cards: C[]): C[];
 /** A Card's chat waiting on its person (#146), read with the Card as `wait:card_wait`. */
 export type CardWait = {person:string, kind:'question'|'hand'|'permission', title:string};
 export declare function columnOf(card: {stage_id:number, wait?:CardWait|null}, stages: {id:number, board_column?:string|null}[]): string;

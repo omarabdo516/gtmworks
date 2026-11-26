@@ -38,7 +38,7 @@ Each of these made the Agent weaker than Hermes for a risk nobody had met. Omar 
 ### What stays, because it costs an Agent no power
 
 - **Separation between Companies** (ADR 0004, ADR 0018). An Agent works for its own Company; another Company's data is not power it needs.
-- **No tool that runs the Agent's own code, or reads a path it chooses, inside the Engine's container.** That container holds the Company's model sign-in, every Member's private Conversations and the memory of Agents a Member may not talk to. The same power is in the work sandbox: the Agent runs Chromium and its own scripts there, and drives the Screen. So `browser` and `kanban` stay off.
+- **No tool that runs the Agent's own code, or reads a path it chooses, inside the Engine's container.** That container holds the Company's model sign-in, every Member's private Conversations and the memory of Agents a Member may not talk to. The same power is in the work sandbox: the Agent runs Chromium and its own scripts there, and drives the Screen. So `browser` stays off. `kanban` is on since spec #831 ([ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) item 2): its tools take a file's bytes, and copy a declared file only from the Card's own scratch folder ([kanban-board](../engine-probes/kanban-board.md), section 7).
 - **Hermes desktop-app toolsets** (`project`, `desktop_ui`, `catalog`, `onboarding`) stay off: they drive Hermes's own desktop app, which a gtmworks install does not have.
 - **No key inside the work sandbox** (ADR 0018). An Agent reaches every paid service through the Engine's tools, which hold the keys.
 

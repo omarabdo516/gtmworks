@@ -4,10 +4,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // gtmworks's web server (#713, ADR 0029): Next.js serves every page and route through its own custom-server API, and
-// this server takes the one WebSocket gtmworks carries itself, the live stream of an Agent's Screen
-// (lib/screen-stream.mjs), on its own address. In development every other upgrade (the hot reload) is Next's, which
-// attaches its own handler on the first request and leaves a path it has no route for alone; in production nothing else
-// upgrades, so any other upgrade is ended (screenUpgrades).
+// this server takes the WebSockets gtmworks carries itself on its own address: the live stream of an Agent's Screen
+// (lib/screen-stream.mjs) and an open board's live changes (lib/board-stream.mjs, #840). In development every other
+// upgrade (the hot reload) is Next's, which attaches its own handler on the first request and leaves a path it has no
+// route for alone; in production nothing else upgrades, so any other upgrade is ended (lib/web-upgrades.mjs).
 //   node scripts/web-server.mjs [--dev]      PORT (default 3000) names the port.
 // In the release image the app is Next's standalone build at the folder above this file, with no next.config.mjs: the
 // build's own resolved config is read from .next/required-server-files.json, as Next's generated server.js embeds it,
@@ -22,13 +22,15 @@ if (standalone) {
 const port = Number.parseInt(process.env.PORT ?? '', 10) || 3000;
 const host = standalone ? process.env.HOSTNAME || '0.0.0.0' : undefined;
 const { default: next } = await import('next');
-const { screenStreams, screenUpgrades } = await import('../lib/screen-stream.mjs');
+const { screenStreams, screenStreamPath } = await import('../lib/screen-stream.mjs');
+const { boardStreams, boardStreamPath } = await import('../lib/board-stream.mjs');
+const { webUpgrades } = await import('../lib/web-upgrades.mjs');
 
 const app = next({ dev, dir, port, hostname: host ?? 'localhost' });
 await app.prepare();
 const handle = app.getRequestHandler();
 const server = createServer((request, response) => { void handle(request, response); });
-const upgrade = screenUpgrades({ dev, screen: screenStreams() });
+const upgrade = webUpgrades({ dev, streams: { [screenStreamPath]: screenStreams(), [boardStreamPath]: boardStreams() } });
 server.on('upgrade', (request, socket, head) => upgrade(new URL(request.url ?? '/', 'http://gtmworks'), request, socket, head));
 const keepAlive = Number.parseInt(process.env.KEEP_ALIVE_TIMEOUT ?? '', 10);
 if (Number.isFinite(keepAlive) && keepAlive >= 0) server.keepAliveTimeout = keepAlive;

@@ -52,12 +52,12 @@ page and in the local database:
 2. signs out, signs back in with that email and password, answers "Alone" and lands in a Conversation with Lead;
 3. sends Lead a message and sees the reply on the page, then reads both messages in `public.conversation_messages`;
 4. opens Numbers (the KPI dashboard) from the sidebar;
-5. puts the seed back, signs in as `omar@example.com`, makes a Card on RS Learning's Marketing board and drags it from
-   Ideas to Planned, then checks the Card's stage in `public.work_cards` (a new Company has only Lead, and a Card needs
-   another Agent).
+5. puts the seed back, signs in as `omar@example.com`, opens RS Learning's Marketing board from the sidebar and finds,
+   in In progress with its "Working on it now" symbol, the Card the fake Engine holds (`scripts/cloud-hermes.mjs`): the
+   board is the Company's Engine's own Kanban board (spec #831), read through gtmworks.
 
 Screenshots of every step (`cloud-verify-NN-<step>.png`) go to `$TMPDIR/gtmworks-cloud/screens` (`--out DIR` puts them elsewhere); attach the ones
-that show your change to the pull request. The journey always ends with the seed back, its own Card gone too, also when a step
+that show your change to the pull request. The journey always ends with the seed back, its own Owner and Company gone too, also when a step
 fails; a failure leaves a `cloud-verify-NN-failed.png` beside the others. It refuses any app or database but the local stack's.
 
 ## 3. Walk your own change

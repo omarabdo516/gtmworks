@@ -1,12 +1,15 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 
 // The board's motion as built (#131; design-reference: dragStart, dragMove, dragScroll, dragEnd, land, boardEnter,
 // syncWaitMarks): a carried Card leans with the pointer and scrolls the columns at an edge, flies back when it moves
 // nothing, lands where it is dropped, bars grow in, and a Card newly waiting on the reader nudges its badge and pops the
 // sidebar's count. The seeded accounts read English.
+// Spec #831 made /work/board the Engine's own Kanban board (#834). The old board's drag, places and Waiting on you are
+// still served on the board opened on Waiting on you (/approvals), where these run until the Engine's board moves Cards
+// (#837), makes them (#836) and works out what waits (#841), and the old board is switched off (#846).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const rs='10000000-0000-0000-0000-000000000001';
@@ -36,7 +39,7 @@ const logRows=(id:number)=>Number(rows(`select count(*) n from public.work_activ
 
 test('a carried Card leans with the pointer and settles back, scrolls the columns at an edge, and has no lean with reduced motion',async({page})=>{
  const id=cardIn('Lean','أفكار');
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  await page.setViewportSize({width:1280,height:800});
  const at=await pickUp(page,id);
  // Standing still, it rests at 2deg and 1.03.
@@ -97,7 +100,7 @@ const flight=(page:Page)=>page.evaluate(()=>(window as unknown as {flight:Promis
 test('a Card cancelled with Escape or let go on its own place flies back over 220ms, dimmed in its place until it arrives, and moves nothing',async({page})=>{
  const id=cardIn('Fly back','أفكار');
  const logged=logRows(id);
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const flying={transition:{property:'transform',duration:'0.22s',easing:'cubic-bezier(0.2, 0, 0, 1)'},dimmed:true};
  const at=await pickUp(page,id);
  await page.mouse.move(at.x+200,at.y+40,{steps:6});
@@ -133,7 +136,7 @@ test('a Card cancelled with Escape or let go on its own place flies back over 22
 
 test('a Card dropped in another column or moved with Shift and an arrow lands on a spring with a ring, and a Viewer picks nothing up',async({page,browser})=>{
  const id=cardIn('Landing','أفكار');
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  // Watches the Card in its new column for the landing's inline transition and ring.
  const landing=()=>page.evaluate(({id})=>new Promise<{transition:string,ring:boolean,transform:string}>(done=>{
   const seen=()=>{ const el=document.querySelector<HTMLElement>(`#board-cols [data-column="planned"] .kcard[data-card-id="${id}"]`); if(el?.classList.contains('is-landing')) { done({transition:el.style.transition,ring:true,transform:el.style.transform}); return true; } return false; };
@@ -169,7 +172,7 @@ test('a Card dropped in another column or moved with Shift and an arrow lands on
  // A Viewer's pointer picks nothing up.
  const viewer=await browser.newPage();
  try {
-  await signIn(viewer,'viewer@example.com','/c/rs-learning/work/board');
+  await signIn(viewer,'viewer@example.com','/c/rs-learning/approvals');
   const box=(await card(viewer,id).boundingBox())!;
   await viewer.mouse.move(box.x+box.width/2,box.y+20); await viewer.mouse.down(); await viewer.mouse.move(box.x+box.width/2+120,box.y+60,{steps:8});
   await expect(ghost(viewer)).toHaveCount(0);
@@ -180,7 +183,7 @@ test('a Card dropped in another column or moved with Shift and an arrow lands on
 test('a Card carried until its own place is out of the window and dropped in another column leaves the board where it is (#556)',async({page})=>{
  const id=cardIn('Far drop','أفكار');
  await page.setViewportSize({width:900,height:800});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const at=await pickUp(page,id);
  await page.mouse.move(at.x+40,at.y,{steps:2});
  // The columns scrolled while it is carried until its place in Ideas is off the window's left edge, where dnd-kit
@@ -214,7 +217,7 @@ test('a Card carried until its own place is out of the window and dropped in ano
 
 test('the progress bars grow in when the board opens and the class that does it is gone after a second, leaving the edge fade; with reduced motion they are drawn at their value',async({page})=>{
  const id=cardIn('Bar','كتابة',{done:1,open:1});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  await page.reload();
  const bar=card(page,id).locator('.bar__fill');
  expect(await bar.evaluate(el=>{ const style=getComputedStyle(el); return {name:style.animationName,duration:style.animationDuration,fill:style.animationFillMode,transition:style.transition}; }))
@@ -236,15 +239,11 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  // The board stays open in one tab while the approver moves a Card to review on its own page in another; the board is
  // drawn again when the reader next moves a Card there.
  const mover=cardIn('Redraw','أفكار');
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
  const tab=await context.newPage();
- ensureRequestAgent();
- await tab.goto('/c/rs-learning/work/new');
- await tab.getByLabel('Message',{exact:true}).fill(`Nudge ${Date.now()}`);
- await tab.getByRole('button',{name:'Create card'}).click();
- await expect(tab).toHaveURL(/\/work\/board\/\d+$/);
- const id=Number(new URL(tab.url()).pathname.split('/').pop());
+ // An old Card on its own page: New card makes its Cards on the Engine since #836.
+ const {id}=await oldCard(tab,`Nudge ${Date.now()}`);
  await tab.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
  await tab.getByRole('button',{name:'Add design'}).click();
  await expect(tab.getByText(/Version 1:/)).toBeVisible();

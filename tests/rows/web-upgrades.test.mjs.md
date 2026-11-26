@@ -1,0 +1,1 @@
+| `web-upgrades.test.mjs` | The web server takes the WebSockets gtmworks carries itself, the Screen's stream (#713) and the board's live changes (#840), each by its own handler; in development any other upgrade is Next's (the hot reload), and in production it is ended (ADR 0029) | 0.1 s | screen-stream.test.mjs, board-stream.test.mjs | new |
