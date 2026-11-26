@@ -9,6 +9,7 @@ import { keepRunningRoutines } from '../lib/routine-runs.mjs';
 import { selfHosted as isSelfHosted, enginePass } from '../lib/company-engine.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
+import { keepMainAgentPlugins } from '../lib/main-agent-plugin.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 import { keepProviderAccounts } from '../lib/provider-switches.mjs';
@@ -36,7 +37,7 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await engineP
 // Company and Agent profile is read, so one the Engine lost is made again. Each call asks the one module for the Engine
 // of the Company it serves (lib/company-engine.mjs), and Runs go to that Engine on each Agent's profile (#342, ADR 0018).
 const selfHosted=isSelfHosted();
-const waiting=new Map(); const moving=new Map(); const keyWaits=new Map(); const providerAccounts=new Map(); const fallbackModels=new Map();
+const waiting=new Map(); const moving=new Map(); const keyWaits=new Map(); const providerAccounts=new Map(); const fallbackModels=new Map(); const mainAgentPlugins=new Map();
 await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
  loop('Channel runs',()=>driveChannelRuns(db,{})),
  loop('Note runs',()=>driveNoteRuns(db,{})),
@@ -54,6 +55,9 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // new Agent's profile or an Agent waiting for a model key.
  selfHosted&&loop('Agent upkeep',async()=>{ await keepSharedSkills(db,{}); await keepAgentRules(db,{}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),
+ // gtmworks's plugin of each main Agent's profile, whose tool makes an Agent (#884): written when the profile lacks this
+ // release's, and its Engine restarted once to load it (lib/main-agent-plugin.mjs).
+ selfHosted&&loop('Main Agent plugin',()=>keepMainAgentPlugins(db,{kept:mainAgentPlugins}),15000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000),
  // Each Company's Engine takes its subscription accounts in the Owner's order, and each move it made from one account to
  // the next is logged once (#621).

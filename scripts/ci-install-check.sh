@@ -801,6 +801,18 @@ engine_node "$engine_key" - verify "$marker" < scripts/check-install-profiles.mj
 # added, tested, turned on for one Agent and removed through the same driver, for no sign-in, a token and OAuth, against a
 # fake MCP server the check starts inside this container (the Engine reaches it as http://web:9123).
 engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps come with all their tools, and any remote MCP server is added and removed'
+# The main Agent's tool (#884): the worker places gtmworks's plugin in the first Company's main Agent's profile on the
+# pinned, unmodified Engine and restarts it once; its tool is offered to that profile's Runs, makes a profile that
+# answers at once in a session marked as an Owner's, refuses an unmarked one with its reason, and its route refuses a call
+# without the Engine's key. The Engine's network stays closed to the install throughout. The same after `gtmworks update`.
+plugin_marker="plugin-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+# A failed Run's reason is in the Engine's own logs, which the check cannot read from the web container.
+engine_errors() { docker exec "$(first_engine_id)" sh -c 'tail -n 40 /opt/data/logs/errors.log /opt/data/profiles/co-*/logs/errors.log 2> /dev/null; grep -hiE "gtmworks|tool_call|error" /opt/data/profiles/co-*/logs/agent.log 2> /dev/null | tail -n 40' >&2 || true; }
+engine_node "$engine_key" - make "$plugin_marker" < scripts/check-install-main-agent.mjs || { engine_errors; fail "the main Agent's tool is offered after the install, makes an Agent for an Owner and refuses anyone else"; }
+sh scripts/install.sh update "$INSTALL_REF" > plugin-update.log 2>&1 || { tail -n 40 plugin-update.log >&2; fail 'gtmworks update of the agents install'; }
+main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
+engine_healthy "$(first_engine_id)" 120 || fail 'the Engine is healthy after the update'
+engine_node "$engine_key" - make "$plugin_marker-update" < scripts/check-install-main-agent.mjs || { engine_errors; fail "the main Agent's tool is offered after gtmworks update, makes an Agent for an Owner and refuses anyone else"; }
 scan_engines
 }
 
@@ -1187,6 +1199,10 @@ db -c "update public.agent_looks set picked_colour='rose',picked_shape='blob' wh
 looks() { db -c "select agent_id||' '||auto_shape||' '||auto_colour||' '||auto_temperament||' '||coalesce(picked_shape,'-')||' '||coalesce(picked_colour,'-')||' '||coalesce(picked_temperament,'-') from public.agent_looks order by agent_id"; }
 looks > looks.before || fail 'read the looks before the backup'
 grep -q ' blob rose -$' looks.before || fail 'an Agent has a picked look before the backup'
+# The main Agent's plugin (#884) and what it was told live in the Engine's data volume, so the archive carries both.
+engine_key=$(first_engine_key)
+plugin_marker="plugin-backup-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - tell "$plugin_marker" < scripts/check-install-main-agent.mjs || fail "the main Agent's plugin is in place and told an Owner's session before the backup"
 sh scripts/install.sh backup || fail 'backup'
 first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
@@ -1204,6 +1220,7 @@ looks > looks.after || fail 'read the looks after the restore'
 diff -u looks.before looks.after || fail "the restore keeps every Agent's look, given and picked"
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
+engine_node "$(first_engine_key)" - told "$plugin_marker" < scripts/check-install-main-agent.mjs || fail "the restore brings back the main Agent's plugin and what it was told"
 }
 
 # backup-engines: the backup of every Company's Engine and work folder (#386, #399, ADR 0018), split from the backup area
@@ -1665,6 +1682,7 @@ docker exec gtmworks-install-hermes-1 grep -qF "$marker" "/opt/data/profiles/$pr
 # previous release ran, and leaves the Company answering from its record.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail 'release update'
+main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(first_engine_key) == "$key" ]] || fail 'the update adopted the Engine key'
 # The Engine the update brought up has gtmworks's theme as its dashboard's default (#872).
 [[ $(dashboard_theme "$key") == gtmworks ]] || fail "the updated Engine's dashboard shows gtmworks's theme by default"
@@ -1721,6 +1739,7 @@ compose exec -T web node --input-type=module - sandbox "$marker" < "$root/script
 # The next release's migration is applied through the running database's bind mount.
 cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" . || fail 'next release files in place'
 sh install.sh update || fail 'next release update'
+main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
   || fail 'the next release migration applied through the running bind mount'
 compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/seen" || fail 'list the migrations the database sees'
@@ -1845,6 +1864,7 @@ fi
 # The update to this release, as a stable install takes it: this release's two files in place of the old ones, then update.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail "the update from $stable to this release"
+main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(cat .install-release) == "$first" ]] || fail 'the update records this release'
 probe "after the update from $stable"
 [[ $(db -c 'select id from public.companies') == "$company" ]] || fail "the update keeps the one Company $stable made"
@@ -2039,6 +2059,7 @@ sed -i '/^SANDBOX_CPUS=/d' ".engines/$second_slug/.env"
 # volume, is pinned to that sandbox.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail 'the update of the release before the work sandbox'
+main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(cat .install-release) == "$first" ]] || fail 'the update records this release'
 : > sandboxes-before
 while read -r name id; do
@@ -2186,6 +2207,7 @@ other_sandbox=$(publish_sandbox 0.0.2-ci) || fail 'push another work sandbox ima
 ( cd "$root" && node scripts/release-assets.mjs "$fourth" release-engines "$other_sandbox" ) || fail 'the release files that pin another Engine image'
 cp "$root/release-engines/docker-compose.install.yml" "$root/release-engines/install.sh" . || fail 'the release files that pin another Engine image in place'
 sh install.sh update || fail 'update every Company Engine'
+main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(cat .install-release) == "$fourth" ]] || fail 'the update records the release that pins another Engine image'
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
@@ -2572,6 +2594,7 @@ done
 # Company profile is confirmed with the one fixed set of tools.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update > update.log 2>&1 || fail_update 'the staged update to this release'
+main_agent_plugin_settled || fail_update "the main Agent's plugin is offered on every Company after the update"
 grep -Fq 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log || fail_update 'the update applies the cutover'
 [[ $(grep -n 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log | cut -d: -f1) -gt $(grep -n 'gateway:8080/api/health 200' update.log | cut -d: -f1) ]] \
   || fail_update 'the cutover applies after this release answers'
@@ -2594,7 +2617,7 @@ done
 compose exec -T web node --input-type=module -e "
   const {engineOf}=await import('/app/lib/company-engine.mjs'); const {readToolsets}=await import('/app/lib/engine/agents.mjs'); const {toolsDiffer,companyProfile}=await import('/app/lib/agent-toolsets.mjs');
   const engine=await engineOf('$company'); const read=await readToolsets({address:engine.address,key:engine.key,profile:companyProfile('$company')});
-  console.log(read.state,(read.toolsets||[]).join(' ')); if(read.state!=='found'||toolsDiffer(read.toolsets,{subagents:false})) process.exit(1);" < /dev/null \
+  console.log(read.state,(read.toolsets||[]).join(' ')); if(read.state!=='found'||toolsDiffer(read.toolsets,{subagents:false,main:true})) process.exit(1);" < /dev/null \
   || fail "the Company profile's Engine offers the one fixed set of tools after the cutover"
 }
 

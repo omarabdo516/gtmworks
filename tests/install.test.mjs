@@ -567,12 +567,17 @@ test('the update check reads the sign-in and the Agent memory through the produc
  assert.doesNotMatch(script,/writeProof\([^)]*key/);
 });
 
-// A successful update on the real install belongs to issue #52; the install job keeps only the failed-update check, and
-// that check still proves the rollback: the migration is named, the old web container serves, and nothing is applied.
+// A successful update between releases belongs to issue #52's areas; a source install updates onto its own release twice:
+// the failed update, whose check still proves the rollback (the migration is named, the old web container serves, and
+// nothing is applied), and the agents area's, after which the main Agent's tool is checked again (#884).
 test('the install job leaves the successful update to issue 52 and keeps the failed-update rollback check', () => {
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  assert.doesNotMatch(run,/update-gateway\.log|old_gateway|sed -i '\/X-Real-IP\/d'/);
- assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,1,'only the failed update runs');
+ assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,2,'the failed update and the agents area\'s');
+ const agents=run.slice(run.indexOf('\nagents() {'),run.indexOf('\n}\n',run.indexOf('\nagents() {')));
+ const update=agents.indexOf('sh scripts/install.sh update "$INSTALL_REF" > plugin-update.log');
+ assert.ok(update>0,'the agents area updates its install');
+ assert.ok(agents.indexOf('make "$plugin_marker-update" < scripts/check-install-main-agent.mjs')>update,'and checks the main Agent\'s tool after it');
  for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then remove_failing_migration; fail_update 'update must fail'; fi",
   "fi\nremove_failing_migration\n",
   "grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log","[[ $(compose ps -q web) == \"$old_web\" ]] || fail_update 'old web container still serving'",

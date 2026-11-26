@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, profileSettingsDiffer, childToolsets, forbiddenOf, companyProfile, isAgentProfile, workFolder } from '../lib/agent-toolsets.mjs';
+import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, profileSettingsDiffer, childToolsets, forbiddenOf, companyProfile, isAgentProfile, isMainAgentProfile, mainAgentToolset, workFolder } from '../lib/agent-toolsets.mjs';
 
 // The toolsets the pinned release names (toolsets.py, TOOLSETS keys of v0.23.0), so a misspelt name fails here instead of
 // being ignored by Hermes.
@@ -171,4 +171,25 @@ test('no level route, level function, policy copy or level setting is left in th
   const text=readFileSync(file,'utf8');
   for(const [pattern,name] of gone) assert.doesNotMatch(text,pattern,`${file} still names ${name}`);
  }
+});
+
+test('the main Agent\'s profile also offers gtmworks\'s own toolset, which its plugin brings, and no other profile does', () => {
+ // #884: the plugin of the main Agent's profile registers one tool in the toolset `gtmworks`. The main Agent's profile
+ // names it in its list, so the Engine keeps it on once it knows it; an Agent's own profile never does.
+ const main='co-10000000000000000000000000000002', own='ag-a0000000000000000000000000000001';
+ assert.equal(mainAgentToolset,'gtmworks');
+ for(const subagents of [false,true]) {
+  assert.ok(toolConfig({subagents,profile:main}).platform_toolsets.api_server.includes(mainAgentToolset));
+  assert.ok(!toolConfig({subagents,profile:own}).platform_toolsets.api_server.includes(mainAgentToolset));
+  assert.ok(!toolConfig({subagents}).platform_toolsets.api_server.includes(mainAgentToolset));
+ }
+ // The fixed set stays the fixed set: the main Agent's profile is the fixed set whether its plugin is loaded yet or not.
+ assert.equal(toolsDiffer([...fixedToolsets()],{main:true}),false);
+ assert.equal(toolsDiffer([...fixedToolsets(),mainAgentToolset],{main:true}),false);
+ // Anywhere else it is a toolset gtmworks places nowhere.
+ assert.equal(toolsDiffer([...fixedToolsets(),mainAgentToolset]),true);
+ // It never stands in for a toolset of the set.
+ assert.equal(toolsDiffer([...fixedToolsets().filter(name=>name!=='web'),mainAgentToolset],{main:true}),true);
+ assert.equal(isMainAgentProfile(main),true);
+ for(const other of [own,'cs-10000000000000000000000000000002','default','co-x',null]) assert.equal(isMainAgentProfile(other),false);
 });
