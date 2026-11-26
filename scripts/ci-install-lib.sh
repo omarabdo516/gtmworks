@@ -185,6 +185,21 @@ engine_board_settings() {
   scratch=$(docker exec -u hermes "$1" sh -c 'test -n "$TMPDIR" && test -d "$TMPDIR" && test -w "$TMPDIR" && printf %s "$TMPDIR"') || return 1
   [[ $scratch == /* ]] && (( ${#scratch} <= 50 ))
 }
+# The Engine's Kanban attachments folder in its Company's work sandbox (spec #831, #843), asked of an Engine container (a
+# name or an id): the sandbox mounts that one folder of the Engine's own data volume, read-only, at the Engine's own path,
+# so the Agent working a Card opens a person's file where the Engine names it, and the sandbox's user cannot write there.
+sandbox_card_files() {
+  local name volume sandbox mount subpath
+  name=$(docker inspect -f '{{.Name}}' "$1") || return 1
+  volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$1") || return 1
+  sandbox=$(sandbox_of "${name#/}")
+  mount=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data/kanban/attachments"}}{{.Type}} {{.Name}} {{.RW}}{{end}}{{end}}' "$sandbox") || return 1
+  [[ -n $volume && $mount == "volume $volume false" ]] || return 1
+  subpath=$(docker inspect -f '{{range .HostConfig.Mounts}}{{if eq .Target "/opt/data/kanban/attachments"}}{{with .VolumeOptions}}{{.Subpath}}{{end}}{{end}}{{end}}' "$sandbox") || return 1
+  [[ $subpath == kanban/attachments ]] || return 1
+  docker exec "$sandbox" test -d /opt/data/kanban/attachments || return 1
+  ! docker exec "$sandbox" sh -c 'touch /opt/data/kanban/attachments/.gtmworks-write' 2> /dev/null
+}
 # The registry's own digest is the one named: Docker's containerd image store also lists the digest of a local tag.
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks:$1" | grep -m 1 '^localhost:5000/gtmworks@'; }
 # The work sandbox image the source install built (or CI loaded), pushed beside the app image so a release file pins it

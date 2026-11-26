@@ -949,7 +949,17 @@ try {
  assert.equal(card.status,'ready');
  assert.equal(card.created_by,'dashboard');
  assert.deepEqual((await read(card.id)).runs,[],'no Run before the tick');
- clock.phase('Card A is made, ready, with no Run',{board:{card:card.id}});
+ // A person's file on Card A (#843), added through the Engine's own route as gtmworks adds one: the Engine keeps it in
+ // its Kanban attachments folder and names it in the worker's prompt by that path, which the sandbox holds read-only.
+ const form=new FormData();
+ form.append('file',new Blob([`${marker}-attachment`],{type:'text/plain'}),`${marker}-brief.txt`);
+ form.append('uploaded_by',person);
+ const uploaded=await fetch(`${firstEngine.managementAddress}/api/plugins/kanban/tasks/${encodeURIComponent(card.id)}/attachments`,{method:'POST',
+  headers:{Authorization:`Bearer ${firstEngine.key}`},body:form,signal:AbortSignal.timeout(20_000)});
+ const attachment=(await answered(uploaded,'add a person\'s file to Card A')).attachment;
+ assert.match(String(attachment?.stored_path),/^\/opt\/data\/kanban\/attachments\//,`the Engine keeps it in its attachments folder: ${JSON.stringify(attachment)}`);
+ assert.equal(attachment.uploaded_by,person);
+ clock.phase('Card A is made, ready, with no Run, and a person\'s file on it',{board:{card:card.id}});
  const tickAsked=Date.now();
  const spawned=(await tick('for Card A')).spawned??[];
  const started=await until('the dispatcher starts Card A',async()=>{ const found=await read(card.id); return found.runs.length?found:null; },clock.within(30));
@@ -1001,6 +1011,7 @@ try {
   const ran=parsed(results.get('call_kanban_work'));
   assert.equal(ran?.exit_code,0,`the worker's command ran: ${results.get('call_kanban_work')}`);
   const [host,pwd]=String(ran.output??'').trim().split('\n');
+  const written=String(ran.output??'').trim().split('\n').at(-1);
   const dangerous=results.get('call_kanban_danger')??'';
   assert.doesNotMatch(dangerous,/\bBLOCKED\b/,`the dangerous command is not refused: ${dangerous}`);
   assert.equal(parsed(dangerous)?.exit_code,0,`the dangerous command ran: ${dangerous}`);
@@ -1041,11 +1052,11 @@ try {
    `the person's pass ends a Run after the second review request: ${JSON.stringify(done.runs.map(run=>[run.profile,run.outcome]))}`);
   assert.ok(done.comments.some(found=>found.author===person&&found.body.startsWith(tag.answer)),'the answer is on the Card under the person\'s name');
   clock.phase('the person passed Card A, done with its summary',{board:{card:card.id}});
-  return {host,pwd,reviewerStopped,returned:returned.assignee,done:done.task.status};
+  return {host,pwd,written,reviewerStopped,returned:returned.assignee,done:done.task.status};
  })();
  // The three side by side: the first to fail fails the step at once.
  const [a,job,ideaAfter]=await Promise.all([cardFlow,jobFlow,triage]);
- writeProof({step:'kanban',marker,sandbox_host:a.host,pwd:a.pwd,profile:worker,board:{
+ writeProof({step:'kanban',marker,sandbox_host:a.host,pwd:a.pwd,profile:worker,attachment_path:attachment.stored_path,attachment_write:a.written,board:{
   card:card.id,spawned_by_tick:spawned.some(([id])=>id===card.id),started_seconds:startSeconds,dangerous:'ran',
   reviewer_stopped:a.reviewerStopped,returned_to:a.returned,done:a.done,job,triage:ideaAfter,reviews:seen.reviews}});
 } catch(error) {
