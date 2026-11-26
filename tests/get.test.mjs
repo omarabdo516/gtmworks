@@ -1315,7 +1315,7 @@ test('gtmworks updater: an Owner\'s request runs gtmworks update to the newest o
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
  assert.deepEqual(m.installer(),[]);
- // Asked while already on the newest: nothing to update, and the Owner is told so (#468).
+ // Asked while already on the newest: nothing to update, and an Administrator is told so (#468).
  m.setRow('button=t auto=f state=requested due=f');
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
@@ -1377,7 +1377,7 @@ test('with the button off a request is ignored; with automatic updates on the up
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
  assert.deepEqual(m.updates(),['read ']);
- // Due again with nothing newer: the update finds nothing and the state the Owners read stays as it was.
+ // Due again with nothing newer: the update finds nothing and the state an Administrators read stays as it was.
  m.setRow('button=t auto=t state=updated due=t');
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
@@ -1430,7 +1430,7 @@ test('gtmworks update-button and auto-update write the switch, gtmworks status s
  ok(m.line(['--version','v1.2.3']));
  const off=m.gtmworks(['update-button','off']);
  ok(off);
- assert.match(off.stdout,/^Update now is off: Owners see no button/m);
+ assert.match(off.stdout,/^Update now is off: Administrators see no button/m);
  const on=m.gtmworks(['auto-update','on']);
  ok(on);
  assert.match(on.stdout,/^Automatic updates are on:/m);

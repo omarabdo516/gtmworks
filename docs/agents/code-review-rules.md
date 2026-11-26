@@ -8,7 +8,7 @@
   Safe path: new tests, or a baseline refresh for screens the issue changes.
 
 ## Company isolation and roles
-- Company data is reached only through the caller's own company (ADR 0004), and Owner-only actions are checked on the server. Flag a `service_role` query with no owner or company filter, and a permission check that exists only in the browser.
+- Company data is reached only through the caller's own company (ADR 0004), and Administrator-only actions are checked on the server. Flag a `service_role` query with no owner or company filter, and a permission check that exists only in the browser.
 
 ## Keys and secrets
 - An Engine's key comes only from its Company's Engine record (or, for unit tests with no database, the server's environment), never from `.env.install`, and a Company's model provider keys are kept in the Engine; none is returned to the browser or logged (ADR 0017, ADR 0018). Flag request bodies, headers or exception text written to logs on a route that receives a key, and any Engine key or address put back in the app's or the worker's environment.

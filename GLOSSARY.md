@@ -8,7 +8,7 @@ The UI defaults to English and ships a complete Arabic translation in Egyptian A
 
 Sidebar labels: Search / بحث; Home / الرئيسية; Inbox / الوارد; Work / الشغل (Work / العمل, Projects / المشاريع, Routines / المهام المتكررة, Campaigns / الحملات, Library / المكتبة, Publishing / النشر); Results / النتائج; Team / الفريق (Agents / الوكلاء والأتمتة, Skills / المهارات, Connections / الربط, Activity log / السجل); Agents / الوكلاء (Company chat / محادثة الشركة, Account manager / مدير الحساب, Writer / الكاتب, Designer / المصمم, Critic / الناقد); Recent / آخر البطاقات.
 
-Permission roles: Owner / مالك; Manager / مدير; Contributor / مساهم; Viewer / مشاهد.
+Permission roles: Administrator / أدمن; Manager / مدير; Contributor / مساهم; Viewer / مشاهد.
 
 ### Who
 
@@ -28,11 +28,11 @@ _Avoid_: user, seat, staff
 A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). An Agent never approves or rejects a Version. It gets the Engine's full power: it may publish and spend, through its apps or on its Screen, when a Member asks, with no Approval first (ADR 0020).
 
 **Main Agent / الوكيل الرئيسي**:
-The Company's default Agent, the one people talk to first, and the manager of the Company's team: it hands a job to the Agent that does it, offers to make an Agent for recurring or specialist work no Agent does, and does small one-off jobs itself. On a new Company it opens the first Conversation, with a few questions about the Company and the first Agents it proposes to make (Omar, 2026-11-20). The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
+The Company's default Agent, the one people talk to first, and the manager of the Company's team: it hands a job to the Agent that does it, offers to make an Agent for recurring or specialist work no Agent does, and does small one-off jobs itself. On a new Company it opens the first Conversation, with a few questions about the Company and the first Agents it proposes to make (Omar, 2026-11-20). The bundled Engine names it Lead; a Company has one at a time, and an Administrator may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
 _Avoid_: default bot, assistant, orchestrator
 
 **Look / شكل الوكيل**:
-An Agent's shape, colour and temperament, the same for everyone in its Company. It is given when the Agent is made and stays its own, after the Agent is removed too. Each of the three is automatic until an Owner picks it, and may be reset to automatic. Only an Owner changes it.
+An Agent's shape, colour and temperament, the same for everyone in its Company. It is given when the Agent is made and stays its own, after the Agent is removed too. Each of the three is automatic until an Administrator picks it, and may be reset to automatic. Only an Administrator changes it.
 _Avoid_: avatar, theme, skin, picture
 
 **Temperament / طبع**:
@@ -44,15 +44,15 @@ What an Agent's face shows of its state, as far as the reader may know it: idle,
 _Avoid_: emotion, mood, status icon
 
 **Agent request / طلب وكيل**:
-A Manager's or Contributor's ask for a new Agent, which the main Agent prepares in their Conversation and which waits in every Owner's "Waiting on you". An Owner makes it, exactly as when the Owner asks the main Agent, or says no with a reason that goes back to the Member's Conversation. Only an Owner makes Agents.
+A Manager's or Contributor's ask for a new Agent, which the main Agent prepares in their Conversation and which waits in every Administrator's "Waiting on you". An Administrator makes it, exactly as when the Administrator asks the main Agent, or says no with a reason that goes back to the Member's Conversation. Only an Administrator makes Agents.
 _Avoid_: proposal, ticket
 
 **Request to open an Agent / طلب فتح وكيل**:
-A Manager's or Contributor's ask to work with an Agent hidden from them. When they ask the main Agent for work that belongs to such an Agent, the main Agent says that job belongs to an Agent they do not have, without naming it, and its card asks whether to request it from the person who chooses which Agents they work with. Their "Ask" puts it in the "Waiting on you" of the Owner and of every Manager who sees that Agent; one of them opens it for them (that Member's switch for that Agent) or says no, and the answer comes back to the Member's Conversation.
+A Manager's or Contributor's ask to work with an Agent hidden from them. When they ask the main Agent for work that belongs to such an Agent, the main Agent says that job belongs to an Agent they do not have, without naming it, and its card asks whether to request it from the person who chooses which Agents they work with. Their "Ask" puts it in the "Waiting on you" of the Administrator and of every Manager who sees that Agent; one of them opens it for them (that Member's switch for that Agent) or says no, and the answer comes back to the Member's Conversation.
 _Avoid_: access ticket, permission request
 
 **Change proposal / اقتراح تغيير**:
-An Agent's ask to change its own settings, or Lead's on another Agent's behalf: its model, its core instructions, its sub-agents or one of the Engine settings gtmworks lists, with the reason. It waits in every Owner's "Waiting on you" and changes nothing until an Owner approves it; approved, it is written to that Agent's own Engine profile and read back; declined, nothing changes. Anything off that list is refused at once and waits on nobody. An app is asked for with the connect card, not proposed; the Agent's own memory and Skills follow its learning mode (#19). The Owner may edit the proposed value before approving it ("Edit, then approve"); the proposal keeps both the value proposed and the value approved (#484).
+An Agent's ask to change its own settings, or Lead's on another Agent's behalf: its model, its core instructions, its sub-agents or one of the Engine settings gtmworks lists, with the reason. It waits in every Administrator's "Waiting on you" and changes nothing until an Administrator approves it; approved, it is written to that Agent's own Engine profile and read back; declined, nothing changes. Anything off that list is refused at once and waits on nobody. An app is asked for with the connect card, not proposed; the Agent's own memory and Skills follow its learning mode (#19). The Administrator may edit the proposed value before approving it ("Edit, then approve"); the proposal keeps both the value proposed and the value approved (#484).
 _Avoid_: settings request, config change
 
 **Handover / تسليم**:
@@ -71,7 +71,7 @@ One tool call the Engine reported for the Run behind an Agent's reply in a Conve
 _Avoid_: action, task, activity
 
 **Channel / قناة**:
-A conversation that a Company's Members and Agents share, where an Agent reads and replies only when a message calls it by name. A Company that works as a team has its general channel («عام»), which holds every Member; an Owner or a Manager makes a team channel, for a campaign or a department, with the Members and Agents they choose, and changes both later. A Member outside a team channel does not see that it exists, the Owner included. Inside a channel its Members see and call its Agents, even one hidden from them elsewhere; outside it nothing changes, and a direct Conversation with that Agent stays impossible. Each Member's unread count is the messages others wrote since they last opened it.
+A conversation that a Company's Members and Agents share, where an Agent reads and replies only when a message calls it by name. A Company that works as a team has its general channel («عام»), which holds every Member; an Administrator or a Manager makes a team channel, for a campaign or a department, with the Members and Agents they choose, and changes both later. A Member outside a team channel does not see that it exists, the Administrator included. Inside a channel its Members see and call its Agents, even one hidden from them elsewhere; outside it nothing changes, and a direct Conversation with that Agent stays impossible. Each Member's unread count is the messages others wrote since they last opened it.
 _Avoid_: room, group chat, thread
 
 **Engine / المحرك**:
@@ -79,11 +79,11 @@ The agent program that runs a Conversation's replies, today the Hermes that ship
 _Avoid_: model, provider, backend
 
 **Provider / مزوّد**:
-One way a Company's Engine reaches models: a subscription the Company signed in to, such as Claude or ChatGPT, or an API key, with the name the Owner gives it, such as "Claude · Said". A Company may hold several, of one kind or of different kinds. They belong to the whole Company, never to one Agent: an Agent chooses a model, and the Engine chooses the Provider it reaches that model through, moving to the next one of the same kind, in the Owner's order, when one runs out. Only the Owner adds, orders or switches off a Provider. Each Provider lists the models it offers, and only the ones switched on are offered when a model is chosen.
+One way a Company's Engine reaches models: a subscription the Company signed in to, such as Claude or ChatGPT, or an API key, with the name the Administrator gives it, such as "Claude · Said". A Company may hold several, of one kind or of different kinds. They belong to the whole Company, never to one Agent: an Agent chooses a model, and the Engine chooses the Provider it reaches that model through, moving to the next one of the same kind, in the Administrator's order, when one runs out. Only the Administrator adds, orders or switches off a Provider. Each Provider lists the models it offers, and only the ones switched on are offered when a model is chosen.
 _Avoid_: account, subscription, key, connection
 
 **Fallback model / الموديل البديل**:
-The model a Company's Agents move to when every Provider of the model they chose has run out. There is none until the Owner picks one, and with none an Agent never moves to another kind of Provider.
+The model a Company's Agents move to when every Provider of the model they chose has run out. There is none until the Administrator picks one, and with none an Agent never moves to another kind of Provider.
 _Avoid_: backup model, failover
 
 **Work sandbox / صندوق الشغل**:
@@ -101,7 +101,7 @@ The planned run status `waiting`: the run delivered a version or asked a questio
 The planned run status `cancelled`: a person or gtmworks stopped the run.
 
 **Role / دور**:
-The named set of permissions a member holds in one company: Owner, Manager, Contributor, or Viewer. Owners and Managers approve; Contributors and Viewers never do. Each company may change what every role except Owner may do.
+The named set of permissions a member holds in one company: Administrator, Manager, Contributor, or Viewer. Administrators and Managers approve; Contributors and Viewers never do. Each company may change what every role except Administrator may do.
 _Avoid_: group, user type, access level
 
 **Grant / صلاحية منفصلة**:
@@ -111,9 +111,9 @@ A separate per-member permission in one company: publishing, money figures, or c
 One thing a role allows in a company, such as approving a post, sending a comment reply, or connecting accounts.
 _Avoid_: right, privilege, scope
 
-**Owner / مالك**:
-The role that can do everything in its company; only an Owner can make another member an Owner, and only an Owner changes or removes an Owner. The first person through first-run is the first company's Owner; a Company made later gets its first Owner through a first-Owner link from the install owner, which works once. A company always has at least one.
-_Avoid_: admin, super admin
+**Administrator / أدمن**:
+The role that can do everything in its company; only an Administrator can make another member an Administrator, and only an Administrator changes or removes an Administrator. The first person through first-run is the first company's Administrator; a Company made later gets its first Administrator through a first-Administrator link from the install owner, which works once. A company always has at least one, and may have several. The code and the database call this Role `owner` (`members.role = 'owner'`).
+_Avoid_: Owner (old name until 2026-11-26), super admin
 
 **Install owner / صاحب التثبيت**:
 The person who runs the install from its server: installs and updates it, makes Companies, and sets how people reach it. An install owner enters a Company only as one of its Members.
@@ -124,7 +124,7 @@ The small timer the install puts on its server, run as the install owner, that c
 _Avoid_: auto-updater service, update daemon
 
 **Invite link / لينك دعوة**:
-A link an Owner makes to bring one new Person into a Company, with the Role they will hold and the Agents they will see. It works once, ends after 7 days, and can be cancelled before it is used. It never gives the Owner role: an Owner makes an existing Member an Owner.
+A link an Administrator makes to bring one new Person into a Company, with the Role they will hold and the Agents they will see. It works once, ends after 7 days, and can be cancelled before it is used. It never gives the Administrator role: an Administrator makes an existing Member an Administrator.
 _Avoid_: invitation email, magic link
 
 **Connection / ربط**:
@@ -170,7 +170,7 @@ One saved revision of a card's output. Editing creates a new version; approving 
 A permitted person's decision on one exact version, recorded with who approved it. An agent cannot approve its own or another agent's work. It is the team's record, not a gate an agent's tools wait on (ADR 0020).
 
 **Permission request / طلب موافقة**:
-The engine's own stop inside a run before an action: the agent waits until the conversation's person answers "Allow once", "Always allow" or "Don't allow", or the engine stops waiting, which counts as not allowed. It is not an approval of a version. "Always allow" stays with Owners and Managers, and only on an agent's own engine profile.
+The engine's own stop inside a run before an action: the agent waits until the conversation's person answers "Allow once", "Always allow" or "Don't allow", or the engine stops waiting, which counts as not allowed. It is not an approval of a version. "Always allow" stays with Administrators and Managers, and only on an agent's own engine profile.
 
 **Handed to you / اتسلّمت لك**:
 A step no agent may do, such as publishing where there is no API or paying an invoice. The agent prepares it; a person does it and marks "I did it" against the approved version. The record shows who did it; approval alone does not record that the step was done.
@@ -182,7 +182,7 @@ The cards of one company goal, with a name, goal, status (active, paused or done
 Recurring work specifying who, what and when; each occurrence creates an ordinary card. The team may pause or reschedule it; three untouched occurrences raise an alert.
 
 **Skill / مهارة**:
-Instructions in SKILL.md, kept only in the Engine (ADR 0017): in an Agent's own profile, or in the Company's shared Skills. An Owner or a Manager writes one into an Agent's own profile or switches it off or on for that Agent; each change is checked on the server and written in the company's log. The shared Skills' names (`team-lessons`, `company-knowledge`) are never taken by an Agent's own skill.
+Instructions in SKILL.md, kept only in the Engine (ADR 0017): in an Agent's own profile, or in the Company's shared Skills. An Administrator or a Manager writes one into an Agent's own profile or switches it off or on for that Agent; each change is checked on the server and written in the company's log. The shared Skills' names (`team-lessons`, `company-knowledge`) are never taken by an Agent's own skill.
 
 **Company's shared Skills / مهارات الشركة المشتركة**:
 One folder of Skills per Company, kept in the Company's shared space (`cs-<company id>`), which every Agent of that Company reads. A lesson approved for the whole team lands there. No Run ever starts on the shared space.
@@ -193,7 +193,7 @@ A setting the install holds once for every Company, such as the address people r
 _Avoid_: global, system-wide, default
 
 **Lesson / درس**:
-A lasting rule a Contributor taught an agent, suggested for the whole team. It waits in "Waiting on you" for the company's Owner and Managers; nothing reaches any agent until one approves it, when it lands in the shared Skill `team-lessons`, and a rejected lesson never does.
+A lasting rule a Contributor taught an agent, suggested for the whole team. It waits in "Waiting on you" for the company's Administrator and Managers; nothing reaches any agent until one approves it, when it lands in the shared Skill `team-lessons`, and a rejected lesson never does.
 _Avoid_: memory, note, feedback
 
 **Inbox / الوارد**:

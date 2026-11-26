@@ -34,7 +34,7 @@ test('app motion contains no broad transitions or the old page entrances', () =>
 test('the four roles and independent grants are documented', () => {
  const glossary=readFileSync('GLOSSARY.md','utf8');
  assert.ok(!/reviewer/i.test(glossary),'the reviewer Role is gone');
- for(const value of ['Owner, Manager, Contributor, or Viewer','publishing, money figures, or customer data']) assert.ok(glossary.includes(value));
+ for(const value of ['Administrator, Manager, Contributor, or Viewer','publishing, money figures, or customer data']) assert.ok(glossary.includes(value));
 });
 test('schema prevents contributor and viewer approval', () => {
  const sql=readFileSync('supabase/migrations/20261104000000_foundation.sql','utf8');
@@ -179,6 +179,11 @@ test('catalogues reject missing keys, empty messages and mismatched interpolatio
  assert.ok(catalogueProblems({},{hello:'مرحبًا'}).length);
  assert.ok(catalogueProblems({hello:'Hello'},{hello:''}).length);
  assert.ok(catalogueProblems({hello:'Hello {0}'},{hello:'مرحبًا {1}'}).length);
+});
+test('catalogues never name the Administrator Role by its old name, Owner or مالك (#902)', async()=>{
+ const {catalogueProblems}=await import('../scripts/check-i18n.mjs');
+ for(const [en,ar] of [[{a:'Ask the Owner'},{a:'اطلب من الأدمن'}],[{a:'The last owner stays'},{a:'الأدمن'}],[{a:'Owners see it'},{a:'الأدمنز'}],[{a:'Administrator'},{a:'اطلب من المالك'}],[{a:'Administrator'},{a:'بصفتك مالكًا'}],[{a:'Administrator'},{a:'المالكون'}]]) assert.ok(catalogueProblems(en,ar).length,JSON.stringify([en,ar]));
+ assert.deepEqual(catalogueProblems({a:'Ask the install owner to run gtmworks company add --owner <email>'},{a:'اطلب من صاحب التثبيت، مالكش دعوة'}),[],'the install owner, a command flag and other Arabic words stay');
 });
 test('UI literal guard parses JSX text, expressions and user-facing attributes', async()=>{
  const {literalProblems}=await import('../scripts/check-i18n.mjs');

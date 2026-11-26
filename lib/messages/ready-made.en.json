@@ -3,7 +3,7 @@
   "subTeam": "Pick a role and add it to the team in a minute. This list is private to the {0} workspace. Nobody outside the team can see it.",
   "subAlone": "Pick a role and {0} makes it right away, in the chat. This list is private to your workspace. Nobody outside it can see it.",
   "subMember": "Pick a role and ask {0}. It prepares a proposal, and the agent is only created when {1} approves. This list is private to the {2} workspace.",
-  "subMemberAnyOwner": "Pick a role and ask {0}. It prepares a proposal, and the agent is only created when the Owner approves. This list is private to the {1} workspace.",
+  "subMemberAnyOwner": "Pick a role and ask {0}. It prepares a proposal, and the agent is only created when an Administrator approves. This list is private to the {1} workspace.",
   "close": "Close",
   "search": "Search ready-made agents",
   "searchHint": "Search by role or tool, e.g. WordPress",

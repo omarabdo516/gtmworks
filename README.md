@@ -147,7 +147,7 @@ For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
 mailbox publicly. On a fresh install, enter your name, email, a password of at
 least 10 characters (twice) and your first company name; you are signed in
 at once, with no email step. You become the first company's
-Owner. Setup then closes permanently and the setup link stops working; later
+Administrator. Setup then closes permanently and the setup link stops working; later
 visits sign in with email and password, and a sign-in lasts 30 days on that
 browser unless you sign out. Public sign-ups stay disabled. No demo people or
 companies are created.
@@ -187,20 +187,20 @@ template when the install owner adds it on the server:
 
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
-gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company add --name "Third Company"     # prints a first-Administrator link instead
 gtmworks company list
 ```
 
 `--owner` names a Person who already has an account on this install; an email that
 belongs to no Person is refused before anything is made. With no `--owner`, the
-Company's name waits behind a first-Owner link that the command prints once: whoever
-opens it types their name, email and password, becomes that Company's Owner and lands
+Company's name waits behind a first-Administrator link that the command prints once: whoever
+opens it types their name, email and password, becomes that Company's Administrator and lands
 in it signed in. Its secret sits after `#` in the address, so only its hash is kept,
 it works once, and opening the page without sending the form leaves it open. A lost
 link is replaced with `gtmworks company link "Third Company"`, which ends the earlier
 one. Until the link is used the Company exists nowhere, and `gtmworks company list`
-shows it waiting for its Owner. `company add` makes the Engine, waits until it is
-healthy, registers it and then makes the Company with that Person as its Owner, or
+shows it waiting for its first Administrator. `company add` makes the Engine, waits until it is
+healthy, registers it and then makes the Company with that Person as its Administrator, or
 holds the name behind the link; the worker then gives the Company its main Agent on
 its own Engine. If the Engine does not become healthy the command says so in one line,
 removes what it made (its container, volume, network and folder, and its record), and
@@ -239,7 +239,7 @@ Company says in one line what every Agent can use and that anything published or
 Approval.
 Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory with the other agents of the same Company only: every profile lives in that Company's own Engine, and no other Company's Engine, Agents or people can read it.
 
-The Owner connects a subscription in Settings, Providers: ChatGPT
+The Administrator connects a subscription in Settings, Providers: ChatGPT
 signs in from that page. A Company's subscription is signed in once on its own
 Engine's root profile, and every Agent of that Company uses it. Another
 Company's Engine and its Agents never see it. One account serves one Company, so
@@ -306,7 +306,7 @@ restore <archive>` there.
 
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
-gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company add --name "Third Company"     # prints a first-Administrator link instead
 gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5 --disk 20g
 gtmworks company limits "Second Company" --memory 3g --cpus 3 --disk 30g   # its work sandbox's limits
 gtmworks company link "Third Company"          # a fresh link for a Company still waiting
@@ -314,15 +314,15 @@ gtmworks company list
 ```
 
 `company add` makes the Company's own Engine from the same template, waits until it is
-healthy, and makes the Company with that existing Person as its Owner; with no
-`--owner` it prints a first-Owner link instead and makes the Company when that link is
+healthy, and makes the Company with that existing Person as its Administrator; with no
+`--owner` it prints a first-Administrator link instead and makes the Company when that link is
 sent. `company link` prints a fresh link for a Company still waiting and ends the
 earlier one. A failed Engine leaves nothing behind and the same command can be run
 again. `company limits` changes a Company's work sandbox memory, CPUs and disk and starts
 only that sandbox again, and its Engine too when the disk changes (see **Server size**
 and **Each Company's disk** under Install). `company list` shows
 every Company with the state of its Engine, including one still waiting for its
-Owner, and each Company's work sandbox and its state. `gtmworks status` reports every
+Administrator, and each Company's work sandbox and its state. `gtmworks status` reports every
 Engine and every sandbox beside the services. See **One Engine per Company** under Install for what each Engine holds and
 how much memory it adds.
 
@@ -334,7 +334,7 @@ gtmworks update --version v1.2.3             # or to that release
 gtmworks update --channel stable             # a main install back to the latest stable release
 ```
 
-Owners can also update from the app: **Update now** asks the install's updater, a
+Administrators can also update from the app: **Update now** asks the install's updater, a
 small timer the install puts on the server (a systemd user timer, or cron), which
 runs `gtmworks update` within a minute and shows "Updated to <version>", or that
 the update failed and which version still runs (ADR 0020). The app never reaches

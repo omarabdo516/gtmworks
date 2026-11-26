@@ -5,6 +5,8 @@ date: 2026-11-26
 
 # gtmworks is an interface and a gatekeeper over Hermes
 
+> Since 2026-11-26 (#902) the Role these ADRs call **Owner** is named **Administrator / أدمن**: same Role, new word; the code keeps `owner`. Past ADR text keeps its words.
+
 Omar's decision of 2026-11-26 (vault decision 0074, a grill of thirteen questions). It carries [ADR 0017](0017-hermes-keeps-skills-knowledge-rules-steps-and-usage.md) and [ADR 0022](0022-hermes-first-then-the-smallest-change.md) to their end. It supersedes:
 
 - [ADR 0026](0026-one-board-in-gtmworks-working-the-hermes-kanban-way.md);

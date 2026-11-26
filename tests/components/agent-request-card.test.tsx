@@ -21,7 +21,7 @@ test('the Member who asked sees the request wait for the Owners, then the answer
  const request = waiting.getByRole('group', { name: 'Agent request: FollowUp' });
  await expect.element(request.getByText('Request · not made yet')).toBeVisible();
  expect(request.element().textContent).toContain('Not made yet. When Omar or Sara says yes it shows in your agents, and I’ll tell you here.');
- for (const text of ['Follows up the WhatsApp leads.', 'WhatsApp Business, Google Sheets', 'Publish anything', 'Youssef«The leads go cold before anyone answers»', 'Youssef and the Owner'])
+ for (const text of ['Follows up the WhatsApp leads.', 'WhatsApp Business, Google Sheets', 'Publish anything', 'Youssef«The leads go cold before anyone answers»', 'Youssef and the Administrators'])
   expect(request.element().textContent).toContain(text);
  expect(request.element().classList.contains('ac-card--req')).toBe(true);
  expect(request.element().querySelectorAll('button, a')).toHaveLength(0);
@@ -46,7 +46,7 @@ test('with no Owner to name, a waiting request says it waits for the Owner', asy
  onTestFinished(() => waiting.unmount());
  const request = waiting.getByRole('group', { name: 'Agent request: FollowUp' });
  await expect.element(request.getByText('Request · not made yet')).toBeVisible();
- expect(request.element().textContent).toContain('Not made yet. When the Owner says yes it shows in your agents, and I’ll tell you here.');
+ expect(request.element().textContent).toContain('Not made yet. When an Administrator says yes it shows in your agents, and I’ll tell you here.');
 });
 
 // Both of the Owner's answers in one render: after a form action has run, this browser window draws no new root.
@@ -56,7 +56,7 @@ test('a request whose apps and asking message did not load shows neither and can
  const screen = await render(<LanguageProvider language="en"><OwnerRequestCard slug="rs-learning" company="co-1" lead="Lead" item={{ ...item(9), request: null }}/></LanguageProvider>);
  const request = screen.getByRole('group', { name: 'Agent request: FollowUp 9' });
  await expect.element(request.getByRole('note')).toHaveTextContent('Part of this request didn’t load, so it can’t be answered yet. Reload the page to try again.');
- for (const text of ['Agent request from Youssef', 'Follows up the WhatsApp leads.', 'Youssef and the Owner']) expect(request.element().textContent).toContain(text);
+ for (const text of ['Agent request from Youssef', 'Follows up the WhatsApp leads.', 'Youssef and the Administrators']) expect(request.element().textContent).toContain(text);
  for (const text of ['Apps', 'No apps', '«']) expect(request.element().textContent).not.toContain(text);
  await expect.element(request.getByRole('button', { name: 'Make it' })).toBeDisabled();
  await expect.element(request.getByRole('button', { name: 'No' })).toBeDisabled();

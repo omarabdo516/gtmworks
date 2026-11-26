@@ -2,6 +2,8 @@ import ts from 'typescript';
 import { readdirSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+// The Role is Administrator / أدمن (#902). The install owner (صاحب التثبيت) and the CLI's --owner flag are not the Role.
+const oldRoleName={en:/(?<!install |--)\b[Oo]wners?\b/,ar:/مالك(?:ًا|ون|ين|ي)?(?![\p{L}\u064B-\u0652])/u};
 export function catalogueProblems(en, ar) {
  const problems=[];
  for(const key of new Set([...Object.keys(en),...Object.keys(ar)])) {
@@ -10,6 +12,8 @@ export function catalogueProblems(en, ar) {
    const parameters=value=>[...value.matchAll(/\{\d+\}/g)].map(match=>match[0]).sort().join(',');
    if(parameters(en[key])!==parameters(ar[key])) problems.push(`${key}: interpolation parameters differ`);
   }
+  if(typeof en[key]==='string'&&oldRoleName.en.test(en[key])) problems.push(`en: ${key} names the Administrator Role by its old name, Owner (#902)`);
+  if(typeof ar[key]==='string'&&oldRoleName.ar.test(ar[key])) problems.push(`ar: ${key} names the Administrator Role by its old name, مالك (#902)`);
  }
  return problems;
 }

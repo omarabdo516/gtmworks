@@ -47,7 +47,7 @@ password, anything shaped like a token, and short digit runs such as authenticat
   setting's name, `settings` for several at once, `learning` for a mode), `status` (the answer's HTTP status) and `ms`,
   each step's elapsed milliseconds from the request's start, so a step's own time is its mark less the one before it:
   `signIn`, `allowed` (the route's Role check), `queue` (the wait behind the Company's other setting writes), `owner`
-  (the Owner check, for one setting), then for a model only `reads` (the Providers, the Agents and the Engine's profile
+  (the Administrator check, for one setting), then for a model only `reads` (the Providers, the Agents and the Engine's profile
   list, read side by side), `engineWrite` (every profile's write and read-back) and `record` (the choice and the Company
   log), and `done`. A step that is not marked is left out. Never a value, a body or a key.
 

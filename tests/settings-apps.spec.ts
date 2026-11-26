@@ -233,7 +233,7 @@ test('a Viewer opens the sheet and reads the states with no button',async({brows
   await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
   await viewer.locator('#btn-apps').click();
   const sheet=sheetOf(viewer);
-  await expect(sheet.locator('.apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
+  await expect(sheet.locator('.apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by an Administrator only.');
   await expect(card(viewer,'Canva').locator('.app__state')).toHaveText('Not connected');
   await expect(sheet.locator('.app-card').getByRole('button')).toHaveCount(0);
   await noEngineText(viewer,'.apps-sheet');
@@ -247,7 +247,7 @@ test('a Manager reads the states with no button, and the server refuses their co
   await signIn(manager,'manager@example.com','/c/rs-learning/home');
   await manager.goto('/c/rs-learning/settings?section=apps');
   // In Settings the line is the title's help (#614), behind its "i".
-  await expect(manager.locator('#apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
+  await expect(manager.locator('#apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by an Administrator only.');
   await expect(card(manager,'Canva').locator('.app__state')).toHaveText('Not connected');
   await expect(manager.locator('.app-card').getByRole('link')).toHaveCount(0);
   const refused=await manager.request.post('/api/company-apps',{data:{company,app:'canva',action:'connect'}});
