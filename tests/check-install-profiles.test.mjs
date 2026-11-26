@@ -5,6 +5,7 @@ import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
 import { proof, proofName, writeProof, writeName, stepClock } from '../lib/install-proof.mjs';
 import { installJob } from './install-job.mjs';
+import { kanbanPlan, reviewRequested, passedAfterReview } from '../lib/install-kanban.mjs';
 
 // The agents area's proof (#126) runs on the pinned Engine, against a real install: four Agents in two Companies, the
 // shared space of each, and a key set for one Company. The capacity of twenty more Agent profiles is the measurement
@@ -161,4 +162,65 @@ test('a step\'s clock prints each phase as it ends and keeps every wait inside t
  at+=7_600;
  assert.throws(()=>clock.within(30),/kanban: its 100 s are spent after Card A started/);
  assert.equal(clock.left(),0);
+});
+
+// Spec #831 (#833): on run 45849314052 every board worker took itself for a reviewer. Hermes's system prompt lists the
+// bundled Skills, `sdlc-review` among them, and the fake model read it: Card A's worker waited for the person as its
+// reviewer would, and Card B's worker passed its own Card. A reviewer is told so in its own first user turn, the line
+// `build_preloaded_skills_prompt` writes for the skill the review dispatch preloads (agent/skill_commands.py,
+// gateway/session_kanban.py); its Card is the header line of that turn (hermes_cli/kanban_db_context.py).
+const skillsListed='You are Hermes.\n## Skills\n- sdlc-review: review a change before it ships.\n# Kanban task execution protocol\n...';
+const preloaded='[IMPORTANT: The user launched this CLI session with the "sdlc-review" skill preloaded. Treat its instructions as active guidance for the duration of this session unless the user overrides them.]';
+const boardTools={tools:['kanban_request_review','kanban_complete','kanban_block','terminal'].map(name=>({type:'function',function:{name}}))};
+const boardTurn=(title,{reviewer=false}={})=>[{role:'system',content:skillsListed},
+ {role:'user',content:`${reviewer?`${preloaded}\n\n`:''}# Kanban task t_1: ${title}\n\nAssignee: ag-2\nStatus: running\n\n## Body\nWrite it.`}];
+const answered=answer=>[answer?.function?.name,JSON.parse(answer?.function?.arguments??'{}')];
+
+test('the Kanban step\'s fake model answers a board worker as a worker though the system prompt lists sdlc-review', async () => {
+ const {plan,tag,seen}=kanbanPlan({marker:'m-1',worker:'ag-2',person:'Proxy Owner',hold:()=>assert.fail('a worker never waits as a reviewer')});
+ const [job,jobArgs]=answered(await plan(boardTurn(tag.job),boardTools));
+ assert.equal(job,'kanban_request_review','Card B\'s worker sends its job for review');
+ assert.match(jobArgs.summary,/JOB-DONE-m-1/);
+ assert.equal(answered(await plan(boardTurn(tag.card),boardTools))[0],'terminal','Card A\'s worker runs its command');
+ assert.equal(seen.reviews,0,'no worker is counted a reviewer');
+});
+
+test('the Kanban step\'s fake model tells a reviewer by its preloaded-skill line: Card B passed, Card A held for the person', async () => {
+ let held=0;
+ const {plan,tag,seen}=kanbanPlan({marker:'m-1',worker:'ag-2',person:'Proxy Owner',hold:async()=>{ held++; }});
+ const [passed,passedArgs]=answered(await plan(boardTurn(tag.job,{reviewer:true}),boardTools));
+ assert.equal(passed,'kanban_complete','the reviewing Agent passes Card B');
+ assert.match(passedArgs.summary,/JOB-PASSED-m-1/);
+ assert.equal(await plan(boardTurn(tag.card,{reviewer:true}),boardTools),null,'Card A\'s reviewer says nothing');
+ assert.equal(held,1,'and waits for the person first');
+ assert.equal(seen.reviews,2);
+});
+
+test('the Kanban step\'s fake model reads every tag from the user turns, never the system prompt', async () => {
+ const {plan,tag,seen}=kanbanPlan({marker:'m-1',worker:'ag-2',person:'Proxy Owner',hold:()=>assert.fail('no reviewer here')});
+ const system=`${skillsListed}\n# Kanban task t_9: ${tag.job}\n${tag.ask}\n${tag.idea}\n[kanban] Task t_9 handed off for review`;
+ assert.equal(await plan([{role:'system',content:system},{role:'user',content:'Hello.'}],boardTools),null,'a tag in the system prompt alone is answered by none of the scripts');
+ assert.deepEqual(seen,{work:[],reviews:0,decomposer:[],told:false});
+ assert.equal(answered(await plan([{role:'system',content:system},{role:'user',content:`${tag.ask}: give the job to the second Agent.`}],boardTools))[0],'kanban_create','the main Agent is told by its user turn');
+ assert.equal(seen.told,false,'a notice in the system prompt is not the session told');
+});
+
+// The run that passed Card B with no review (45849314052) had one Run, `completed`. A Card was sent for review only when
+// a Run of it ended `review_requested` with the worker's summary, and passed after its review only when a later Run ended
+// `completed` with the pass's summary.
+test('a Card is passed after its review only when a later Run completes after one that requested review', () => {
+ const run=(outcome,summary)=>({profile:'ag-2',status:'done',outcome,summary});
+ assert.equal(reviewRequested([run('completed','JOB-DONE-m JOB-PASSED-m')],'JOB-DONE-m'),false,'a worker that completed its own Card asked for no review');
+ assert.equal(reviewRequested([run('blocked','QUESTION-m'),run('review_requested','The job is written. JOB-DONE-m')],'JOB-DONE-m'),true);
+ assert.equal(passedAfterReview([run('completed','JOB-PASSED-m')],'JOB-DONE-m','JOB-PASSED-m'),false,'the false green of run 45849314052');
+ assert.equal(passedAfterReview([run('completed','JOB-PASSED-m'),run('review_requested','JOB-DONE-m')],'JOB-DONE-m','JOB-PASSED-m'),false,'the pass came before the review');
+ assert.equal(passedAfterReview([run('review_requested','JOB-DONE-m'),run('completed','Reviewed. JOB-PASSED-m')],'JOB-DONE-m','JOB-PASSED-m'),true);
+ assert.equal(passedAfterReview([run('review_requested','SUMMARY-1-m'),run('reclaimed',null),run('review_requested','SUMMARY-2-m'),run('completed','SUMMARY-2-m\n\nPassed by Proxy Owner.')],'SUMMARY-2-m','Passed by Proxy Owner.'),true,'Card A, passed by the person after its second review request');
+ const start=script.indexOf("step==='kanban') {");
+ const branch=script.slice(start,script.indexOf('} else if(',start));
+ assert.match(branch,/kanbanPlan\(\{marker,worker,person,/,'the step\'s fake model is the script tested here');
+ assert.match(branch,/reaches\(job\.id,[^\n]*reviewRequested\(found\.runs,`JOB-DONE-/,'Card B waits for its review request on a Run');
+ assert.match(branch,/passedAfterReview\(jobDone\.runs,`JOB-DONE-\$\{marker\}`,`JOB-PASSED-/,'Card B is passed on a Run after its review request');
+ for(const summary of ['SUMMARY-1-','SUMMARY-2-']) assert.match(branch,new RegExp(`reviewRequested\\(found\\.runs,\`${summary}`),`Card A waits for its review request ${summary} on a Run`);
+ assert.match(branch,/passedAfterReview\(done\.runs,`SUMMARY-2-\$\{marker\}`,passedLine\)/,'Card A is passed on a Run after its second review request');
 });

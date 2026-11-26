@@ -147,6 +147,17 @@ asks for, never on the Engine's 60 s one. The fake model tells a board session's
 `# Kanban task <id>: <title>`: the prompt also lists the Agent's recent work on its other Cards
 (`hermes_cli/kanban_db_context.py`, `_ctx_role_history`), and Card A and Card B are each in the other's.
 
+The fake model (`lib/install-kanban.mjs`) reads only a session's user turns. Hermes's system prompt lists the bundled
+Skills, `sdlc-review` among them, for every session, so on run 45849314052 a script that read it took every board
+worker for a reviewer: Card A's worker waited for the person, as Card A's reviewer does, until its 90 s were spent with
+no tool called, and Card B's worker passed its own Card in one Run whose outcome was `completed`, which the check then
+counted green. A reviewer is told in its own first user turn: the review dispatch preloads `sdlc-review`
+(`hermes_cli/kanban_db_dispatch.py`, `gateway/session_kanban.py`), and the prompt opens with the preloaded skill's
+line, `[IMPORTANT: The user launched this CLI session with the "sdlc-review" skill preloaded. …]`
+(`agent/skill_commands.py`, `build_preloaded_skills_prompt`), before the Card's header. The check now holds each review
+by the Card's Runs, not its latest summary: sent for review only once a Run ended `review_requested` with the worker's
+summary, and passed only on a later Run that ended `completed` (Card B's reviewer, Card A's person).
+
 | Phase | Its deadline | Expected on the fake model |
 | --- | --- | --- |
 | Both Agents on the fake model, their toolsets read | (requests) | about 2 s |

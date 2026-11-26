@@ -69,6 +69,7 @@ const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSe
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/engine/agents.mjs`);
 const {writeProof,writeName,stepClock}=await import(`${process.cwd()}/lib/install-proof.mjs`);
+const {kanbanPlan,reviewRequested,passedAfterReview}=await import(`${process.cwd()}/lib/install-kanban.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
 
 const [step,marker]=process.argv.slice(2);
@@ -875,8 +876,6 @@ for(const profile of [first.profile,worker]) {
 }
 clock.phase('both Agents are on the fake model and offered the board',{profile:worker});
 const person='Proxy Owner';
-const tag={card:`KANBAN-CARD ${marker}`,job:`KANBAN-JOB ${marker}`,idea:`KANBAN-IDEA ${marker}`,ask:`KANBAN-ASK ${marker}`,
- answer:`ANSWER-${marker}`,back:`RETURN-${marker}`};
 const board=(path,init={})=>manage(firstEngine,`/api/plugins/kanban${path}`,{...init,signal:AbortSignal.timeout(20_000)});
 const answered=async(response,what)=>{ assert.ok(response.ok,`${what} (HTTP ${response.status}: ${await response.clone().text()})`); return response.json(); };
 const read=async id=>answered(await board(`/tasks/${encodeURIComponent(id)}`),`read Card ${id}`);
@@ -902,58 +901,14 @@ const reaches=(id,statuses,seconds,also=()=>true)=>until(`Card ${id} ${[statuses
  const found=await read(id); return [statuses].flat().includes(found.task.status)&&also(found)?found:null;
 },seconds);
 const lastRun=found=>found.runs.at(-1);
-// The fake model, scripted by what each session was told: the main Agent's Conversation, Card A's worker and reviewer,
-// Card B's worker and reviewer, and the decomposer. A session is told its Card's title in its own prompt; a tool's
-// result is kept by the call it answers.
-// A message's content as its lines read, whether one string or a list of parts.
-const textOf=messages=>messages.filter(message=>message.role==='user'||message.role==='system')
- .map(({content})=>typeof content==='string'?content:Array.isArray(content)
-  ?content.map(part=>typeof part?.text==='string'?part.text:JSON.stringify(part)).join('\n'):JSON.stringify(content??'')).join('\n');
-const call=(name,args,id=`call_${name}_${randomUUID().slice(0,8)}`)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
-const results=new Map();
-const seen={work:[],reviews:0,decomposer:[],told:false};
 let personActed=()=>{};
 const acted=new Promise(resolve=>{ personActed=resolve; });
 // The step's end, which no hold of the fake model outlasts.
 const spent=new Promise(resolve=>{ setTimeout(resolve,clock.left()*1000).unref(); });
-const work=`hostname; pwd; printf '%s' '${marker}-card' > /work/${marker}-card.txt`;
-// Hermes flags a recursive delete under the root path as dangerous (tools/approval_detection.py, probe section 3).
-const danger=`mkdir -p /tmp/${marker}-danger/gone && rm -rf /tmp/${marker}-danger/gone && echo removed`;
-const plan=async(messages,body)=>{
- const text=textOf(messages);
- const called=messages.filter(message=>message.role==='assistant').flatMap(message=>(message.tool_calls||[]).map(made=>made.function?.name));
- for(const message of messages) if(message.role==='tool') results.set(message.tool_call_id,typeof message.content==='string'?message.content:JSON.stringify(message.content));
- const kanbanTools=(body.tools||[]).some(tool=>String(tool.function?.name).startsWith('kanban_'));
- // A board session's own Card is the one its prompt's header names (hermes_cli/kanban_db_context.py): the prompt also
- // lists the Agent's recent work on other Cards, and Card A and Card B, worked side by side, are each that of the other.
- const own=text.match(/^# Kanban task [^:\n]+: (.*)$/m)?.[1]??'';
- if(text.includes(tag.ask)) {
-  // The main Agent: it makes Card B for the second Agent once, and may be told of its result in a later user turn.
-  if(messages.some(message=>message.role==='user'&&textOf([message]).includes('[kanban]'))) seen.told=true;
-  if(!called.includes('kanban_create')) return call('kanban_create',{title:tag.job,body:'Write the job and send it for review. NO-QUESTION',assignee:worker},'call_kanban_create');
-  return null;
- }
- if(kanbanTools&&own&&text.includes('sdlc-review')) {
-  seen.reviews++;
-  if(own.includes(tag.job)) return called.includes('kanban_complete')?null:call('kanban_complete',{summary:`Reviewed and passed by the reviewing Agent. JOB-PASSED-${marker}`});
-  // Card A's review is the person's: a reviewer the Engine's own tick starts meanwhile waits for them, then says nothing.
-  await Promise.race([acted,spent]);
-  return null;
- }
- if(kanbanTools&&own.includes(tag.job)) return called.includes('kanban_request_review')?null:call('kanban_request_review',{summary:`The job is written. JOB-DONE-${marker}`});
- if(kanbanTools&&own.includes(tag.card)) {
-  const run={answer:text.includes(tag.answer),back:text.includes(tag.back),person:text.includes(person)};
-  seen.work.push(run);
-  if(!run.answer) {
-   if(!called.includes('terminal')) return call('terminal',{command:work},'call_kanban_work');
-   if(called.filter(name=>name==='terminal').length<2) return call('terminal',{command:danger},'call_kanban_danger');
-   return called.includes('kanban_block')?null:call('kanban_block',{reason:`Which colour should the brief use? QUESTION-${marker}`});
-  }
-  return called.includes('kanban_request_review')?null:call('kanban_request_review',{summary:run.back?`The brief, shorter and in blue. SUMMARY-2-${marker}`:`The brief, in blue. SUMMARY-1-${marker}`});
- }
- if(text.includes(tag.idea)) seen.decomposer.push(body.model);
- return null;
-};
+// The fake model's script (lib/install-kanban.mjs) reads what each session was told in its user turns only: Hermes's
+// system prompt lists the bundled Skills, sdlc-review among them, for every session, and a reviewer is told so by the
+// preloaded skill's line of its own first turn. Card A's reviewer waits for the person, or the step's end.
+const {plan,tag,results,seen}=kanbanPlan({marker,worker,person,hold:()=>Promise.race([acted,spent])});
 const parsed=value=>{ try { return JSON.parse(value); } catch { return null; } };
 const cards={};
 // The Cards as the board reads them, by id, status, Agent, each Run's profile and outcome and the latest events' kinds:
@@ -1022,11 +977,14 @@ try {
   assert.equal(job.assignee,worker,'Card B is given to the second Agent');
   clock.phase('the main Agent\'s Conversation made Card B',{board:{job:job.id}});
   await tick('for Card B');
-  await reaches(job.id,['review','running','done'],clock.within(90),found=>found.task.status==='done'||String(found.task.latest_summary).includes(`JOB-DONE-${marker}`));
+  // Sent for review only by a Run that ended `review_requested`: a worker that completes its own Card, as every one did
+  // on run 45849314052, is no review (lib/install-kanban.mjs).
+  await reaches(job.id,['review','running','done'],clock.within(90),found=>reviewRequested(found.runs,`JOB-DONE-${marker}`));
   clock.phase('Card B is sent for review',{board:{job:job.id}});
   await tick('for Card B\'s review');
   const jobDone=await reaches(job.id,'done',clock.within(90));
-  assert.ok(String(jobDone.task.latest_summary).includes(`JOB-PASSED-${marker}`),'the reviewing Agent passed Card B by itself');
+  assert.ok(passedAfterReview(jobDone.runs,`JOB-DONE-${marker}`,`JOB-PASSED-${marker}`),
+   `the reviewing Agent passed Card B by itself, on a Run after the review request: ${JSON.stringify(jobDone.runs.map(run=>[run.profile,run.outcome]))}`);
   clock.phase('the reviewing Agent passed Card B',{board:{job:job.id}});
   // Whether the main Agent's session is told: the Engine's notifier, which polls every 5 s, wakes the session that made
   // the Card, on its review request as on its end. Recorded, not required.
@@ -1051,7 +1009,7 @@ try {
   await comment(card.id,`${tag.answer}: use blue.`);
   assert.equal((await move(card.id,{status:'ready'},'move Card A to ready after the answer')).task.status,'ready');
   await tick('for Card A after the answer');
-  const reviewed=await reaches(card.id,['review','running'],clock.within(90),found=>String(found.task.latest_summary).includes(`SUMMARY-1-${marker}`));
+  const reviewed=await reaches(card.id,['review','running'],clock.within(90),found=>reviewRequested(found.runs,`SUMMARY-1-${marker}`));
   assert.ok(seen.work.some(run=>run.answer&&run.person),'the next Run read the answer under the person\'s name');
   assert.ok(reviewed.runs.filter(run=>run.profile===worker).length>=2,'the answer started a second Run of the same Agent');
   clock.phase('Card A read the answer and is sent for review',{board:{card:card.id}});
@@ -1069,7 +1027,7 @@ try {
   assert.equal(returned.assignee,worker,'a return puts the Card back to the same Agent');
   clock.phase('the person returned Card A to the same Agent',{board:{card:card.id,returned_to:returned.assignee}});
   await tick('for Card A after the return');
-  const again=await reaches(card.id,['review','running'],clock.within(90),found=>String(found.task.latest_summary).includes(`SUMMARY-2-${marker}`));
+  const again=await reaches(card.id,['review','running'],clock.within(90),found=>reviewRequested(found.runs,`SUMMARY-2-${marker}`));
   assert.ok(seen.work.some(run=>run.back),'the Agent\'s next Run read the reason it was sent back');
   assert.equal(again.task.assignee,worker);
   clock.phase('Card A read the reason and is sent for review again',{board:{card:card.id}});
@@ -1079,6 +1037,8 @@ try {
   personActed();
   const done=await reaches(card.id,'done',clock.within(20));
   assert.ok(String(done.task.latest_summary).includes(`SUMMARY-2-${marker}`)&&String(done.task.latest_summary).includes(passedLine),String(done.task.latest_summary));
+  assert.ok(passedAfterReview(done.runs,`SUMMARY-2-${marker}`,passedLine),
+   `the person's pass ends a Run after the second review request: ${JSON.stringify(done.runs.map(run=>[run.profile,run.outcome]))}`);
   assert.ok(done.comments.some(found=>found.author===person&&found.body.startsWith(tag.answer)),'the answer is on the Card under the person\'s name');
   clock.phase('the person passed Card A, done with its summary',{board:{card:card.id}});
   return {host,pwd,reviewerStopped,returned:returned.assignee,done:done.task.status};
