@@ -1,6 +1,7 @@
 """Which sessions are an Owner's (#884), kept in the plugin's own data of the main Agent's profile
 (plugins/plugin_storage.py: <profile>/plugin-data/gtmworks/data.db), never in the plugin's folder, which a release
 replaces. The plugin's route writes a mark (dashboard/plugin_api.py) and the tool reads it, both inside the Engine.
+Taking a mark off before its life ends is #886's.
 
 A mark has a short life: gtmworks marks a session again before each Run it starts, so a mark that was never taken off
 (a missed removal) ends by itself."""
@@ -39,24 +40,6 @@ def mark(session_id: str, person: str, seconds=None) -> float:
     finally:
         db.close()
     return until
-
-
-def unmark(session_id: str) -> int:
-    db = _db()
-    try:
-        with db:
-            return db.execute("DELETE FROM owner_sessions WHERE session_id = ?", (session_id,)).rowcount
-    finally:
-        db.close()
-
-
-def unmark_person(person: str) -> int:
-    db = _db()
-    try:
-        with db:
-            return db.execute("DELETE FROM owner_sessions WHERE person = ?", (person,)).rowcount
-    finally:
-        db.close()
 
 
 def read(session_id: str) -> dict | None:

@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
-const {companyProfile,isAgentProfile}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
+const {companyProfile,isAgentProfile,forbiddenOf,fixedToolsets}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
 const {releasePlugin,markOwnerSession,readOwnerSessions,readMainAgentPlugin}=await import(`${process.cwd()}/lib/engine/plugin.mjs`);
 
@@ -50,6 +50,7 @@ const offered=async()=>{
  for(const [label,key] of [['no key',''],['a wrong key','install-check-wrong-key']]) {
   const answer=await manage(route,{method:'POST',body:JSON.stringify({session_id:'forged',person:'nobody'})},key);
   assert.equal(answer.status,401,`the plugin's route refuses ${label}`);
+  assert.equal((await manage(route,{},key)).status,401,`the plugin's route refuses a read with ${label}`);
  }
  assert.ok(!(await readOwnerSessions(connection)).sessions.some(one=>one.session==='forged'),'a refused call marks nothing');
  console.log(`main Agent plugin: offered on ${profile}, ${files.length} files, its route refuses no key and a wrong key`);
@@ -119,6 +120,10 @@ if(step==='make') {
   assert.ok(listed,`${made.profile} is one of the Engine's profiles`);
   assert.equal(listed.display_name,name);
   assert.equal(listed.description,'Writes the install check.');
+  // It starts with the fixed set every Agent gets, never the Engine's defaults, and without the main Agent's tool.
+  const tools=await toolsets(made.profile);
+  assert.deepEqual(forbiddenOf(tools),[],`${made.profile} offers no tool no Agent gets`);
+  assert.deepEqual([...tools].sort(),[...fixedToolsets()].sort(),`${made.profile} offers exactly the fixed set`);
   // The new profile answers a Run at once, with no restart: it is pointed at the fake model as the check points each.
   const pointed=await manage(`/api/config?profile=${made.profile}`,{method:'PUT',body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
   assert.equal(pointed.status,200);

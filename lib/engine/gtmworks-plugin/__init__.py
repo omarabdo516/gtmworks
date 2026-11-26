@@ -60,6 +60,31 @@ def _taken(profiles, name: str) -> bool:
     return False
 
 
+def _same_tools(path) -> None:
+    """The new profile starts with the main Agent's own tools, which gtmworks keeps to the fixed set every Agent gets
+    (lib/agent-toolsets.mjs toolConfig), never with the Engine's defaults: the main Agent's plugin toolset left out, and
+    its commands starting in its own folder of the Company's work folder."""
+    from pathlib import Path
+    from hermes_cli.config import read_user_config_raw
+    from hermes_constants import get_hermes_home
+    from utils import atomic_yaml_write
+    main = read_user_config_raw(Path(get_hermes_home()) / "config.yaml")
+    target = Path(str(path)) / "config.yaml"
+    config = read_user_config_raw(target)
+    listed = (main.get("platform_toolsets") or {}).get("api_server")
+    if isinstance(listed, list):
+        config["platform_toolsets"] = {**(config.get("platform_toolsets") or {}),
+                                       "api_server": [name for name in listed if name != "gtmworks"]}
+    for key in ("approvals", "bot_desktop"):
+        if isinstance(main.get(key), dict):
+            config[key] = dict(main[key])
+    disabled = (main.get("agent") or {}).get("disabled_toolsets")
+    if isinstance(disabled, list):
+        config["agent"] = {**(config.get("agent") or {}), "disabled_toolsets": list(disabled)}
+    config["terminal"] = {**(config.get("terminal") or {}), "cwd": f"/work/{Path(str(path)).name}"}
+    atomic_yaml_write(target, config, sort_keys=False)
+
+
 def make_agent(args: dict, **kwargs) -> str:
     if not marks.read(str(kwargs.get("session_id") or "")):
         return _refused(NOT_OWNER)
@@ -85,6 +110,7 @@ def make_agent(args: dict, **kwargs) -> str:
         profile = f"ag-{uuid.uuid4().hex}"
         path = profiles.create_profile(name=profile, soul=instructions or None, description=speciality)
         profiles.seed_profile_skills(path, quiet=True)
+        _same_tools(path)
         profiles.set_profile_display_name(profile, name)
         # The new profile takes Runs on the Engine's own key, as gtmworks gives every profile (lib/engine/agents.mjs).
         key = os.environ.get("API_SERVER_KEY", "")
@@ -92,7 +118,8 @@ def make_agent(args: dict, **kwargs) -> str:
             with open(os.path.join(str(path), ".env"), "a", encoding="utf-8") as env:
                 env.write(f"API_SERVER_KEY={key}\n")
     except Exception as exc:  # noqa: BLE001 - the Agent says what the Engine answered
-        return _refused(f"The Engine could not make the Agent: {exc}")
+        # The Engine's own words, kept short: they reach the Agent's reply, so never a path or a value beyond them.
+        return _refused(f"The Engine could not make the Agent: {type(exc).__name__}: {str(exc)[:200]}")
     return _answer(True, profile=profile, name=name, speciality=speciality)
 
 

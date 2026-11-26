@@ -33,13 +33,3 @@ def listed():
 def mark(body: Mark):
     until = marks.mark(body.session_id, body.person, body.seconds)
     return {"ok": True, "session_id": body.session_id, "until": until}
-
-
-@router.delete("/owner-sessions/{session_id}")
-def unmark(session_id: str):
-    return {"ok": True, "removed": marks.unmark(session_id), "session_id": session_id}
-
-
-@router.delete("/people/{person}")
-def unmark_person(person: str):
-    return {"ok": True, "removed": marks.unmark_person(person), "person": person}

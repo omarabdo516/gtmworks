@@ -194,7 +194,7 @@ Engine of `engine-stack/`:
 | `GET /api/status` while no turn runs | `gateway_busy: false` |
 | `POST /api/gateway/restart` | 200 `{ok: true, name: "gateway-restart"}`; the container is not restarted (same `StartedAt`, `RestartCount` 0), and 10 s later the profile's Run API lists toolset `gtmworks` enabled with `gtmworks_make_agent` |
 | `platform_toolsets.api_server` written as gtmworks's fixed set with `gtmworks` beside it, before and after the plugin loads | 200; the toolset is offered once loaded, and the fixed set is unchanged |
-| A Run in a marked session calling the tool through `tool_call` | `{success: true, profile: "ag-<32 hex>", name, speciality}`; the profile is listed with that `display_name` and `description` and answers a Run at once |
+| A Run in a marked session calling the tool through `tool_call` | `{success: true, profile: "ag-<32 hex>", name, speciality}`; the profile is listed with that `display_name` and `description`, its Run API offers exactly gtmworks's fixed set (copied from the main Agent's config, its own toolset left out), and it answers a Run at once |
 | The same name again, in any case | `{success: false, error: "An Agent named … already exists. Choose another name."}` |
 | A session nobody marked | `{success: false, error: "Only an Owner of this Company can make an Agent. Ask an Owner to make it."}` |
 

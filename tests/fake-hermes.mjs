@@ -573,20 +573,19 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      &&Array.isArray(held.config?.plugins?.enabled)&&held.config.plugins.enabled.includes('gtmworks')).map(([name])=>name));
     return send(response,200,{ok:true,pid:4242,name:'gateway-restart'});
    }
-   const pluginRoute=url.pathname.match(/^\/api\/plugins\/gtmworks\/(owner-sessions)(?:\/([^/]+))?$/);
+   const pluginRoute=url.pathname.match(/^\/api\/plugins\/gtmworks\/(owner-sessions)$/);
    if(pluginRoute) {
     const named=url.searchParams.get('profile')||'default';
     if(!settings.fileBytes.has(`/opt/data/profiles/${named}/plugins/gtmworks/dashboard/plugin_api.py`)) return send(response,404,{detail:'Plugin not found'});
     const held=settings.ownerSessions.get(named)??new Map(); settings.ownerSessions.set(named,held);
     const now=Date.now()/1000;
-    if(request.method==='GET'&&!pluginRoute[2]) return send(response,200,{sessions:[...held].filter(([,mark])=>mark.until>now).map(([session_id,mark])=>({session_id,...mark}))});
-    if(request.method==='POST'&&!pluginRoute[2]) {
+    if(request.method==='GET') return send(response,200,{sessions:[...held].filter(([,mark])=>mark.until>now).map(([session_id,mark])=>({session_id,...mark}))});
+    if(request.method==='POST') {
      if(typeof body?.session_id!=='string'||!body.session_id||typeof body?.person!=='string'||!body.person) return send(response,422,{detail:'session_id, person'});
      const until=now+Math.min(Math.max(Number.isInteger(body.seconds)?body.seconds:900,1),3600);
      held.set(body.session_id,{person:body.person,until});
      return send(response,200,{ok:true,session_id:body.session_id,until});
     }
-    if(request.method==='DELETE'&&pluginRoute[2]) { const session=decodeURIComponent(pluginRoute[2]); const removed=held.delete(session)?1:0; return send(response,200,{ok:true,removed,session_id:session}); }
     return send(response,405,{detail:'Method Not Allowed'});
    }
    if(url.pathname==='/api/files'&&request.method==='GET') {
