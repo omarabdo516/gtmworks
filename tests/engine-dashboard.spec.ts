@@ -135,6 +135,8 @@ test('the dashboard is in gtmworks\'s colours in the person\'s light or dark, an
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('dir','ltr');
   await expect(page.locator('#to-sessions')).toHaveText('Sessions');
+  // The page paints with the theme once the dashboard has read it, which the theme line shows.
+  await expect(page.locator('#engine-theme')).toHaveText('gtmworks');
   expect(await backgroundOf(page)).toBe(canvas.light);
  } finally { query(`update public.people set theme='device',language='en' where id='${owner}'`); }
 });
