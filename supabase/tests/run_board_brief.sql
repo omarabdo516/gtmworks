@@ -4,6 +4,7 @@ select plan(9);
 -- Spec #831 (#844): every Agent's Run is told the board names (Engine profiles) of the Agents its person sees and its
 -- own, so it gives a job as a Card with the Engine's own kanban_create; pinned once with the Run. RS Learning's main
 -- Agent, and Reach on its own profile, made from the meta role.
+insert into public.agent_profiles(agent_id,company_id) values ('f8440000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default,template)
  values('f8440000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Reach','Plans the Meta ads.','ag-f8440000000000000000000000000002',false,'meta');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default)
