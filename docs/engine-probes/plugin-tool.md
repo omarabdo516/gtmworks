@@ -15,7 +15,8 @@ start**, not when its files land.
 Run it again with `sh docs/engine-probes/plugin-tool/run.sh` (about five minutes): it stands up the throwaway Engine of
 `docs/engine-probes/engine-stack/` (#823), places the plugin in `docs/engine-probes/plugin-tool/plugin/`, runs
 `plugin-tool/probe.mjs`, prints the lines below and removes everything it made. A step that gets another answer than
-the one below exits non-zero with the Engine's answer.
+the one below exits non-zero with the Engine's answer. The install's own backup and restore with the plugin in place
+run apart, on a real install: `bash docs/engine-probes/plugin-tool/install-backup.sh` (section 8).
 
 # 1. What the Engine answered
 
@@ -82,11 +83,17 @@ paths are not API, so reading the platform that way may break at a pin bump.
   replaced by `hermes plugins update`, so state never goes there). Both are in the Engine's data volume.
 - **An Engine restart** keeps both (table, row "After an Engine restart").
 - **`gtmworks update`** pulls the new Engine image and recreates the Engine's container on the same data volume
-  (`scripts/install.sh`); the image's own files (`/opt/hermes`) are replaced and `/opt/data` is not. The probe did the
-  same with the same pin (row "a new one started on the same volume") and both stayed.
-- **A backup and a restore** copy each Engine's whole data volume, `engines/<folder>` in the archive
-  (`scripts/install.sh`, the `tar -czf … engines work …` of `backup` and the `tar -xzpf … engines work` of `restore`), so
-  the plugin and its marks go with it. See section 6 for the run of the install's own commands.
+  (`scripts/install.sh`): a release's update replaces the image's own files (`/opt/hermes`) and never `/opt/data`. The
+  probe did the same with the same pin (table, "a new one started on the same volume") and both stayed.
+- **A backup and a restore** carry both. The install's own commands, on the install proof's own stack, ran in
+  `docs/engine-probes/plugin-tool/install-backup.sh` (section 8): a source install made by the proof's helpers
+  (`scripts/ci-install-lib.sh`), the plugin placed in the first Company's main Agent's profile and a session marked,
+  `sh scripts/install.sh backup`, the install removed, a fresh install whose Engine held no profile at all, and
+  `sh scripts/install.sh restore <archive>`. The archive held
+  `engines/first/profiles/<profile>/plugins/gtmworks-people/…` and `…/plugin-data/gtmworks-people/data.db`; after the
+  restore the plugin's files were back, its toolset was offered and its route listed the Owner's session it was told
+  before the backup. (The proof's `remove_install` leaves the screen-driver container holding the Engine's volume, so
+  the probe removes both before the fresh install; #850.)
 - **How long a session stays an Owner's after the mark is taken off:** not at all. The tool reads the mark on every call,
   so the first call after the route answered is refused; the window is the route's own round trip.
 
@@ -113,6 +120,8 @@ it.
 - **Read the session from `session_id`**, the documented field. Platform, profile and Card come from Engine internals
   (`gateway.session_context`, `hermes_constants`, the worker's environment) and from `hermes_cli.profiles` for making the
   profile: the spec lists them as the pin-bump check, and this probe is that check (`run.sh`).
+- **Nothing else carries it.** The plugin and what it was told live in the Engine's data volume, so `gtmworks update`,
+  `install.sh backup` and `install.sh restore` keep them with no step of their own (section 8).
 - **Nothing reaches the install.** The tool needs no address, key or database of gtmworks; the Engine's network stays as
   ADR 0018 keeps it.
 
@@ -144,5 +153,29 @@ after an Engine restart: marks ["conversation-owner","card:t_b2474e55"], the too
 after a new Engine container on the same volume: the tool {"success":true,"made":"ag-after-update"}; plugin files at /opt/data/profiles/lead/plugins/gtmworks-people: __init__.py dashboard marks.py plugin.yaml; marks in /opt/data/profiles/lead/plugin-data/gtmworks-people: data.db
 ending: in 5 tries the first call after the mark was taken off was refused each time; the longest that call took from the route's answer to the refusal in the session: 254 ms, and no call in between succeeded
 with tools.tool_search.enabled: off on the profile, the tool named directly: events ["tool.started gtmworks_make_agent","tool.completed gtmworks_make_agent error=false"], answer {"success":true,"made":"ag-eager"}
+probe complete
+```
+
+# 8. The install's backup and restore
+
+`bash docs/engine-probes/plugin-tool/install-backup.sh` (commit first: it runs HEAD; about 20 minutes, most of it the
+install's image builds). It needs the ports a source install takes on `127.0.0.1` free.
+
+```
+install: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002 as the first Company's Engine
+main Agent's profile: co-4a386308ea6443a59e4a4f15c727a54d
+mark a session through the plugin's route: {"ok":true,"session_id":"conversation-owner"}
+before the backup: the plugin's toolset [('gtmworks', True)]; its marks {"sessions":[{"session_id":"conversation-owner","person":"owner-1","at":1795657191.3029134}]}
+backup: 2869 entries; the plugin's entries:
+  engines/first/profiles/co-4a386308ea6443a59e4a4f15c727a54d/plugin-data/gtmworks-people/
+  engines/first/profiles/co-4a386308ea6443a59e4a4f15c727a54d/plugin-data/gtmworks-people/data.db
+  engines/first/profiles/co-4a386308ea6443a59e4a4f15c727a54d/plugins/gtmworks-people/
+  engines/first/profiles/co-4a386308ea6443a59e4a4f15c727a54d/plugins/gtmworks-people/__init__.py
+  engines/first/profiles/co-4a386308ea6443a59e4a4f15c727a54d/plugins/gtmworks-people/plugin.yaml
+  engines/first/profiles/co-4a386308ea6443a59e4a4f15c727a54d/plugins/gtmworks-people/marks.py
+left after remove_install: gtmworks-screen-driver-first gtmworks-install_hermes 
+a fresh, empty install: the main Agent's profile folder absent
+after the restore: the plugin's files __init__.py dashboard marks.py plugin.yaml 
+after the restore: the plugin's toolset [('gtmworks', True)]; its marks {"sessions":[{"session_id":"conversation-owner","person":"owner-1","at":1795657191.3029134}]}
 probe complete
 ```
