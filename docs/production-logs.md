@@ -20,7 +20,7 @@ password, anything shaped like a token, and short digit runs such as authenticat
   one per call. Fields: `engine` (its host and port), `listener` (`api` or `management`), `state` (`slow`: a call timed
   out; `down`: nothing could connect; `up`: it answers again) and `cause` (`timedOut`, `refused`, `nameNotFound`,
   `noNetwork` or `failed`; null when `up`). A slow listener is asked one call at a time, after a wait of 250 ms that
-  doubles with each timeout in a row up to 8 s (a Run's start, stop, answer and permission go at their turn without it); a down one is asked one call at a time with no wait. A slow Engine reads
+  doubles with each timeout in a row up to 8 s (the Run lifecycle's calls, a Run's start, record, events, answer, permission and stop, go at their turn without it); a down one is asked one call at a time with no wait. A slow Engine reads
   `timedOut`, never unreachable. The worker leaves an Engine whose write failed out of its upkeep after 2 s, then 4 s,
   and so on up to five minutes. It writes an Agent's rules and its Company's shared Skills only when they changed since
   its own last write, and reads every profile once every five minutes for drift.
