@@ -18,14 +18,17 @@ export type LogPeople=Awaited<ReturnType<typeof logPeople>>;
 // The names and faces a log line needs, read as the signed-in person: the Company's Members, removed ones too (the
 // legacy role agents' memberships among them), its Agents and the Cards the rows point at.
 export async function logPeople(db:Db,company:string,cardIds:number[]) {
- const [{data:members},{data:agents},{data:current},{data:archived}]=await Promise.all([
+ const [{data:members},{data:former},{data:agents},{data:current},{data:archived}]=await Promise.all([
   db.from('members').select('person_id,removed_at,people(name)').eq('company_id',company),
+  // A removed membership's row is hidden from its readers; its name still reads (spec #695).
+  db.rpc('former_member_names',{c:company}),
   db.from('hermes_agents').select('id,name,connection_id,is_default').eq('company_id',company),
   cardIds.length?db.from('work_cards').select('id,title').eq('company_id',company).in('id',[...new Set(cardIds)]):Promise.resolve({data:[] as {id:number,title:string}[]}),
   // An archived Card (#670) keeps its title in the log: it is read apart, as current Cards leave it out.
   cardIds.length?db.rpc('archived_cards',{c:company}).select('id,title').in('id',[...new Set(cardIds)]):Promise.resolve({data:[] as {id:number,title:string}[]}),
  ]);
- const rows=(members||[]) as unknown as {person_id:string,removed_at:string|null,people:{name:string}|null}[];
+ const rows=[...(members||[]) as unknown as {person_id:string,removed_at:string|null,people:{name:string}|null}[],
+  ...((former||[]) as {person_id:string,name:string}[]).map(({person_id,name})=>({person_id,removed_at:'removed',people:{name}}))];
  return {
   members:rows,
   agents:(agents||[]) as {id:string,name:string,connection_id:string,is_default:boolean}[],

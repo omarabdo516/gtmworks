@@ -30,7 +30,8 @@ begin
  select coalesce(array_agg(id),'{}') into old_agents from (select a.id from public.agents a
   union select m.person_id from public.members m where m.agent_role is not null) x;
  update public.members m set removed_at=now() where m.removed_at is null and m.person_id=any(old_agents);
- update auth.users u set banned_until='infinity' where u.id=any(old_agents) and u.banned_until is distinct from 'infinity';
+ -- The auth server reads banned_until into a time of its own, so the ban is a date far ahead, not 'infinity'.
+ update auth.users u set banned_until='2999-12-31 00:00:00+00' where u.id=any(old_agents) and (u.banned_until is null or u.banned_until<'2999-12-31 00:00:00+00');
 end $$;
 revoke all on function public.settle_legacy_role_agents() from public, anon, authenticated, service_role;
 
@@ -101,19 +102,49 @@ create or replace function public.channel_message_mentions(ch uuid, person uuid,
  order by m.person_id;
 $$;
 
--- A new Card's request (New card on the board) was addressed to a role agent, which since #341 nothing runs. It is addressed
--- to one of the Company's own Agents the reader sees, as an idea from the Ideas column is (create_work_card), and the
--- message is its first comment. The previous release's request to a role agent finds none and is refused, as it was for
--- an agent without an active grant.
+-- A new Card's request (New card on the board) was addressed to a role agent, which since #341 nothing runs. This release
+-- addresses it to one of the Company's own Agents the reader sees, as an idea from the Ideas column is (create_work_card),
+-- and the message is its first comment. The previous release's request to a role agent keeps its meaning until the
+-- cutover (ADR 0023): a granted role agent with an active membership is still assigned, as before.
 create or replace function public.create_card_request(c uuid, message text, agent uuid, card_mode text) returns bigint language plpgsql set search_path = '' as $$
 declare result bigint; first_stage bigint; text_body text := btrim(coalesce(message,'')); begin
  if not public.work_can_edit(c) then raise exception 'not permitted'; end if;
  if text_body='' or card_mode is null or card_mode not in ('plan','do','answer') then raise exception 'invalid request' using errcode='22023'; end if;
+ select id into first_stage from public.work_stages where company_id=c and kind='ideas';
+ if agent is not null and exists(select 1 from public.company_agents(c) x where x.person_id=agent and x.granted) then
+  if first_stage is null then raise exception 'no Ideas stage'; end if;
+  insert into public.work_cards(company_id,stage_id,title,mode) values (c,first_stage,left(btrim(split_part(text_body,E'\n',1)),80),card_mode) returning id into result;
+  insert into public.work_assignees(company_id,card_id,person_id) values (c,result,agent);
+  insert into public.work_comments(company_id,card_id,body) values (c,result,text_body);
+  return result;
+ end if;
  if agent is null or not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=agent)
   or not public.can_see_agent(c,agent) then raise exception 'agent not found'; end if;
- select id into first_stage from public.work_stages where company_id=c and kind='ideas';
  if first_stage is null then raise exception 'no Ideas stage'; end if;
  insert into public.work_cards(company_id,stage_id,title,mode,agent_id) values (c,first_stage,left(btrim(split_part(text_body,E'\n',1)),80),card_mode,agent) returning id into result;
  insert into public.work_comments(company_id,card_id,body) values (c,result,text_body);
  return result;
 end $$;
+
+-- An old agent's identity cannot be assigned (spec #695): a Member assigns only an active Member. A removed membership, an
+-- old agent's among them, stays only for the names of what it did; assignees already stored are kept as they are. It runs
+-- as the caller: someone outside the Company is refused by the row rule, as before.
+create function public.guard_work_assignee() returns trigger language plpgsql set search_path = '' as $$
+begin
+ if auth.uid() is not null and public.is_member(new.company_id)
+  and not exists(select 1 from public.members m where m.company_id=new.company_id and m.person_id=new.person_id and m.removed_at is null) then
+  raise exception 'memberNotFound' using errcode='P0002';
+ end if;
+ return new;
+end $$;
+revoke all on function public.guard_work_assignee() from public, anon, authenticated;
+create trigger work_assignee_active before insert on public.work_assignees for each row execute function public.guard_work_assignee();
+
+-- What a removed Member did keeps its name (spec #695): a removed membership is hidden by its row rule, so its people row
+-- is too. A Member of the Company reads the names of its former Members, and nothing else of them.
+create function public.former_member_names(c uuid) returns table(person_id uuid, name text) language sql stable security definer set search_path = '' as $$
+ select m.person_id, p.name from public.members m join public.people p on p.id=m.person_id
+ where m.company_id=c and m.removed_at is not null and public.is_member(c);
+$$;
+revoke all on function public.former_member_names(uuid) from public, anon;
+grant execute on function public.former_member_names(uuid) to authenticated;

@@ -7,6 +7,7 @@ import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 import { appOrigin } from './lane.mjs';
+import { ensureRequestAgent } from './request-agent';
 
 async function chooseLanguage(page:Page,language:Language) {
  await chooseLanguageInSettings(page,language);
@@ -80,6 +81,7 @@ test('English default, account language across sessions/devices, automatic conte
  const calendarTitles=[`ع 1440 ${suffix.toString(36)}`,`A 1440 ${suffix.toString(36)}`];
  const goLive=`${new Date().toISOString().slice(0,10)}T12:00`;
  const paths:string[]=[];
+ ensureRequestAgent();
  for(const title of [...titles,...calendarTitles]) {
   await page.goto('/c/rs-learning/work/new');
   await page.getByLabel('Message',{exact:true}).fill(title);

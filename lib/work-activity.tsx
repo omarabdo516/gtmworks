@@ -8,7 +8,9 @@ import Link from '@/lib/link';
 import { workDate } from './work-date.mjs';
 import { isThumbnail } from './attachments.mjs';
 import { columnLabel } from './board-columns.mjs';
-export type WorkMember={person_id:string,role?:'owner'|'manager'|'contributor'|'viewer',people:{name:string}|null};
+// removed_at: a removed Member is kept for the names of what it did (spec #695: an old role agent's too) and offered
+// by no picker.
+export type WorkMember={person_id:string,role?:'owner'|'manager'|'contributor'|'viewer',removed_at?:string|null,people:{name:string}|null};
 export type WorkActivity={id:number,card_id:number,action:string,details:Record<string,unknown>,created_at:string,actor_id:string|null,evidence:string|null,evidence_url?:string|null};
 // A person shows the first letter of its name (#697: the orb is a Company Agent's face only).
 export function Avatar({id,members,nameVisible=false}:{id:string|null,members:WorkMember[],nameVisible?:boolean}) { const {t}=useI18n(); const member=members.find(member=>member.person_id===id); const name=member?.people?.name||t('member'); return <span dir="auto" className="avatar" title={name} role="img" aria-label={name} aria-hidden={nameVisible||undefined}>{Array.from(name.trim())[0]||'؟'}</span>; }

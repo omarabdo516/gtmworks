@@ -6,7 +6,8 @@ import { roleAgentsAsTheyStood, testDb } from './pgtap.mjs';
 // (the key on a membership and its type, the shared agents and their grants) inside its own transaction, then applies the
 // first step and the cutover as the installer does, each in its stage. Cases: an install with none, with old agents, with
 // a person holding a key, with an identity that cannot be told; the previous release's writes on the first step's schema;
-// a backup from before the cutover restored after it; and a cutover that meets a person recorded as an agent.
+// rows a backup from before the cutover brings back, which the install's restore settles by applying the cutover again
+// (scripts/install.sh); and a cutover that meets a person recorded as an agent.
 const first = readFileSync('supabase/migrations/20270418000000_legacy_role_agents.sql', 'utf8');
 const cutover = readFileSync('supabase/migrations/20270418000001_legacy_role_agents_cutover.sql', 'utf8');
 const rs = '10000000-0000-0000-0000-000000000001';
@@ -21,12 +22,12 @@ const people = `insert into auth.users(id,email,last_sign_in_at) values
 insert into public.people(id,name) values ('${agent}','الكاتب'),('${keyed}','المصمم'),('${person}','Hermes Person'),('${unsure}','الناقد');`;
 const sql = `begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(29);
 ${roleAgentsAsTheyStood}
 
 -- An install with none: the first step changes no membership.
 create temporary table members_before as select company_id,person_id,role,removed_at from public.members;
-${first.replace('create function public.settle_legacy_role_agents', 'create or replace function public.settle_legacy_role_agents')}
+${first.replace(/^create function public\./gm, 'create or replace function public.').replace(/^create trigger /gm, 'create or replace trigger ')}
 select is((select count(*)::int from public.members m join members_before b using(company_id,person_id) where m.removed_at is not distinct from b.removed_at and m.role=b.role),
  (select count(*)::int from members_before),'an install with no role agent keeps every membership as it was');
 select ok(to_regclass('public.agents') is not null and exists(select 1 from information_schema.columns where table_schema='public' and table_name='members' and column_name='agent_role'),
@@ -41,7 +42,7 @@ insert into public.work_comments(company_id,card_id,body,author_id) select '${rs
 select lives_ok($$select public.settle_legacy_role_agents()$$,'the rows are settled');
 select ok((select removed_at is not null from public.members where company_id='${rs}' and person_id='${agent}')
  and (select removed_at is not null from public.members where company_id='${rs}' and person_id='${keyed}'),'an old agent''s membership is marked removed, shared or keyed');
-select is((select count(*)::int from auth.users where id in ('${agent}','${keyed}') and banned_until='infinity'),2,'and it can no longer sign in');
+select is((select count(*)::int from auth.users where id in ('${agent}','${keyed}') and banned_until='2999-12-31 00:00:00+00'),2,'and it can no longer sign in');
 select is((select count(*)::int from public.people where id in ('${agent}','${keyed}')),2,'its people row stays for names');
 select is((select p.name from public.work_comments c join public.people p on p.id=c.author_id where c.body='old agent note 695'),'الكاتب','what it wrote keeps its name');
 select ok((select removed_at is null and agent_role is null from public.members where company_id='${rs}' and person_id='${person}'),'a person who held a key keeps the membership and loses the key');
@@ -51,6 +52,15 @@ select ok(not public.channel_person('${rs}','${agent}'),'an old agent is in no c
 select is((select name from public.conversation_addressee('${rs}','@Hermes Person can you look?')),'Hermes Person','the person is mentioned');
 select is((select count(*)::int from public.conversation_addressee('${rs}','@الكاتب look')),0,'an old agent is not');
 select is(public.log_actor_kind('${rs}','${person}'),'person','the person''s new log rows are a person''s');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','${owner}',true);
+select throws_ok($$insert into public.work_assignees(company_id,card_id,person_id) select '${rs}',min(id),'${agent}' from public.work_cards where company_id='${rs}'$$,'P0002','memberNotFound','an old agent cannot be assigned');
+select lives_ok($$insert into public.work_assignees(company_id,card_id,person_id) select '${rs}',min(id),'${person}' from public.work_cards where company_id='${rs}'$$,'the person can');
+select is((select name from public.former_member_names('${rs}') where person_id='${agent}'),'الكاتب','a Member reads an old agent''s name, for what it wrote');
+reset role;
+select set_config('request.jwt.claim.sub','',true);
+select is((select count(*)::int from public.members where company_id='${rs}' and removed_at is null and person_id in ('${agent}','${keyed}','${person}')),1,'an old agent is not counted among the Members; the person is');
+select ok(not exists(select 1 from public.channel_message_mentions((select id from public.channels where company_id='${rs}' and kind='general'),'${owner}','@الكاتب look')),'nor mentioned in a channel');
 
 -- The previous release on the first step's schema: its Members page writes a key, and its Agents page a grant.
 select lives_ok($$update public.members set agent_role='critic' where company_id='${rs}' and person_id='${person}'$$,'the previous release still writes a role key');

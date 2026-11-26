@@ -90,6 +90,20 @@ begin
  end loop;
 end $$;
 
+-- A new Card's request goes only to one of the Company's own Agents; the previous release's branch for a role agent goes.
+create or replace function public.create_card_request(c uuid, message text, agent uuid, card_mode text) returns bigint language plpgsql set search_path = '' as $$
+declare result bigint; first_stage bigint; text_body text := btrim(coalesce(message,'')); begin
+ if not public.work_can_edit(c) then raise exception 'not permitted'; end if;
+ if text_body='' or card_mode is null or card_mode not in ('plan','do','answer') then raise exception 'invalid request' using errcode='22023'; end if;
+ if agent is null or not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=agent)
+  or not public.can_see_agent(c,agent) then raise exception 'agent not found'; end if;
+ select id into first_stage from public.work_stages where company_id=c and kind='ideas';
+ if first_stage is null then raise exception 'no Ideas stage'; end if;
+ insert into public.work_cards(company_id,stage_id,title,mode,agent_id) values (c,first_stage,left(btrim(split_part(text_body,E'\n',1)),80),card_mode,agent) returning id into result;
+ insert into public.work_comments(company_id,card_id,body) values (c,result,text_body);
+ return result;
+end $$;
+
 -- 4. The tables, the key and its type. The key's check and its one-holder index go with the column.
 alter table public.members drop column agent_role;
 drop type public.member_agent_role;
