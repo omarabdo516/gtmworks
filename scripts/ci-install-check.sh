@@ -800,6 +800,15 @@ engine_node "$engine_key" - verify "$marker" < scripts/check-install-profiles.mj
 # added, tested, turned on for one Agent and removed through the same driver, for no sign-in, a token and OAuth, against a
 # fake MCP server the check starts inside this container (the Engine reaches it as http://web:9123).
 engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps come with all their tools, and any remote MCP server is added and removed'
+# The main Agent's tool (#884): the worker places gtmworks's plugin in the first Company's main Agent's profile on the
+# pinned, unmodified Engine and restarts it once; its tool is offered to that profile's Runs, makes a profile that
+# answers at once in a session marked as an Owner's, refuses an unmarked one with its reason, and its route refuses a call
+# without the Engine's key. The Engine's network stays closed to the install throughout. The same after `gtmworks update`.
+plugin_marker="plugin-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - make "$plugin_marker" < scripts/check-install-main-agent.mjs || fail "the main Agent's tool is offered after the install, makes an Agent for an Owner and refuses anyone else"
+sh scripts/install.sh update "$INSTALL_REF" > plugin-update.log 2>&1 || { tail -n 40 plugin-update.log >&2; fail 'gtmworks update of the agents install'; }
+engine_healthy "$(first_engine_id)" 120 || fail 'the Engine is healthy after the update'
+engine_node "$engine_key" - make "$plugin_marker-update" < scripts/check-install-main-agent.mjs || fail "the main Agent's tool is offered after gtmworks update, makes an Agent for an Owner and refuses anyone else"
 scan_engines
 }
 
@@ -1186,6 +1195,10 @@ db -c "update public.agent_looks set picked_colour='rose',picked_shape='blob' wh
 looks() { db -c "select agent_id||' '||auto_shape||' '||auto_colour||' '||auto_temperament||' '||coalesce(picked_shape,'-')||' '||coalesce(picked_colour,'-')||' '||coalesce(picked_temperament,'-') from public.agent_looks order by agent_id"; }
 looks > looks.before || fail 'read the looks before the backup'
 grep -q ' blob rose -$' looks.before || fail 'an Agent has a picked look before the backup'
+# The main Agent's plugin (#884) and what it was told live in the Engine's data volume, so the archive carries both.
+engine_key=$(first_engine_key)
+plugin_marker="plugin-backup-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - tell "$plugin_marker" < scripts/check-install-main-agent.mjs || fail "the main Agent's plugin is in place and told an Owner's session before the backup"
 sh scripts/install.sh backup || fail 'backup'
 first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
@@ -1203,6 +1216,7 @@ looks > looks.after || fail 'read the looks after the restore'
 diff -u looks.before looks.after || fail "the restore keeps every Agent's look, given and picked"
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
+engine_node "$(first_engine_key)" - told "$plugin_marker" < scripts/check-install-main-agent.mjs || fail "the restore brings back the main Agent's plugin and what it was told"
 }
 
 # backup-engines: the backup of every Company's Engine and work folder (#386, #399, ADR 0018), split from the backup area

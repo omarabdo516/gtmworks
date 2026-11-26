@@ -179,3 +179,24 @@ after the restore: the plugin's files __init__.py dashboard marks.py plugin.yaml
 after the restore: the plugin's toolset [('gtmworks', True)]; its marks {"sessions":[{"session_id":"conversation-owner","person":"owner-1","at":1795657191.3029134}]}
 probe complete
 ```
+
+# 9. How the release places the plugin (#884)
+
+The product's plugin is `lib/engine/gtmworks-plugin/` (plugin and toolset `gtmworks`, tool `gtmworks_make_agent`); the
+worker keeps it in each main Agent's profile (`lib/main-agent-plugin.mjs`) through the Engine's own management listener
+with the Engine's key, where the probe above used `docker cp`. Measured on the same pin on 2026-11-26, with a throwaway
+Engine of `engine-stack/`:
+
+| Step | Answer |
+| --- | --- |
+| Each file `POST /api/files/upload` to `<profile path>/plugins/gtmworks/<file>` (the path `GET /api/profiles` lists) | 200 `ok: true`, written as the Engine's own user; `GET /api/files/download` answers the same bytes, and 404 `Path not found` before |
+| `PUT /api/config?profile=<profile>` `{plugins: {enabled: [gtmworks]}}` | 200; `GET /api/config` lists it under `plugins.enabled` |
+| `GET /api/status` while no turn runs | `gateway_busy: false` |
+| `POST /api/gateway/restart` | 200 `{ok: true, name: "gateway-restart"}`; the container is not restarted (same `StartedAt`, `RestartCount` 0), and 10 s later the profile's Run API lists toolset `gtmworks` enabled with `gtmworks_make_agent` |
+| `platform_toolsets.api_server` written as gtmworks's fixed set with `gtmworks` beside it, before and after the plugin loads | 200; the toolset is offered once loaded, and the fixed set is unchanged |
+| A Run in a marked session calling the tool through `tool_call` | `{success: true, profile: "ag-<32 hex>", name, speciality}`; the profile is listed with that `display_name` and `description` and answers a Run at once |
+| The same name again, in any case | `{success: false, error: "An Agent named … already exists. Choose another name."}` |
+| A session nobody marked | `{success: false, error: "Only an Owner of this Company can make an Agent. Ask an Owner to make it."}` |
+
+The install proof repeats it on a real install (`scripts/check-install-main-agent.mjs`): after the install and after
+`gtmworks update` in the agents area, and across a backup and a restore in the backup area.
