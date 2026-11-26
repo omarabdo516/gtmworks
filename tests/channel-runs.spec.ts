@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+import { hermesHostOf } from './lane.mjs';
 test.beforeAll(()=>laneEngineRecords());
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -52,7 +53,8 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week'};
   const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,mention)) as {message:number};
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
-  expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
+  // The Company's Engine record names the lane's Engine, and its key (scripts/local-db.sh).
+  expect(fake.connections[0]).toMatchObject({address:`http://${hermesHostOf()}:8642`,key:'test-only-key'});
   // The Agent's rules are in its profile's SOUL.md (#345), and no channel Run is told the Company knowledge (#344): the
   // profile auto-loads it as the shared Skill.
   expect(fake.runs[0].instructions??'').not.toContain('Answer in English');

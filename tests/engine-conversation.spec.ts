@@ -975,7 +975,10 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   const before=hermes.settings.managementRequests.length;
   expect(await runToolCall({db:service,engine:engineFor({address:hermes.address,profile,key:'test-only-key'}),profile,conversation,run:fake.runs[0].id},
    {id:'call-0',name:'create_agent',arguments:{template:'writer'}})).toEqual({state:'created',agent:agent.id});
-  expect(managed(hermes).slice(before)).toEqual([]);
+  // The lane's worker keeps its own upkeep on the same Engine on its own clock (the accounts, their switches, the config
+  // it reads each pass): those reads are not the call's.
+  const upkeep=new Set(['GET /api/credentials/pool','GET /api/credentials/pool/switches','GET /api/config']);
+  expect(managed(hermes).slice(before).filter(request=>!upkeep.has(request))).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
   // The worker gives the Agent's own profile its Company's shared folder before its first Run (#122).
