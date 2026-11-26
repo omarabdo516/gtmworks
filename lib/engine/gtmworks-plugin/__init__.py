@@ -101,6 +101,7 @@ def make_agent(args: dict, **kwargs) -> str:
         return _refused(f"The new Agent's speciality is longer than {SPECIALITY_LIMIT} characters. Say it in one sentence.")
     if len(instructions) > INSTRUCTIONS_LIMIT:
         return _refused(f"The new Agent's instructions are longer than {INSTRUCTIONS_LIMIT} characters. Make them shorter.")
+    made = None
     try:
         from hermes_cli import profiles
         if _taken(profiles, name):
@@ -109,6 +110,7 @@ def make_agent(args: dict, **kwargs) -> str:
         # id from the profile's name.
         profile = f"ag-{uuid.uuid4().hex}"
         path = profiles.create_profile(name=profile, soul=instructions or None, description=speciality)
+        made = profile
         profiles.seed_profile_skills(path, quiet=True)
         _same_tools(path)
         profiles.set_profile_display_name(profile, name)
@@ -118,6 +120,13 @@ def make_agent(args: dict, **kwargs) -> str:
             with open(os.path.join(str(path), ".env"), "a", encoding="utf-8") as env:
                 env.write(f"API_SERVER_KEY={key}\n")
     except Exception as exc:  # noqa: BLE001 - the Agent says what the Engine answered
+        # A profile this call made and could not finish goes again, so a half-made Agent never holds the name; nothing
+        # else is removed.
+        if made:
+            try:
+                profiles.delete_profile(made, yes=True)
+            except Exception:  # noqa: BLE001 - the refusal below still says why the Agent was not made
+                pass
         # The Engine's own words, kept short: they reach the Agent's reply, so never a path or a value beyond them.
         return _refused(f"The Engine could not make the Agent: {type(exc).__name__}: {str(exc)[:200]}")
     return _answer(True, profile=profile, name=name, speciality=speciality)

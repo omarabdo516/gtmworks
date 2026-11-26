@@ -39,9 +39,8 @@ if(step==='settled') {
   await until(`the main Agent's plugin offered on ${main}`,async()=>{
    const at=await engineOf(one.id,service);
    if(!at) return false;
-   const response=await fetch(`${at.address}/p/${main}/v1/toolsets`,{headers:{Authorization:`Bearer ${at.key}`}}).catch(()=>null);
-   if(!response?.ok) return false;
-   return (await response.json()).data.some(toolset=>toolset.enabled&&toolset.name==='gtmworks');
+   // This release's revision, not only the toolset: an earlier one still loaded means a restart is still to come.
+   return (await readOfferedPlugin({address:at.address,managementAddress:at.address.replace(/:\d+$/,':9119'),key:at.key,profile:main})).current===true;
   },300);
  }
  console.log(`main Agent plugin: offered on the main Agent of ${all.length} Companies`);

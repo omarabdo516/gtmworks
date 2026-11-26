@@ -181,3 +181,37 @@ test('a new worker that finds this release\'s files in place and an earlier revi
   assert.deepEqual(await keepMainAgentPlugins(due(main),{}),{placed:0,restarted:0,offered:1});
  } finally { await fake.close(); }
 });
+
+test('a restart still owed from an earlier pass is not made when the Engine already offers this release\'s plugin', async () => {
+ // A restart whose answer was lost (its deadline passed, the connection dropped) can still have loaded the plugin: the
+ // next pass reads what the Engine offers before it restarts again (CodeRabbit on #895).
+ const fake=await engineServing(company);
+ try {
+  await provided(fake,main);
+  const kept=new Map(), {now,pass}=clock();
+  fake.settings.gatewayBusy=true;
+  assert.deepEqual(await keepMainAgentPlugins(due(main),{kept,now}),{placed:1,restarted:0,offered:0});
+  assert.equal(kept.get(main)?.state,'restart');
+  // The Engine restarted by itself meanwhile and loaded this release's plugin.
+  const yaml=Buffer.from(fake.settings.fileBytes.get(`/opt/data/profiles/${main}/plugins/gtmworks/plugin.yaml`).body).toString();
+  fake.settings.pluginsLoaded.set(main,/^description: "(.*)"$/m.exec(yaml)[1]);
+  fake.settings.gatewayBusy=false;
+  pass(1000);
+  assert.deepEqual(await keepMainAgentPlugins(due(main),{kept,now}),{placed:0,restarted:0,offered:1});
+  assert.equal(fake.settings.restarts,0);
+ } finally { await fake.close(); }
+});
+
+test('gtmworks names a mark\'s life of its own, zero included, and leaves the plugin\'s default when it names none', async () => {
+ const fake=await engineServing(company);
+ try {
+  await provided(fake,main);
+  await keepMainAgentPlugins(due(main),{});
+  const on=(await companyEngine(company)).on(main);
+  for(const [seconds,sent] of [[0,0],[60,60],[undefined,undefined]]) {
+   await on.plugin.markOwner({session:`life-${seconds}`,person:'owner-1',seconds});
+   const body=fake.settings.managementRequests.filter(request=>request.method==='POST'&&request.path.startsWith('/api/plugins/gtmworks/owner-sessions')).at(-1).body;
+   assert.equal(body.seconds,sent,`seconds ${seconds}`);
+  }
+ } finally { await fake.close(); }
+});
