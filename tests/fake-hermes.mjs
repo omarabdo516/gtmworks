@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
+import { readFileSync } from 'node:fs';
+import { load } from 'js-yaml';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
@@ -49,13 +51,38 @@ export function screenFrame(grab) {
 // for at the root, as the dashboard's lazily loaded pages ask (Probe B, docs/engine-probes/engine-dashboard.md); an API
 // route, /api/status; and a socket, /api/ws, opened with a single-use ticket from POST /api/auth/ws-ticket. Every
 // request needs the Engine's key, as the gated dashboard does. Answers whether the request was the dashboard's.
-const dashboardPage=prefix=>`<!doctype html><html><head><meta charset="utf-8"><title>Hermes Agent - Dashboard</title><script>window.__HERMES_BASE_PATH__=${JSON.stringify(prefix)};</script><script type="module" src="${prefix}/assets/index.js"></script></head><body><div id="root"></div></body></html>`;
+// #872: its themes, as Hermes keeps them (hermes_cli/web_routers/dashboard_ui.py): a built-in one and gtmworks's own file
+// (scripts/engine-dashboard-theme.yaml, which every Engine reads), the active one in `settings.dashboardTheme` (gtmworks's,
+// as scripts/engine-dashboard-theme.sh leaves a new Engine), GET /api/dashboard/themes and PUT /api/dashboard/theme. The
+// page applies the active theme's palette to the root's custom properties and paints with them, as Hermes's
+// ThemeProvider does, and reads its language only from localStorage['hermes-locale'], as Hermes's i18n does, Arabic right
+// to left, with one word translated and the rest in English.
+// From the repository root: Playwright compiles this file to CommonJS, where import.meta does not exist.
+const gtmworksTheme=load(readFileSync('scripts/engine-dashboard-theme.yaml','utf8'));
+const layer=value=>typeof value==='string'?{hex:value,alpha:1}:value;
+const dashboardThemes=[
+ {name:'default',label:'Hermes Teal',description:'Classic dark teal',definition:{palette:{background:layer('#041c1c'),midground:layer('#ffe6cb')}}},
+ {name:gtmworksTheme.name,label:gtmworksTheme.label,description:gtmworksTheme.description,definition:{...gtmworksTheme,palette:{...gtmworksTheme.palette,background:layer(gtmworksTheme.palette.background),midground:layer(gtmworksTheme.palette.midground)}}},
+];
+const dashboardPage=prefix=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Hermes Agent - Dashboard</title><style>html,body{background-color:var(--background-base,#041c1c);color:var(--midground-base,#ffe6cb)}</style><script>window.__HERMES_BASE_PATH__=${JSON.stringify(prefix)};</script><script type="module" src="${prefix}/assets/index.js"></script></head><body><div id="root"></div></body></html>`;
 const dashboardCode=`const base=window.__HERMES_BASE_PATH__||'';
 const root=document.getElementById('root');
+let locale='en'; try { if(localStorage.getItem('hermes-locale')==='ar') locale='ar'; } catch {}
+document.documentElement.lang=locale; document.documentElement.dir=locale==='ar'?'rtl':'ltr';
+async function dress(){
+ const {themes,active}=await (await fetch(base+'/api/dashboard/themes')).json();
+ const palette=(themes.find(theme=>theme.name===active)||themes[0]).definition.palette;
+ document.documentElement.style.setProperty('--background-base',palette.background.hex);
+ document.documentElement.style.setProperty('--midground-base',palette.midground.hex);
+ const line=root.querySelector('#engine-theme'); if(line) line.textContent=active;
+ const pick=root.querySelector('#pick-theme');
+ if(pick&&!pick.options.length) { for(const theme of themes) pick.add(new Option(theme.label,theme.name)); pick.value=active; pick.addEventListener('change',async()=>{ await fetch(base+'/api/dashboard/theme',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:pick.value})}); dress(); }); }
+}
 async function draw(){
  const path=location.pathname.slice(base.length)||'/';
  if(path.startsWith('/sessions')){ const {render}=await import('/assets/sessions.js'); render(root); return; }
- root.innerHTML='<h1>Hermes dashboard</h1><nav><a id="to-sessions" href="'+base+'/sessions">Sessions</a></nav><p id="engine-status">Reading…</p><p id="engine-socket">Connecting…</p>';
+ root.innerHTML='<h1>Hermes dashboard</h1><nav><a id="to-sessions" href="'+base+'/sessions">'+(locale==='ar'?'الجلسات':'Sessions')+'</a></nav><p id="engine-status">Reading…</p><p id="engine-socket">Connecting…</p><p id="engine-theme">…</p><select id="pick-theme"></select>';
+ dress();
  root.querySelector('#to-sessions').addEventListener('click',event=>{ event.preventDefault(); history.pushState(null,'',base+'/sessions'); draw(); });
  fetch(base+'/api/status').then(answer=>answer.json()).then(status=>{ root.querySelector('#engine-status').textContent='Engine '+status.version; });
  const ticket=await (await fetch(base+'/api/auth/ws-ticket',{method:'POST'})).json();
@@ -71,7 +98,7 @@ function dashboardAnswer(settings,request,response) {
  const url=new URL(request.url||'/','http://management');
  const path=url.pathname;
  const page=path==='/'||path==='/sessions'||path.startsWith('/sessions/');
- if(!page&&!path.startsWith('/assets/')&&path!=='/api/status'&&path!=='/api/auth/ws-ticket') return false;
+ if(!page&&!path.startsWith('/assets/')&&path!=='/api/status'&&path!=='/api/auth/ws-ticket'&&path!=='/api/dashboard/themes'&&path!=='/api/dashboard/theme') return false;
  const prefix=String(request.headers['x-forwarded-prefix']??'').replace(/\/$/,'');
  settings.dashboardRequests.push({method:request.method||'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix});
  const answer=(status,type,body)=>{ response.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'}); response.end(body); };
@@ -80,6 +107,14 @@ function dashboardAnswer(settings,request,response) {
  else if(path==='/assets/index.js') answer(200,'text/javascript',dashboardCode);
  else if(path==='/assets/sessions.js') answer(200,'text/javascript',dashboardSessions);
  else if(path==='/api/status') answer(200,'application/json',JSON.stringify({version:settings.version}));
+ else if(path==='/api/dashboard/themes') answer(200,'application/json',JSON.stringify({themes:dashboardThemes,active:settings.dashboardTheme}));
+ else if(path==='/api/dashboard/theme'&&request.method==='PUT') {
+  const chunks=[]; request.on('data',chunk=>chunks.push(chunk)); request.on('end',()=>{
+   const name=String(JSON.parse(Buffer.concat(chunks).toString()||'{}').name??'');
+   if(!dashboardThemes.some(theme=>theme.name===name)) { answer(400,'application/json','{"detail":"Unknown theme"}'); return; }
+   settings.dashboardTheme=name; answer(200,'application/json',JSON.stringify({ok:true,theme:name}));
+  });
+ }
  else if(path==='/api/auth/ws-ticket'&&request.method==='POST') { const ticket=randomUUID(); settings.dashboardTickets.add(ticket); answer(200,'application/json',JSON.stringify({ticket})); }
  else answer(404,'application/json','{"error":"not found"}');
  return true;
@@ -186,7 +221,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The Engine's own dashboard (#869): every request to its pages, code and API, with the key and the cookies it came with
   // and the prefix it was served under, and every socket it opened. See dashboardAnswer.
   dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string}[]} */([]),
-  dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardSockets:/** @type {Set<import('ws').WebSocket>} */(new Set()),
+  dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardTheme:'gtmworks',dashboardSockets:/** @type {Set<import('ws').WebSocket>} */(new Set()),
   screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human',viewer?:string|null}>} */(new Map()),
   screenCalls:/** @type {{method:string,params:any,token:string|null}[]} */([]),screenStartDelay:0,screenPictureUrl:/** @type {string|null} */(null),screenGrabs:0,
   // #713: the live stream (/api/display/ws, hermes_cli/web_routers/display.py): every ticket display.observe minted, and

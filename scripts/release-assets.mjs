@@ -58,7 +58,7 @@ export function releaseEngineTemplate(text) {
 // The Engine template mounts files of its own, so a release that ships the template without them would leave
 // every Engine unable to start: all are beside it wherever it is copied (Dockerfile, /app/install/scripts and
 // /app/release-source).
-const engineBeside = ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh', 'scripts/engine-ssh-sync-files.sh', 'scripts/engine-codex-accounts.sh', 'scripts/engine-pool-order.sh'];
+const engineBeside = ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh', 'scripts/engine-ssh-sync-files.sh', 'scripts/engine-codex-accounts.sh', 'scripts/engine-pool-order.sh', 'scripts/engine-dashboard-theme.yaml', 'scripts/engine-dashboard-theme.sh'];
 
 export function writeReleaseAssets(app, directory, sandbox) {
  const compose = releaseCompose(readFileSync('docker-compose.install.yml', 'utf8'), app);

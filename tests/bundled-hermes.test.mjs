@@ -110,6 +110,43 @@ test('an Engine publishes no host port, joins its install network and its work n
  for(const [name,service] of Object.entries(compose.services)) for(const port of service.ports||[]) assert.match(port,/^127\.0\.0\.1:/,name);
 });
 
+// #872 (spec #866): the Engine's own dashboard is in gtmworks's colours with no choice made by the person. Every Engine,
+// new or brought up by an update, carries gtmworks's theme (read from <home>/dashboard-themes/, as Hermes reads a user
+// theme) and a hook that, at each start, makes it the dashboard's default only where none is set, so an Owner's own pick
+// in the dashboard is kept. A Hermes theme has one palette: each colour is DESIGN.md's light and dark value of one token
+// together, and the person's own scheme picks one (the gate marks the page with it). The install proof's proxy and
+// update areas prove it on the pinned Engine.
+test('every Engine carries gtmworks\'s dashboard theme in DESIGN.md\'s light and dark values, and a hook that makes it the default only where none is set', () => {
+ const engine=template.services.engine;
+ assert.ok(engine.volumes.includes('./engine-dashboard-theme.yaml:/opt/data/dashboard-themes/gtmworks.yaml:ro'),'the theme is where Hermes reads a user theme');
+ assert.ok(engine.volumes.includes('./engine-dashboard-theme.sh:/etc/cont-init.d/09-engine-dashboard-theme:ro'),'the default is set at every start');
+ assert.ok(statSync('scripts/engine-dashboard-theme.sh').mode&0o111,'the theme hook is executable as s6 runs it');
+ const colors=load(/** @type {string[]} */(readFileSync('DESIGN.md','utf8').match(/^---\n([\s\S]*?)\n---\n/))[1]).colors;
+ const both=token=>`light-dark(${colors[token]}, ${colors[`${token}-dark`]})`;
+ const theme=load(readFileSync('scripts/engine-dashboard-theme.yaml','utf8'));
+ assert.equal(theme.name,'gtmworks');
+ assert.equal(theme.palette.background,both('canvas'));
+ assert.equal(theme.palette.midground,both('ink'));
+ assert.deepEqual(theme.colorOverrides,{
+  card:both('surface'),cardForeground:both('ink'),popover:both('surface'),popoverForeground:both('ink'),
+  primary:both('primary'),primaryForeground:both('primary-foreground'),
+  secondary:both('muted-fill'),secondaryForeground:both('ink'),muted:both('muted-fill'),mutedForeground:both('muted-ink'),
+  accent:both('hover-fill'),accentForeground:both('ink'),destructive:both('destructive'),destructiveForeground:both('primary-foreground'),
+  border:both('hairline'),input:both('hairline'),ring:both('focus-ring'),
+ });
+ // Where Hermes shows its wordmark, the theme's own CSS shows gtmworks's name instead (Omar on #866): the sidebar's and
+ // the narrow screen's header's, named by the pinned dashboard's markup.
+ assert.match(theme.customCSS,/#app-sidebar span\.uppercase\.text-\\\[1\\\.125rem\\\]::before/);
+ assert.match(theme.customCSS,/header\.lg\\:hidden > span\.text-\\\[0\\\.95rem\\\]::before/);
+ assert.match(theme.customCSS,/content: "gtmworks";/);
+ // The hook sets the default through Hermes's own `config set`, only when the Engine's own config names no theme.
+ const hook=readFileSync('scripts/engine-dashboard-theme.sh','utf8');
+ assert.match(hook,/config set dashboard\.theme gtmworks/);
+ // It ships with the release beside the Engine's other files.
+ assert.ok(readFileSync('scripts/release-assets.mjs','utf8').includes("'scripts/engine-dashboard-theme.yaml', 'scripts/engine-dashboard-theme.sh'"));
+ for(const name of ['engine-dashboard-theme.yaml','engine-dashboard-theme.sh']) assert.equal((readFileSync('Dockerfile','utf8').match(new RegExp(`/app/scripts/${name.replace('.','\\.')} `,'g'))??[]).length,2,`the image carries ${name} for the install and the release`);
+});
+
 test('every Company\'s work sandbox is the least container its Agents\' work needs, on a network with no way out', () => {
  const sandbox=template.services.sandbox;
  // The Company's one work sandbox (#393, ADR 0018): its own image (built once, or a release's pinned digest), its own

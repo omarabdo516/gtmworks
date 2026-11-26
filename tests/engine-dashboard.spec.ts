@@ -101,6 +101,58 @@ test('the way back is in the person\'s own language',async({page})=>{
  } finally { query(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`); }
 });
 
+// #872: the dashboard is in gtmworks's colours with no choice made by the person, in their own light or dark (the fake
+// Engine's dashboard applies its active theme, gtmworks's own theme file, as Hermes does), and in their gtmworks language,
+// read again on each load: Arabic right to left. A theme the Owner picks in the dashboard is theirs and stays.
+const owner='20000000-0000-0000-0000-000000000001';
+const canvas={light:'rgb(250, 250, 250)',dark:'oklch(0.185 0 0)'};
+const backgroundOf=(page:Page)=>page.evaluate(()=>getComputedStyle(document.body).backgroundColor);
+test('the dashboard is in gtmworks\'s colours in the person\'s light or dark, and in their language, Arabic right to left, on its next load',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/settings');
+ try {
+  await page.goto('/c/rs-learning/hermes/');
+  await expect(page.locator('#engine-theme')).toHaveText('gtmworks');
+  // The seeded Owner follows the device; this device is light.
+  expect(await backgroundOf(page)).toBe(canvas.light);
+  await expect(page.locator('html')).toHaveAttribute('lang','en');
+  await expect(page.locator('html')).toHaveAttribute('dir','ltr');
+  await expect(page.locator('#to-sessions')).toHaveText('Sessions');
+  await page.emulateMedia({colorScheme:'dark'});
+  await expect.poll(()=>backgroundOf(page)).toBe(canvas.dark);
+  await page.emulateMedia({colorScheme:'light'});
+  // Their gtmworks theme and language changed: the dashboard's next load follows both.
+  query(`update public.people set theme='dark',language='ar' where id='${owner}'`);
+  await page.reload();
+  await expect(page.locator('#engine-theme')).toHaveText('gtmworks');
+  await expect(page.locator('html')).toHaveAttribute('lang','ar');
+  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
+  // What Hermes translated is in Arabic; what it has not stays in English.
+  await expect(page.locator('#to-sessions')).toHaveText('الجلسات');
+  await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
+  expect(await backgroundOf(page)).toBe(canvas.dark);
+  query(`update public.people set theme='light',language='en' where id='${owner}'`);
+  await page.emulateMedia({colorScheme:'dark'});
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('dir','ltr');
+  await expect(page.locator('#to-sessions')).toHaveText('Sessions');
+  expect(await backgroundOf(page)).toBe(canvas.light);
+ } finally { query(`update public.people set theme='device',language='en' where id='${owner}'`); }
+});
+
+test('a theme the Owner picks in the dashboard is kept for them',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/settings');
+ try {
+  await page.goto('/c/rs-learning/hermes/');
+  await expect(page.locator('#engine-theme')).toHaveText('gtmworks');
+  await page.locator('#pick-theme').selectOption('default');
+  await expect(page.locator('#engine-theme')).toHaveText('default');
+  await page.reload();
+  await expect(page.locator('#engine-theme')).toHaveText('default');
+  expect(await backgroundOf(page)).toBe('rgb(4, 28, 28)');
+  expect(fake.settings.dashboardTheme).toBe('default');
+ } finally { fake.settings.dashboardTheme='gtmworks'; }
+});
+
 for(const [who,email] of [['a Manager','manager@example.com'],['a Contributor','reviewer@example.com'],['a Viewer','viewer@example.com'],['an Owner of another Company only','multi@example.com'],['a signed-out person','']] as const) {
  test(`${who} gets the missing page on the dashboard's page, code and API, opens no socket, and has no Hermes row`,async({page})=>{
   if(email) {

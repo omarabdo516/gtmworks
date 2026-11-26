@@ -371,13 +371,13 @@ test('--channel main installs the main image by its digest, with the two files w
 test('the main image holds what --channel main runs, and release-assets.mjs writes the two files from it', t => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/docker-compose\.install\.yml \.\/release-source\/$/m);
- assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/get\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \/app\/scripts\/engine-managed\.yml \/app\/scripts\/engine-listener-address\.py \/app\/scripts\/engine-listener-address\.sh \/app\/scripts\/engine-ssh-sync-files\.sh \/app\/scripts\/engine-codex-accounts\.sh \/app\/scripts\/engine-pool-order\.sh \.\/release-source\/scripts\/$/m);
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/get\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \/app\/scripts\/engine-managed\.yml \/app\/scripts\/engine-listener-address\.py \/app\/scripts\/engine-listener-address\.sh \/app\/scripts\/engine-ssh-sync-files\.sh \/app\/scripts\/engine-codex-accounts\.sh \/app\/scripts\/engine-pool-order\.sh \/app\/scripts\/engine-dashboard-theme\.yaml \/app\/scripts\/engine-dashboard-theme\.sh \.\/release-source\/scripts\/$/m);
  // /app/release-source laid out as the image holds it, run as get.sh runs it there.
  const source=mkdtempSync(join(tmpdir(),'gtmworks-release-source-'));
  t.after(()=>rmSync(source,{recursive:true,force:true}));
  mkdirSync(join(source,'scripts'));
  cpSync('docker-compose.install.yml',join(source,'docker-compose.install.yml'));
- for(const file of ['install.sh','release-assets.mjs','engine-template.yml','engine-managed.yml','engine-listener-address.py','engine-listener-address.sh','engine-ssh-sync-files.sh','engine-codex-accounts.sh','engine-pool-order.sh']) cpSync(join('scripts',file),join(source,'scripts',file));
+ for(const file of ['install.sh','release-assets.mjs','engine-template.yml','engine-managed.yml','engine-listener-address.py','engine-listener-address.sh','engine-ssh-sync-files.sh','engine-codex-accounts.sh','engine-pool-order.sh','engine-dashboard-theme.yaml','engine-dashboard-theme.sh']) cpSync(join('scripts',file),join(source,'scripts',file));
  // The release workflow builds the sandbox image first and the main image records it (Dockerfile, sandbox-image), so the
  // two arguments get.sh passes, also the command of an install from before the work sandbox, pin that sandbox (#392).
  assert.match(dockerfile,/^RUN if \[ -n "\$GTMWORKS_SANDBOX_IMAGE" \]; then printf '%s\\n' "\$GTMWORKS_SANDBOX_IMAGE" > \.\/release-source\/sandbox-image; fi$/m);

@@ -1402,6 +1402,11 @@ first_profile=$(sed -n 1p engines.txt | cut -d' ' -f2) first_company=$(sed -n 1p
 docker exec gtmworks-sandbox-first test -e "/work/$first_profile/$work_marker-${first_company//-/}.txt" || fail 'the refused work-folder restore changed no work folder'
 }
 
+# The theme the first Engine's own dashboard shows (#872), as the Engine lists it on its management listener with its key.
+dashboard_theme() {
+  engine_node "$1" -e "const answer=await fetch(process.env.HERMES_MANAGEMENT_ADDRESS+'/api/dashboard/themes',{headers:{Authorization:'Bearer '+process.env.ENGINE_KEY}}); console.log((await answer.json()).active);" < /dev/null
+}
+
 # proxy: the public address behind a proxy (issue #40, #41): first run, the emailed sign-in and invitation links on
 # APP_ORIGIN over HTTPS, and the sign-in rate limit per visitor behind it.
 proxy() {
@@ -1431,13 +1436,17 @@ docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PW
 # The Owner's Hermes dashboard on the pinned Engine (#869): the Owner just made opens its first page, an inner page, its
 # code at both addresses, an API route and a socket through the proxy and gtmworks's gate; a Manager, a Contributor, a
 # Viewer and a signed-out person get the missing page and no socket; no answer holds the Engine's key, given by name;
-# and nothing of the Engine is reached on this machine but through the gate.
+# and nothing of the Engine is reached on this machine but through the gate. The dashboard is in gtmworks's theme, light
+# and dark, by default on this new Company's Engine, and in the Owner's language and colour scheme (#872); the Owner then
+# picks another theme there, and the theme hook every start of the Engine runs, run again, keeps their pick.
 engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ -n $engine_id ]] && ! publishes_host_port "$engine_id" || fail 'the Engine publishes no host port'
 ENGINE_KEY=$(first_engine_key) docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" \
   --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) -e ENGINE_KEY \
   -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e SIGN_IN_EMAIL=proxy-owner@example.com -e SIGN_IN_PASSWORD=proxy-owner-password \
   node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-engine-dashboard.mjs || { docker logs --tail 80 "$(compose ps -q web)"; fail 'the Owner'"'"'s Hermes dashboard behind the gate on the pinned Engine'; }
+docker exec -u 0 "$engine_id" /etc/cont-init.d/09-engine-dashboard-theme || fail 'the dashboard theme hook runs again'
+[[ $(dashboard_theme "$(first_engine_key)") == mono ]] || fail 'the theme the Owner picked in the dashboard is kept at the next start'
 # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
 # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes
 # it only from the install network's bridge gateway, where every connection from this machine arrives from
@@ -1647,6 +1656,8 @@ docker exec gtmworks-install-hermes-1 grep -qF "$marker" "/opt/data/profiles/$pr
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail 'release update'
 [[ $(first_engine_key) == "$key" ]] || fail 'the update adopted the Engine key'
+# The Engine the update brought up has gtmworks's theme as its dashboard's default (#872).
+[[ $(dashboard_theme "$key") == gtmworks ]] || fail "the updated Engine's dashboard shows gtmworks's theme by default"
 if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi
 engine=$(first_engine_id)
 [[ -n $engine ]] || fail "the updated install runs the Company's Engine"
