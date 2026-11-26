@@ -102,6 +102,31 @@ test('a call that cannot wait out a slow listener fails at once, even behind a c
  } finally { logged.mock.restore(); await engine.close(); }
 });
 
+test('a Run\'s start and what a person tells a Run are sent at their turn without the slow wait, and a read still waits', async()=>{
+ const engine=await slowListener();
+ const logged=mock.method(console,'log',()=>{});
+ try {
+  const at={address:engine.address,key:'k'};
+  engine.state.delay=5000;
+  await failureOf(engineRequest(at,{path:'/health',deadline:50}));
+  engine.state.delay=0;
+  // The Run lifecycle holds its claim on the turn while it starts, so a start is never held behind the wait.
+  const began=Date.now();
+  const started=await hermesEngine({...at,profile:'default'}).start({conversation:'c',input:'hi',idempotencyKey:'i'});
+  assert.ok(Date.now()-began<200,`the start went at once (${Date.now()-began} ms)`);
+  assert.equal(engine.state.arrivals.length,2,'it reached the Engine');
+  assert.notDeepEqual(started,{state:'notReached'});
+  // It answered, so the listener answers again and nothing waits.
+  assert.deepEqual(listenerHealth(at,'api'),{state:'answering',cause:null});
+  // Slow again: a read waits out the wait, as before.
+  engine.state.delay=5000;
+  await failureOf(engineRequest(at,{path:'/health',deadline:50}));
+  engine.state.delay=0;
+  const read=Date.now(); await engineRequest(at,{path:'/health',deadline:3000});
+  assert.ok(Date.now()-read>=200,`the read waited (${Date.now()-read} ms)`);
+ } finally { logged.mock.restore(); await engine.close(); }
+});
+
 test('a listener nothing connects to is down, asked one call at a time by every caller, and back the moment it answers', async()=>{
  const engine=await listener();
  const logged=mock.method(console,'log',()=>{});
