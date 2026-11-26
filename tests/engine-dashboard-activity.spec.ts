@@ -6,8 +6,9 @@ import { signIn } from './sign-in';
 
 // #873 (spec #866): the Engine knows one identity for everyone who comes through gtmworks's gate, so the Activity log is
 // the only record of which Owner did what on the dashboard: one line a visit (a first page loaded; a reload, the
-// dashboard's own page changes and its reads write nothing more), one line for each change the Engine took, naming the
-// person, the page and the kind of change, and one for each refused action. No line holds a key, a value or any part of
+// dashboard's own page changes and its reads write nothing more), one line for each change request, naming the person,
+// the page and the kind of change, and saying when the Engine did not take it, and one for each refused action, with
+// its page. No line holds a key, a value or any part of
 // a request's body. Every line reads in English and in Arabic.
 const owner='20000000-0000-0000-0000-000000000001';
 const company='10000000-0000-0000-0000-000000000001';
@@ -44,7 +45,7 @@ test('opening the dashboard is one line a visit, and reading it writes nothing m
  expect(lines()).toEqual([{action:'engine_dashboard_opened',details:{private:'owners'},body:null}]);
 });
 
-test('each change the Engine took is one line with the page and the kind, and a refused action says it was refused',async({page})=>{
+test('each change is one line with the page and the kind, one the Engine did not take says so, and a refused action says it was refused on its page',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/settings');
  await page.goto('/c/rs-learning/hermes/');
  await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
@@ -54,7 +55,7 @@ test('each change the Engine took is one line with the page and the kind, and a 
  expect(await ask(page,'/api/config',{method:'PUT',body:{config:{display:{skin:'mono'}}}})).toBe(200);
  expect(await ask(page,'/api/messaging/platforms/telegram',{method:'PUT',body:{enabled:true,env:{TELEGRAM_BOT_TOKEN:'123:telegram-token'}}})).toBe(200);
  expect(await ask(page,'/api/hermes/update',{method:'POST',body:{}})).toBe(403);
- // A change the Engine did not take is no change.
+ // A change the Engine did not take is a line too, that says it was not taken.
  expect(await ask(page,'/api/webhooks',{method:'POST',body:{name:'Not A Name!'}})).toBe(400);
  const written=lines().slice(before);
  expect(written.map(line=>[line.action,line.details])).toEqual([
@@ -62,7 +63,8 @@ test('each change the Engine took is one line with the page and the kind, and a 
   ['engine_dashboard_changed',{page:'plugins',change:'pluginInstalled',private:'owners'}],
   ['engine_dashboard_changed',{page:'config',change:'settingSaved',private:'owners'}],
   ['engine_dashboard_changed',{page:'channels',change:'platformSet',private:'owners'}],
-  ['engine_dashboard_refused',{refused:'hermesUpdate',private:'owners'}],
+  ['engine_dashboard_refused',{page:'system',refused:'hermesUpdate',private:'owners'}],
+  ['engine_dashboard_rejected',{page:'webhooks',change:'added',private:'owners'}],
  ]);
  // No line holds a key, a value or a name from a body.
  const all=JSON.stringify(rows(`select * from public.company_log where company_id='${company}' and source='engine_dashboard'`));
@@ -72,7 +74,8 @@ test('each change the Engine took is one line with the page and the kind, and a 
 test('the lines read in English and in Arabic in the Activity log',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/log?who=p:${owner}`);
  const acts=page.locator('.lgp-body .lg-row .lg-act');
- const english=['tried to update the Engine on the Engine dashboard and was refused','set up a messaging platform on the Channels page of the Engine dashboard',
+ const english=['tried to add something new on the Webhooks page of the Engine dashboard, and it was not taken',
+  'tried to update the Engine on the System page of the Engine dashboard and was refused','set up a messaging platform on the Channels page of the Engine dashboard',
   'saved a setting on the Config page of the Engine dashboard','installed a plugin on the Plugins page of the Engine dashboard',
   'saved a key on the Keys page of the Engine dashboard','opened the Engine dashboard'];
  await expect(acts.first()).toBeVisible();
@@ -81,7 +84,7 @@ test('the lines read in English and in Arabic in the Activity log',async({page})
  try {
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('dir','rtl');
-  const arabic=['حاول يحدّث المحرك في لوحة تحكم المحرك واترفض','ظبط منصة رسايل في صفحة Channels في لوحة تحكم المحرك',
+  const arabic=['حاول يضيف حاجة جديدة في صفحة Webhooks في لوحة تحكم المحرك، وماتاخدش','حاول يحدّث المحرك في صفحة النظام في لوحة تحكم المحرك واترفض','ظبط منصة رسايل في صفحة Channels في لوحة تحكم المحرك',
    'حفظ إعداد في صفحة الإعدادات في لوحة تحكم المحرك','نزّل إضافة في صفحة المكوِّنات الإضافية في لوحة تحكم المحرك',
    'حفظ مفتاح في صفحة المفاتيح في لوحة تحكم المحرك','فتح لوحة تحكم المحرك'];
   await expect(acts.first()).toHaveText(arabic[0]);

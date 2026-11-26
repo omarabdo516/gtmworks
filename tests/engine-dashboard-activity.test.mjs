@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dashboardChange } from '../lib/engine-dashboard-activity.mjs';
+import { readFileSync } from 'node:fs';
+import { dashboardChange, dashboardPage } from '../lib/engine-dashboard-activity.mjs';
+import { dashboardActs, dashboardChanges, dashboardPages, dashboardRefusalKinds } from '../lib/engine-dashboard-words.mjs';
 
 // #873 (spec #866): which requests of the Owner's dashboard are a change for the Activity log, and what the line names:
 // the dashboard's page and the kind of change, read from the method and the route only, never from a body or a query.
@@ -43,4 +45,29 @@ test('reading writes nothing: a read, a page, a code file, a socket ticket or a 
   ['POST', '/api/mcp/servers/crm/test'], ['POST', '/api/messaging/platforms/telegram/test'], ['POST', '/api/ops/doctor'], ['POST', '/api/ops/dump'],
   ['POST', '/api/ops/prompt-size'], ['POST', '/api/audio/speak'], ['POST', '/api/profiles/lead/export'], ['POST', '/api/git/review/pr-list'], ['PUT', '/assets/index.js']])
   assert.equal(dashboardChange(method, path), null, `${method} ${path}`);
+});
+
+// The words a line may carry are lib/engine-dashboard-words.mjs's, and the database refuses any other
+// (log_engine_dashboard): the two lists are one. The database's are read from supabase/schema.sql, which is written from
+// a freshly migrated database and checked against one by the database job (#780).
+test('the words a dashboard line may carry are exactly the ones the database takes', () => {
+ const schema = readFileSync('supabase/schema.sql', 'utf8');
+ const body = /CREATE FUNCTION public\.log_engine_dashboard\(c uuid, act text, page text, kind text\)[\s\S]*?end \$\$;/.exec(schema)?.[0];
+ assert.ok(body, 'the database has log_engine_dashboard');
+ const list = text => [...text.matchAll(/'([^']*)'/g)].map(([, word]) => word);
+ const listAfter = pattern => list(new RegExp(`${pattern} in \\(([^)]*)\\)`).exec(body)?.[1] ?? '');
+ assert.deepEqual(listAfter('page not'), [...dashboardPages], 'the pages');
+ assert.deepEqual(listAfter("act in \\('changed','rejected'\\) and kind"), [...dashboardChanges], 'the kinds of change');
+ assert.deepEqual(listAfter("act='refused' and kind"), [...dashboardRefusalKinds], 'the refused actions');
+ const acts = [...body.matchAll(/act='([a-z]+)'|act in \(([^)]*)\)/g)].flatMap(([, one, many]) => one ? [one] : list(many));
+ assert.deepEqual(new Set(acts), new Set(dashboardActs), 'the acts');
+});
+
+// A refused action names the page it was asked on (#873, from the review of #889), read from its route as a change is.
+test('a refused action reads its page from its route as a change does', () => {
+ assert.equal(dashboardPage('/api/env/reveal'), 'keys');
+ assert.equal(dashboardPage('/api/hermes/update'), 'system');
+ assert.equal(dashboardPage('/api/ops/import-upload'), 'system');
+ assert.equal(dashboardPage('/API/Profiles/lead?x=1'), 'profiles');
+ assert.equal(dashboardPage('/assets/index.js'), null);
 });

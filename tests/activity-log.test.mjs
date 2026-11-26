@@ -477,6 +477,14 @@ test('a visit to the Engine dashboard, a change made there and a refused action 
   assert.deepEqual(['en', 'ar'].map(language => say(language, refused)), [`tried to ${en} on the Engine dashboard and was refused`, `حاول ${ar} في لوحة تحكم المحرك واترفض`], kind);
  }
  assert.deepEqual(describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { refused: 'later' } }).act, ['logActOther']);
+ // From the review of #889: a refused action names its page when the line has one, and a change the Engine did not take
+ // reads as a change that was not taken.
+ const refusedOn = describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { page: 'profiles', refused: 'agentProfile' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, refusedOn)), ['tried to make, rename or delete an Agent on the Profiles page of the Engine dashboard and was refused', 'حاول يعمل وكيل أو يغيّر اسمه أو يمسحه في صفحة الملفات الشخصية في لوحة تحكم المحرك واترفض']);
+ const notTaken = describeEntry({ subject: 'company', action: 'engine_dashboard_rejected', details: { page: 'webhooks', change: 'added' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, notTaken)), ['tried to add something new on the Webhooks page of the Engine dashboard, and it was not taken', 'حاول يضيف حاجة جديدة في صفحة Webhooks في لوحة تحكم المحرك، وماتاخدش']);
+ const notTakenElsewhere = describeEntry({ subject: 'company', action: 'engine_dashboard_rejected', details: { change: 'changed' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, notTakenElsewhere)), ['tried to make a change on the Engine dashboard, and it was not taken', 'حاول يعمل تغيير في لوحة تحكم المحرك، وماتاخدش']);
  // Whatever else a row's details held, the line names none of it.
  const leaky = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'keys', change: 'keySaved', value: 'sk-secret', body: '{"value":"sk-secret"}' } });
  assert.ok(!JSON.stringify(leaky).includes('sk-secret'));
