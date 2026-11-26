@@ -53,7 +53,7 @@ test('the Hermes row is the Owner\'s alone and leaves Settings for the Company\'
   assert.ok(visibleSections('owner').some(([key]) => key === 'hermes'));
   assert.equal(overlayHref('rs-learning', 'hermes'), '/c/rs-learning/hermes');
   for (const role of ['owner', 'manager', 'viewer']) assert.notEqual(pickSection('hermes', role), 'hermes', role);
-  assert.deepEqual(findSections('hermes', 'owner', key => messages.en[key]).map(([key]) => key), ['hermes']);
+  assert.deepEqual(findSections('gtmworks', 'owner', key => messages.en[key]).map(([key]) => key), ['hermes']);
   assert.deepEqual(findSections('hermes', 'manager', key => messages.en[key]), []);
 });
 

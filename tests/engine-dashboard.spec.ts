@@ -5,7 +5,7 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
-// #869 (spec #866): an Owner opens "Hermes" from Settings and is in their Company's own Hermes dashboard, served by the
+// #869 (spec #866): an Owner opens "gtmworks" from Settings and is in their Company's own Hermes dashboard, served by the
 // fake Engine's small dashboard (tests/fake-hermes.mjs dashboardAnswer) under /c/<slug>/hermes through gtmworks's gate:
 // its first page, a page whose code is loaded lazily from the root /assets/, an API route and a socket. A Manager, a
 // Contributor, a Viewer, an Owner of another Company only and a signed-out person each get the missing page there, on a
@@ -48,11 +48,11 @@ test('an Owner opens Hermes from Settings, its inner page and its live socket lo
  const answers:{url:string,headers:Record<string,string>,body:string}[]=[];
  page.on('response',async response=>{ try { answers.push({url:response.url(),headers:response.headers(),body:(await response.body()).toString('latin1')}); } catch { /* a redirect or a socket has no body */ } });
  await signIn(page,'omar@example.com','/c/rs-learning/settings');
- const row=page.locator('#sov-nav').getByRole('link',{name:'Hermes',exact:true});
+ const row=page.locator('#sov-nav').getByRole('link',{name:'gtmworks',exact:true});
  await expect(row).toBeVisible();
  // In the existing row style, in the Engine group.
  await expect(row).toHaveClass(/sb-item sov-nav__i/);
- await expect(page.locator('#sov-nav-l-engine').locator('..').getByRole('link',{name:'Hermes',exact:true})).toBeVisible();
+ await expect(page.locator('#sov-nav-l-engine').locator('..').getByRole('link',{name:'gtmworks',exact:true})).toBeVisible();
  const pages=page.context().pages().length;
  await row.click();
  // The same tab.
@@ -106,7 +106,7 @@ for(const [who,email] of [['a Manager','manager@example.com'],['a Contributor','
   if(email) {
    await signIn(page,email,'/c/rs-learning/settings');
    await expect(page.locator('#sov-nav')).toBeVisible();
-   await expect(page.locator('#sov-nav').getByRole('link',{name:'Hermes',exact:true})).toHaveCount(0);
+   await expect(page.locator('#sov-nav').getByRole('link',{name:'gtmworks',exact:true})).toHaveCount(0);
   } else await page.goto('/sign-in');
   const missing=await missingAnswer(page.request,'/c/no-such-company/hermes');
   expect(missing.status).toBe(404);

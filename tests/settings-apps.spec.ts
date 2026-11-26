@@ -46,9 +46,8 @@ test.beforeAll(async({browser},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 const card=(page:Page,name:string)=>page.locator('.app-card').filter({has:page.getByRole('heading',{name,exact:true})});
-// The Owner's Hermes row of Settings, which opens the Engine's own dashboard under its name (#869), is left out.
 async function noEngineText(page:Page,where='.sov') {
- const shown=await page.locator(where).evaluate(node=>{ const row=node.querySelector<HTMLElement>('#sov-nav-hermes'); if(row) row.style.display='none'; const text=(node as HTMLElement).innerText; if(row) row.style.display=''; return text; });
+ const shown=await page.locator(where).innerText();
  expect(shown).not.toMatch(/hermes|هيرمس|هرمس/i);
  expect(shown).not.toMatch(/\/(opt|data|home|root|tmp)\/|config\.yaml|mcp_servers/i);
 }

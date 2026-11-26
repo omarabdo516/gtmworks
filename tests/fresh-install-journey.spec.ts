@@ -28,15 +28,9 @@ test.beforeAll(async({baseURL})=>{
 });
 test.afterAll(async({baseURL})=>{ await fake?.close(); resetFirstRun(baseURL,true); });
 
-// Everything a person can read or hear on the page (as tests/engine-name.spec.ts reads it, the Owner's Hermes row of
-// Settings left out, #869).
-const readable=(page:Page)=>page.evaluate(()=>{
- const row=document.getElementById('sov-nav-hermes'); if(row) row.style.display='none';
- const text=[document.title,document.body.innerText,
-  ...[...document.querySelectorAll('[aria-label],[placeholder],[title],[alt]')].flatMap(element=>['aria-label','placeholder','title','alt'].map(name=>element.getAttribute(name)||''))].join('\n');
- if(row) row.style.display='';
- return text;
-});
+// Everything a person can read or hear on the page (as tests/engine-name.spec.ts reads it).
+const readable=(page:Page)=>page.evaluate(()=>[document.title,document.body.innerText,
+ ...[...document.querySelectorAll('[aria-label],[placeholder],[title],[alt]')].flatMap(element=>['aria-label','placeholder','title','alt'].map(name=>element.getAttribute(name)||''))].join('\n'));
 // The page in `language` names neither the Engine nor an agency (the words: tests/ui-words.mjs).
 async function wordsAreOwn(page:Page,language:'en'|'ar',path:string) {
  await expect(page.locator('html')).toHaveAttribute('lang',language);
