@@ -74,7 +74,16 @@ engine_listen_ports() {
 # The second Company on an Engine of its own, made by the command a person runs (#382): the caller names its failure and
 # where the output goes; an area running a release's own installer names that script instead.
 # Any argument after the installer's path is passed to `company add`, such as the sandbox limits (#396).
-second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com "${@:2}"; }
+second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com "${@:2}" && main_agent_plugin_settled; }
+# The worker places the main Agent's plugin in each Company's main Agent's profile and restarts that Engine once to load
+# it (#884): every check after first run and after a Company is added waits for it, so none meets the Engine mid-restart.
+# An install of a release without the plugin (the release areas' older ones) has nothing to wait for.
+main_agent_plugin_settled() {
+  [ -f scripts/check-install-main-agent.mjs ] || return 0
+  local web; web=$(compose ps -q web 2> /dev/null) || return 0
+  [ -n "$web" ] && docker exec "$web" test -f /app/lib/engine/gtmworks-plugin/plugin.yaml 2> /dev/null || return 0
+  engine_node "$(first_engine_key)" - settled < scripts/check-install-main-agent.mjs
+}
 # The app image a source install runs, from its compose file's `web` service: CI loads the run's one build under this
 # tag and the release areas tag their test releases from it, so a tag change is made in that file alone (#411).
 web_image_tag() { sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1; }
@@ -141,7 +150,7 @@ install_source() { sh scripts/install.sh 2>&1 | tee "$1"; }
 complete_setup() {
   docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
     -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
-    node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs
+    node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs && main_agent_plugin_settled
 }
 # What an Agent was told, and the sign-in its Company made, written in an Engine's own data before an update (#385,
 # #483): the code word $3 in the memory of profile $2 on the Engine container $1, and a Claude sign-in on that Engine.

@@ -2,6 +2,8 @@
 // first Engine of the install (HERMES_ADDRESS, HERMES_MANAGEMENT_ADDRESS, ENGINE_KEY), with the Engine's network closed
 // to the install as every install's is (ADR 0018). It checks gtmworks's plugin of the main Agent's profile on the pinned
 // Engine (#884), in steps. It prints names and states only, never a key.
+//   settled: every Company of the install has its main Agent's plugin offered, so the one Engine restart that loads
+//     it is behind the checks that follow (scripts/ci-install-lib.sh complete_setup and second_company).
 //   offered: the worker has placed the plugin in the main Agent's profile of the Company on this Engine and the Engine
 //     offers its toolset to that profile's Runs, and to no Agent's own profile; the plugin's route refuses a call with no
 //     key and with a wrong one. The agents area runs it after the install and again after `gtmworks update`.
@@ -24,6 +26,27 @@ const until=async(what,read,seconds)=>{
  for(let left=seconds;left>0;left--) { const found=await read(); if(found) return found; await new Promise(resolve=>setTimeout(resolve,1000)); }
  throw new Error(`${what} within ${seconds}s`);
 };
+
+// Every Company's main Agent's profile, on its own Engine, offers the plugin's toolset: the worker placed it and its one
+// restart is over. A Company still waiting for its profile is waited for too.
+if(step==='settled') {
+ // Only a Company with an Owner gets its profile (company_profile_work); one held behind its first-Owner link has none.
+ const {data:owners,error:failed}=await service.from('members').select('company_id').eq('role','owner').is('removed_at',null);
+ assert.equal(failed,null,JSON.stringify(failed));
+ const all=[...new Set(owners.map(row=>row.company_id))].map(id=>({id}));
+ for(const one of all) {
+  const main=companyProfile(one.id);
+  await until(`the main Agent's plugin offered on ${main}`,async()=>{
+   const at=await engineOf(one.id,service);
+   if(!at) return false;
+   const response=await fetch(`${at.address}/p/${main}/v1/toolsets`,{headers:{Authorization:`Bearer ${at.key}`}}).catch(()=>null);
+   if(!response?.ok) return false;
+   return (await response.json()).data.some(toolset=>toolset.enabled&&toolset.name==='gtmworks');
+  },300);
+ }
+ console.log(`main Agent plugin: offered on the main Agent of ${all.length} Companies`);
+ process.exit(0);
+}
 
 // The Company whose Engine is the first one, and its main Agent's profile there, from the records the worker reads.
 const {data:companies,error}=await service.from('companies').select('id,name').order('created_at');
