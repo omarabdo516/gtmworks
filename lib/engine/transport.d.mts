@@ -1,5 +1,6 @@
 export const callLimit:number;
 export const bodyLimit:number;
+export function slowWait(failures:number):number;
 export function isHermesAddressAllowed(address:string):boolean;
 export type EngineListener='api'|'management';
 export type ListenerConnection={address:string,key?:string,managementAddress?:string};
