@@ -10,16 +10,16 @@
 }
 /* As the reference draws it: its own width, whichever stylesheet a route loads last (shell.css: .transcript__col > *). */
 .gw .transcript__col > .ch-intro { max-width: 520px; }
-.gw .ch-intro__h { font-size: var(--gw-fs-base); font-weight: 600; color: var(--gw-text-1); }
+.gw .ch-intro__h { font-size: var(--gw-fs-base); font-weight: var(--gw-fw-semibold); color: var(--gw-text-1); }
 .gw .ch-intro p { margin: 0; display: inline-flex; align-items: flex-start; gap: 6px; text-align: start; color: var(--gw-text-2); }
 .gw .ch-intro p .gw-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--gw-text-3); }
 .gw .ch-intro__only { padding-top: 4px; border-top: 0.5px solid var(--gw-border-2); }
 
 .gw .divider { align-self: center; margin-bottom: -8px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); list-style: none; }
 .gw .turn--peer { align-items: flex-start; }
-.gw .bubble--peer { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: 6px; }
+.gw .bubble--peer { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: var(--gw-r-xs); }
 .gw .sender__role { color: var(--gw-text-3); }
-.gw .mention { font-weight: 600; }
+.gw .mention { font-weight: var(--gw-fw-semibold); }
 .gw .bubble--agent .mention, .gw .bubble--peer .mention { color: var(--gw-text-1); }
 /* Where a mention lands (#200): the message rings once for 1.6 seconds, and with reduced motion the ring stays still
    (design-reference: .is-spot, @keyframes spot). */
@@ -31,7 +31,7 @@
 .gw .details .dp-top__l { font-size: var(--gw-fs-sm); color: var(--gw-text-3); padding-inline-start: 8px; }
 .gw .details .dp-sections { display: flex; flex-direction: column; gap: 22px; padding: 10px 16px 16px; }
 .gw .details .dp-sec { display: flex; flex-direction: column; gap: 10px; }
-.gw .details .dp-label { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding-inline: 12px 6px; margin: 0; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.6; color: var(--gw-text-2); }
+.gw .details .dp-label { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding-inline: 12px 6px; margin: 0; font-size: var(--gw-fs-sm); font-weight: var(--gw-fw-regular); line-height: 1.6; color: var(--gw-text-2); }
 .gw .details .muted { color: var(--gw-text-3); }
 .gw .details .num { font-variant-numeric: tabular-nums; }
 .gw .details .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
@@ -41,7 +41,7 @@
 .gw .details .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
 .gw .details .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; text-align: start; }
 .gw .details .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
-.gw .details .ch-you { color: var(--gw-text-3); font-weight: 400; }
+.gw .details .ch-you { color: var(--gw-text-3); font-weight: var(--gw-fw-regular); }
 .gw .details .tm-hint { display: flex; align-items: flex-start; gap: 6px; margin-inline: 8px; padding: 10px 0 8px; border-top: 0.5px solid var(--gw-border-2); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); }
 .gw .details .tm-hint .gw-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; }
 .gw .details .tm-hint + .tm-hint { border-top: 0; padding-top: 0; }
@@ -53,7 +53,7 @@
 .gw .details :is(.tm-add, .tm-cand)::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
 .gw .details .btn {
   display: inline-flex; align-items: center; justify-content: center; flex: none; height: 30px; padding: 0 var(--s3); border-radius: var(--gw-r-full);
-  font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap;
+  font-size: var(--gw-fs-sm); font-weight: var(--gw-fw-semibold); white-space: nowrap;
 }
 .gw .details .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
 .gw .details :is(.ch-who, .set-err) { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); text-wrap: pretty; }

@@ -1,0 +1,1 @@
+| `design-components.ts` | browser helper: a `DESIGN.md` component's values resolved for a theme and a language, where each component is drawn, and the differences from the element's computed styles, each value set on a hidden probe beside it (#808) | — | — | helper, new (#808) |

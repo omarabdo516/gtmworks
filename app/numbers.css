@@ -13,7 +13,7 @@
 .gw .numbers-page .kpi { display: grid; gap: 6px; padding: var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); min-width: 0; }
 .gw .numbers-page .kpi > * { display: block; min-width: 0; }
 .gw .numbers-page .kpi__label { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
-.gw .numbers-page .kpi__val { font-size: clamp(24px, 2.1vw, var(--p-fs-2xl)); font-weight: 600; line-height: 1.25; white-space: nowrap; color: var(--gw-text-1); }
+.gw .numbers-page .kpi__val { font-size: clamp(24px, 2.1vw, var(--p-fs-2xl)); font-weight: var(--gw-fw-semibold); line-height: 1.25; white-space: nowrap; color: var(--gw-text-1); }
 .gw .numbers-page .kpi__val--none { color: var(--gw-text-3); }
 /* A figure's count (#134): the number as it counts is drawn for the eye, the value itself is read to a screen reader.
    With reduced motion the value is what is drawn, even before the page's script runs. */
@@ -22,13 +22,13 @@
   .gw .numbers-page .kpi__count { display: none; }
   .gw .numbers-page .kpi__final { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; }
 }
-.gw .numbers-page .kpi__unit { font-size: var(--gw-fs-base); font-weight: 400; color: var(--gw-text-2); margin-inline-start: 4px; }
+.gw .numbers-page .kpi__unit { font-size: var(--gw-fs-base); font-weight: var(--gw-fw-regular); color: var(--gw-text-2); margin-inline-start: 4px; }
 .gw .numbers-page .kpi__unit--pre { margin-inline-start: 0; margin-inline-end: 4px; }
 .gw .numbers-page .kpi__delta { display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 
 .gw .numbers-page .panel { padding: var(--s5); border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); min-width: 0; color: var(--gw-text-1); }
 .gw .numbers-page .panel__h { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); }
-.gw .numbers-page .panel__h h2 { margin: 0; font-size: var(--gw-fs-msg); line-height: 1.6; font-weight: 600; }
+.gw .numbers-page .panel__h h2 { margin: 0; font-size: var(--gw-fs-msg); line-height: 1.6; font-weight: var(--gw-fw-semibold); }
 .gw .numbers-page .panel__h .muted { font-size: var(--gw-fs-sm); }
 .gw .numbers-page .dash-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--s4); align-items: start; }
 
@@ -38,7 +38,7 @@
 .gw .numbers-page .dash-empty .btn { margin-top: var(--s2); }
 
 .gw .numbers-page .table { width: 100%; border-collapse: collapse; font-size: var(--gw-fs-sm); }
-.gw .numbers-page .table th { text-align: start; font-weight: 400; color: var(--gw-text-3); padding: 0 var(--s2) var(--s2); border-bottom: 0.5px solid var(--gw-border-2); white-space: nowrap; }
+.gw .numbers-page .table th { text-align: start; font-weight: var(--gw-fw-regular); color: var(--gw-text-3); padding: 0 var(--s2) var(--s2); border-bottom: 0.5px solid var(--gw-border-2); white-space: nowrap; }
 .gw .numbers-page .table td { padding: var(--s3) var(--s2); border-bottom: 0; }
 .gw .numbers-page .table-wrap { overflow-x: auto; }
 
@@ -55,7 +55,7 @@
 .gw .numbers-page .dot--waiting { background: var(--p-wait); }
 
 .gw .numbers-page .wait-empty { padding: var(--s5); border-radius: var(--gw-r-md); border: 1px dashed var(--gw-border-2); text-align: center; display: grid; gap: 2px; }
-.gw .numbers-page .wait-empty b { font-size: var(--gw-fs-msg); font-weight: 600; }
+.gw .numbers-page .wait-empty b { font-size: var(--gw-fs-msg); font-weight: var(--gw-fw-semibold); }
 .gw .numbers-page .wait-empty span { font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
 [dir="ltr"] .gw .numbers-page :is(.wait-empty span, .panel-row__t, .panel-row__d, .feed__t) { unicode-bidi: plaintext; }
 

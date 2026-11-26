@@ -1,10 +1,9 @@
 'use client';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
-import { localeFor } from '@/lib/i18n.mjs';
 import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
-import { useZone } from './agent-made';
+import { ReaderTime } from './agent-made';
 import { chatPlace } from '@/lib/board-columns.mjs';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { morningTitle } from '@/lib/good-morning-title.mjs';
@@ -40,9 +39,6 @@ export function MorningCard({slug,card}:{slug:string,card:Card}) {
  const waitLine=!waiting?t('goodMorningWaitNone'):!writer?t('goodMorningWaitTeam',waiting):waiting===1?t('goodMorningWaitOne'):waiting===2?t('goodMorningWaitTwo'):t('goodMorningWaitMany',waiting);
  const handLine=!handed?null:writer?(handed===1?t('goodMorningHandedYou'):t('goodMorningHandedYouMany',handed)):(handed===1?t('goodMorningHandedTeam'):t('goodMorningHandedTeamMany',handed));
  const sub=[waitLine,t('goodMorningRanCount',night),...(handLine?[handLine]:[])].join(' · ');
- // Read in UTC while the page hydrates and in the reader's own zone after, so the server's drawing and the first match.
- const zone=useZone();
- const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'numeric',minute:'2-digit',timeZone:zone});
  const foot=!card.foot?null:card.foot.on?t('goodMorningFootOn',card.foot.custom??clockLabel(t,...card.foot.time.split(':').map(Number) as [number,number])):t('goodMorningFootOff');
  return <div className="reply-card ckcard" role="group" aria-label={t('goodMorningCardLabel')}>
   <div className="card__head"><span className="tool-tile tool-tile--lg tool-tile--ink" aria-hidden="true"><ShellIcon name="sun"/></span>
@@ -54,7 +50,7 @@ export function MorningCard({slug,card}:{slug:string,card:Card}) {
   {night>0&&<section className="ck-sec" aria-labelledby="ck-h-night"><h3 className="ck-label" id="ck-h-night">{t('goodMorningRan')} <span className="num">{night}</span></h3>
    <div className="ck-list">{card.overnight.map(row=><Link key={row.id} className="panel-row" href={`/c/${slug}/chat/${row.agent.id}`} data-kind="overnight">
     <span aria-hidden="true"><AgentFace agent={row.agent.id} size={24}/></span>
-    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{row.line}</span><span className="panel-row__d"><bdi>{row.agent.name}</bdi> · <span className="num">{time(row.at)}</span> · <bdi dir="auto">{row.routine}</bdi></span></span>
+    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{row.line}</span><span className="panel-row__d"><bdi>{row.agent.name}</bdi> · <ReaderTime at={row.at} className="num" hour="numeric"/> · <bdi dir="auto">{row.routine}</bdi></span></span>
     <span className="panel-row__meta"><ShellIcon name={on}/></span></Link>)}</div></section>}
   {handed>0&&<section className="ck-sec" aria-labelledby="ck-h-hand"><h3 className="ck-label" id="ck-h-hand"><span className="badge ck-badge"><ShellIcon name="hand"/>{t('goodMorningHanded')}</span></h3>
    <div className="ck-list">{card.handed.map(item=><ItemRow key={`${item.kind}:${item.id}`} slug={slug} item={item} on={on}/>)}</div></section>}

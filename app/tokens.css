@@ -1,7 +1,15 @@
-/* The approved reference's tokens (design-reference/index.html :root), for the shell and everything drawn the way it
-   is (app/shell.css, the settings overlay, the toast). They carry a gw- prefix so they never collide with the Paperclip
-   tokens that the sections inside the shell still use. They hold only custom properties, so where this file sits among
+/* The design system's values as custom properties: every one is named in DESIGN.md's front matter with the same value,
+   in light and dark, and tests/design-values.test.mjs fails when the two differ (#808). The sizes, weights and radii
+   are the same in every theme and every scope, so they sit on :root, where app/globals.css reaches them too; the rest
+   are the approved reference's (design-reference/index.html :root), for the shell and everything drawn the way it is
+   (app/shell.css, the settings overlay, the toast). They carry a gw- prefix so they never collide with the Paperclip
+   tokens that the sections inside the shell still use. This file holds only custom properties, so where it sits among
    the others never changes what wins. */
+:root {
+  --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
+  --gw-fw-regular: 400; --gw-fw-medium: 500; --gw-fw-semibold: 600;
+  --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-card: 24px; --gw-r-full: 9999px;
+}
 .gw {
   --gw-bg-chrome: #FCFCFC; --gw-bg-sidebar: #F5F5F5; --gw-bg-pane: #FFFFFF;
   --gw-bg-hover: #1C1C1C0F; --gw-bg-active: #1C1C1C14; --gw-bg-tertiary: #1C1C1C0F; --gw-bg-secondary-hover: #1C1C1C1A; --gw-bg-subtle: #1C1C1C08;
@@ -18,8 +26,6 @@
   --gw-shadow-modal: #1C1C1C1A 0 20px 32px -5px, #1C1C1C1A 0 8px 12px -6px;
   --gw-bubble-ring: #1C1C1C0F 0 0 0 0.5px inset; --gw-shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
   --gw-font: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
-  --gw-fs-xs: 12px; --gw-fs-sm: 13px; --gw-fs-base: 14px; --gw-fs-msg: 15px; --gw-fs-lg: 17px; --gw-fs-xl: 22px;
-  --gw-r-xs: 6px; --gw-r-sm: 8px; --gw-r-md: 12px; --gw-r-lg: 16px; --gw-r-bubble: 18px; --gw-r-composer: 22px; --gw-r-card: 24px; --gw-r-full: 9999px;
   --gw-dur-fast: 150ms; --gw-dur: 200ms; --gw-dur-slow: 280ms;
   --gw-ease-out: cubic-bezier(0.2, 0, 0, 1); --gw-ease-in: cubic-bezier(0.4, 0, 1, 1); --gw-ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
   --gw-sidebar-w: 300px; --gw-details-w: 320px; --gw-chat-col: 620px; --gw-head-h: 64px; --gw-idle-dot: #B5B5B5; --gw-wait: #DA830E;

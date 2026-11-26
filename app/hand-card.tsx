@@ -16,10 +16,8 @@ import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
 import { knownApp } from '@/lib/app-catalogue.mjs';
 import { useI18n } from '@/lib/i18n-client';
-import { localeFor } from '@/lib/i18n.mjs';
 import { directionOf } from '@/lib/bidi';
-import { madeDay, useZone } from '@/app/agent-made';
-import { dayOf } from '@/lib/activity-log.mjs';
+import { ReaderTime } from '@/app/agent-made';
 import type { ReplyCard } from '@/lib/conversations';
 
 type Hand=Extract<ReplyCard,{kind:'hand'}>;
@@ -33,7 +31,7 @@ const settling=900;
 const handApp=(name:string)=>knownApp(name)??{key:'',mark:'·'};
 
 export function HandCard({card,fresh,done,team=false,openScreen}:{card:Hand,fresh:boolean,done?:MarkHandDone,team?:boolean,openScreen?:(card:number)=>void}) {
- const {t,language}=useI18n(); const zone=useZone();
+ const {t,language}=useI18n();
  const [pressed,setPressed]=useState<string|null>(null); const [error,setError]=useState(''); const [just,setJust]=useState(false);
  const [sending,setSending]=useState(false); const busy=useRef(false);
  useEffect(()=>{
@@ -51,10 +49,6 @@ export function HandCard({card,fresh,done,team=false,openScreen}:{card:Hand,fres
   else setError(result.error==='conversationFailed'?'handFailed':result.error);
   busy.current=false; setSending(false);
  };
- // Today its time, another day its day, as the made card says when an Agent was made.
- const when=(value:string)=>dayOf(new Date().toISOString(),zone)===dayOf(value,zone)
-  ?new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone}):madeDay(value,language,zone);
- const time=(value:string)=><time dateTime={value} data-utc={zone}>{when(value)}</time>;
  // The time is its own element inside the sentence, so the sentence is split where the time goes.
  const [before,after]=t('handDoneAt','{0}').split('{0}');
  return <div id={`hand-${card.id}`} tabIndex={-1} className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={directionOf(card.title,language==='ar'?'rtl':'ltr')}>
@@ -62,7 +56,7 @@ export function HandCard({card,fresh,done,team=false,openScreen}:{card:Hand,fres
   <div className="card__head"><AppTile app={handApp(card.app)} size="lg"/>
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
   {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>}
-  {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}{time(at)}{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
+  {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}<ReaderTime at={at} orDay/>{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
    :!done&&team?<div className="card__outcome"><ShellIcon name="clock"/><span>{t('handWaitTeam')}</span></div>
    :<div className="card__actions">
     {card.screen?openScreen&&<button type="button" className="btn btn--secondary" onClick={()=>openScreen(card.id)}><ShellIcon name="monitor"/><span>{t('handOpenScreen')}</span></button>
