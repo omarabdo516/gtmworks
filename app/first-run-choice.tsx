@@ -24,12 +24,17 @@ const isolateEmails=(text:string):ReactNode[]=>text.split(/([\w.+-]+@[\w.-]+)/).
 // The workspace behind the question (app/shell.tsx): inert until the question is answered and has left. The Shell is
 // drawn once by the Company's layout (#789) and the page the answer opens does not draw it again, so the answer itself
 // takes the question away and gives the workspace back. It wraps the workspace whether or not the question is asked, so
-// a refresh that no longer asks it keeps the workspace mounted as it was.
+// a refresh that no longer asks it keeps the workspace mounted as it was. Saving the answer can draw the layout again
+// with no question; the question it was drawn with stays until it has left and opened the Owner's Conversation, or
+// that drawing would take it away before its exit, and the page would never move.
 const Answered=createContext<()=>void>(()=>{});
 export function FirstRunGate({question,children}:{question:ReactNode|null,children:ReactNode}) {
  const [answered,setAnswered]=useState(false);
+ const [asked,setAsked]=useState(question);
+ if(question&&question!==asked) setAsked(question);
  const answer=useCallback(()=>setAnswered(true),[]);
- return <Answered value={answer}><div style={{display:'contents'}} inert={!!question&&!answered}>{children}</div>{!answered&&question}</Answered>;
+ const shown=answered?null:asked;
+ return <Answered value={answer}><div style={{display:'contents'}} inert={!!shown}>{children}</div>{shown}</Answered>;
 }
 
 // First run (#9, #186; design-reference: dialog#firstrun, frHTML): alone or with a team, then, for a team, who is on

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
-import FirstRunChoice, { type FirstRunState } from '@/app/first-run-choice';
+import FirstRunChoice, { FirstRunGate, type FirstRunState } from '@/app/first-run-choice';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 import { untilDrawn, fakeClock } from './fake-clock';
@@ -215,4 +215,25 @@ test('a save that fails keeps the question with its error and never leaves', asy
  await new Promise(resolve => setTimeout(resolve, 250));
  expect(document.querySelector('.fr.is-closing')).toBeNull();
  expect(push).not.toHaveBeenCalled();
+});
+
+// #789: the Shell is drawn once by the Company's layout, around the gate. Saving the answer can draw the layout again
+// with no question before the question has left; the question stays, plays its exit and opens the Conversation, and
+// only then gives the workspace back.
+test('an answer whose save draws the layout again without the question still opens the Conversation, then frees the workspace', async () => {
+ finish.mockResolvedValue({ opened: '/c/acme-abcd1234/conversations/c1' });
+ const question = <FirstRunChoice slug="acme-abcd1234" company="10000000-0000-0000-0000-000000000090" companyName="Acme" personName="Omar"
+  lead={{ id: 'f0000000-0000-0000-0000-000000000090', name: 'Lead' }} brand={<>gtm<span>works</span></>} mark={<span/>} finish={finish}/>;
+ const gate = (asked: boolean) => <LanguageProvider language="en"><FirstRunGate question={asked ? question : null}><main data-testid="workspace">Workspace</main></FirstRunGate></LanguageProvider>;
+ const screen = await render(gate(true));
+ const workspace = () => document.querySelector('[data-testid="workspace"]')!.parentElement!;
+ expect(workspace().inert).toBe(true);
+ await screen.getByRole('radio', { name: 'Alone' }).click();
+ await screen.getByRole('button', { name: 'Open the workspace' }).click();
+ await expect.poll(() => finish.mock.calls.length).toBe(1);
+ // The layout is drawn again as the answer is saved: the Shell no longer asks.
+ await screen.rerender(gate(false));
+ await expect.poll(() => push.mock.calls.map(([href]) => href)).toEqual(['/c/acme-abcd1234/conversations/c1']);
+ await expect.poll(() => workspace().inert).toBe(false);
+ expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
