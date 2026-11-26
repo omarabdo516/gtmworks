@@ -226,7 +226,9 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
   piped:(args=[],options)=>spawn(['-s','--',...args],{...options,input:getText}),
   gtmworks:(args=[],options)=>spawn([join(home,'.local/bin/gtmworks'),...args],options),
   spawnIn:(args,options)=>spawn(args.slice(1),options),
-  docker:()=>read(logs.DOCKER_LOG),curl:()=>read(logs.CURL_LOG),installer:()=>read(logs.INSTALLER_LOG).split('\n').filter(Boolean),
+  docker:()=>read(logs.DOCKER_LOG),curl:()=>read(logs.CURL_LOG),// The updater's every run first asks the installer to mount the work disks after a restart (#507): listed apart.
+  installer:()=>read(logs.INSTALLER_LOG).split('\n').filter(line=>line&&!line.endsWith(' disks')),
+  disks:()=>read(logs.INSTALLER_LOG).split('\n').filter(line=>line.endsWith(' disks')),
   file:name=>read(join(dir,name)),
   clear:()=>{ for(const path of [logs.DOCKER_LOG,logs.CURL_LOG,logs.INSTALLER_LOG,logs.RESTORE_LOG]) rmSync(path,{force:true}); },
   restoreLog:()=>read(logs.RESTORE_LOG),
@@ -1162,7 +1164,7 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
   /gtmworks v0\.0\.1 is running: \$next/,
   /if gtmworks update --version v0\.0\.0 > /,
   /owners=\$\(owned_by_others "\$dir"\)/,
-  /find "\$1" ! -user "\$\(id -u\)"/,
+  /find "\$1" -xdev ! -user "\$\(id -u\)" ! -path '\*\/\.work-disks\/\*\/fs'/,
   /gtmworks update --version v0\.0\.2 --no-backup/,
   /Applying migration: 99999999999999_failure\.sql/,
   /\[\[ \$\(compose ps -q web\) == "\$old_web" \]\]/,
@@ -1319,6 +1321,19 @@ test('gtmworks updater: an Owner\'s request runs gtmworks update to the newest o
  ok(m.gtmworks(['updater']));
  assert.deepEqual(m.updates(),['read ','updating ','current v1.10.0']);
  assert.deepEqual(m.installer(),[]);
+});
+
+// After the server starts again, no Company's Engine or sandbox can start until its work disk is mounted (#507, ADR
+// 0032): every run of the updater asks the install's own installer to mount them, before it reads the database, so a
+// machine whose database is not up yet gets its disks too.
+test('every updater run asks the installer to mount the work disks first, with nothing asked of the database', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.disks(),[`${hex('a')} disks`]);
+ assert.deepEqual(m.installer(),[]);
+ assert.match(getText,/flock -n 7 \|\| return 0\n(  #.*\n)+  run_installer disks > "\$dir\/\.gtmworks-disks\.log" 2>&1 \|\| true\n  # No database/);
 });
 
 test('a request that names a version or anything else changes nothing beyond the normal update', t => {

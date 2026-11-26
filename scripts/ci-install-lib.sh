@@ -99,7 +99,23 @@ remove_engine() {
   docker volume rm gtmworks-install_hermes gtmworks-work-first gtmworks-sandbox-hostkey-first > /dev/null 2>&1 || true
   docker network rm gtmworks-engine-first gtmworks-work-first gtmworks-exit-first > /dev/null 2>&1 || true
   docker rm -f gtmworks-install-hermes-1 > /dev/null 2>&1 || true
+  remove_work_disks
   rm -rf .engines
+}
+# Every Company's work disk (#507), unmounted and deleted by the work sandbox image's own helper as the installer runs it,
+# with its two volumes; its folder goes only once empty, so nothing on a disk still mounted is removed with it.
+remove_work_disks() {
+  local image folder
+  image=$(cat .work-sandbox-image 2> /dev/null || echo gtmworks-work-sandbox:local)
+  for folder in .work-disks/*/; do
+    [[ -d $folder ]] || continue
+    folder=${folder%/}
+    docker volume rm "gtmworks-folder-${folder#.work-disks/}" "gtmworks-home-${folder#.work-disks/}" > /dev/null 2>&1 || true
+    docker run --rm --privileged --pid host --network none --user 0 --entrypoint /usr/local/bin/work-disk \
+      -v "$PWD/$folder:/disk" "$image" remove "$PWD/$folder" > /dev/null 2>&1 || true
+    rmdir "$folder/fs" "$folder" 2> /dev/null || true
+  done
+  rmdir .work-disks 2> /dev/null || true
 }
 remove_install() { compose down -v && remove_engine; }
 # An area starts on a fresh isolated Docker machine (#406): whatever an earlier area or an earlier run left there is
@@ -248,7 +264,9 @@ DOCKERFILE
 # left to CI.
 owned_by_others() {
   if [[ -n ${INSTALL_LANE_FOREIGN_OWNER:-} ]]; then echo "file owners not checked here (INSTALL_LANE_FOREIGN_OWNER)" >&2; return 0; fi
-  find "$1" ! -user "$(id -u)"
+  # A mounted work disk (#507) is a filesystem of its own, whose files (its root, at fs/, included) are the Company's
+  # sandbox user's: not looked into.
+  find "$1" -xdev ! -user "$(id -u)" ! -path '*/.work-disks/*/fs'
 }
 web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
 # The public half of the key an Engine dials its Company's sandbox with (#393): read from the Engine's own data volume in a

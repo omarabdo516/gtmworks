@@ -40,7 +40,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 - 🟡 **Fewer keys in the app.** The app and the worker get only the values they read. Merged; waiting for the release (#572). [#446, #539]
 - 🟡 **Server sizes measured.** The README states two sizes (with and without video) from the install job's numbers. Merged; waiting for the release (#572). [#400]
 - 🟡 **Safer failed updates.** An update that fails before its Engines start leaves the previous release's own Engine files on disk. Merged; waiting for the release (#572). [#554]
-- 🟡 **A disk limit for each work sandbox.** Today one Company can fill the install's disk. [#507]
+- 🟡 **A disk limit for each work sandbox.** Each Company's sandbox writes only to its own work disk of a fixed size (10 GB by default, `--disk` on `company add` and `company limits`), so one Company can no longer fill the install's disk. Merged; waiting for the release. [#507, ADR 0032]
 
 ## 2. Team and Agents
 
