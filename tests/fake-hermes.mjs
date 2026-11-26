@@ -760,9 +760,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(settings.envDropped.has(named)) { request.socket.destroy(); return; }
     if(request.method==='PUT') {
      if(settings.envHang.has(named)) return;
-     if(settings.failStep==='env'||settings.envFail.has(named)||!target) return send(response,500,{detail:'Internal Server Error'});
+     if(settings.failStep==='env'||settings.envFail.has(named)||(named!=='default'&&!target)) return send(response,500,{detail:'Internal Server Error'});
      if(typeof body?.value==='string'&&(body.value.includes('...')||body.value.includes('***'))) return send(response,400,{detail:'Refusing to save a redacted credential preview'});
-     if(body?.key==='API_SERVER_KEY') target.key=body.value;
+     if(body?.key==='API_SERVER_KEY'&&target) target.key=body.value;
      else envOf()[body?.key]=body?.value;
      return send(response,200,{ok:true,key:body?.key,config_updates:[]});
     }

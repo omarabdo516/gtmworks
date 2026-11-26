@@ -46,7 +46,7 @@ const refused=[
 ] as const;
 
 test('each of the four is refused for an Owner on its route, reaches nothing of the Engine, and names where gtmworks does it',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/hermes/');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings'); await page.goto('/c/rs-learning/hermes/');
  await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
  for(const asked of refused) {
   const before=fake.settings.managementRequests.length;
@@ -75,7 +75,7 @@ test('each of the four is refused for an Owner on its route, reaches nothing of 
 });
 
 test('the refusal is in the person\'s own language',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/hermes/');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings'); await page.goto('/c/rs-learning/hermes/');
  query(`update public.people set language='ar' where id='${owner}'`);
  try {
   for(const asked of refused) {
@@ -109,7 +109,7 @@ test('the Engine\'s own key appears in no answer, whichever key route is asked, 
  fake.settings.fileBytes.set('/opt/data/backups/plain.txt',{body:'nothing secret here\n',type:'text/plain'});
  const answers:string[]=[];
  page.on('response',async response=>{ try { answers.push(`${response.url()} ${JSON.stringify(response.headers())} ${(await response.body()).toString('latin1')}`); } catch { /* a redirect has no body */ } });
- await signIn(page,'omar@example.com','/c/rs-learning/hermes/');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings'); await page.goto('/c/rs-learning/hermes/');
  await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
  const seen=[];
  for(const path of ['/api/files/download?path=/opt/data/backups/notes.txt','/api/files/read?path=/opt/data/backups/notes.txt','/api/files/download?path=/opt/data/backups/hermes-backup.zip','/api/ops/dump']) {
@@ -132,7 +132,7 @@ test('the Engine\'s own key appears in no answer, whichever key route is asked, 
 });
 
 test('an Owner connects a messaging platform, adds an MCP server, installs a plugin, makes a webhook, edits a Skill and changes a model, and each takes',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/hermes/');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings'); await page.goto('/c/rs-learning/hermes/');
  await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
  const wrote=async(path:string,method:string,body:unknown)=>{ const answer=await ask(page,path,{method,body}); expect(answer.status,`${method} ${path}: ${answer.text}`).toBe(200); };
  const read=async(path:string)=>{ const answer=await ask(page,path); expect(answer.status,path).toBe(200); return JSON.parse(answer.text); };
