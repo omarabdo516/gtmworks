@@ -4,7 +4,9 @@ Matching the frozen design (`design-reference/`), motion included, is a delivery
 request that ships it (Omar, 2026-11-17, #255). It is not a standing CI suite: the checks that compared the product with
 the frozen reference on every change retired in #271. After delivery the product's look is held to the design system
 (`DESIGN.md`, the tokens and `design-reference/`; no screenshot is compared in CI, #805), and its behaviour by the tests in
-`docs/testing.md`.
+`docs/testing.md`. A delivered screen passes the design system's value checks (#808): its stylesheet writes tokens, not
+raw values (`tests/design-values.test.mjs`), and each component it draws has `DESIGN.md`'s values
+(`tests/design-components.spec.ts`; `docs/agents/checks.md`, "The design system's values").
 
 How a delivery is recorded: [COMPARE.md, "The delivery record"](COMPARE.md#the-delivery-record).
 

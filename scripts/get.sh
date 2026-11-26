@@ -10,8 +10,9 @@
 # (the image carries it, #437) in the folder as gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
 #   gtmworks update-button on|off | gtmworks auto-update on|off | gtmworks updater (one run of the updater, #443)
-#   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>]
-#   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] | gtmworks company link <Company> | gtmworks company list
+#   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>]
+#   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company link <Company>
+#   gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
@@ -48,8 +49,8 @@ Usage:
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes] [--no-backup]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
-  gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>]
-  gtmworks company limits <Company> [--memory <size>] [--cpus <number>]  (its work sandbox's memory and CPUs)
+  gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>]
+  gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>]  (its work sandbox's memory, CPUs and disk)
   gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
   gtmworks company list     (each Company, the state of its Engine and of its work sandbox)
   gtmworks update-button on|off  (the Update now button Owners see; on by default)
@@ -796,6 +797,10 @@ op_updater() {
   # One updater at a time; cron starts one every minute whether the last one finished or not.
   exec 7>"${update_lock%/*}/updater.lock"
   flock -n 7 || return 0
+  # After the server starts again, each Company's work disk is mounted and its Engine and sandbox started (#507, ADR
+  # 0032): they cannot start before. The installer does nothing for a Company that runs, and nothing while another
+  # install step holds its lock; what it did is in the log beside the updater's.
+  run_installer disks > "$dir/.gtmworks-disks.log" 2>&1 || true
   # No database, or one from before #443: nothing to read, nothing to do.
   row=$(updates read 2> /dev/null) || return 0
   IFS='|' read -r button auto state due <<ROW

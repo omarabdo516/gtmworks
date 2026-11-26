@@ -1,11 +1,13 @@
 ---
-status: accepted, partly superseded by ADR 0020
+status: accepted, partly superseded by ADR 0020, amended by ADR 0032
 date: 2026-11-19
 ---
 
 # An Engine and a work sandbox per Company, and no Docker inside the install
 
 Omar's decisions of 2026-11-19. Not built yet: the spec that builds it follows this record. It supersedes, where they conflict, [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md) (one bundled Hermes for the whole install), [ADR 0014](0014-one-hermes-profile-per-company.md) (terminal, file, code and desktop tools always off, Agent levels, the sign-in rules), [ADR 0016](0016-the-engine-profile-is-the-agent.md) (its Sign-in section) and [ADR 0017](0017-hermes-keeps-skills-knowledge-rules-steps-and-usage.md) ("One Hermes" as one per install). Everything else in ADR 0008 to 0017 still holds: Hermes ships inside the install unmodified, an Agent is an Engine profile, and gtmworks stores nothing the Engine keeps.
+
+[ADR 0032](0032-a-fixed-size-work-disk-per-company-made-by-a-one-off-privileged-helper.md) amends it for one exception: each Company's work sandbox writes only to a work disk of a fixed size, which a one-off privileged helper with no network makes and mounts, then exits.
 
 [ADR 0020](0020-full-power-first-limits-only-after-a-real-problem.md): full power first. An Agent may publish and spend when a Member asks, with no Approval first; apps come with all their tools; `delegation` and `connections` are on. The tools that run inside the Engine's container stay off.
 
@@ -39,7 +41,7 @@ Read in the pinned Engine (Hermes v0.23.0) for this:
 ### The work sandbox
 
 - Each Company has one work sandbox: a second container, built on the Engine's own sandbox image (`nousresearch/hermes-sandbox:desktop`) with the work tools added (ffmpeg, Chromium, Node, Python, Arabic fonts). Every Agent of the Company works in it.
-- It is an ordinary container with the least it needs: a non-root user, no capabilities, no new privileges, and RAM and CPU limits given when the Company is made. It stays running; the Engine stops an unused screen by itself.
+- It is an ordinary container with the least it needs: a non-root user, no capabilities, no new privileges, and RAM, CPU and disk limits given when the Company is made (the disk: ADR 0032). It stays running; the Engine stops an unused screen by itself.
 - The Engine reaches it through the `ssh` terminal backend, with a key for that sandbox only. The backend is pinned in the Engine's managed config, so no profile and no Settings write changes it.
 - It holds no key of any kind: no model credential, no publishing or payment key, not the Engine's key and none of gtmworks's. A paid service (voice, images, video review) is called by a tool of the Engine, never by a key in the shell.
 - Its network is outbound internet only, through one exit that refuses the install's networks, private address ranges and cloud metadata addresses.

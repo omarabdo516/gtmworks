@@ -1,4 +1,5 @@
 import './globals.css';
+import './tokens.css';
 import { getI18n } from '@/lib/i18n-server';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { IBM_Plex_Sans_Arabic, Vazirmatn } from 'next/font/google';
