@@ -1,5 +1,5 @@
 'use client';
-import { createContext, Fragment, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useSelectedLayoutSegments } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
@@ -32,36 +32,45 @@ function placeOf(segments:string[],lead?:string):Place {
  return {section:parts.join('/')||'home',chat:false};
 }
 
-type ShellState={company:{name:string,slug:string},place:Place,told:Told,tell:(told:Told|null)=>void,approvals:Promise<number>};
+// What pages say lives in a store of its own, never in the context's value: a context that changes while the page is
+// still hydrating makes React draw the page's streamed boundaries again in the browser and leave the streamed copy
+// hidden in the page (#172). Only the Shell's own parts subscribe to it.
+type Store={get:()=>Told,set:(told:Told|null)=>void,subscribe:(listener:()=>void)=>()=>void};
+const nothingTold:Told={};
+function toldStore():Store {
+ let told=nothingTold; const listeners=new Set<()=>void>();
+ return {get:()=>told,set:next=>{ told=next??nothingTold; listeners.forEach(listener=>listener()); },subscribe:listener=>{ listeners.add(listener); return ()=>{ listeners.delete(listener); }; }};
+}
+type ShellState={company:{name:string,slug:string},place:Place,store:Store,approvals:Promise<number>};
 const ShellContext=createContext<ShellState|null>(null);
 
 export function ShellPageProvider({company,lead,approvals,children}:{company:{name:string,slug:string},lead?:string,approvals:Promise<number>,children:ReactNode}) {
- const [told,setTold]=useState<Told>({});
+ const [store]=useState(toldStore);
  const segments=useSelectedLayoutSegments();
  const key=segments.join('\n');
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const place=useMemo(()=>placeOf(segments,lead),[key,lead]);
- // One `tell` for the provider's life, so a page's word does not ask to be said again each time it is heard.
- const tell=useCallback((next:Told|null)=>setTold(next??{}),[]);
- const state=useMemo(()=>({company,place,told,tell,approvals}),[company,place,told,tell,approvals]);
+ const state=useMemo(()=>({company,place,store,approvals}),[company,place,store,approvals]);
  return <ShellContext.Provider value={state}>{children}</ShellContext.Provider>;
 }
 
 const home:Place={section:'home',chat:false};
+const noSubscribe=()=>()=>{};
+const noTold=()=>nothingTold;
 
 // The open page as the Shell marks it: its section, whether it is a chat, and what is open on it. Drawn outside a
 // Company's layout (a component test), the page is the Company's Home with nothing open.
 export function useShellPage() {
  const state=useContext(ShellContext);
  const place=state?.place??home;
- const told=state?.told??{};
+ const told=useSyncExternalStore(state?.store.subscribe??noSubscribe,state?.store.get??noTold,noTold);
  return {...place,agentId:told.agentId??place.agentId,cardId:told.cardId??place.cardId,crumbs:told.crumbs,approvals:told.approvals};
 }
 
 // A page's word to the Shell (app/shell.tsx); it says nothing while the page shows, and its word ends with the page.
 export function ShellPage({crumbs,agentId,cardId,approvals}:Told) {
  const state=useContext(ShellContext);
- const tell=state?.tell;
+ const tell=state?.store.set;
  const key=JSON.stringify({crumbs,agentId,cardId,count:typeof approvals==='number'?approvals:null});
  useLayoutEffect(()=>{
   if(!tell) return;
