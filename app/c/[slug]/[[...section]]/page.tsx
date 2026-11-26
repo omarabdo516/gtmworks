@@ -43,11 +43,12 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // Usage is the Owner's and the Managers' (#32), checked here for the page as the database checks each read.
  if(section==='usage'&&!manage) notFound();
  // The board (spec #831): the Company's Engine's own Kanban board. Its frame is drawn here from nothing the Engine keeps,
- // and the browser reads its Cards after (ADR 0030); a person who is no Member found no Company above. A Card opened over
- // the board (?card=, ?show=) still opens on the old board until the Engine's Card window replaces it (#835). New card
+ // and the browser reads its Cards after (ADR 0030); a person who is no Member found no Company above. A Card of the
+ // Engine opens over it at ?card=<its id> in the Engine's Card window (#835), which the board draws and reads itself. An
+ // old board's Card, a number (?card=, ?show=), still opens on the old board until it is switched off (#846). New card
  // (/work/new) is the board with its New card open (#836); a Viewer gets the board alone.
  const opened=await searchParams;
- if(section==='work/new'||section==='work/board'&&!cardId&&opened.card===undefined&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} creating={section==='work/new'}/></main></Page>;
+ if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} creating={section==='work/new'}/></main></Page>;
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
  const {data:companyHermesAgents}=section==='agents'?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]};
  const skillAgents=section==='skills'?await companySkillAgents(company.id):null;
