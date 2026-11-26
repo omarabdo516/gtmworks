@@ -187,22 +187,32 @@ async function liveParts(cookie,who) {
  }
  return {chat:opened[0],terminal:opened[1],board:opened[2],all:opened};
 }
-const card=async title=>{ const made=await get(`${prefix}/api/plugins/kanban/tasks`,{cookie:owner,method:'POST',json:{title}}); assert.ok(made.status>=200&&made.status<300,`the Owner makes the Card "${title}" from the dashboard: HTTP ${made.status} ${made.body.slice(0,200)}`); };
+// A Card the first Owner makes from the dashboard. Hermes's board stream reports it as a `created` task event naming the
+// Card by its id, not its title (plugins/kanban/dashboard/plugin_api.py stream_events), so a stream reports the Card when
+// it carries that id.
+const card=async title=>{
+ const made=await get(`${prefix}/api/plugins/kanban/tasks`,{cookie:owner,method:'POST',json:{title}});
+ assert.ok(made.status>=200&&made.status<300,`the Owner makes the Card "${title}" from the dashboard: HTTP ${made.status} ${made.body.slice(0,200)}`);
+ const id=JSON.parse(made.body).task?.id;
+ assert.ok(typeof id==='string'&&id,`the dashboard answers the Card's id: ${made.body.slice(0,200)}`);
+ const reported=new RegExp(`"task_id":\\s*"${id.replace(/[^\w-]/g,'\\$&')}"`);
+ return live=>reported.test(live.text);
+};
 const firstLive=await liveParts(owner,'first'), secondLive=await liveParts(second.cookie,'second');
 await until('the second Owner\'s terminal writes to them',()=>secondLive.terminal.text.length>0,30000);
-await card('A Card both board streams report');
-await until('both Owners\' board streams report the Card',()=>firstLive.board.text.includes('A Card both board streams report')&&secondLive.board.text.includes('A Card both board streams report'),30000);
+const before=await card('A Card both board streams report');
+await until('both Owners\' board streams report the Card',()=>before(firstLive.board)&&before(secondLive.board),30000);
 for(const live of secondLive.all) assert.equal(live.closedAt,null,`the second Owner's ${live.path} is open before the change`);
 const changed=Date.now();
 for(const live of secondLive.all) live.line=changed+5000;
 await json(`/rest/v1/members?company_id=eq.${company}&person_id=eq.${second.id}`,{method:'PATCH',headers:asService,body:JSON.stringify({role:'manager'})});
 await until('every socket of the Owner whose Role changed is closed',()=>secondLive.all.every(live=>live.closedAt!==null),7000);
 for(const live of secondLive.all) assert.ok(live.closedAt-changed<5000,`${live.path} closed ${live.closedAt-changed} ms after the change, within five seconds`);
-await card('A Card after the Role changed');
-await until('the first Owner\'s board stream still reports',()=>firstLive.board.text.includes('A Card after the Role changed'),30000);
+const after=await card('A Card after the Role changed');
+await until('the first Owner\'s board stream still reports',()=>after(firstLive.board),30000);
 for(const live of secondLive.all) {
  assert.equal(live.after,0,`${live.path} got nothing after the line`);
- assert.ok(!live.text.includes('A Card after the Role changed'),`${live.path} never reported the Card made after the change`);
+ assert.ok(!after(live),`${live.path} never reported the Card made after the change`);
 }
 for(const live of firstLive.all) assert.equal(live.closedAt,null,`the first Owner's ${live.path} stayed open`);
 assert.equal((await get(`${prefix}/api/auth/ws-ticket`,{cookie:second.cookie,method:'POST'})).status,404,'the changed Owner mints no new ticket');
