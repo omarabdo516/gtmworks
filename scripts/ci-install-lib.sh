@@ -171,14 +171,19 @@ YAML
   docker restart "$1" > /dev/null || fail 'restart the Engine'
   engine_healthy "$1" 60 || fail 'the Engine is healthy after configuration'
 }
-# Whether an Engine's managed scope approves a board worker's dangerous command (spec #831, #833): the dispatcher runs a
-# Card's worker as a single-query Run, which refuses one unless `approvals.single_query_mode` is approve. Read from inside
-# the Engine, at the managed scope's own path, so a template that mounts another file fails here; read whole before it is
-# parsed, so no early exit of a pipe can pass for a match.
+# Whether an Engine holds the settings a board worker needs (spec #831, #833). Its managed scope approves the worker's
+# dangerous command: the dispatcher runs a Card's worker as a single-query Run, which refuses one unless
+# `approvals.single_query_mode` is approve. Read from inside the Engine, at the managed scope's own path, so a template
+# that mounts another file fails here; read whole before it is parsed, so no early exit of a pipe can pass for a match.
+# And the Engine's own user has a temp folder short enough for the ssh backend's control socket, there and writable: with
+# none set, Hermes gives a worker its profile's scratch, where the socket's path ran past a Unix socket's 108 bytes (CI run
+# 45854207378). 50 characters is Hermes's own budget for a temp root that holds sockets (SOCKET_TMPDIR_MAX_LEN).
 engine_board_settings() {
-  local managed
+  local managed scratch
   managed=$(docker exec "$1" cat /etc/hermes/config.yaml) || return 1
-  awk '/^[^[:space:]#]/ {section=$1} section == "approvals:" && $1 == "single_query_mode:" && $2 == "approve" {found=1} END {exit !found}' <<< "$managed"
+  awk '/^[^[:space:]#]/ {section=$1} section == "approvals:" && $1 == "single_query_mode:" && $2 == "approve" {found=1} END {exit !found}' <<< "$managed" || return 1
+  scratch=$(docker exec -u hermes "$1" sh -c 'test -n "$TMPDIR" && test -d "$TMPDIR" && test -w "$TMPDIR" && printf %s "$TMPDIR"') || return 1
+  [[ $scratch == /* ]] && (( ${#scratch} <= 50 ))
 }
 # The registry's own digest is the one named: Docker's containerd image store also lists the digest of a local tag.
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks:$1" | grep -m 1 '^localhost:5000/gtmworks@'; }
