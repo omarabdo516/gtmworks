@@ -1,6 +1,6 @@
 import { test, expect, type Page } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import { laneEngineRecords } from './spec-engine-records';
+import './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -8,7 +8,6 @@ import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
-test.beforeAll(()=>laneEngineRecords());
 
 // #671: archiving a Card an Agent works on, or that waits on someone (design-reference-card: cwArchive, cwConfirm). One
 // confirmation names each thing that stops; "Archive and stop" stops the Run through the stop that exists and clears the

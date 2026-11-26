@@ -1,6 +1,6 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import { laneEngineRecords } from './spec-engine-records';
+import './spec-engine-records';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -9,7 +9,6 @@ import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
-test.beforeAll(()=>laneEngineRecords());
 
 // #165: a pending permission request (#163) is one item in "Waiting on you" of the person who can decide it, on the
 // board's first column, in the sidebar count and on Numbers, until it is allowed, refused or closed by the Engine. In a

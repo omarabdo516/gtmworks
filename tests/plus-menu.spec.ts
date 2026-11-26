@@ -1,13 +1,12 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import { laneEngineRecords } from './spec-engine-records';
+import './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
-test.beforeAll(()=>laneEngineRecords());
 
 // #153, the composer's "+" menu: whom it calls in a Conversation and in a channel, and a new chat's first message that
 // calls an Agent. The menu's own behaviour (focus, keys, the caret) is proven in tests/components/plus-menu.test.tsx.
