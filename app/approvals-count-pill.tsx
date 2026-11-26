@@ -14,12 +14,12 @@ import { useSidebarApprovals } from './sidebar-live';
 // that falls or stays, and a count still on its way do not. The pill is drawn once per Company (keyed by its address),
 // so another Company's count is never read as a rise. A second rise takes the class off for a frame, so the pop plays
 // again on the same link and the keyboard keeps its place on it.
-export function CountPill({href,current:drawn,count}:{href:string,current?:boolean,count?:number}) {
+export function CountPill({href,current:drawn,count:drawnCount}:{href:string,current?:boolean,count?:number}) {
  const {t}=useI18n();
  // Current while Waiting on you is the page shown (app/shell-place).
  const place=useShellPlace(); const current=drawn??place.section==='approvals';
  // The sidebar's poll counts again while a page stays open (#789); until it answers, the Shell's count stands.
- const polled=useSidebarApprovals(); if(polled!==undefined) count=polled;
+ const polled=useSidebarApprovals(); const count=polled??drawnCount;
  const seen=useRef<number|undefined>(undefined);
  const [pop,setPop]=useState(false);
  useEffect(()=>{
