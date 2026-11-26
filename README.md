@@ -47,7 +47,8 @@ first, and moving to another release is an update, backup first.
 
 Requirements: Docker Engine with Docker Compose v2.20+ (`docker compose`), POSIX
 `sh`, `curl`, `flock` (from util-linux, present on nearly every Linux install),
-internet access to pull images, **20 GB free disk** plus room for your data, and
+internet access to pull images, **20 GB free disk** plus room for your data (each
+Company's work disk takes up to its limit, 10 GB by default, as it fills), and
 the CPU and RAM of one of the two server sizes below. No host Node.js, Git,
 Supabase CLI, cloud project or external account is required.
 
@@ -96,6 +97,28 @@ raised the default to 2 GB (for the Company's Screen) raises a Company's own low
 memory limit to it once and never lowers one; a limit you set after that is kept. A render that needs more memory than its Company's limit is stopped at the
 limit, and every other Company's sandbox keeps answering: one Company's video cannot
 starve the others.
+
+**Each Company's disk.** A work sandbox writes to nothing of the server's own disk:
+its root is read-only, its scratch folders (`/tmp`, 1 GB, and `/var/tmp`, 256 MB) are
+memory counted in its memory limit, and its work folder and home (the Screen's
+browser profile with its sign-ins, the tools' settings and caches) are on the
+Company's own work disk, a filesystem of a fixed size and number of files kept as one
+image file under `.work-disks/` in the install's folder. Each Company gets a work disk
+of **10 GB** by default; the image grows on the server's disk only as the Company
+writes. A command that fills it stops with "No space left on device", and the database,
+the app and every other Company keep running. `gtmworks company add --disk 20g` gives
+a new Company another size and `gtmworks company limits "Second Company" --disk 20g`
+changes one (a whole number of megabytes or gigabytes, at least `1g`): that Company's
+Engine and sandbox stop for the moment the disk is resized, with its files kept. A size
+below what the disk holds is refused, the command says how much it holds, and the
+disk stays as it was. The limits of all Companies together may be more than the
+server's disk, so size the server for what your Companies write. Making and mounting
+a disk takes a short-lived privileged container from the work sandbox image, with no
+network, that exits once the disk is ready (ADR 0032). After the server restarts, each
+Company's Engine and sandbox start once the gtmworks updater (which runs every minute,
+see Update) has mounted its disk, within a minute; on a machine without the updater,
+run `gtmworks install`. An update from a release before the work disks moves each
+Company's work folder onto its disk, with a disk large enough to hold it.
 
 **The sandbox shares the server's kernel.** A work sandbox is a container, not a
 virtual machine: every Company's sandbox, the Engines and the install run on the
@@ -182,8 +205,8 @@ holds the name behind the link; the worker then gives the Company its main Agent
 its own Engine. If the Engine does not become healthy the command says so in one line,
 removes what it made (its container, volume, network and folder, and its record), and
 leaves no Company, so running it again is safe. The Company's work sandbox and exit
-are made with its Engine, with the memory and CPU limit `--memory` and `--cpus` name
-(the install's default with none), and the Engine must reach the sandbox before the
+are made with its Engine, with the memory, CPU and disk limit `--memory`, `--cpus` and
+`--disk` name (the install's default with none), and the Engine must reach the sandbox before the
 command says anything; a sandbox that does not start or cannot be reached is removed
 the same way, with its work folder and its keys. `gtmworks company list` shows every
 Company with the state of its Engine and of its work sandbox, and `gtmworks status`
@@ -284,8 +307,8 @@ restore <archive>` there.
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
 gtmworks company add --name "Third Company"     # prints a first-Owner link instead
-gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5
-gtmworks company limits "Second Company" --memory 3g --cpus 3   # its work sandbox's limits
+gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5 --disk 20g
+gtmworks company limits "Second Company" --memory 3g --cpus 3 --disk 30g   # its work sandbox's limits
 gtmworks company link "Third Company"          # a fresh link for a Company still waiting
 gtmworks company list
 ```
@@ -295,8 +318,9 @@ healthy, and makes the Company with that existing Person as its Owner; with no
 `--owner` it prints a first-Owner link instead and makes the Company when that link is
 sent. `company link` prints a fresh link for a Company still waiting and ends the
 earlier one. A failed Engine leaves nothing behind and the same command can be run
-again. `company limits` changes a Company's work sandbox memory and CPUs and starts
-only that sandbox again (see **Server size** under Install). `company list` shows
+again. `company limits` changes a Company's work sandbox memory, CPUs and disk and starts
+only that sandbox again, and its Engine too when the disk changes (see **Server size**
+and **Each Company's disk** under Install). `company list` shows
 every Company with the state of its Engine, including one still waiting for its
 Owner, and each Company's work sandbox and its state. `gtmworks status` reports every
 Engine and every sandbox beside the services. See **One Engine per Company** under Install for what each Engine holds and

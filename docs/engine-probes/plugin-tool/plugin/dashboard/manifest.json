@@ -1,0 +1,7 @@
+{
+  "name": "gtmworks-people",
+  "label": "gtmworks people",
+  "description": "Probe C of gtmworks spec #822: the install marks which sessions are an Owner's.",
+  "version": "0.0.1",
+  "api": "plugin_api.py"
+}

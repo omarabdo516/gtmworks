@@ -1,0 +1,6 @@
+name: gtmworks-people
+version: 0.0.1
+description: "Probe C of gtmworks spec #822: one tool that knows whether its session is an Owner's. Not part of the product."
+author: gtmworks
+provides_tools:
+  - gtmworks_make_agent

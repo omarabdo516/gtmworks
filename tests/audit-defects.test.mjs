@@ -61,7 +61,7 @@ test('the alert shows only the product\'s own messages, in the reader\'s languag
 
 test('every action that comes back to a Company page names its alert by a key the page shows', () => {
  const base = 'app/c/[slug]/[[...section]]/';
- for (const file of ['actions.ts', 'agent-actions.ts', 'project-actions.ts', 'work-actions.ts']) {
+ for (const file of ['actions.ts', 'project-actions.ts', 'work-actions.ts']) {
   const source = readFileSync(base + file, 'utf8');
   assert.doesNotMatch(source, /message=\$\{encodeURIComponent/, file);
   for (const [, key] of source.matchAll(/[?&]message=([A-Za-z]+)/g)) assert.ok(pageAlerts.includes(key), `${file}: ${key}`);

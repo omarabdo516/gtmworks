@@ -67,7 +67,7 @@ test('discovery accepts unit, browser, recursive database tests and the existing
  mkdirSync(join(dir, 'supabase/tests/nested'), { recursive: true });
  mkdirSync(join(dir, 'tests/new.spec.ts-snapshots'));
  for (const path of ['tests/new.spec.ts-snapshots/home-visual-linux.png', 'supabase/tests/nested/new.sql', 'supabase/tests/nested/new.pg', 'tests/new.test.mjs',
-  'tests/function-grants-migration.mjs', 'tests/agent-role-backfill.mjs', 'tests/bootstrap-db.mjs',
+  'tests/function-grants-migration.mjs', 'tests/bootstrap-db.mjs',
   'tests/sign-in.ts', 'tests/navigation-measure.ts']) writeFileSync(join(dir, path), '');
  writeFileSync(join(dir, 'tests/new.spec.ts'), "import { test } from '@playwright/test'; test('collected browser test', () => {});\n");
  const result = command(dir, 'node', ['scripts/check-test-discovery.mjs']);

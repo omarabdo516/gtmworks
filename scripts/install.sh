@@ -165,15 +165,23 @@ exit_network() { printf 'gtmworks-exit-%s' "$1"; }
 # The one-off step that copies the sandbox image's Screen driver into the Engine's volume (#711): its container stays
 # after it exits, so it has a name of its own, taken away with the sandbox and the exit.
 screen_driver_container() { printf 'gtmworks-screen-driver-%s' "$1"; }
-work_volume() { printf 'gtmworks-work-%s' "$1"; }
+# The Company's work folder and its sandbox's home live on its work disk (#507, ADR 0032): one filesystem of a fixed size,
+# an image file under .work-disks/<Engine folder>/ mounted at fs/ there, which these two volumes bind (fs/work, fs/home).
+# Before #507 the work folder was a plain volume on the server's own disk (gtmworks-work-<folder>, now old_work_volume):
+# the first run of this release moves it onto the disk, and the volume goes once the run has finished.
+work_volume() { printf 'gtmworks-folder-%s' "$1"; }
+home_volume() { printf 'gtmworks-home-%s' "$1"; }
+old_work_volume() { printf 'gtmworks-work-%s' "$1"; }
+work_disk_folder() { printf '%s/.work-disks/%s' "$PWD" "$1"; }
 work_network() { printf 'gtmworks-work-%s' "$1"; }
 host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
-# What one sandbox gets by default (the RAM and CPU the install gives a Company's sandbox, and the process limit and shared
-# memory Chromium needs) is set in one place, the sandbox service of scripts/engine-template.yml, from the install job's
-# measurement (#400); nothing here repeats a default. A Company's own memory and CPU limit (#396), given to `company add`
-# or `company limits`, is kept in its Engine's folder beside its key, as SANDBOX_MEMORY and SANDBOX_CPUS, and only that
-# file gives them to Compose: a value left in the shell never reaches a sandbox, so an update, a restore and a recreate
-# give every sandbox the limits its Company was given, and a Company given none the template's default.
+# What one sandbox gets by default (the RAM and CPU the install gives a Company's sandbox, the size of its work disk, and
+# the process limit and shared memory Chromium needs) is set in one place, the sandbox service of
+# scripts/engine-template.yml, from the install job's measurement (#400); nothing here repeats a default. A Company's own
+# memory, CPU and disk limit (#396, #507), given to `company add` or `company limits`, is kept in its Engine's folder
+# beside its key, as SANDBOX_MEMORY, SANDBOX_CPUS and SANDBOX_DISK, and only that file gives them to Compose and the disk:
+# a value left in the shell never reaches a sandbox, so an update, a restore and a recreate give every sandbox the limits
+# its Company was given, and a Company given none the template's default.
 sandbox_limit() { sed -n "s/^SANDBOX_$2=//p" "$(engine_folder "$1")/.env" 2> /dev/null; }
 # A limit is refused before anything changes when it is not one Docker reads as a size or a number of CPUs; what Docker
 # itself refuses (more CPUs than the server has) fails the sandbox's start, which takes the change back.
@@ -182,22 +190,28 @@ check_limits() {
     || { echo "The memory limit is a whole number of megabytes or gigabytes, such as 512m or 2g, not $1." >&2; return 1; }
   [ -z "$2" ] || { printf '%s\n' "$2" | grep -Eqx '[0-9]+(\.[0-9]{1,2})?' && awk -v cpus="$2" 'BEGIN { exit !(cpus > 0) }'; } \
     || { echo "The CPU limit is a number of CPUs above 0, such as 1 or 1.5, not $2." >&2; return 1; }
+  # A work disk holds the sandbox's home beside the work folder, so it is at least a gigabyte.
+  [ -z "${3:-}" ] || { printf '%s\n' "$3" | grep -Eqx '[1-9][0-9]*[mg]' && [ "$(megabytes "$3")" -ge 1024 ]; } \
+    || { echo "The disk limit is a whole number of megabytes or gigabytes of at least 1g, such as 5g or 20g, not $3." >&2; return 1; }
 }
-# One Company's limits written into its Engine's file, owner-only, under a temporary name then moved into place; an
-# empty value leaves that limit to the template's default. A memory limit of its own is noted with the default it was
-# written under (SANDBOX_MEMORY_DEFAULT), so an update raises it only once for each new default (#711).
+# One Company's limits (memory, CPUs, disk) written into its Engine's file, owner-only, under a temporary name then moved
+# into place; an empty value leaves that limit to the template's default. A memory limit of its own is noted with the
+# default it was written under (SANDBOX_MEMORY_DEFAULT), so an update raises it only once for each new default (#711).
 write_limits() {
   file="$(engine_folder "$1")/.env"
   {
-    grep -Ev '^SANDBOX_(MEMORY|CPUS|MEMORY_DEFAULT)=' "$file" || true
+    grep -Ev '^SANDBOX_(MEMORY|CPUS|MEMORY_DEFAULT|DISK)=' "$file" || true
     [ -z "$2" ] || printf 'SANDBOX_MEMORY=%s\nSANDBOX_MEMORY_DEFAULT=%s\n' "$2" "$(default_sandbox_memory)"
     [ -z "$3" ] || printf 'SANDBOX_CPUS=%s\n' "$3"
+    [ -z "${4:-}" ] || printf 'SANDBOX_DISK=%s\n' "$4"
   } > "$file.tmp" || return 1
   chmod 600 "$file.tmp" || return 1
   mv "$file.tmp" "$file" || return 1
 }
 # The install's default memory for one sandbox, read from the one place it is set, the sandbox service of the template.
 default_sandbox_memory() { sed -n 's/^    mem_limit: ${SANDBOX_MEMORY:-\([0-9]*[mg]\)}$/\1/p' "$engine_template"; }
+# The install's default work disk for one Company, read from the same place (#507).
+default_sandbox_disk() { sed -n 's/^      gtmworks.disk: ${SANDBOX_DISK:-\([0-9]*[mg]\)}$/\1/p' "$engine_template"; }
 # A size as Docker reads it (512m, 2g) in megabytes.
 megabytes() { case "$1" in *g) echo $(( ${1%g} * 1024 ));; *m) echo "${1%m}";; *) return 1;; esac; }
 # A Company's sandbox holds its Screen, which its Agents share (#711), so an update to a release whose default memory is larger raises a
@@ -211,8 +225,119 @@ raise_sandbox_memory() {
   test -n "$default" || { echo "The sandbox's default memory is not in $engine_template." >&2; return 1; }
   [ "$(sandbox_limit "$1" MEMORY_DEFAULT)" != "$default" ] || return 0
   [ "$(megabytes "$own")" -lt "$(megabytes "$default")" ] || return 0
-  write_limits "$1" "$default" "$(sandbox_limit "$1" CPUS)" || return 1
+  write_limits "$1" "$default" "$(sandbox_limit "$1" CPUS)" "$(sandbox_limit "$1" DISK)" || return 1
   echo "The work sandbox of the Engine $1 had $own of memory: raised to $default, the new default, so its Screen fits."
+}
+# The template on disk says which layout its Engines run: this release's, whose work folder is on the Company's work disk
+# (#507), or a previous release's, whose work folder is the plain volume it always had. A rollback starts the previous
+# release's Engines from that release's own template, so they get the folder that release knows.
+disk_layout() { grep -q 'SANDBOX_HOME_VOLUME' "$engine_template"; }
+layout_work_volume() { if disk_layout; then work_volume "$1"; else old_work_volume "$1"; fi; }
+# The one-off helper for a Company's work disk (#507, ADR 0032): the work sandbox image's own fixed command (work-disk), as
+# root, privileged for its loop device and its mount, with the host's process table to mount in the Docker daemon's mount
+# namespace, no network, and only this Company's folder under .work-disks. It never stays running and takes nothing from
+# the Company but its size. The previous release's work folder (a plain volume) is lent to it read-only while there is
+# one, so a disk it makes moves that folder in.
+work_disk() {
+  disk_image=$(work_sandbox_ref)
+  test -n "$disk_image" || { echo "The work sandbox image is not recorded: run sh scripts/install.sh." >&2; return 1; }
+  disk_folder=$(work_disk_folder "$1")
+  mkdir -p "$disk_folder/fs" && chmod 700 "${disk_folder%/*}" || return 1
+  disk_old=
+  if [ "$2" = mount ] && docker volume inspect "$(old_work_volume "$1")" > /dev/null 2>&1; then
+    disk_old="--mount=type=volume,src=$(old_work_volume "$1"),dst=/old,readonly"
+  fi
+  docker run --rm --privileged --pid host --network none --user 0 --entrypoint /usr/local/bin/work-disk \
+    -v "$disk_folder:/disk" ${disk_old:+"$disk_old"} "$disk_image" "$2" "$disk_folder" ${3:+"$3"}
+}
+# A Company's work disk made, resized or mounted at its limit (SANDBOX_DISK, or the template's default), and the two
+# volumes that bind it. A size changes only with nothing using the disk: the Company's Engine and sandbox stop first, and
+# the caller starts them again. A previous work folder too large for the limit, moved onto a new disk, gets a disk that
+# holds it, and that size becomes the Company's limit. 4, with disk_used set to the MiB it holds, when a smaller limit
+# does not hold what is on it: the disk stays as it was and mounted.
+work_disk_up() {
+  disk_slug=$1
+  disk_size=$(sandbox_limit "$disk_slug" DISK)
+  [ -n "$disk_size" ] || disk_size=$(default_sandbox_disk)
+  test -n "$disk_size" || { echo "The work disk's default size is not in $engine_template." >&2; return 1; }
+  disk_status=0
+  disk_out=$(work_disk "$disk_slug" mount "$disk_size") || disk_status=$?
+  if [ "$disk_status" -eq 3 ]; then
+    docker stop "$(engine_project "$disk_slug")" "$(sandbox_container "$disk_slug")" > /dev/null 2>&1 || true
+    work_disk "$disk_slug" unmount || { echo "The work disk of the Engine $disk_slug is in use and could not be resized." >&2; return 1; }
+    disk_status=0
+    disk_out=$(work_disk "$disk_slug" mount "$disk_size") || disk_status=$?
+  fi
+  # A disk this run made is named in the scratch folder, so an update that goes back takes it away again.
+  if printf '%s\n' "$disk_out" | grep -qx made; then printf '%s\n' "$disk_slug" >> .install-lock/work-disks-made; fi
+  disk_used=$(printf '%s\n' "$disk_out" | sed -n 's/^used //p')
+  case "$disk_status" in
+    0|4) ;;
+    *) echo "The work disk of the Engine $disk_slug could not be made or mounted." >&2; return 1;;
+  esac
+  disk_moved=$(printf '%s\n' "$disk_out" | sed -n 's/^size //p')
+  if [ -n "$disk_moved" ]; then
+    write_disk_limit "$disk_slug" "$disk_moved" || return 1
+    echo "The work folder of the Engine $disk_slug needed more than $disk_size: its work disk is $disk_moved."
+  fi
+  bind_volume "$(work_volume "$disk_slug")" "$(work_disk_folder "$disk_slug")/fs/work" || return 1
+  bind_volume "$(home_volume "$disk_slug")" "$(work_disk_folder "$disk_slug")/fs/home" || return 1
+  # A refused smaller size leaves the disk mounted as it was, bound like any other.
+  return "$disk_status"
+}
+# A Company's disk limit alone, kept with its other limits in its Engine's file. Not through write_limits, which notes a
+# memory limit with the default of this release and so would skip the raise an update owes it (raise_sandbox_memory).
+write_disk_limit() {
+  disk_file="$(engine_folder "$1")/.env"
+  { grep -v '^SANDBOX_DISK=' "$disk_file" || true; printf 'SANDBOX_DISK=%s\n' "$2"; } > "$disk_file.tmp" || return 1
+  chmod 600 "$disk_file.tmp" && mv "$disk_file.tmp" "$disk_file"
+}
+# A volume that binds one folder of a work disk. It holds nothing of its own: one that binds another path (an install
+# folder moved) is made again. While the disk is not mounted its folder does not exist, so a container using the volume
+# does not start rather than write to the server's own disk.
+bind_volume() {
+  bound=$(docker volume inspect -f '{{index .Options "device"}}' "$1" 2> /dev/null) || bound=
+  [ "$bound" != "$2" ] || return 0
+  if [ -n "$bound" ]; then docker volume rm "$1" > /dev/null || return 1; fi
+  docker volume create --driver local --opt type=none --opt o=bind --opt device="$2" "$1" > /dev/null
+}
+# A Company's work disk unmounted and deleted, with its volumes, once nothing uses it. Its folder goes only when empty, so
+# nothing on a disk still mounted is ever removed with it.
+remove_work_disk() {
+  docker volume rm "$(work_volume "$1")" "$(home_volume "$1")" > /dev/null 2>&1 || true
+  [ -d "$(work_disk_folder "$1")" ] || return 0
+  work_disk "$1" remove || return 1
+  rmdir "$(work_disk_folder "$1")/fs" "$(work_disk_folder "$1")"
+}
+# What this run made of the work disks, taken away when an update goes back (#507): the previous release's Engines run
+# the work folder they had, so a disk this update made, with its copy of that folder, goes, and the next update moves the
+# folder again. What an Agent wrote on that disk between the move and the failure goes with it: the previous release
+# serves from the folder as it was when the update began. This release's Engine and sandbox of that Company hold the
+# disk, so they go first; the previous release's own start makes them again.
+remove_new_work_disks() {
+  [ -f .install-lock/work-disks-made ] || return 0
+  for disk_name in $(sort -u .install-lock/work-disks-made); do
+    docker rm -f "$(engine_project "$disk_name")" "$(sandbox_container "$disk_name")" > /dev/null 2>&1 || true
+    remove_work_disk "$disk_name" \
+      || echo "The work disk this update made for the Engine $disk_name could not be removed: run the update again." >&2
+  done
+  rm -f .install-lock/work-disks-made
+}
+# The previous release's work folders go once this run, which moved each onto its Company's work disk, is whole (#507).
+drop_moved_work_volumes() {
+  for disk_name in $(engine_names); do
+    moved=$(old_work_volume "$disk_name")
+    [ -f "$(work_disk_folder "$disk_name")/fs.img" ] || continue
+    docker volume inspect "$moved" > /dev/null 2>&1 || continue
+    docker volume rm "$moved" > /dev/null \
+      || echo "The previous work folder $moved is on its work disk now but could not be removed: docker volume rm $moved" >&2
+  done
+}
+# A Company's Engine started again after its work disk was resized, and healthy before this returns.
+start_engine_again() {
+  [ "$(docker inspect -f '{{.State.Running}}' "$(engine_project "$1")" 2> /dev/null)" != true ] || return 0
+  docker start "$(engine_project "$1")" > /dev/null || return 1
+  healthy_within "$(engine_project "$1")" "${GTMWORKS_ENGINE_WAIT:-300}"
 }
 # The Engine reaches its sandbox as every Agent's command does (#396): over ssh, as the Engine's own user, with its own
 # key and the host key its known_hosts pins. A few tries, as Docker's name for the sandbox can take a moment to answer.
@@ -243,10 +368,16 @@ sandbox_keys() {
   test -n "$image" || { echo "The work sandbox image is not recorded: run sh scripts/install.sh." >&2; return 1; }
   docker volume create "$volume" > /dev/null || return 1
   docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
-  docker volume create "$(work_volume "$slug")" > /dev/null || return 1
+  # The work folder is on the Company's work disk (#507), made or mounted here before anything writes to it; a previous
+  # release's template, started again by a rollback, keeps its plain volume.
+  if disk_layout; then
+    work_disk_up "$slug" || [ $? -eq 4 ] || return 1
+  else
+    docker volume create "$(old_work_volume "$slug")" > /dev/null || return 1
+  fi
   keys_failed=0
   keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
-    -v "$(work_volume "$slug"):/work" "$image" -ec '
+    -v "$(layout_work_volume "$slug"):/work" "$image" -ec '
       set -e
       # An Engine with no sandbox key yet is one made before the work sandbox (#397): the files each of its Agents made in
       # the old Library root of its profile (`workspace`, on the disk of the Engine) are copied once into the own folder
@@ -316,8 +447,10 @@ engine() {
   SANDBOX_AUTHORIZED_KEY=${sandbox_key:-} \
   SANDBOX_MEMORY=$(sandbox_limit "$slug" MEMORY) \
   SANDBOX_CPUS=$(sandbox_limit "$slug" CPUS) \
+  SANDBOX_DISK=$(sandbox_limit "$slug" DISK) \
   SANDBOX_HOST_KEY_VOLUME=$(host_key_volume "$slug") \
-  WORK_VOLUME=$(work_volume "$slug") \
+  SANDBOX_HOME_VOLUME=$(home_volume "$slug") \
+  WORK_VOLUME=$(layout_work_volume "$slug") \
   WORK_NETWORK=$(work_network "$slug") \
   EXIT_NAME=$(exit_container "$slug") \
   SCREEN_DRIVER_NAME=$(screen_driver_container "$slug") \
@@ -361,7 +494,7 @@ write_engine_env() {
   mkdir -p "$folder" || return 1
   # The Company's own sandbox limits (#396) stay when the file is written again, as each run writes the first Engine's,
   # with the default its memory limit was written under (#711), so an update does not raise the Owner's own limit again.
-  kept=$(grep -E '^SANDBOX_(MEMORY|CPUS|MEMORY_DEFAULT)=' "$folder/.env" 2> /dev/null || true)
+  kept=$(grep -E '^SANDBOX_(MEMORY|CPUS|MEMORY_DEFAULT|DISK)=' "$folder/.env" 2> /dev/null || true)
   {
     printf 'ENGINE_NAME=%s\n' "$(engine_project "$slug")" &&
     printf 'ENGINE_KEY=%s\n' "$key" &&
@@ -468,7 +601,8 @@ engine_destroy() {
   slug=$1 volume=$2 network=$3
   engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
   docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" "$(exit_container "$slug")" "$(screen_driver_container "$slug")" > /dev/null 2>&1 || true
-  docker volume rm "$volume" "$(work_volume "$slug")" "$(host_key_volume "$slug")" > /dev/null 2>&1 || true
+  docker volume rm "$volume" "$(old_work_volume "$slug")" "$(host_key_volume "$slug")" > /dev/null 2>&1 || true
+  remove_work_disk "$slug" || echo "The work disk of the Engine $slug could not be removed: $(work_disk_folder "$slug")" >&2
   docker network rm "$(work_network "$slug")" "$(exit_network "$slug")" > /dev/null 2>&1 || true
   # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
   # network would be left behind and the same command run again would meet it.
@@ -603,7 +737,8 @@ remove_new_sandbox_parts() {
     fi
     # An update begun with no list removes no volume or network it cannot tell apart.
     [ -f "$record" ] || continue
-    for part in "$(work_volume "$name")" "$(host_key_volume "$name")"; do
+    # A work folder of the previous layout (a plain volume); one on a work disk goes with its disk (remove_new_work_disks).
+    for part in "$(old_work_volume "$name")" "$(host_key_volume "$name")"; do
       grep -qxF "volume $part" "$record" || ! docker volume inspect "$part" > /dev/null 2>&1 \
         || docker volume rm "$part" > /dev/null 2>&1 || left="$left the volume $part (docker volume rm $part),"
     done
@@ -623,6 +758,7 @@ remove_new_sandbox_parts() {
 # Engine is still there to write its volume, or when the old one does not start or become healthy.
 restore_old_engine() {
   old_engine=$(cat .install-lock/old-engine)
+  remove_new_work_disks
   rm -f .install-lock/work-sandbox-image
   engine first down --remove-orphans > /dev/null 2>&1 || true
   docker rm -f "$(engine_project first)" "$(sandbox_container first)" "$(exit_container first)" "$(screen_driver_container first)" > /dev/null 2>&1 || true
@@ -666,6 +802,8 @@ restore_old_engine() {
 restore_previous_engine() {
   if [ -f .install-lock/old-engine ]; then restore_old_engine; return; fi
   [ -f .install-lock/previous-engine/engine-template.yml ] || return 1
+  # The work disks this update made go first, with the image this run recorded still at hand to unmount them (#507).
+  remove_new_work_disks
   # The sandboxes start again from the image the previous run recorded, never the one this run made: a release names it
   # by digest, and a source build kept it under the -previous name before rebuilding the tag. The files this release
   # brought stay until every Engine runs from the previous ones, as an Engine of this release may restart meanwhile.
@@ -770,7 +908,7 @@ company_engine() {
 }
 
 company_usage() {
-  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] | gtmworks company limits <Company> [--memory <size>] [--cpus <number>] | gtmworks company link <Company> | gtmworks company list' >&2
+  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company link <Company> | gtmworks company list' >&2
   exit 1
 }
 # `gtmworks company add` (#382, #383, ADR 0018, 0019): one new Company, its Engine made from the template with its own
@@ -778,19 +916,20 @@ company_usage() {
 # held behind a first-Owner link whose secret is printed once, after `#`. The Engine is made and waited on before either;
 # a failure removes everything this command made, in one plain line, so the same command can be run again.
 company_add() {
-  company_name= owner_email= has_owner=no memory= cpus=
+  company_name= owner_email= has_owner=no memory= cpus= disk=
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) [ $# -ge 2 ] || company_usage; company_name=$2; shift;;
       --owner) [ $# -ge 2 ] || company_usage; owner_email=$2; has_owner=yes; shift;;
       --memory) [ $# -ge 2 ] || company_usage; memory=$2; shift;;
       --cpus) [ $# -ge 2 ] || company_usage; cpus=$2; shift;;
+      --disk) [ $# -ge 2 ] || company_usage; disk=$2; shift;;
       *) company_usage;;
     esac
     shift
   done
   test -n "$company_name" || company_usage
-  check_limits "$memory" "$cpus" || return 1
+  check_limits "$memory" "$cpus" "$disk" || return 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   # A versioned restore replaces the install over several installer runs and holds .install-restore while it does
   # (#378, C5): a Company made between its safety backup and the replacement would be lost without being in that backup,
@@ -833,7 +972,7 @@ company_add() {
     add_slug=
   }
   trap 'rollback_add; exit 1' HUP INT TERM
-  { write_engine_env "$slug" "$key" "$volume" "$network" && write_limits "$slug" "$memory" "$cpus"; } || {
+  { write_engine_env "$slug" "$key" "$volume" "$network" && write_limits "$slug" "$memory" "$cpus" "$disk"; } || {
     rollback_add
     echo "Company \"$company_name\" was not made: its Engine's folder could not be written. Nothing was left behind."
     return 1
@@ -899,23 +1038,26 @@ company_link() {
   fi
   compose exec -T web node scripts/company-add.mjs link --name "$company_name"
 }
-# `gtmworks company limits <Company> [--memory <size>] [--cpus <number>]` (#396): an existing Company's sandbox limits,
-# kept in its Engine's file. Only that Company's sandbox is made again with them (its Engine, its exit, its work folder
-# and every other Company stay as they run), and its Engine reaches it before the command says so. A sandbox that does
-# not start with the new limits is started again with its earlier ones, which its file keeps.
+# `gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>]` (#396, #507): an existing
+# Company's sandbox limits, kept in its Engine's file. Only that Company's sandbox is made again with them (its exit, its
+# work folder and every other Company stay as they run), and its Engine reaches it before the command says so. A sandbox
+# that does not start with the new memory or CPUs is started again with its earlier ones, which its file keeps. A new disk
+# size stops the Company's Engine and sandbox while its work disk is resized, never below what the disk holds: a size
+# that does not hold it is refused, and the disk is kept as it was.
 company_limits() {
-  company_name=${1:-} memory= cpus=
+  company_name=${1:-} memory= cpus= disk=
   [ $# -gt 0 ] && shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --memory) [ $# -ge 2 ] || company_usage; memory=$2; shift;;
       --cpus) [ $# -ge 2 ] || company_usage; cpus=$2; shift;;
+      --disk) [ $# -ge 2 ] || company_usage; disk=$2; shift;;
       *) company_usage;;
     esac
     shift
   done
-  test -n "$company_name" && { [ -n "$memory" ] || [ -n "$cpus" ]; } || company_usage
-  check_limits "$memory" "$cpus" || return 1
+  test -n "$company_name" && { [ -n "$memory" ] || [ -n "$cpus" ] || [ -n "$disk" ]; } || company_usage
+  check_limits "$memory" "$cpus" "$disk" || return 1
   if [ -f .install-restore ] && ! flock -n .install-restore true > /dev/null 2>&1; then
     echo 'A restore is running: wait for it to finish, then run this again.' >&2
     return 1
@@ -923,10 +1065,30 @@ company_limits() {
   company_engine "$company_name" || return 1
   slug=${host#gtmworks-engine-}
   test -f "$(engine_folder "$slug")/.env" || { echo "The Engine of $name has no folder on this install. Nothing was changed." >&2; return 1; }
-  old_memory=$(sandbox_limit "$slug" MEMORY) old_cpus=$(sandbox_limit "$slug" CPUS)
-  write_limits "$slug" "${memory:-$old_memory}" "${cpus:-$old_cpus}" || return 1
+  old_memory=$(sandbox_limit "$slug" MEMORY) old_cpus=$(sandbox_limit "$slug" CPUS) old_disk=$(sandbox_limit "$slug" DISK)
+  write_limits "$slug" "${memory:-$old_memory}" "${cpus:-$old_cpus}" "${disk:-$old_disk}" || return 1
+  if [ -n "$disk" ]; then
+    resized=0
+    work_disk_up "$slug" >&2 || resized=$?
+    # What the disk holds, read now: starting the sandbox again below reads the disk again.
+    held=$disk_used
+    if [ "$resized" -ne 0 ]; then
+      write_limits "$slug" "$old_memory" "$old_cpus" "$old_disk" || return 1
+      # The disk is mounted as it was (work-disk mounts it again when it refuses), so the Company runs again on it.
+      start_engine_again "$slug" >&2 && sandbox_restart "$slug" >&2 \
+        || echo "Company \"$name\"'s Engine or work sandbox did not come back: run this command again, or the install command." >&2
+      if [ "$resized" -eq 4 ]; then
+        echo "The limits of Company \"$name\" were not changed: its work disk holds $held MiB, which does not fit in $disk. Its disk is kept as it was."
+      else
+        echo "The limits of Company \"$name\" were not changed: its work disk could not be resized." >&2
+      fi
+      return 1
+    fi
+    start_engine_again "$slug" >&2 || { echo "Company \"$name\"'s Engine did not start again after its work disk was resized: run the install command." >&2; return 1; }
+  fi
   if ! sandbox_restart "$slug" >&2; then
-    write_limits "$slug" "$old_memory" "$old_cpus" || return 1
+    # The disk keeps its new size; only the memory and CPUs go back.
+    write_limits "$slug" "$old_memory" "$old_cpus" "$(sandbox_limit "$slug" DISK)" || return 1
     # The earlier limits are said to run only when the sandbox started with them again and its Engine reaches it; a start
     # Docker made that the Engine cannot reach is no working sandbox either.
     if sandbox_restart "$slug" >&2; then
@@ -936,8 +1098,8 @@ company_limits() {
     fi
     return 1
   fi
-  docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$(sandbox_container "$slug")" \
-    | awk -v name="$name" '{ printf "Company \"%s\": its work sandbox now has %d MiB of memory and %g CPUs.\n", name, $1/1048576, $2/1000000000 }'
+  docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}} {{index .Config.Labels "gtmworks.disk"}}' "$(sandbox_container "$slug")" \
+    | awk -v name="$name" '{ printf "Company \"%s\": its work sandbox now has %d MiB of memory, %g CPUs and a %s work disk.\n", name, $1/1048576, $2/1000000000, $3 }'
 }
 # One Company's sandbox made again from its Engine's file, alone: the keys are read first so it keeps accepting its
 # Engine's key, and the Engine reaches it before this returns.
@@ -1028,8 +1190,9 @@ volumes() {
     test -n "$volume" || { echo "The Engine $name names no data volume: run sh scripts/install.sh." >&2; return 1; }
     if [ "$mode" = rw ]; then docker volume create "$volume" > /dev/null || return 1; fi
     set -- -v "$volume:/engines/$name:$mode" "$@"
-    # Each Company's work folder (#399), under its Engine folder's name, beside its Engine's data.
-    if [ "$mode" = rw ]; then docker volume create "$(work_volume "$name")" > /dev/null || return 1; fi
+    # Each Company's work folder (#399), under its Engine folder's name, beside its Engine's data: on its work disk (#507),
+    # mounted first, so a backup copies what the disk holds and a restore writes within the Company's limit.
+    work_disk_up "$name" || [ $? -eq 4 ] || return 1
     set -- -v "$(work_volume "$name"):/work/$name:$mode" "$@"
   done
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
@@ -1161,6 +1324,7 @@ check_backup() {
     printf '%s\n' "$engine_file" | sed -n 's/^ENGINE_KEY=//p' | grep -Eqx '[a-f0-9]{64}' \
       || { echo "The backup's Engine $name has no usable key." >&2; return 1; }
     check_limits "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" \
+      "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_DISK=//p')" \
       || { echo "The backup's Engine $name names sandbox limits that are not usable." >&2; return 1; }
   done
   return 0
@@ -1273,7 +1437,8 @@ elif [ "$operation" = restore ]; then
        write_engine_env "$name" "$key" "$(engine_project "$name")" "$(engine_project "$name")"
      fi
      # The Company's sandbox limits, checked with the archive above, come back with its key.
-     write_limits "$name" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" || exit 1
+     write_limits "$name" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" \
+       "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_DISK=//p')" || exit 1
    done
   fi
   if [ "$engines_layout" = yes ]; then
@@ -1342,6 +1507,7 @@ elif [ "$operation" = restore ]; then
   fi
   # The image the restored install's sandboxes start from is recorded only now that the restore is whole (#393).
   mv .install-lock/work-sandbox-image .work-sandbox-image || { echo 'The restored install could not record its work sandbox image.' >&2; return 1; }
+  drop_moved_work_volumes
   # The cutover (ADR 0023), once this release's app answers on the restored database and its worker runs.
   apply_migrations cutover || { echo 'The restore finished, but its cutover migrations did not apply: run the install command again.' >&2; return 1; }
   return
@@ -1396,6 +1562,20 @@ elif [ "$operation" = company ]; then
   shift
   company "$@"
   return
+elif [ "$operation" = disks ]; then
+  # After the server starts again (#507): its work disks are not mounted, so each Company's Engine and sandbox did not
+  # start (their work volumes bind a folder that only a mounted disk has). The updater runs this every minute (the
+  # gtmworks command's `updater`): each Company whose sandbox is stopped gets its disk mounted, then its Engine and its
+  # sandbox started. A Company that runs is left as it is, and this lock keeps it from running during any other step.
+  [ -n "$(work_sandbox_ref)" ] && disk_layout || return 0
+  status=0
+  for name in $(engine_names); do
+    [ "$(docker inspect -f '{{.State.Running}}' "$(sandbox_container "$name")" 2> /dev/null)" = false ] || continue
+    work_disk_up "$name" > /dev/null || [ $? -eq 4 ] || { status=1; continue; }
+    docker start "$(engine_project "$name")" "$(sandbox_container "$name")" > /dev/null || status=1
+    echo "The work disk of the Engine $name is mounted, and its Engine and sandbox started."
+  done
+  return "$status"
 elif [ "$operation" = engines ]; then
   # Every Engine's state, as `gtmworks status` reports it (scripts/get.sh), and every Company's work sandbox beside it:
   # the sandbox state comes from the host's Docker, which the web container does not hold. Non-zero when an Engine or a
@@ -1406,7 +1586,7 @@ elif [ "$operation" = engines ]; then
   sandbox_report "$report" || status=1
   return "$status"
 elif [ "$operation" != install ]; then
-  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] | company limits <Company> [--memory <size>] [--cpus <number>] | company link <Company> | company list | engines]' >&2; exit 1
+  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>] | company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | company link <Company> | company list | engines]' >&2; exit 1
 fi
 # A plain install run on an install the previous release made (its `hermes` container, no Engine folder) moves it to this
 # release as an update does, so it is refused the same way when that install holds several Companies on its one Engine,
@@ -1540,6 +1720,8 @@ if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-relea
 # The work sandbox image this run made is recorded only now, with the install whole (#393, as before #393): a run that
 # failed leaves the image an earlier run recorded, and the exit handler starts no build.
 mv .install-lock/work-sandbox-image .work-sandbox-image
+# Each Company's previous work folder, moved onto its work disk by this run, goes now that the run is whole (#507).
+drop_moved_work_volumes
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'

@@ -9,13 +9,13 @@
 .gw :is(.sov-apps, .apps-sheet) .sheet__title { flex: 1 1 0; min-width: 0; }
 .gw :is(.sov-apps, .apps-sheet) .sheet__meta { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw :is(.sov-apps, .apps-sheet) .badge.apps-count { align-self: center; --od-icon-size: 12px; color: var(--gw-text-2); }
-.gw :is(.sov-apps, .apps-sheet) .badge--warn { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
+.gw :is(.sov-apps, .apps-sheet) .badge--warn { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: var(--gw-fw-semibold); }
 .gw :is(.sov-apps, .apps-sheet) .apps-sub { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
 .gw .sov-apps .apps-sub { max-width: 72ch; }
 .gw :is(.sov-apps, .apps-sheet) .apps-body { display: flex; flex-direction: column; gap: var(--s5); }
 .gw .sov-apps .apps-body { padding: var(--s4) 0 0; }
 .gw :is(.sov-apps, .apps-sheet) .apps-sec { display: grid; gap: 10px; }
-.gw :is(.sov-apps, .apps-sheet) .apps-sec__h { margin: 0; padding-inline: 2px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.5; color: var(--gw-text-2); }
+.gw :is(.sov-apps, .apps-sheet) .apps-sec__h { margin: 0; padding-inline: 2px; font-size: var(--gw-fs-sm); font-weight: var(--gw-fw-regular); line-height: 1.5; color: var(--gw-text-2); }
 .gw :is(.sov-apps, .apps-sheet) .apps-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
 .gw :is(.sov-apps, .apps-sheet) .app-card {
   display: flex; flex-direction: column; gap: 10px; padding: var(--s4); border-radius: var(--gw-r-md); min-width: 0;
@@ -23,14 +23,14 @@
 }
 .gw :is(.sov-apps, .apps-sheet) .app__top { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
 .gw :is(.sov-apps, .apps-sheet) .app__titles { display: grid; min-width: 0; }
-.gw :is(.sov-apps, .apps-sheet) .app__name { margin: 0; font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
+.gw :is(.sov-apps, .apps-sheet) .app__name { margin: 0; font-size: var(--gw-fs-base); font-weight: var(--gw-fw-semibold); line-height: 1.5; }
 .gw :is(.sov-apps, .apps-sheet) .app__cat { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw :is(.sov-apps, .apps-sheet) .app__use { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
 .gw :is(.sov-apps, .apps-sheet) .od-clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .gw :is(.sov-apps, .apps-sheet) .app__foot { display: flex; align-items: center; gap: var(--s2); margin-top: auto; padding-top: 2px; }
 .gw :is(.sov-apps, .apps-sheet) .app__state { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-1); --od-icon-size: 14px; }
 .gw :is(.sov-apps, .apps-sheet) .app__state--off { color: var(--gw-text-3); }
-.gw :is(.sov-apps, .apps-sheet) .app__state--warn { color: var(--gw-wait-text); font-weight: 600; }
+.gw :is(.sov-apps, .apps-sheet) .app__state--warn { color: var(--gw-wait-text); font-weight: var(--gw-fw-semibold); }
 .gw :is(.sov-apps, .apps-sheet) .app__state .fstack { margin-inline-start: 4px; }
 .gw :is(.sov-apps, .apps-sheet) .apps-detail { gap: var(--s5); }
 .gw :is(.sov-apps, .apps-sheet) .app-hero { display: flex; align-items: flex-start; gap: var(--s3); }
@@ -92,7 +92,7 @@
 .gw .apps-sheet .switch[aria-checked="true"] { background: var(--gw-primary); }
 .gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
 [dir="ltr"] .gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(12px); }
-:root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: #121212; }
+:root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: var(--gw-on-primary); }
 .gw .apps-sheet .switch[aria-disabled="true"] { opacity: .55; }
 @media (hover: hover) { .gw .apps-sheet button.panel-row:hover:not([aria-disabled="true"]) { background: var(--gw-bg-hover); } }
 

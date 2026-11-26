@@ -35,7 +35,7 @@ select is((select count(*)::int from public.conversation_messages where conversa
 select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000201','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000211','e3000000-0000-0000-0000-000000000204','@مدير can you check the budget?'),'{"state":"note"}'::jsonb,'a message to a Member is a note');
 select is((select addressed_to::text||' '||person_id::text from public.conversation_notes),'20000000-0000-0000-0000-000000000002 20000000-0000-0000-0000-000000000001','addressed to that Member, written by the sender');
 select is((select count(*)::int from public.conversation_queued_turns),2,'and it did not join the queue');
-select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000209','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000211','e3000000-0000-0000-0000-000000000209','@Lead plan the week')->>'state','reserved','a Member that is an Agent is never a person: "@Lead" reaches the Agent');
+select is(public.reserve_conversation_turn('e2000000-0000-0000-0000-000000000209','10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000211','e3000000-0000-0000-0000-000000000209','@Lead plan the week')->>'state','reserved','"@Lead", the name of no Member, reaches the Agent');
 
 -- Stop: the run's own person or a Manager or Owner; another Contributor or a Viewer is refused.
 select is((select run from public.conversation_stop_target('e2000000-0000-0000-0000-000000000201','10000000-0000-0000-0000-000000000001')),'team_run_1','the run''s person may stop it');

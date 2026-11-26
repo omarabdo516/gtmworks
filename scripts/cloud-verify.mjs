@@ -146,10 +146,12 @@ async function journey(page) {
  await expect(page.getByText('Leads per day',{exact:true})).toBeVisible();
  await screenshot(page,'numbers');
  step('opened Numbers from the sidebar');
- // 5. The board, on the seed put back: a Card needs an Agent beside Lead, which a new Company does not have yet. The
+ // 5. The board, on the seed put back. A new Card is asked of one of the Company's own Agents (spec #695); the seed gives
+ // RS Learning none, so the journey gives it its main Agent, which the seed put back at the end takes away again. The
  // seeded Owner makes a Card in RS Learning and carries it by mouse from Ideas to Planned; the move is in the database.
  putSeedBack();
  step('the seeded data is back');
+ query(`insert into public.hermes_agents(company_id,name,speciality,profile,is_default) select id,'Lead','General','cloud-verify-lead',true from public.companies where slug='${seeded.company}' returning id`);
  await page.context().clearCookies();
  await signIn(page,seeded.email,seeded.password);
  // The seeded Owner lands in another of their Companies; RS Learning is the one whose Agents take Cards.

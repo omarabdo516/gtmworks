@@ -2,6 +2,7 @@ import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
+import { ensureRequestAgent } from './request-agent';
 import { laneHermes } from './lane-hermes';
 import { inbox } from './lane.mjs';
 
@@ -11,6 +12,7 @@ const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArr
 const rs='10000000-0000-0000-0000-000000000001';
 
 async function newCard(page:Page,label:string) {
+ ensureRequestAgent();
  await page.goto('/c/rs-learning/work/new');
  const title=`${label} ${Date.now()}`;
  await page.getByLabel('Message',{exact:true}).fill(title);
@@ -252,8 +254,8 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   attachedAgent.id=randomUUID();
-  // As an Owner's attachment made it: the Company's first Agent is its main one.
-  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) select '${attachedAgent.id}','${rs}','Lead ${stamp}','Marketing','board-${stamp}',not exists(select 1 from public.hermes_agents where company_id='${rs}')`);
+  // As an Owner's attachment made it: the Company's first Agent is its main one (New card's own Agent is a plain one).
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) select '${attachedAgent.id}','${rs}','Lead ${stamp}','Marketing','board-${stamp}',not exists(select 1 from public.hermes_agents where company_id='${rs}' and is_default)`);
   await page.context().clearCookies();
   await signIn(page,'manager@example.com','/c/rs-learning/approvals');
   // Mail sent by earlier tests (an invite) may already be in the local mailbox; only a change counts.

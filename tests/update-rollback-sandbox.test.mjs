@@ -17,7 +17,7 @@ const fn = name => {
   if (install.slice(start + 1).match(/^[a-z_]+\(\) \{ [^\n]*\}\n/)) return install.slice(start + 1, install.indexOf('\n', start + 1) + 1);
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
-const helpers = ['engine_folder', 'sandbox_container', 'exit_container', 'screen_driver_container', 'exit_network', 'work_volume', 'work_network', 'host_key_volume',
+const helpers = ['engine_folder', 'sandbox_container', 'exit_container', 'screen_driver_container', 'exit_network', 'work_volume', 'old_work_volume', 'work_network', 'host_key_volume',
   'engine_names', 'work_sandbox_ref', 'keep_previous_engine', 'keep_previous_release', 'keep_sandbox_parts', 'previous_engine_files_back', 'previous_engine_files_kept_back', 'new_engine_files_removed', 'remove_new_sandbox_parts'].map(fn).join('');
 
 // The stand-in: `volume ls`, `network ls`, `inspect`, `rm` over two files, every call written to a log on one line, and a failing
@@ -31,7 +31,7 @@ docker() {
     'network ls') cat "$state/networks";;
     'volume inspect') grep -qxF "$3" "$state/volumes";;
     'network inspect') grep -qxF "$3" "$state/networks";;
-    'volume rm') grep -vxF "$3" "$state/volumes" > "$state/next" || true; mv "$state/next" "$state/volumes";;
+    'volume rm') shift 2; for gone in "$@"; do grep -vxF "$gone" "$state/volumes" > "$state/next" || true; mv "$state/next" "$state/volumes"; done;;
     'network rm') grep -vxF "$3" "$state/networks" > "$state/next" || true; mv "$state/next" "$state/networks";;
     *) return 0;;
   esac
@@ -191,4 +191,32 @@ test('a key made before a later step of its preparation failed is still named, s
   const result = spawnSync('sh', ['-c', `${docker}${fn('engine_folder')}${fn('work_volume')}${fn('host_key_volume')}${fn('work_sandbox_ref')}${fn('sandbox_keys')}sandbox_keys acme`], { cwd: dir, encoding: 'utf8' });
   assert.notEqual(result.status, 0, 'the preparation still fails');
   assert.equal(readFileSync(join(dir, '.install-lock/sandbox-keys-made'), 'utf8'), 'acme\n');
+});
+
+// #507: the work disks an update made (each moving its Company's previous work folder in) go when the update goes back,
+// with their volumes, once that Company's Engine and sandbox of this release no longer hold them; the previous release
+// runs on the work folder it had, and the next update moves it again. A disk the install had before stays.
+test('a failed update removes the work disks it made, and only those, through the helper', t => {
+  const install = installFolder(t, {
+    volumes: ['gtmworks-folder-first', 'gtmworks-home-first', 'gtmworks-folder-acme', 'gtmworks-home-acme', 'gtmworks-folder-kept'],
+    networks: [],
+    engines: { first: 'gtmworks-install_hermes', acme: 'gtmworks-engine-acme', kept: 'gtmworks-engine-kept' },
+  });
+  writeFileSync(join(install.dir, '.work-sandbox-image'), 'gtmworks-work-sandbox:local\n');
+  for (const slug of ['first', 'acme', 'kept']) mkdirSync(join(install.dir, '.work-disks', slug, 'fs'), { recursive: true });
+  writeFileSync(join(install.dir, '.install-lock/work-disks-made'), 'first\nacme\nfirst\n');
+  const disks = ['engine_project', 'home_volume', 'old_work_volume', 'work_disk_folder', 'work_disk', 'remove_work_disk', 'remove_new_work_disks'].map(fn).join('');
+  const removed = install.run(`${disks}remove_new_work_disks`);
+  assert.equal(removed.status, 0, removed.stderr);
+  const log = install.read('log');
+  for (const slug of ['first', 'acme']) {
+    const stopped = log.indexOf(`rm -f gtmworks-engine-${slug} gtmworks-sandbox-${slug}`);
+    const helper = log.findIndex(line => line.includes(`--entrypoint /usr/local/bin/work-disk -v ${install.dir}/.work-disks/${slug}:/disk gtmworks-work-sandbox:local remove ${install.dir}/.work-disks/${slug}`));
+    assert.ok(stopped >= 0 && helper > stopped, log.join('\n'));
+    assert.equal(log.filter(line => line.includes(`local remove ${install.dir}/.work-disks/${slug}`)).length, 1, 'each disk is removed once');
+  }
+  assert.deepEqual(install.read('volumes'), ['gtmworks-folder-kept']);
+  assert.equal(log.some(line => line.includes('.work-disks/kept')), false, 'the disk the install had stays');
+  assert.equal(spawnSync('test', ['-e', join(install.dir, '.work-disks/first')]).status, 1, 'the removed disk leaves no folder');
+  assert.equal(spawnSync('test', ['-e', join(install.dir, '.install-lock/work-disks-made')]).status, 1);
 });

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, roleAgentsAsTheyStood, testDb } from './pgtap.mjs';
 
 // One log for the Company (#11): the earlier Card comments and Card activity land in the log with their original
 // author and time. Inside one rolled-back transaction the log is taken away again, a Card comment and a Card change
@@ -13,6 +13,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(8);
 -- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
 ${connectionsAsTheyStood}
+-- The legacy role agents the migration reads, removed since (spec #695).
+${roleAgentsAsTheyStood}
 drop table public.company_log;
 drop function public.refuse_log_change(), public.log_card_activity(), public.log_card_comment(), public.log_member_change(), public.log_agent_change() cascade;
 drop function public.log_actor_kind(uuid,uuid), public.log_member_details(text,jsonb,jsonb), public.log_member_action(text), public.log_agent_action(text);
@@ -27,7 +29,7 @@ ${migration}
 select is((select concat_ws('|',actor_id::text,actor_kind,actor_name,action,body,created_at::text) from public.company_log where source='work_comments' and source_id=911001),
  '${omar}|person|عمر|note|تعليق قديم|2026-11-11 09:30:00+00','an earlier comment is in the log with its author, its text and its time');
 select is((select concat_ws('|',actor_id::text,actor_kind,action,details->>'new_name',created_at::text) from public.company_log where source='work_activity' and source_id=911002),
- '${writer}|agent|card_changed|كتابة|2026-11-11 10:15:00+00','an earlier Card change is in the log with its Agent and its time');
+ '${writer}|person|card_changed|كتابة|2026-11-11 10:15:00+00','an earlier Card change is in the log with its writer and its time (a person: the seed holds no role agent since spec #695)');
 select is((select count(*)::int from public.company_log where source='work_activity' and source_id in (select id from public.work_activity where action='comment_added')),0,'the comment is not copied a second time as activity');
 select is((select count(*)::int from public.company_log where source='member_audit'),(select count(*)::int from public.member_audit),'every earlier Member change is in the log');
 select is((select count(*)::int from public.company_log where source='hermes_agent_audit'),(select count(*)::int from public.hermes_agent_audit),'every earlier Agent change is in the log');

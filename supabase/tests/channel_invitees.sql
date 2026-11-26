@@ -35,7 +35,7 @@ select is((select array_agg(name||':'||role||':'||coalesce(email,'-') order by n
 select is((select name from public.channel_members((select id from general)) where invitation=(select id from invited where label='mona')),'Mona',
  'the name is the first word of the email before the @, a capital first letter and the rest in lower case');
 select is((select count(*)::int from public.channel_members((select id from general)) where person is null),2,'neither has a person yet');
-select is((select count(*)::int from public.channel_members((select id from general))),8,'the count includes both invited people with the six Members');
+select is((select count(*)::int from public.channel_members((select id from general))),12,'the count includes both invited people with the ten Members');
 
 -- A Manager reads the email; a Contributor and a Viewer read the row without it.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
@@ -144,7 +144,7 @@ delete from public.member_invitations where id=(select id from invited where lab
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.channel_members((select id from general)) where invitation is not null),0,'a withdrawn invitation leaves the channel''s Members');
-select is((select count(*)::int from public.channel_members((select id from general))),7,'and its count');
+select is((select count(*)::int from public.channel_members((select id from general))),11,'and its count');
 select is((select count(*)::int from public.channel_notes where channel_id=(select id from general)),2,'the line the channel got stays');
 select is((select count(*)::int from public.channel_notes where invitee_name='Mona'),1,'with the name it had');
 select is((select count(*)::int from public.channel_invitees),0,'and a team channel keeps none of it');

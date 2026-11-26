@@ -25,7 +25,7 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). Legacy role agents retain their company grants during the transition. An Agent never approves or rejects a Version. It gets the Engine's full power: it may publish and spend, through its apps or on its Screen, when a Member asks, with no Approval first (ADR 0020).
+A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). An Agent never approves or rejects a Version. It gets the Engine's full power: it may publish and spend, through its apps or on its Screen, when a Member asks, with no Approval first (ADR 0020).
 
 **Main Agent / الوكيل الرئيسي**:
 The Company's default Agent, the one people talk to first, and the manager of the Company's team: it hands a job to the Agent that does it, offers to make an Agent for recurring or specialist work no Agent does, and does small one-off jobs itself. On a new Company it opens the first Conversation, with a few questions about the Company and the first Agents it proposes to make (Omar, 2026-11-20). The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
@@ -99,14 +99,6 @@ The planned run status `waiting`: the run delivered a version or asked a questio
 
 **Cancelled / ملغي**:
 The planned run status `cancelled`: a person or gtmworks stopped the run.
-
-**Company grant / إتاحة شركة**:
-An Owner's permission for one agent to work in one company, kept as one row per company and agent. Without an active grant the agent sees and writes nothing there and receives not found. Revoking keeps the row with who revoked it and when; granting and revoking are recorded in the company's activity record with the acting person.
-_Avoid_: access key, invitation, membership
-
-**Agent role key / مفتاح دور الوكيل**:
-A stable designation identifying a company's account manager, writer, designer or critic independently of the person's name. Only a Contributor may hold one; each designation belongs to at most one active member per company. Other members have none.
-_Avoid_: display name, person identity, permission role
 
 **Role / دور**:
 The named set of permissions a member holds in one company: Owner, Manager, Contributor, or Viewer. Owners and Managers approve; Contributors and Viewers never do. Each company may change what every role except Owner may do.

@@ -112,6 +112,12 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   #257). A screen is held to the design system: `DESIGN.md`, the tokens and the approved reference in
   `design-reference/`. Text contrast is still measured, from the drawn styles and not from a picture
   (`tests/contrast.spec.ts`, in the functional project).
+- The design system's values are checked as values (#808). `tests/design-values.test.mjs`, a node test in `./ci.sh
+  fast`, holds `DESIGN.md`'s front matter and `app/tokens.css` to the same values in light and dark, the Paperclip
+  values it names to the stylesheet, Tailwind and `lib/agent-look.ts`, and every stylesheet under `app/` to tokens for
+  its colours, shadows, radii and fonts, past a list of exceptions that only shrinks. `tests/design-components.spec.ts`,
+  in the functional project, reads every component `DESIGN.md` names from the computed styles where a screen draws it,
+  in light and dark, in Arabic and English (`docs/agents/checks.md`, "The design system's values").
 - Design parity is checked once, at delivery, outside CI (Omar, 2026-11-17, #257). The worker that delivers a screen
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request

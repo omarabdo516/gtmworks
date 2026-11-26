@@ -882,7 +882,7 @@ try {
  assert.ok(answer.body.includes(reply),answer.body);
  assert.equal(results.length,3,JSON.stringify(results));
  // The Owner's Library of that Agent, read as the app reads it: the signed-in person's own session, the Company's Engine.
- const request={company:first.company,agent:first.agent,hermes:firstEngine};
+ const request={company:first.company,agent:first.agent};
  const library=await agentLibrary(person,request);
  assert.equal(library.state,'found',JSON.stringify(library));
  const listed=new Map(library.entries.map(entry=>[entry.name,entry]));

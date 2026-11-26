@@ -5,7 +5,7 @@
 .gw.modal.modal--upd { display: flex; flex-direction: column; width: min(480px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 48px); }
 .gw .upd-body { display: grid; gap: 12px; padding: 0 24px 20px; overflow-y: auto; min-height: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
 .gw .upd-lines { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.gw .upd-lines b { color: var(--gw-text-1); font-weight: 600; }
+.gw .upd-lines b { color: var(--gw-text-1); font-weight: var(--gw-fw-semibold); }
 .gw .upd-more { color: var(--gw-text-3); }
 .gw .upd-run, .gw .upd-hint { margin: 0; }
 .gw .upd-hint { font-size: var(--gw-fs-xs); color: var(--gw-text-3); }

@@ -2,6 +2,7 @@ import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
+import { ensureRequestAgent } from './request-agent';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the next
 // case reads the English faces (#257); Arabic at 390 is held to the design system (#805).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
@@ -111,7 +112,7 @@ test('members controls, the Role list, viewer access, and no all-companies list'
  await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
  await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
  const owner=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^عمر$/})}); await owner.getByRole('button',{name:"Remove"}).click(); await expect(page.getByRole('status').filter({hasText:'The last owner'})).toContainText('The last owner');
- const viewer=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); const roles=await viewer.getByRole('combobox',{name:"Member role",exact:true}).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value)); expect(roles).toEqual(['owner','manager','contributor','viewer']); await expect(viewer.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0); await viewer.getByRole('combobox',{name:"Member role",exact:true}).selectOption('contributor'); await viewer.getByLabel("Publishing").check(); await viewer.getByRole('button',{name:"Save"}).click(); await expect(page.getByRole('status').filter({hasText:'Change saved.'})).toContainText('Change saved.'); const changed=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('contributor'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toBeVisible(); await changed.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer'); await changed.getByLabel("Publishing").uncheck(); await changed.getByRole('button',{name:"Save"}).click(); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('viewer'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
+ const viewer=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); const roles=await viewer.getByRole('combobox',{name:"Member role",exact:true}).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value)); expect(roles).toEqual(['owner','manager','contributor','viewer']); await expect(viewer.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0); await viewer.getByRole('combobox',{name:"Member role",exact:true}).selectOption('contributor'); await viewer.getByLabel("Publishing").check(); await viewer.getByRole('button',{name:"Save"}).click(); await expect(page.getByRole('status').filter({hasText:'Change saved.'})).toContainText('Change saved.'); const changed=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('contributor'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0); await changed.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer'); await changed.getByLabel("Publishing").uncheck(); await changed.getByRole('button',{name:"Save"}).click(); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('viewer'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
  expect((await page.goto('/all-brands'))?.status()).toBe(404);
  await context.clearCookies(); await signIn(page,'viewer@example.com','/c/rs-learning/settings/members'); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible(); await expect(page.getByRole('button',{name:"Remove"})).toHaveCount(0); await expect(page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})})).toContainText("Viewer"); const res=await page.goto('/all-brands'); expect(res?.status()).toBe(404);
 });
@@ -166,6 +167,7 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await settings.getByLabel("New approver").selectOption('role:owner');
  await settings.getByRole('button',{name:"Add step"}).click();
  await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
+ ensureRequestAgent();
  await page.goto('/c/rs-learning/work/board');
  await page.getByRole('button',{name:"+ New card"}).click();
  const title=`بطاقة موافقة ${Date.now()}`;
@@ -203,6 +205,7 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);
  await page.goto(cardUrl);
  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
+ ensureRequestAgent();
  await page.goto('/c/rs-learning/work/board');
  await page.getByRole('button',{name:"+ New card"}).click();
  const rejected=`بطاقة رفض ${Date.now()}`;

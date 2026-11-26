@@ -1,5 +1,17 @@
 [
  {
+  "issue": 695,
+  "date": "2026-11-26",
+  "en": { "title": "The four old role agents are gone", "body": "The Account manager, Writer, Designer and Critic are no longer in menus, pickers or the Members page: New card goes to one of your Company's Agents, anyone who held a role by mistake is an ordinary Contributor again, and what those agents wrote keeps their names." },
+  "ar": { "title": "الوكلاء الأربعة القدام اتشالوا", "body": "مدير الحساب والكاتب والمصمم والناقد مبقوش في القوايم ولا الاختيارات ولا صفحة الأعضاء: البطاقة الجديدة بتروح لوكيل من وكلاء شركتك، واللي كان واخد دور منهم بالغلط رجع مساهم عادي، واللي الوكلاء دول كتبوه فضل بأساميهم." }
+ },
+ {
+  "issue": 507,
+  "date": "2026-11-25",
+  "en": { "title": "Each Company has a disk of its own", "body": "A Company's Agents now work on a disk of a fixed size, 10 GB by default and changed with gtmworks company limits --disk, so a command that fills it stops there and the rest of the install keeps running." },
+  "ar": { "title": "كل شركة ليها ديسك خاص بيها", "body": "وكلاء كل شركة بقوا بيشتغلوا على ديسك بحجم ثابت، ١٠ جيجا في الأول وبيتغيّر بـ gtmworks company limits --disk، فلو أمر ملاه بيقف عنده، وباقي التثبيت بيفضل شغال." }
+ },
+ {
   "issue": 731,
   "date": "2026-11-25",
   "en": { "title": "A reply that ran out of usage names the accounts", "body": "When a reply stops because every account ran out of usage, the chat now names the accounts that ran out, by the names you gave them in Providers, beside when the usage resets." },

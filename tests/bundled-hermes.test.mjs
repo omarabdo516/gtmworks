@@ -132,14 +132,26 @@ test('every Company\'s work sandbox is the least container its Agents\' work nee
  const readme=readFileSync('README.md','utf8');
  assert.match(readme,new RegExp(`\\*\\*${sandbox.mem_limit.match(/:-(\d+)g\}$/)[1]} GB of RAM and ${Number(sandbox.cpus.match(/:-([\d.]+)\}$/)[1])} CPUs\\*\\* by default`));
  assert.match(readme,/\*\*The sandbox shares the server's kernel\.\*\*/);
- // The Company's work folder and the sandbox's own host key, and nothing else; the only key that reaches it is a public
- // one, passed when the container starts.
- assert.deepEqual(sandbox.volumes,['work:/work','host-key:/home/pn/.ssh-host:ro']);
+ // Nothing it writes lands on the server's own disk (#507, ADR 0032): a read-only root, scratch folders in memory of a
+ // fixed size, and its home and the Company's work folder on the Company's work disk, whose default size is set here
+ // alone; the README states it.
+ assert.equal(sandbox.read_only,true);
+ assert.deepEqual(sandbox.tmpfs,['/tmp:size=1g,mode=1777','/var/tmp:size=256m,mode=1777']);
+ assert.equal(sandbox.labels['gtmworks.disk'],'${SANDBOX_DISK:-10g}');
+ assert.doesNotMatch(readFileSync('scripts/install.sh','utf8'),/SANDBOX_DISK=[0-9]|disk_size=[0-9'"]/);
+ assert.match(readme,new RegExp(`a work disk\\s+of \\*\\*${sandbox.labels['gtmworks.disk'].match(/:-(\d+)g\}$/)[1]} GB\\*\\*\\s+by default`));
+ // The Company's work folder, the sandbox's home and its own host key, and nothing else; the only key that reaches it is
+ // a public one, passed when the container starts.
+ assert.deepEqual(sandbox.volumes,['work:/work','home:/home/pn','host-key:/home/pn/.ssh-host:ro']);
  assert.deepEqual(Object.keys(sandbox.environment),['SSH_AUTHORIZED_KEY']);
  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.networks)),{work:{aliases:['sandbox']}});
  assert.match(sandbox.healthcheck.test.join(' '),/2222/);
- // One volume per Company's work folder and host key, and one internal network with no route out of the install.
- assert.equal(template.volumes.work.name,'${WORK_VOLUME:-gtmworks-work-first}');
+ // One volume per Company's work folder, home and host key, and one internal network with no route out of the install.
+ // The work folder and the home bind the Company's work disk, which the installer makes: Compose never makes either.
+ assert.equal(template.volumes.work.name,'${WORK_VOLUME:-gtmworks-folder-first}');
+ assert.equal(template.volumes.work.external,true);
+ assert.equal(template.volumes.home.name,'${SANDBOX_HOME_VOLUME:-gtmworks-home-first}');
+ assert.equal(template.volumes.home.external,true);
  assert.equal(template.volumes['host-key'].name,'${SANDBOX_HOST_KEY_VOLUME:-gtmworks-sandbox-hostkey-first}');
  assert.equal(template.networks.work.name,'${WORK_NETWORK:-gtmworks-work-first}');
  assert.equal(template.networks.work.internal,true);

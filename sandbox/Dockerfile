@@ -61,9 +61,11 @@ RUN --mount=type=secret,id=build-ca set -eu; \
 FROM browser
 
 # The work tools a marketer's job needs, the Arabic fonts a rendered image or video is drawn in, and what the `ssh`
-# backend needs to reach this container: sshd, and `ss` so an install owner can see what listens.
+# backend needs to reach this container: sshd, and `ss` so an install owner can see what listens. e2fsprogs is for the
+# Company's work disk, which the installer makes and resizes with this image (work-disk, #507); the sandbox never runs it.
 RUN apt-get update \
  && apt-get install --yes --no-install-recommends \
+      e2fsprogs \
       ffmpeg \
       fonts-noto-core \
       iproute2 \
@@ -97,7 +99,10 @@ COPY work-shell /usr/local/bin/work-shell
 # The Company's exit (#394): the HTTP proxy the template runs from this same image as a container of its own, so an install
 # carries no second image for it and the exit is pinned with the release as the sandbox is. The sandbox never runs it.
 COPY exit.py /usr/local/lib/gtmworks/exit.py
-RUN chmod 0755 /usr/local/bin/work-sandbox-entrypoint /usr/local/bin/work-shell \
+# The Company's work disk (#507, ADR 0032): the installer's one-off helper runs this fixed command from this image, as root
+# with a loop device and the Docker daemon's mount namespace; the sandbox itself, its user and its Agents never run it.
+COPY work-disk /usr/local/bin/work-disk
+RUN chmod 0755 /usr/local/bin/work-sandbox-entrypoint /usr/local/bin/work-shell /usr/local/bin/work-disk \
  && chmod 0644 /usr/local/lib/gtmworks/exit.py
 # sshd starts every session through the user's login shell, which is where an Agent's own start folder is made before the
 # Engine's command runs (work-shell, #393).

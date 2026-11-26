@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-const {engineFor}=await import(`${process.cwd()}/lib/engine.mjs`);
+const {hermesEngine:engineFor}=await import(`${process.cwd()}/lib/engine/contract.mjs`);
 const {registerEngine}=await import(`${process.cwd()}/lib/engine-record.mjs`);
 const {writeSoulRules}=await import(`${process.cwd()}/lib/engine/souls.mjs`);
 const {provideSharedSpace,writeSharedSkill,readSharedSkill}=await import(`${process.cwd()}/lib/engine/skills.mjs`);

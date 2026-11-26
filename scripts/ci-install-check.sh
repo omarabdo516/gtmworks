@@ -176,7 +176,13 @@ sandbox_id=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$') || fail 'the
 [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox_id") == healthy ]] || fail 'the sandbox is healthy'
 [[ $(docker network inspect gtmworks-work-first -f '{{.Internal}}') == true ]] || fail "the sandbox's network has no way out"
 ! publishes_host_port "$sandbox_id" || fail 'the sandbox publishes no host port'
-[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox_id") == gtmworks-work-first ]] || fail "the Company's work folder is the sandbox's own volume"
+[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox_id") == gtmworks-folder-first ]] || fail "the Company's work folder is the sandbox's own volume"
+# On the Company's work disk (#507): its work folder and its home are one filesystem, the image under .work-disks/first,
+# and nothing of the server's own disk; the sizes area fills it.
+[[ -f .work-disks/first/fs.img ]] || fail "the first Company's work disk is an image under .work-disks"
+[[ $(docker exec "$sandbox_id" stat -c %d /work) == "$(docker exec "$sandbox_id" stat -c %d /home/pn)" ]] || fail "the sandbox's home is on the Company's work disk"
+[[ $(docker exec "$sandbox_id" stat -c %d /work) != "$(docker exec "$sandbox_id" stat -c %d /)" ]] || fail 'the work folder is not on the root filesystem'
+[[ $(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$sandbox_id") == true ]] || fail "the sandbox's root is read-only"
 [[ $(docker exec "$sandbox_id" id -un) == pn ]] || fail 'the sandbox runs as its own ordinary user'
 # From the Engine's network nothing else of the install is reachable (db, auth, REST, storage, the gateway), and a
 # request to the app there buys nothing with a forged visitor address.
@@ -384,7 +390,8 @@ nothing_left() {
   [[ $(docker volume ls -q --filter 'name=^gtmworks-engine' | wc -l) == 0 ]] || fail "$1 left an Engine volume"
   [[ $(docker network ls -q --filter 'name=^gtmworks-engine' | wc -l) == 1 ]] || fail "$1 left an Engine network"
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-sandbox-second-company-') ]] || fail "$1 left a sandbox container"
-  if docker volume ls -q | grep -Eq '^gtmworks-(work|sandbox-hostkey)-second-company-'; then fail "$1 left a sandbox volume"; fi
+  if docker volume ls -q | grep -Eq '^gtmworks-(work|folder|home|sandbox-hostkey)-second-company-'; then fail "$1 left a sandbox volume"; fi
+  if ls -d .work-disks/second-company-* > /dev/null 2>&1; then fail "$1 left a work disk"; fi
   if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-work-second-company-'; then fail "$1 left a work network"; fi
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-exit-second-company-') ]] || fail "$1 left an exit container"
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-screen-driver-second-company-') ]] || fail "$1 left the Screen driver's container"
@@ -407,8 +414,9 @@ fi
 cat company-sandbox-failed.log
 grep -Fq 'Company "Second Company" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again.' company-sandbox-failed.log || fail 'a failed sandbox is one plain line'
 nothing_left 'the add whose sandbox did not start'
-# Running it again, on an Engine that becomes healthy, succeeds, with the memory and CPU limit it is given (#396).
-second_company scripts/install.sh --memory 1536m --cpus 1.5 || fail 'company add makes the second Company'
+# Running it again, on an Engine that becomes healthy, succeeds, with the memory, CPU and disk limit it is given (#396,
+# #507).
+second_company scripts/install.sh --memory 1536m --cpus 1.5 --disk 3g || fail 'company add makes the second Company'
 second_folder=$(ls -d .engines/* | grep -v '/first$')
 second_container=$(engine_value "$second_folder" NAME)
 second_network=$(engine_value "$second_folder" NETWORK)
@@ -660,7 +668,7 @@ docker exec "$second_sandbox" sh -ec 'printf kept > /work/limits-kept.txt' || fa
 first_before=$(started_of gtmworks-sandbox-first) second_engine_before=$(started_of "$second_container") second_before=$(started_of "$second_sandbox")
 second_exit_before=$(started_of "$second_exit")
 sh scripts/install.sh company limits 'Second Company' --memory 768m --cpus 1 | tee company-limits.log || fail 'company limits changes the second Company'
-grep -Fx 'Company "Second Company": its work sandbox now has 768 MiB of memory and 1 CPUs.' company-limits.log || fail 'company limits says the limits the sandbox has'
+grep -Fx 'Company "Second Company": its work sandbox now has 768 MiB of memory, 1 CPUs and a 3g work disk.' company-limits.log || fail 'company limits says the limits the sandbox has'
 [[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail 'the second sandbox runs with its new limits'
 [[ $(started_of "$second_sandbox") != "$second_before" ]] || fail 'the second sandbox was started again with its new limits'
 [[ $(started_of gtmworks-sandbox-first) == "$first_before" ]] || fail "the first Company's sandbox kept running while the second's limits changed"
@@ -671,9 +679,42 @@ grep -Fx 'Company "Second Company": its work sandbox now has 768 MiB of memory a
 # the limits its Company was given, which are kept with the Company's own files (the review's finding on #400).
 sh scripts/install.sh company limits 'Proxy Company' --cpus 1.5 || fail 'company limits changes the first Company'
 [[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) 1500000000" ]] || fail "the first Company's sandbox runs with its new CPU limit and the default memory"
-SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh > companies-repeat.log 2>&1 || { cat companies-repeat.log; fail 'a repeat install with limits in the shell'; }
+# The second Company's work disk is the size its add named (#507), kept with its other limits.
+second_slug=${second_container#gtmworks-engine-}
+grep -qx 'SANDBOX_DISK=3g' ".engines/$second_slug/.env" || fail "the second Company's disk limit is kept with its files"
+(( $(docker exec "$second_sandbox" df -k --output=size /work | tail -n 1) > 2900000 && $(docker exec "$second_sandbox" df -k --output=size /work | tail -n 1) <= 3145728 )) \
+  || fail 'the second work disk is the 3g its add named'
+# After the server starts again (#507, ADR 0032), the work disks are not mounted, so a Company's Engine and sandbox cannot
+# start; the updater's every-minute run of `install.sh disks` mounts each and starts them, and leaves a running Company
+# alone. Here the restart is the second Company's disk unmounted with its Engine and sandbox stopped.
+disk_helper() { docker run --rm --privileged --pid host --network none --user 0 --entrypoint /usr/local/bin/work-disk -v "$PWD/.work-disks/$2:/disk" "$(cat .work-sandbox-image)" "$1" "$PWD/.work-disks/$2"; }
+first_before=$(started_of gtmworks-sandbox-first)
+docker stop "$second_container" "$second_sandbox" > /dev/null || fail 'stop the second Engine and sandbox'
+disk_helper unmount "$second_slug" || fail "unmount the second Company's work disk"
+if docker start "$second_sandbox" > /dev/null 2>&1; then fail 'a sandbox whose work disk is not mounted does not start, so it never writes to the server disk'; fi
+sh scripts/install.sh disks | tee disks.log || fail 'install.sh disks after a restart'
+grep -Fx "The work disk of the Engine $second_slug is mounted, and its Engine and sandbox started." disks.log || fail 'it says which disk it mounted'
+[[ $(grep -c . disks.log) == 1 ]] || fail 'a running Company is left as it is'
+engine_healthy "$second_container" 300 && engine_healthy "$second_sandbox" 120 || fail 'the second Engine and sandbox run again on their disk'
+[[ $(docker exec "$second_sandbox" cat /work/limits-kept.txt) == kept ]] || fail 'the work folder is kept across a restart'
+[[ $(started_of gtmworks-sandbox-first) == "$first_before" ]] || fail "the first Company's sandbox kept running"
+# A Company whose work folder a previous release kept as a plain volume on the server's disk (#507): the next run moves
+# it onto a work disk of the Company's limit and removes the volume. Here the second Company is put back in that shape.
+# Docker keeps a volume while any container names it, running or not, so the Engine and sandbox go; the repeat install
+# below makes them again.
+docker rm -f "$second_container" "$second_sandbox" > /dev/null || fail 'remove the second Engine and sandbox'
+disk_helper remove "$second_slug" && docker volume rm "gtmworks-folder-$second_slug" "gtmworks-home-$second_slug" > /dev/null \
+  && rmdir ".work-disks/$second_slug/fs" ".work-disks/$second_slug" || fail "remove the second Company's work disk"
+docker volume create "gtmworks-work-$second_slug" > /dev/null || fail 'the previous work folder'
+docker run --rm --user 0 --entrypoint sh -v "gtmworks-work-$second_slug:/work" "$(cat .work-sandbox-image)" -ec \
+  'install -d -o 1000 -g 1000 /work/ag-moved; printf moved > /work/ag-moved/brief.md; chown 1000:1000 /work/ag-moved/brief.md' || fail 'a file in the previous work folder'
+SANDBOX_MEMORY=3g SANDBOX_CPUS=3 SANDBOX_DISK=50g sh scripts/install.sh > companies-repeat.log 2>&1 || { cat companies-repeat.log; fail 'a repeat install with limits in the shell'; }
 [[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) 1500000000" ]] || fail "a repeat install keeps the first Company's limits"
 [[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail "a repeat install keeps the second Company's limits"
+[[ $(docker exec "$second_sandbox" cat /work/ag-moved/brief.md) == moved ]] || fail 'the previous work folder is moved onto the work disk'
+[[ $(docker exec "$second_sandbox" stat -c %U /work/ag-moved/brief.md) == pn ]] || fail 'the moved files keep their owner'
+if docker volume inspect "gtmworks-work-$second_slug" > /dev/null 2>&1; then fail 'the previous work folder goes once it is moved'; fi
+(( $(docker exec "$second_sandbox" df -k --output=size /work | tail -n 1) <= 3145728 )) || fail "the moved disk is the Company's own 3g, not the shell's"
 # #711: the second Company's limit as a release before the Screens wrote it (no default noted beside it) is raised to the
 # default by the next run, once; a Company's limit above the default is never lowered.
 second_file="$(dirname "$(grep -lx "ENGINE_NAME=$second_container" .engines/*/.env)")/.env"
@@ -1178,7 +1219,7 @@ install_source backup-engines-install.log || fail 'every-Engine backup area inst
 complete_setup || fail 'first run before the every-Engine backup'
 # A second Company on an Engine of its own for the every-Engine archive: the first run's Owner is its Owner, and the
 # worker gives it its main Agent by itself. It is given its own sandbox limits (#396), which the restore brings back.
-second_company scripts/install.sh --memory 1536m --cpus 1.5 || fail 'the second Company for the every-Engine backup'
+second_company scripts/install.sh --memory 1536m --cpus 1.5 --disk 2g || fail 'the second Company for the every-Engine backup'
 # Every Company's Engine is in one backup and comes back from it (#386, ADR 0018). Each Company's main Agent is told
 # a code word in its own Engine first; after the restore each Company's Agent answers on its own Engine, with its own
 # code word and never the other Company's.
@@ -1235,9 +1276,13 @@ if grep -E -- "$work_marker-[0-9a-f]+-(cache\.bin|module\.js)\$|^work/.*/(\.cach
 fi
 # The install is made empty and the one archive brings both Companies and both Engines back.
 remove_install || fail 'remove the install before the every-Engine restore'
+# The removed install took its work disks with it (#507); the fresh install makes the first Company's again, and the
+# restore makes the second's, each at its own size from the archive whatever the shell holds, and writes its work
+# folder there.
+[[ ! -e .work-disks ]] || fail 'the removed install left no work disk'
 rm -f .env.install
 sh scripts/install.sh || fail 'fresh install before the every-Engine restore'
-SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
+SANDBOX_MEMORY=3g SANDBOX_CPUS=3 SANDBOX_DISK=50g sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
 [[ $(ls -d .engines/*/ | wc -l) == "$engines_before" ]] || fail 'the every-Engine restore brings every Engine back'
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
@@ -1259,6 +1304,12 @@ for folder in .engines/*/; do
   # Each sandbox comes back with the limits its Company was given, whatever the shell of the restore held (#396).
   if [[ $name == gtmworks-engine-first ]]; then want_limits="$(sandbox_memory_bytes) $(sandbox_nano_cpus)"; else want_limits='1610612736 1500000000'; fi
   [[ $(docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$sandbox") == "$want_limits" ]] || fail "the restored sandbox of $name has its Company's limits"
+  # Its work folder is on its own work disk again, of its Company's size (#507).
+  if [[ $name == gtmworks-engine-first ]]; then want_disk=$(sed -n 's/^      gtmworks.disk: ${SANDBOX_DISK:-\([0-9]*\)g}$/\1/p' scripts/engine-template.yml); else want_disk=2; fi
+  [[ -f ".work-disks/${name#gtmworks-engine-}/fs.img" ]] || fail "the restore made the work disk of $name"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox") == "gtmworks-folder-${name#gtmworks-engine-}" ]] || fail "the restored sandbox of $name works on its work disk"
+  disk_kib=$(docker exec "$sandbox" df -k --output=size /work | tail -n 1)
+  (( disk_kib > want_disk * 1024 * 1024 * 95 / 100 && disk_kib <= want_disk * 1024 * 1024 )) || fail "the restored work disk of $name is its Company's ${want_disk}g ($disk_kib KiB)"
 done
 # The restored Engine binds every listener to its install-network address alone again, over every port it listens on:
 # the work-network check runs after the restore, on the other side of a restart (#393).
@@ -1404,12 +1455,14 @@ docker run --rm --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/c
 # (#378, C3), and the update that pins another Engine image.
 # rollback: this release's installer rolls a failed migration back and leaves the release it was running serving. Its own
 # area since the work sandbox image (#389) made the update area's whole run longer than its 12 minutes: it needs only a
-# source install, none of the releases the update area makes.
+# source install, none of the releases the update area makes. It also reads an Engine with only its management listener
+# stopped as unhealthy (#773): Docker's five minutes of retries fit here, and not in the companies area's 12.
 rollback() {
 cd "$root"
 area_setup
 reset_install
 install_source source-install.log || fail 'source install before the failed update'
+management_listener_stopped gtmworks-engine-first
 old_web=$(compose ps -q web)
 cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
 # The failing migration leaves the checkout as soon as the update tried it, failed or not, so no later area in it meets
@@ -1421,6 +1474,23 @@ grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_upd
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
 status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) || fail_update 'old version health request'
 [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
+}
+
+# A healthy Engine is one gtmworks can read and write (#773). With only its management listener stopped, by the image's
+# own supervisor (its `dashboard` service), the Run listener still answers and Docker reports the Engine unhealthy, after
+# its health check's sixty retries five seconds apart; started again, the Engine is healthy again.
+health_of() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1"; }
+management_listener_stopped() {
+  local engine=$1 management=/run/service/dashboard attempt
+  [[ $(health_of "$engine") == healthy ]] || fail "$engine is healthy before its management listener stops"
+  docker exec -u 0 "$engine" /command/s6-svc -wD -d "$management" || fail "stop only the management listener of $engine"
+  for attempt in $(seq 90); do [[ $(health_of "$engine") == unhealthy ]] && break; sleep 5; done
+  [[ $(health_of "$engine") == unhealthy ]] || fail "$engine reports unhealthy with its management listener stopped"
+  docker exec "$(compose ps -q web)" node -e "fetch('http://$engine:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
+    || fail "the Run listener of $engine answers while its management listener is stopped"
+  docker exec -u 0 "$engine" /command/s6-svc -wu -u "$management" || fail "start the management listener of $engine again"
+  for attempt in $(seq 60); do [[ $(health_of "$engine") == healthy ]] && break; sleep 2; done
+  [[ $(health_of "$engine") == healthy ]] || fail "$engine is healthy again once its management listener answers"
 }
 
 # The previous release installed in release-install/ from its own two files, its first run made, a memory written in
@@ -1555,6 +1625,7 @@ probe 'after the update from the one-Engine release whose Engine does not start'
 [[ ! -e .engines ]] || fail_update 'the failed update leaves no Engine folder'
 [[ -z $(docker ps -aq --filter 'name=^gtmworks-(engine|sandbox|exit|screen-driver)-first$') ]] || fail_update "the failed update leaves no Engine, sandbox or exit of the template"
 if docker volume inspect gtmworks-work-first > /dev/null 2>&1; then fail_update 'the failed update leaves no work folder'; fi
+if docker volume ls -q | grep -Eq '^gtmworks-(folder|home)-first$' || [[ -e .work-disks/first ]]; then fail_update 'the failed update leaves no work disk'; fi
 if docker network inspect gtmworks-engine-first > /dev/null 2>&1; then fail_update "the failed update leaves no Engine network"; fi
 docker run --rm --network gtmworks-install_default curlimages/curl:8.12.1 -sf -H "Authorization: Bearer $key" http://hermes:9119/api/profiles \
   | grep -qF "$profile" || fail_update "the hermes Engine answers on the previous release's network with its key and the Company profile"
@@ -1823,8 +1894,10 @@ sh "$dir/install.sh" || fail 'install the release before the work sandbox'
 cd "$dir"
 sandbox_parts() {
   docker ps -a --format '{{.Names}}' | grep -E '^gtmworks-(sandbox|exit)-'
-  docker volume ls -q | grep -E '^gtmworks-(work|sandbox-hostkey)-'
+  docker volume ls -q | grep -E '^gtmworks-(work|folder|home|sandbox-hostkey)-'
   docker network ls --format '{{.Name}}' | grep -E '^gtmworks-(work|exit)-'
+  # A work disk an update made goes with it (#507).
+  ls -d .work-disks/*/ 2> /dev/null
   true
 }
 [[ -f .engines/first/.env && ! -e .work-sandbox-image && -z $(sandbox_parts) ]] || fail 'that release runs its first Engine from its own folder and makes no sandbox'
@@ -1953,7 +2026,8 @@ while read -r name id; do
     [[ $(docker inspect -f '{{.Config.Image}}' "$container") == "$(cat .work-sandbox-image)" ]] || fail "the $part of $name runs the image the install recorded"
   done
   box=$(docker ps -q --filter "name=^gtmworks-sandbox-$slug$")
-  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$box") == "gtmworks-work-$slug" ]] || fail "the sandbox of $name works in its Company's own work folder"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$box") == "gtmworks-folder-$slug" ]] || fail "the sandbox of $name works in its Company's own work folder"
+  [[ -f ".work-disks/$slug/fs.img" ]] || fail "the update makes the work disk of $name"
   echo "$slug $box" >> sandboxes-before
 done < engines-before
 [[ $(cut -d' ' -f2 sandboxes-before | sort -u | grep -c .) == 2 ]] || fail 'each Company has its own sandbox'
@@ -2429,6 +2503,9 @@ previous_release_serves() {
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-(sandbox|exit)-') ]] || fail_update "the update $1 leaves no sandbox or exit beside the previous release's Engine"
   [[ ! -e .work-sandbox-image ]] || fail_update "the update $1 records no work sandbox image"
   [[ $(staged_level_column) == 1 && $(staged_cutovers) == 0 ]] || fail_update "the update $1 keeps the level and applies no cutover"
+  # Spec #695's first step takes nothing away either: the role agents' tables and key stay for that release.
+  [[ $(db -c "select count(*) from information_schema.columns where table_schema='public' and table_name='members' and column_name='agent_role'") == 1 \
+     && $(db -c "select to_regclass('public.agents') is not null") == t ]] || fail_update "the update $1 keeps the role agents' tables and key"
   [[ $(db -c "select count(*) from information_schema.columns where table_schema='public' and table_name='company_profiles' and column_name='tools_confirmed'") == 1 ]] \
     || fail_update "the update $1 applied the first step of the staged removal"
   # The previous release's worker records the Company profile again with its own function and its level.
@@ -2468,7 +2545,12 @@ sh install.sh update > update.log 2>&1 || fail_update 'the staged update to this
 grep -Fq 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log || fail_update 'the update applies the cutover'
 [[ $(grep -n 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log | cut -d: -f1) -gt $(grep -n 'gateway:8080/api/health 200' update.log | cut -d: -f1) ]] \
   || fail_update 'the cutover applies after this release answers'
-[[ $(staged_level_column) == 0 && $(staged_cutovers) == 1 ]] || fail 'the update removes the level at the cutover'
+# Every cutover of this release is applied once it answers: the levels' and the legacy role agents' (spec #695).
+[[ $(staged_level_column) == 0 && $(staged_cutovers) == $(ls "$root"/supabase/migrations/*_cutover.sql | wc -l) ]] || fail 'the update removes the level at the cutover'
+grep -Fq 'Applying migration: 20270418000001_legacy_role_agents_cutover.sql' update.log || fail_update 'the update applies the role agents cutover'
+[[ $(grep -n 'Applying migration: 20270418000001_legacy_role_agents_cutover.sql' update.log | cut -d: -f1) -gt $(grep -n 'gateway:8080/api/health 200' update.log | cut -d: -f1) ]] \
+  || fail_update 'the role agents cutover applies after this release answers'
+[[ $(db -c "select to_regclass('public.agents') is null and to_regclass('public.agent_grants') is null") == t ]] || fail 'the cutover removes the role agents'
 [[ $(staged_level_log) == "$level_before" ]] || fail 'the past level change stays in the log as it was'
 compose exec -T -e LEVEL_ROW="$level_before" web node --input-type=module -e "const {describeEntry}=await import('/app/lib/activity-log.mjs'); const read=describeEntry(JSON.parse(process.env.LEVEL_ROW)); console.log(JSON.stringify([read.act,read.from,read.to]));" \
   | grep -qxF '[["logActAgentLevel"],{"key":"agentLevel1"},{"key":"agentLevel2"}]' || fail 'the past level change still reads in the log'
@@ -2718,6 +2800,73 @@ oom_events=$(docker events --since "$since" --until "$(date +%s)" --filter "cont
 first_answers || fail "the first Company's sandbox answers after the second Company's render was stopped"
 engine_healthy "$first_sandbox" 10 || fail "the first Company's sandbox is still healthy"
 echo "sizes: a render that needed $render_peak MiB was stopped at its Company's $low_mib MiB limit (oom_kill ${kills_before:-?} to ${kills_after:-?}, $oom_events oom events); the other Company's sandbox answered $answers times while it ran"
+# The disk a sandbox writes to (#507, ADR 0032). Both sandboxes run at the install's default work disk, read from the one
+# place it is set; their root is read-only, and their scratch folders are memory of a fixed size.
+disk_default=$(sed -n 's/^      gtmworks.disk: ${SANDBOX_DISK:-\([0-9]*\)g}$/\1/p' scripts/engine-template.yml)
+[[ -n $disk_default ]] || fail "the work disk's default is in scripts/engine-template.yml"
+size_kib() { docker exec "$1" df -k --output=size "$2" | tail -n 1; }
+for sandbox in "$first_sandbox" "$second_sandbox"; do
+  (( $(size_kib "$sandbox" /work) > disk_default * 1024 * 1024 * 95 / 100 && $(size_kib "$sandbox" /work) <= disk_default * 1024 * 1024 )) \
+    || fail "the sandbox $sandbox has the install's default work disk"
+  if docker exec "$sandbox" sh -c 'echo x > /usr/local/written' 2> /dev/null; then fail "the sandbox $sandbox writes nothing to its root"; fi
+  (( $(size_kib "$sandbox" /tmp) == 1048576 && $(size_kib "$sandbox" /var/tmp) == 262144 )) || fail "the sandbox $sandbox has scratch folders of a fixed size"
+done
+echo "sizes: the default work disk is ${disk_default} GB a Company; the root is read-only, /tmp is 1 GB and /var/tmp 256 MB of memory"
+# Filled to its limit: the second Company gets a 1g disk (`company limits --disk`, which stops its Engine and sandbox while
+# it shrinks), then fills it and every inode of it. The writes stop there, with ENOSPC, while the first Company's sandbox,
+# the database and the app answer, and the server's disk holds no more than the disk's own image.
+sh scripts/install.sh company limits 'Second Company' --disk 1g | tee disk-small.log || fail 'company limits --disk 1g'
+grep -F 'and a 1g work disk.' disk-small.log || fail 'company limits says the disk the sandbox has'
+engine_healthy "$second_sandbox" 120 && engine_healthy "$second_container" 300 || fail 'the second Engine and sandbox run on the smaller disk'
+# The image file is on the disk that holds the install's folder, which the database and every other Company share.
+host_free_before=$(df -k . | awk 'NR==2 { print $4 }')
+if docker exec "$second_sandbox" dd if=/dev/zero of=/work/fill bs=1M count=2048 > disk-fill.log 2>&1; then cat disk-fill.log; fail 'a write past the work disk stops'; fi
+grep -F 'No space left on device' disk-fill.log || { cat disk-fill.log; fail 'the write past the work disk stops with ENOSPC'; }
+if docker exec "$second_sandbox" sh -c 'dd if=/dev/zero of=/home/pn/more bs=1M count=16' > /dev/null 2>&1; then fail "the sandbox's home is on the same full disk"; fi
+first_answers || fail "the first Company's sandbox answers while the second Company's disk is full"
+[[ $(db -c 'select 1') == 1 ]] || fail 'the database answers while a work disk is full'
+[[ $(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) == 200 ]] || fail 'the app answers while a work disk is full'
+host_free_after=$(df -k . | awk 'NR==2 { print $4 }')
+(( host_free_before - host_free_after < 1153434 )) || fail "the server's disk lost no more than the work disk's own 1g ($host_free_before KiB free before, $host_free_after after)"
+docker exec "$second_sandbox" rm -f /work/fill /home/pn/more || fail 'free the work disk'
+# Inodes: empty files until the disk has no inode left, then ENOSPC.
+docker exec "$second_sandbox" python3 -c '
+import errno, os
+os.makedirs("/work/inodes", exist_ok=True)
+count = 0
+try:
+    while True:
+        open(f"/work/inodes/{count}", "w").close()
+        count += 1
+except OSError as error:
+    assert error.errno == errno.ENOSPC, error
+    print(f"inodes={count}")
+' | tee disk-inodes.log || fail 'files until the work disk has no inode left'
+inodes=$(sed -n 's/^inodes=//p' disk-inodes.log)
+(( inodes > 1000 && inodes <= 65536 )) || fail "the inode limit of a 1g disk holds ($inodes files)"
+first_answers || fail "the first Company's sandbox answers while the second Company's disk has no inode left"
+docker exec "$second_sandbox" rm -rf /work/inodes || fail 'free the inodes'
+# The scratch folders stop at their size too.
+if docker exec "$second_sandbox" dd if=/dev/zero of=/var/tmp/fill bs=1M count=300 > disk-scratch.log 2>&1; then fail 'a write past /var/tmp stops'; fi
+grep -F 'No space left on device' disk-scratch.log || { cat disk-scratch.log; fail 'the write past /var/tmp stops with ENOSPC'; }
+docker exec "$second_sandbox" rm -f /var/tmp/fill
+echo "sizes: a 1g work disk stopped a write at its size and at $inodes files, and the other Company, the database and the app answered"
+# Raised, the disk grows and keeps what it holds; lowered below what it holds, the change is refused and the disk kept.
+docker exec "$second_sandbox" dd if=/dev/zero of=/work/kept bs=1M count=900 > /dev/null 2>&1 || fail 'a 900 MiB file on the work disk'
+sh scripts/install.sh company limits 'Second Company' --disk 3g | tee disk-grow.log || fail 'company limits --disk 3g'
+engine_healthy "$second_sandbox" 120 || fail 'the second sandbox runs on the larger disk'
+(( $(size_kib "$second_sandbox" /work) > 2900000 )) || fail 'the work disk grew to 3g'
+[[ $(docker exec "$second_sandbox" stat -c %s /work/kept) == 943718400 ]] || fail 'the grown disk keeps what it held'
+docker exec "$second_sandbox" dd if=/dev/zero of=/work/more bs=1M count=900 > /dev/null 2>&1 || fail 'the grown disk takes more'
+if sh scripts/install.sh company limits 'Second Company' --disk 1g > disk-refused.log 2>&1; then cat disk-refused.log; fail 'a disk limit below what the disk holds is refused'; fi
+cat disk-refused.log
+grep -E '^The limits of Company "Second Company" were not changed: its work disk holds [0-9]+ MiB, which does not fit in 1g\. Its disk is kept as it was\.$' disk-refused.log \
+  || fail 'the refusal says what the disk holds'
+grep -qx 'SANDBOX_DISK=3g' "$second_folder/.env" || fail 'the refused limit is not kept'
+engine_healthy "$second_sandbox" 120 && engine_healthy "$second_container" 300 || fail 'the second Company runs again after the refusal'
+(( $(size_kib "$second_sandbox" /work) > 2900000 )) || fail 'the refused disk keeps its size'
+[[ $(docker exec "$second_sandbox" stat -c %s /work/kept) == 943718400 ]] || fail 'the refused disk keeps what it held'
+echo "sizes: a work disk raised to 3g kept its files, and lowering it below what it held was refused"
 }
 
 # measure: how much disk and memory twenty Agent profiles take (#126, #400, #408): ten more profiles in the first
