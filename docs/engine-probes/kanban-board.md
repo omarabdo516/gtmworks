@@ -84,7 +84,8 @@ done. Title: … Assignee: @delta … Result: <summary>`. It also woke on `crash
   (`unsafe_control_permissions … chmod go-w`); profiles made through `POST /api/profiles` are `drwxr-xr-x`.
 - A Run API request for a named profile needs that profile's own `API_SERVER_KEY`; the install already writes it.
 - A reviewer Run on a profile made with `no_skills` exited before the model (`Kanban owner refused: Kanban execution
-  unknown`); every Agent profile gtmworks makes keeps the bundled Skills, and the install check proves review on one.
+  unknown`) in the hand run. Every Agent profile gtmworks makes keeps the bundled Skills, and on the real Engine the
+  review ran on one: Card B's reviewer, on the second Agent's profile, passed it (section 8, "The first green run").
 
 ## 7. The settings the install writes
 
@@ -203,4 +204,21 @@ to 11 at the worst.
 The proof prints one line, `{"step":"kanban",…,"board":{…}}`, in the open-design log (`kanban-proof.log`): the
 Card, whether the tick the check asked for spawned it, the seconds to its first Run, the Agent a return went back to,
 Card B's maker, Agent, `subscribed`, `told`, the triage Card's status and children, and the decomposer's calls and
-models. Its results are added here from the first green run.
+models.
+
+### The first green run
+
+CI run 45860369833 on commit 5d979d5, 2026-11-26, job install-open-design (green, 8 minutes 9 s; the `second` step
+took 64 s). The step took 120 s, set by the triage Card; seconds below are from the step's start.
+
+| Acceptance criterion of #833 | What the real Engine answered |
+| --- | --- |
+| Started by the dispatcher after one tick, no Run started by the check | the one tick spawned Card A (`spawned_by_tick: true`) and its first Run started at 0 s; Card B's tick spawned it at 2 s |
+| A file in the Work sandbox, nothing on the Engine's disk | the worker's command printed the sandbox's hostname and `pwd` `/work/ag-<32 hex>`: a remote worker starts in its Agent's own folder of the work folder. The job read `/work/<marker>-card.txt` in the sandbox and found nothing of the marker's name on the Engine outside its Kanban folders |
+| Blocked on a question, the comment read, goes on | blocked after its two commands at 8 s; after the comment, the move to ready and a tick, its next Run read the answer and sent the work for review at 16 s |
+| Review: pass done with the summary, return to the same Agent | the person's return at 16 s put Card A `ready` on the same Agent (`returned_to` the second Agent's profile; no reviewer to stop, `reviewer_stopped: false`); its next Run read the reason and sent it again at 22 s; the person's pass made it `done` at 22 s. Card B's review ran on the second Agent's profile, which gtmworks made with the bundled Skills kept, and the reviewing Agent passed it, `done`, at 17 s |
+| A dangerous command runs | `dangerous: ran` after the profile's own `single_query_mode: deny`, and the job found the folder gone in the sandbox |
+| A Run API Agent makes a Card for another, and whether its session is told | Card B `created_by` the main Agent's profile (`co-<32 hex>`), assignee the second Agent, `subscribed: true`; `told: true` at 17 s, when the reviewing Agent passed it |
+| A Card in `triage` in two ticks, the decomposer's model | after two of the Engine's own ticks (120 s) the Card is still `triage` with no children; the decomposer called the model twice, both `fake-model`, the default profile's main model |
+| The settings in a new Company's Engine and an updated one, not changed by a profile | `engine_board_settings` held on every Engine of open-design, the second Company's included, and the install-update and install-engines-update jobs of the same commit are green |
+| No CI job is added | the check ran as a step of install-open-design |
