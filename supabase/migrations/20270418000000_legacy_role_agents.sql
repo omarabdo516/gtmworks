@@ -34,7 +34,7 @@ begin
 end $$;
 revoke all on function public.settle_legacy_role_agents() from public, anon, authenticated, service_role;
 
-select public.settle_legacy_role_agents();
+do $$ begin perform public.settle_legacy_role_agents(); end $$;
 
 -- The log's actor kind: a person, or the system. A Company Agent's own rows name their kind where they are written.
 create or replace function public.log_actor_kind(c uuid, actor uuid) returns text language sql stable security definer set search_path = '' as $$

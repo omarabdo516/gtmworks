@@ -48,3 +48,15 @@ create function public.is_bundled_connection(connection uuid) returns boolean la
  select exists(select 1 from public.hermes_agent_audit u where u.action in ('PROVIDE_BUNDLED_HERMES_AGENT','MOVE_COMPANY_PROFILE','REQUEST_HERMES_AGENT','MOVE_AGENT_PROFILE')
   and u.details->>'connection_id'=connection::text) $stood$;
 alter table public.hermes_agents alter column profile drop not null;`;
+
+// The legacy role agents as they stood before spec #695's cutover (20270418000001) removed them: the role key on a
+// membership, its type, check and one-holder index, the shared agents and their company grants. Put back inside a
+// replay's transaction, for a migration written against them.
+export const roleAgentsAsTheyStood=`create type public.member_agent_role as enum ('account_manager','writer','designer','critic');
+alter table public.members add column agent_role public.member_agent_role;
+alter table public.members add constraint members_agent_role_check check (agent_role is null or role='contributor');
+create unique index members_active_agent_role on public.members(company_id,agent_role) where agent_role is not null and removed_at is null;
+create table public.agents(id uuid primary key references public.people(id), role text not null unique, created_at timestamptz not null default now());
+create table public.agent_grants(company_id uuid not null references public.companies(id), agent_id uuid not null references public.agents(id),
+ granted_by uuid references public.people(id), granted_at timestamptz not null default now(), revoked_by uuid references public.people(id), revoked_at timestamptz,
+ primary key (company_id, agent_id));`;

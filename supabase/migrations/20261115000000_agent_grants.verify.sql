@@ -1,9 +1,8 @@
+-- The shared role agents and their company grants went with spec #695 (20270418000001_legacy_role_agents_cutover): no
+-- table, guard or function of theirs is left.
 select json_build_object(
- 'agents_rls',(select relrowsecurity from pg_class where oid='public.agents'::regclass),
- 'grants_rls',(select relrowsecurity from pg_class where oid='public.agent_grants'::regclass),
- 'grant_row_per_company_and_agent',exists(select 1 from pg_constraint where conrelid='public.agent_grants'::regclass and contype='p' and pg_get_constraintdef(oid)='PRIMARY KEY (company_id, agent_id)'),
- 'revocation_records_who',exists(select 1 from pg_constraint where conrelid='public.agent_grants'::regclass and conname='agent_grants_revocation'),
- 'membership_needs_grant',exists(select 1 from pg_trigger where tgrelid='public.members'::regclass and tgname='agent_membership_guard' and not tgisinternal),
- 'owner_functions_for_signed_in_people',has_function_privilege('authenticated','public.grant_agent_access(uuid,uuid)','execute') and has_function_privilege('authenticated','public.revoke_agent_access(uuid,uuid)','execute') and not has_function_privilege('anon','public.grant_agent_access(uuid,uuid)','execute') and not has_function_privilege('anon','public.revoke_agent_access(uuid,uuid)','execute'),
- 'clients_cannot_write_grants',not has_table_privilege('authenticated','public.agent_grants','insert') and not has_table_privilege('authenticated','public.agent_grants','update') and not has_table_privilege('authenticated','public.agent_grants','delete')
+ 'removed_by_20270418000001',to_regclass('public.agents') is null and to_regclass('public.agent_grants') is null
+  and not exists(select 1 from pg_trigger where tgrelid='public.members'::regclass and tgname='agent_membership_guard')
+  and to_regprocedure('public.grant_agent_access(uuid,uuid)') is null and to_regprocedure('public.revoke_agent_access(uuid,uuid)') is null
+  and to_regprocedure('public.agent_membership_guard()') is null
 );

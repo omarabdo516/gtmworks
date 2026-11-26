@@ -85,7 +85,7 @@ for (const path of [
   'supabase/migrations/20260101000000_x.sql', 'supabase/tests/foundation.sql', 'supabase/config.toml',
   'scripts/check-rls.sql', 'scripts/verify-db.mjs', 'scripts/local-default-privileges.sql',
   'tests/db.sh', 'tests/first-run-migration.mjs', 'tests/bootstrap-db.mjs', 'tests/hosted-default-privileges.mjs',
-  'tests/agent-role-backfill.mjs', 'tests/sql-statements.mjs',
+  'tests/sql-statements.mjs',
   // tests/bootstrap-db.mjs runs this file's SQL against the real constraints and triggers.
   'scripts/bootstrap-owner.mjs',
   // The verify session, the migration replays' shared pgTAP runner and the stack's cached images (#259).

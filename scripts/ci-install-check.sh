@@ -2429,6 +2429,9 @@ previous_release_serves() {
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-(sandbox|exit)-') ]] || fail_update "the update $1 leaves no sandbox or exit beside the previous release's Engine"
   [[ ! -e .work-sandbox-image ]] || fail_update "the update $1 records no work sandbox image"
   [[ $(staged_level_column) == 1 && $(staged_cutovers) == 0 ]] || fail_update "the update $1 keeps the level and applies no cutover"
+  # Spec #695's first step takes nothing away either: the role agents' tables and key stay for that release.
+  [[ $(db -c "select count(*) from information_schema.columns where table_schema='public' and table_name='members' and column_name='agent_role'") == 1 \
+     && $(db -c "select to_regclass('public.agents') is not null") == t ]] || fail_update "the update $1 keeps the role agents' tables and key"
   [[ $(db -c "select count(*) from information_schema.columns where table_schema='public' and table_name='company_profiles' and column_name='tools_confirmed'") == 1 ]] \
     || fail_update "the update $1 applied the first step of the staged removal"
   # The previous release's worker records the Company profile again with its own function and its level.
@@ -2468,7 +2471,12 @@ sh install.sh update > update.log 2>&1 || fail_update 'the staged update to this
 grep -Fq 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log || fail_update 'the update applies the cutover'
 [[ $(grep -n 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log | cut -d: -f1) -gt $(grep -n 'gateway:8080/api/health 200' update.log | cut -d: -f1) ]] \
   || fail_update 'the cutover applies after this release answers'
-[[ $(staged_level_column) == 0 && $(staged_cutovers) == 1 ]] || fail 'the update removes the level at the cutover'
+# Every cutover of this release is applied once it answers: the levels' and the legacy role agents' (spec #695).
+[[ $(staged_level_column) == 0 && $(staged_cutovers) == $(ls "$root"/supabase/migrations/*_cutover.sql | wc -l) ]] || fail 'the update removes the level at the cutover'
+grep -Fq 'Applying migration: 20270418000001_legacy_role_agents_cutover.sql' update.log || fail_update 'the update applies the role agents cutover'
+[[ $(grep -n 'Applying migration: 20270418000001_legacy_role_agents_cutover.sql' update.log | cut -d: -f1) -gt $(grep -n 'gateway:8080/api/health 200' update.log | cut -d: -f1) ]] \
+  || fail_update 'the role agents cutover applies after this release answers'
+[[ $(db -c "select to_regclass('public.agents') is null and to_regclass('public.agent_grants') is null") == t ]] || fail 'the cutover removes the role agents'
 [[ $(staged_level_log) == "$level_before" ]] || fail 'the past level change stays in the log as it was'
 compose exec -T -e LEVEL_ROW="$level_before" web node --input-type=module -e "const {describeEntry}=await import('/app/lib/activity-log.mjs'); const read=describeEntry(JSON.parse(process.env.LEVEL_ROW)); console.log(JSON.stringify([read.act,read.from,read.to]));" \
   | grep -qxF '[["logActAgentLevel"],{"key":"agentLevel1"},{"key":"agentLevel2"}]' || fail 'the past level change still reads in the log'

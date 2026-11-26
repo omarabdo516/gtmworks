@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { connectionsAsTheyStood, testDb } from './pgtap.mjs';
+import { connectionsAsTheyStood, roleAgentsAsTheyStood, testDb } from './pgtap.mjs';
 
 // The Agency and the reviewer Role are removed (#7, ADR 0012). The database is put back in its earlier shape inside
 // the transaction (the reviewer Role, the Agency flag, a policy using the bypass), a reviewer is seeded, and the real
@@ -16,6 +16,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(19);
 -- The Connections and the Agent audit this replay's rows were written in, dropped since (#342).
 ${connectionsAsTheyStood}
+-- The legacy role agents the migration reads, removed since (spec #695).
+${roleAgentsAsTheyStood}
 create temporary table migration_history(name text primary key);
 -- The earlier shape: the role type with reviewer, the Agency flag and functions, and a policy that uses them.
 -- Tables dropped later stood then, and the migration rewrites their policies: the external-agent API's (#341) and the
