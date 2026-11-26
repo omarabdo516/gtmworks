@@ -7,6 +7,7 @@ import { ShellIcon, type ShellIconName } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
 import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { cardColumns, columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-columns.mjs';
+import { followBoard } from '@/app/board-live';
 import '@/app/board.css';
 
 // The board (spec #831, #834): the Company's Engine's own Kanban board in gtmworks's look (design-reference-card:
@@ -15,6 +16,9 @@ import '@/app/board.css';
 //
 // The last good read stays: it is shown while the board reads again and kept when the Engine does not answer, which the
 // board says in one line. It lives in this browser's memory only, never in storage, and never in a table.
+//
+// The board follows the Engine live (#840): a change the Engine reports, through gtmworks's own web server
+// (app/board-live.ts), reads the board again at once. While the stream is down the board reads again on a slow timer.
 
 export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,comments:number};
 type Agent={id:string,name:string};
@@ -22,35 +26,42 @@ type Board={cards:BoardCard[],main:Agent|null};
 type Read={board:Board|null,state:'reading'|'read'|'failed'};
 
 const kept=new Map<string,Board>();
-// A read that failed is asked again after a pause, longer each time; a good one is read again on a slow timer and when
-// the window comes back to the board, until the live stream of #840 carries every change.
+// A read that failed is asked again after a pause, longer each time; a good one is read again when the board's live
+// stream reports a change, when the window comes back to the board, and on a slow timer while the stream is down. A
+// change reported while a read is on its way reads again once that read has answered.
 const againAfter=[3000,10000,30000];
 const slowRead=30000;
 
 function useBoard(company:string):Read {
  const [read,setRead]=useState<Read>(()=>({board:kept.get(company)??null,state:'reading'}));
  useEffect(()=>{
-  let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined; let tries=0; let asking=false;
+  let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined; let tries=0; let asking=false; let stale=false; let live=false;
   const controller=new AbortController();
   const next=(after:number)=>{ clearTimeout(timer); timer=setTimeout(ask,after); };
   function ask() {
-   if(asking||stopped) return;
-   asking=true;
+   if(stopped) return;
+   if(asking) { stale=true; return; }
+   asking=true; stale=false;
    void fetch(`/api/board?company=${encodeURIComponent(company)}`,{cache:'no-store',signal:controller.signal})
     // The answer is read whole either way, so a refused read leaves no response open behind it.
     .then(async response=>{ const body=await response.json().catch(()=>null) as {cards?:unknown,main?:Agent|null}|null; return response.ok?body:null; },()=>null)
     .then(body=>{
      asking=false;
      if(stopped) return;
-     if(body&&Array.isArray(body.cards)) { const board={cards:body.cards as BoardCard[],main:body.main??null}; kept.set(company,board); tries=0; setRead({board,state:'read'}); next(slowRead); return; }
+     if(body&&Array.isArray(body.cards)) {
+      const board={cards:body.cards as BoardCard[],main:body.main??null}; kept.set(company,board); tries=0; setRead({board,state:'read'});
+      if(stale) ask(); else if(live) clearTimeout(timer); else next(slowRead);
+      return;
+     }
      setRead({board:kept.get(company)??null,state:'failed'});
      next(againAfter[Math.min(tries++,againAfter.length-1)]);
     });
   }
   const back=()=>{ if(document.visibilityState==='visible') ask(); };
   ask();
+  const unfollow=followBoard(company,{changed:()=>ask(),live:on=>{ live=on; if(!on&&!asking&&!tries) next(slowRead); }});
   window.addEventListener('focus',ask); document.addEventListener('visibilitychange',back);
-  return ()=>{ stopped=true; clearTimeout(timer); controller.abort(); window.removeEventListener('focus',ask); document.removeEventListener('visibilitychange',back); };
+  return ()=>{ stopped=true; clearTimeout(timer); controller.abort(); unfollow(); window.removeEventListener('focus',ask); document.removeEventListener('visibilitychange',back); };
  },[company]);
  return read;
 }

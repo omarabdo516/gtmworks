@@ -46,14 +46,26 @@ export function screenFrame(grab) {
 // The pinned release's Kanban board (spec #831; hermes_cli/kanban_workflow.py DEFAULT_WORKFLOW, hermes_cli/kanban_db.py
 // Task): its statuses in column order, and its tasks as the Task dataclass holds them. A test puts a task on it with
 // `task(fields)` (an id `t_` and eight hex digits, as _new_task_id makes), links a child to the parent it waits for with
-// `link`, and comments with `comment`; `board()` is GET /board's answer.
+// `link`, and comments with `comment`; `board()` is GET /board's answer. Each change is a row of its append-only
+// `events` (kanban_db.py task_events: an id, the task, its kind and payload), which the board's event socket tails; a test
+// moves a task to another status with `move`, as a worker or another person would, and records any other change with
+// `event`.
 export const kanbanStatuses=['triage','todo','scheduled','ready','running','blocked','review','done'];
 function kanbanBoard() {
  const tasks=/** @type {any[]} */([]);
  const links=/** @type {{parent_id:string,child_id:string}[]} */([]);
  const comments=/** @type {{id:number,task_id:string,author:string,body:string,created_at:number}[]} */([]);
+ const events=/** @type {{id:number,task_id:string,run_id:string|null,kind:string,payload:any,created_at:number}[]} */([]);
  let clock=Math.floor(Date.now()/1000);
- return {tasks,links,comments,
+ /** @param {string} task @param {string} kind @param {any} [payload] */
+ const event=(task,kind,payload=null)=>{ events.push({id:events.length+1,task_id:task,run_id:null,kind,payload,created_at:++clock}); };
+ return {tasks,links,comments,events,event,
+  /** @param {string} id @param {string} status */
+  move(id,status) {
+   const task=tasks.find(found=>found.id===id); if(!task) return;
+   task.status=status; if(status==='done') task.completed_at=++clock;
+   event(id,'status',{status});
+  },
   /** @param {Record<string,any>} fields */
   task(fields) {
    const at=++clock;
@@ -64,12 +76,13 @@ function kanbanBoard() {
     reasoning_effort:null,max_retries:null,goal_mode:false,goal_max_turns:null,session_id:null,block_kind:null,block_recurrences:0,completion_contract:null,...fields};
    if(task.status==='done'&&task.completed_at==null) task.completed_at=at;
    tasks.push(task);
+   event(task.id,'created',{assignee:task.assignee,status:task.status});
    return task;
   },
   /** @param {string} parent @param {string} child */
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
   /** @param {string} task @param {string} author @param {string} body */
-  comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); },
+  comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
   // GET /board (get_board): every task not archived, in its status's column, each with its link, comment and child counts
   // and its latest Run's summary; the queue columns by priority then age, Done newest finished first.
   board() {
@@ -86,7 +99,7 @@ function kanbanBoard() {
     return {name,tasks:listed};
    });
    return {columns,tenants:[...new Set(tasks.flatMap(task=>task.tenant?[task.tenant]:[]))].sort(),assignees:[...new Set(tasks.flatMap(task=>task.assignee?[task.assignee]:[]))].sort(),
-    latest_event_id:0,now};
+    latest_event_id:events.length,now};
   },
  };
 }
@@ -227,6 +240,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The Engine's default Kanban board (spec #831): its tasks, links and comments, served on the management listener's
   // /api/plugins/kanban routes as the pinned release serves them (plugins/kanban/dashboard/plugin_api.py).
   kanban:kanbanBoard(),
+  // The board's event socket (#840; plugin_api.py stream_events): the one-use tickets POST /api/auth/ws-ticket minted, the
+  // address of each socket opened (`kanbanSockets`, its query included) and how many are open now (`kanbanStreams`).
+  // `kanbanStreamDown` cuts the stream, as an Engine whose dashboard went away: every open socket ends and none opens.
+  socketTickets:/** @type {Map<string,number>} */(new Map()),kanbanSockets:/** @type {string[]} */([]),kanbanStreams:0,kanbanStreamDown:false,
   // What a Routine's run now answers (#182): each run is a cron session of the job's profile, `cron_<id>_<time>`, holding
   // the prompt and this reply, listed newest first by the job's runs route.
   // A function of the job answers each job its own way (#183: the night's results beside the morning's greeting).
@@ -1132,6 +1149,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    // The Kanban board's routes (plugins/kanban/dashboard/plugin_api.py, mounted at /api/plugins/kanban), the default
    // board when no ?board= is named.
    if(url.pathname==='/api/plugins/kanban/board'&&request.method==='GET') return send(response,200,settings.kanban.board());
+   // A one-use ticket for a socket upgrade, 30 seconds (dashboard_auth/routes.py api_auth_ws_ticket), which the board's
+   // event socket takes as `?ticket=` (#840).
+   if(url.pathname==='/api/auth/ws-ticket'&&request.method==='POST') {
+    const ticket=randomUUID().replaceAll('-','');
+    settings.socketTickets.set(ticket,Date.now()+30000);
+    return send(response,200,{ticket,ttl_seconds:30});
+   }
    send(response,404,{detail:'Not Found'});
   });
  };
@@ -1162,6 +1186,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  management.on('upgrade',(request,socket,head)=>{
   const url=new URL(request.url||'/','http://management');
   if(url.pathname==='/api/display/ws') { sockets.handleUpgrade(request,socket,head,ws=>displayStream(ws,url.searchParams.get('display_ticket')??'')); return; }
+  if(url.pathname==='/api/plugins/kanban/events') { boardEvents(request,socket,head,url); return; }
   if(url.pathname!=='/api/ws'||url.searchParams.get('token')!==settings.key) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
   sockets.handleUpgrade(request,socket,head,ws=>{
    // The viewer ids display.observe minted on this connection: acquire and release take only those (methods_display.py
@@ -1224,6 +1249,26 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    });
   });
  });
+ // The board's event stream (plugins/kanban/dashboard/plugin_api.py stream_events): opened with a one-use ticket of
+ // POST /api/auth/ws-ticket, refused otherwise (the gate closes before accepting, which the client reads as a refused
+ // upgrade). It starts at `since`, or at the board's tail when none is sent, and every 300 ms sends the rows after its
+ // cursor, at most 200, as {events, cursor}; messages from the client are ignored.
+ function boardEvents(request,socket,head,url) {
+  const ticket=url.searchParams.get('ticket')??''; const expires=settings.socketTickets.get(ticket); settings.socketTickets.delete(ticket);
+  if(settings.kanbanStreamDown) { socket.destroy(); return; }
+  if(!expires||expires<Date.now()) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+  sockets.handleUpgrade(request,socket,head,ws=>{
+   settings.kanbanSockets.push(url.pathname+url.search); settings.kanbanStreams++;
+   const since=url.searchParams.get('since');
+   let cursor=since!==null&&/^\d+$/.test(since)?Number(since):settings.kanban.events.length;
+   const tail=setInterval(()=>{
+    if(settings.kanbanStreamDown) { ws.terminate(); return; }
+    const rows=settings.kanban.events.filter(row=>row.id>cursor).slice(0,200);
+    if(rows.length) { cursor=rows[rows.length-1].id; ws.send(JSON.stringify({events:rows,cursor})); }
+   },300);
+   ws.on('close',()=>{ clearInterval(tail); settings.kanbanStreams--; });
+  });
+ }
  // The live stream of a Screen (hermes_cli/web_routers/display.py): accepted, then closed with 4401 unless it brings a
  // ticket display.observe minted, unused and under 30 seconds old; with one, raw RFB 3.8 as binary frames from a Screen
  // of 64 by 40 with no password, which answers each full request with one plain picture. Keyboard and pointer messages
