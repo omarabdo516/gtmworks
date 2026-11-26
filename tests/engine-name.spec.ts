@@ -15,9 +15,16 @@ const filePath=/~\/|(?:^|[\s"'(=])(?:\/(?:home|root|Users|opt|var|etc|usr|tmp|da
 // A Company's shared space in the Engine (#122).
 const spaceName=/cs-[0-9a-f]{32}/;
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-// Everything a person can read or hear: the title, the visible text, and labels, placeholders and tooltips.
-const readable=(page:Page)=>page.evaluate(()=>[document.title,document.body.innerText,
- ...[...document.querySelectorAll('[aria-label],[placeholder],[title],[alt]')].flatMap(element=>['aria-label','placeholder','title','alt'].map(name=>element.getAttribute(name)||''))].join('\n'));
+// Everything a person can read or hear: the title, the visible text, and labels, placeholders and tooltips. The one
+// exception is the Owner's Settings row that opens the Engine's own dashboard, called "Hermes" as the dashboard calls
+// itself (spec #866, #869): it is left out while the page is read, and its own test is engine-dashboard.spec.ts.
+const readable=(page:Page)=>page.evaluate(()=>{
+ const row=document.getElementById('sov-nav-hermes'); if(row) row.style.display='none';
+ const text=[document.title,document.body.innerText,
+  ...[...document.querySelectorAll('[aria-label],[placeholder],[title],[alt]')].flatMap(element=>['aria-label','placeholder','title','alt'].map(name=>element.getAttribute(name)||''))].join('\n');
+ if(row) row.style.display='';
+ return text;
+});
 
 test('page titles, the sidebar, Agent pages and the settings overlay never name the Engine, in English or Arabic, and the overlay shows no file path',async({page})=>{
  const agent=randomUUID(), conversation=randomUUID();

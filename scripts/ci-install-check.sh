@@ -1428,6 +1428,16 @@ docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PW
   --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
   -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
   node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
+# The Owner's Hermes dashboard on the pinned Engine (#869): the Owner just made opens its first page, an inner page, its
+# code at both addresses, an API route and a socket through the proxy and gtmworks's gate; a Manager, a Contributor, a
+# Viewer and a signed-out person get the missing page and no socket; no answer holds the Engine's key, given by name;
+# and the Engine still publishes no port on this machine.
+engine_id=$(first_engine_id) || fail 'the first Engine container'
+[[ -n $engine_id ]] && ! publishes_host_port "$engine_id" || fail 'the Engine publishes no host port'
+ENGINE_KEY=$(first_engine_key) docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" \
+  --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) -e ENGINE_KEY \
+  -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e SIGN_IN_EMAIL=proxy-owner@example.com -e SIGN_IN_PASSWORD=proxy-owner-password \
+  node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-engine-dashboard.mjs || { docker logs --tail 80 "$(compose ps -q web)"; fail 'the Owner'"'"'s Hermes dashboard behind the gate on the pinned Engine'; }
 # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
 # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes
 # it only from the install network's bridge gateway, where every connection from this machine arrives from

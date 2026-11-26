@@ -8,11 +8,11 @@ import { messages } from '../lib/i18n.mjs';
 // knowledge; Agents holds Agents, Learning, Recurring tasks and Apps; Engine holds Providers and Usage; Backups, Your
 // account and About stand on their own at the end.
 test('the overlay lists its sections in groups, Backups, Your account and About on their own at the end', () => {
-  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'usage', 'backup', 'account', 'about']);
+  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'usage', 'hermes', 'backup', 'account', 'about']);
   assert.deepEqual(overlayGroups('owner').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [
     ['company', ['company', 'members', 'knowledge']],
     ['agents', ['agents', 'learning', 'routines', 'apps']],
-    ['engine', ['models', 'usage']],
+    ['engine', ['models', 'usage', 'hermes']],
     [null, ['backup', 'account', 'about']],
   ]);
   for (const [key, label] of overlaySections) for (const language of ['en', 'ar']) assert.ok(messages[language][label], `${key}: ${language} label`);
@@ -23,7 +23,7 @@ test('the overlay lists its sections in groups, Backups, Your account and About 
 test('a Viewer sees only the Agents, their account and About; Usage is the Owner’s and the Managers’, in the same order', () => {
   assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account', 'about']);
   assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'account', 'about']);
-  assert.deepEqual(visibleSections('manager').map(([key]) => key), overlaySections.map(([key]) => key).filter(key => key !== 'backup'));
+  assert.deepEqual(visibleSections('manager').map(([key]) => key), overlaySections.map(([key]) => key).filter(key => key !== 'backup' && key !== 'hermes'));
   assert.deepEqual(visibleSections('owner').map(([key]) => key), overlaySections.map(([key]) => key));
   // A group none of whose pages the person may open is not drawn at all.
   assert.deepEqual(overlayGroups('viewer').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [['agents', ['agents']], [null, ['account', 'about']]]);
@@ -38,12 +38,23 @@ test('the breadcrumb names the group of the open page, and nothing for a page on
 });
 
 test('the Owner alone sees Backup (#33)', () => {
-  assert.equal(visibleSections('owner').length, 12);
+  assert.equal(visibleSections('owner').length, 13);
   for (const role of ['manager', 'contributor', 'viewer']) {
     assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
     assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
   }
   assert.equal(pickSection('backup', 'owner'), 'backup');
+});
+
+// #869: the Company's Hermes dashboard is one row in the Engine group, the Owner's alone, and leaves Settings for the
+// dashboard's own path instead of opening a section; a request for it opens no section.
+test('the Hermes row is the Owner\'s alone and leaves Settings for the Company\'s dashboard', () => {
+  for (const role of ['manager', 'contributor', 'viewer']) assert.ok(!visibleSections(role).some(([key]) => key === 'hermes'), role);
+  assert.ok(visibleSections('owner').some(([key]) => key === 'hermes'));
+  assert.equal(overlayHref('rs-learning', 'hermes'), '/c/rs-learning/hermes');
+  for (const role of ['owner', 'manager', 'viewer']) assert.notEqual(pickSection('hermes', role), 'hermes', role);
+  assert.deepEqual(findSections('hermes', 'owner', key => messages.en[key]).map(([key]) => key), ['hermes']);
+  assert.deepEqual(findSections('hermes', 'manager', key => messages.en[key]), []);
 });
 
 test('a request opens the section asked for only when the person may see it, else their first one', () => {
@@ -194,7 +205,7 @@ test('a search keeps the sidebar\'s groups (#612): a group named by the search k
   const en = key => messages.en[key];
   const shape = groups => groups.map(({ group, sections }) => [group, sections.map(([key]) => key)]);
   assert.deepEqual(shape(findGroups('', 'owner', en)), shape(overlayGroups('owner')));
-  assert.deepEqual(shape(findGroups('engine', 'owner', en)), [['engine', ['models', 'usage']]]);
+  assert.deepEqual(shape(findGroups('engine', 'owner', en)), [['engine', ['models', 'usage', 'hermes']]]);
   assert.deepEqual(shape(findGroups('engine', 'contributor', en)), [['engine', ['models']]]);
   assert.deepEqual(shape(findGroups('engine', 'viewer', en)), []);
   assert.deepEqual(shape(findGroups('knowledge', 'owner', en)), [['company', ['knowledge']]]);

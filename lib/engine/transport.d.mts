@@ -19,3 +19,5 @@ export function forgetListeners():void;
 export function engineRequest(connection:ListenerConnection,call:{listener?:EngineListener,path:string,method?:string,headers?:Record<string,string>,body?:unknown,deadline?:number,signal?:AbortSignal,stream?:boolean,key?:string|null,now?:boolean}):Promise<Response>;
 export function engineSocket(connection:ListenerConnection&{key:string},socket:{path:string,search?:Record<string,string>,binary?:boolean}):WebSocket;
 export type HermesConnection={address:string,profile:string,key:string};
+export function engineDashboardRequest(connection:ListenerConnection&{key:string},asked:{method:string,path:string,headers:Record<string,string>,body?:Buffer|null}):Promise<import('node:http').IncomingMessage>;
+export function engineDashboardSocket(connection:ListenerConnection&{key:string},asked:{path:string,headers:Record<string,string>},browser:import('node:stream').Duplex,early:Buffer):Promise<import('node:stream').Duplex|null>;

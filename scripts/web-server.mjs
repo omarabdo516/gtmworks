@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 // gtmworks's web server (#713, ADR 0029): Next.js serves every page and route through its own custom-server API, and
 // this server takes the one WebSocket gtmworks carries itself, the live stream of an Agent's Screen
-// (lib/screen-stream.mjs), on its own address. In development every other upgrade (the hot reload) is Next's, which
+// (lib/screen-stream.mjs), and the sockets of each Company's Hermes dashboard (lib/engine-dashboard.mjs, #869), on its own
+// address. In development every other upgrade (the hot reload) is Next's, which
 // attaches its own handler on the first request and leaves a path it has no route for alone; in production nothing else
 // upgrades, so any other upgrade is ended (screenUpgrades).
 //   node scripts/web-server.mjs [--dev]      PORT (default 3000) names the port.
@@ -23,13 +24,20 @@ const port = Number.parseInt(process.env.PORT ?? '', 10) || 3000;
 const host = standalone ? process.env.HOSTNAME || '0.0.0.0' : undefined;
 const { default: next } = await import('next');
 const { screenStreams, screenUpgrades } = await import('../lib/screen-stream.mjs');
+const { dashboardSockets } = await import('../lib/engine-dashboard.mjs');
 
 const app = next({ dev, dir, port, hostname: host ?? 'localhost' });
 await app.prepare();
 const handle = app.getRequestHandler();
 const server = createServer((request, response) => { void handle(request, response); });
-const upgrade = screenUpgrades({ dev, screen: screenStreams() });
-server.on('upgrade', (request, socket, head) => upgrade(new URL(request.url ?? '/', 'http://gtmworks'), request, socket, head));
+const upgrade = screenUpgrades({ dev, screen: screenStreams(), dashboard: dashboardSockets() });
+// An upgrade this server takes is never seen by Next's own handler, which it attaches to this server on the first
+// request and which ends any upgrade on a path an app route matches (a Company's Hermes dashboard, #869).
+const emit = server.emit;
+server.emit = function (event, ...rest) {
+  if (event === 'upgrade' && upgrade(new URL(rest[0].url ?? '/', 'http://gtmworks'), rest[0], rest[1], rest[2])) return true;
+  return emit.call(this, event, ...rest);
+};
 const keepAlive = Number.parseInt(process.env.KEEP_ALIVE_TIMEOUT ?? '', 10);
 if (Number.isFinite(keepAlive) && keepAlive >= 0) server.keepAliveTimeout = keepAlive;
 server.listen(port, host, () => console.log(`gtmworks is listening on ${host ?? '*'}:${port}${dev ? ' (development)' : ''}`));

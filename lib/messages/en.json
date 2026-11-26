@@ -733,6 +733,8 @@
   "settingsApps": "Apps",
   "settingsRoutines": "Recurring tasks",
   "settingsBackup": "Backups",
+  "settingsHermes": "Hermes",
+  "engineDashboardBack": "Back to gtmworks",
   "settingsAccount": "Your account",
   "settingsCompanySub": "The company name, working alone or with a team, and what every agent can use.",
   "settingsAgentsSub": "Here you see how each agent is set up: its job, apps, rules and memory.",
