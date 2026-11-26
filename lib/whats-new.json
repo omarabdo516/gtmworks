@@ -1,5 +1,11 @@
 [
  {
+  "issue": 863,
+  "date": "2026-11-26",
+  "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },
+  "ar": { "title": "إعدادات الصوت مرة واحدة للشركة كلها", "body": "الإعدادات ← الصوت بتظبط إزاي كل وكيل بيكتب اللي بتمليه: المزوّد والموديل بتاعه، واللغة (تلقائي بيعرف العربي من الإنجليزي)، والأسامي اللي لازم يكتبها صح، وقص السكوت؛ وصفحة كل وكيل مبقاش فيها لغة لوحدها." }
+ },
+ {
   "issue": 862,
   "date": "2026-11-26",
   "en": { "title": "Switching speech-to-text keeps your other keys", "body": "Choosing another speech-to-text provider no longer deletes the key you gave the last one: every provider with a saved key says so, and you switch back to it without pasting the key again." },

@@ -12,6 +12,8 @@ const paths = {
  archive: <><rect x="3.5" y="4.5" width="17" height="4" rx="1"/><path d="M5 8.5v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-10M10 12.5h4"/></>,
  user: <><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></>,
  info: <><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.75v.5"/></>,
+ // The reference's mic (design-reference/app.js, ICONS.mic).
+ mic: <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></>,
  monitor: <><rect x="3.5" y="4.5" width="17" height="11.5" rx="2"/><path d="M9 20h6M12 16v4"/></>,
  x: <path d="M6 6l12 12M18 6L6 18"/>,
  chat: <path d="M4 5.5h16v10.5H9l-5 4z"/>,

@@ -32,7 +32,7 @@ import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
 import { ModelsParts } from './settings-models-parts';
-import { MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, AgentModel } from './settings-lazy';
+import { MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, AgentModel, VoiceSettings } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -112,7 +112,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // Agent's page; another Agent on the Company's shared profile would change the main Agent too, so its About is read only.
  // Its own Skills come from that same profile, each as the Engine lists it, with what it learned on its own (#180), and
  // its standing instructions (#176) are the profile's SOUL.md outside the team's rules section, read for every Role.
- // The Agent's voice is its own profile's settings too (#162): the language it listens in, the voice of its provider and
+ // The Agent's voice is its own profile's settings too (#162): the voice of its provider and
  // the speed, read with the Engine's own defaults. Listen is the Engine speaking with them, asked for from the page.
  // What the Agent may do without asking again (#166): its own Engine profile's standing permissions, with who allowed
  // each, for every Role that sees it. An Engine that cannot be read draws no section, as an empty list does.
@@ -151,6 +151,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id).state} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
+  // Voice is the Owner's and the Managers' (#863): pickSection opens it for no other Role, and only the Owner changes it.
+  :section==='voice'&&canManage?<><Head title={t('settingsVoicePage')} info={t('settingsVoicePageSub')}/><VoiceSettings company={company.id} slug={slug} owner={owner}/></>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning} readAt={readAt}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
@@ -255,7 +257,6 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  // Good morning (#182) is the Owner's and the Managers' on the main Agent's own profile, once the Engine was read.
  const morningEditable=canManage&&morning?.state==='found';
  const morningProps=morning?.state==='found'?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null;
- const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  // The main mark is a row of Identity (#615): the Owner moves it here, and every other Role reads why only the Owner can.
  const mainRow=owner?(isMain?<li className="panel-row" id="set-main"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
    :<MakeMain company={company} agent={agent} current={main?.name||''}/>)
@@ -311,12 +312,11 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
       <AgentModel key={agent.id} company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} choice={agentModel.models.agents[0].choice} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner} readAt={readAt}/>
       <AgentEffort agent={agent.id} effort={agentModel.models.agents[0].effort} editable={effortEditable}/>
      </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}</Group>
-    {/* The Agent's voice (#162): its language and its real voice with Listen; the speed is in Advanced. */}
+    {/* The Agent's voice (#162): its real voice with Listen; the speed is in Advanced. The language it listens in is the
+        Company's, on Settings → Voice (#863). */}
     <Group id="set-h-voice" title={t('settingsVoice')}>
      {voiceEditable?<AgentVoiceField company={company} agent={agent.id} personName={personName} voice={voice}/>
       :<ul className="panel-card">
-       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoiceLang')}</span>
-        <span className="panel-row__d ro-val" id="set-voice-lang-val">{spokenLanguage??'—'}</span></span></li>
        <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoice')}</span>
         <span className="panel-row__d ro-val" id="set-voice-val">{voice?.state==='found'?voice.voiceName??'—':'—'}</span></span></li>
       </ul>}
