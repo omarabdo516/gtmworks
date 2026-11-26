@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { readFileSync } from 'node:fs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, decidePermission } from '../lib/conversation-runs.mjs';
@@ -11,6 +13,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // permission functions (supabase/tests/permission_requests.sql proves the real ones) that records what was asked of it.
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// The Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+engineRecord('co',hermes);
 const conversation='c1000000-0000-0000-0000-000000000001';
 const secret='rm -rf /srv/exports/private-client-list.csv';
 
@@ -21,7 +25,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const service={
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
-   if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
+   if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
    if(name==='track_run_question') return ok([]);
    if(name==='track_run_permission') {
     // What Postgres's jsonb refuses: a NUL, or half of a surrogate pair.
@@ -58,11 +62,11 @@ const asking=(/** @type {{description:string,command:string,choices?:import('../
  return fake;
 };
 const start=async(/** @type {ReturnType<typeof fakeEngine>} */ fake)=>/** @type {string} */(await fake.engineFor({}).start({conversation,input:'Clean up',idempotencyKey:`${conversation}:k`}));
-const close=(/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake)=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+const close=(/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake)=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
 // A press as the route makes it: answered first, its delivery run after the answer (the route's after()).
 const pressOf=(/** @type {any} */ person,/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {import('../lib/engine.mjs').PermissionChoice} */ choice,card=1)=>{
  const later=/** @type {(()=>Promise<void>)[]} */([]);
- return {later,answered:decidePermission(person,service,{company:'co',conversation,card,choice,hermes,engineFor:fake.engineFor,later:deliver=>{ later.push(deliver); }})};
+ return {later,answered:withEngineContract(fake.engineFor,()=>decidePermission(person,service,{company:'co',conversation,card,choice,later:deliver=>{ later.push(()=>withEngineContract(fake.engineFor,deliver)); }}))};
 };
 const decide=async(/** @type {any} */ person,/** @type {any} */ service,/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {import('../lib/engine.mjs').PermissionChoice} */ choice,card=1)=>{
  const {later,answered}=pressOf(person,service,fake,choice,card);
@@ -217,13 +221,13 @@ for(const [label,drive,due,close] of /** @type {const} */([['note',driveNoteRuns
  const run=/** @type {string} */(await fake.engineFor({}).start({conversation:'s',input:'Clean up',idempotencyKey:`${label}:1`}));
  const key=encryptSecret('test-only-key',encryptionKey); const closes=/** @type {any[]} */([]);
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name===due) return {data:closes.length?[]:[{message:1,run,connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected',key_encrypted:key}],error:null};
+  if(name===due) return {data:closes.length?[]:[{message:1,run,company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected',key_encrypted:key}],error:null};
   if(name===close) { closes.push(args); return {data:true,error:null}; }
   return {data:null,error:{message:'unexpected'}};
  }};
- assert.deepEqual(await drive(service,{hermes,engineFor:fake.engineFor}),{started:0,closed:0},'the read that finds the request does not close the Run');
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>drive(service,{})),{started:0,closed:0},'the read that finds the request does not close the Run');
  assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'deny'}]);
- assert.deepEqual(await drive(service,{hermes,engineFor:fake.engineFor}),{started:0,closed:1});
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>drive(service,{})),{started:0,closed:1});
  assert.equal(closes[0].reply,'Reply to: Clean up (deny)');
 });
 
@@ -235,7 +239,7 @@ function channelDatabases(/** @type {ReturnType<typeof fakeEngine>} */ fake,/** 
  /** @type {{id:number,permission:string,content:any,state:string,at:string}[]} */ const requests=[]; const calls=/** @type {[string,any][]} */([]); const closes=/** @type {any[]} */([]);
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
-  if(name==='channel_runs_due') return ok(closes.length?[]:[{message:7,run,connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected',key_encrypted:key}]);
+  if(name==='channel_runs_due') return ok(closes.length?[]:[{message:7,run,company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected',key_encrypted:key}]);
   if(name==='track_channel_permission') {
    for(const each of requests) if(args.ended&&['open','sending'].includes(each.state)||each.state==='open'&&each.permission!==args.asking?.id&&each.at<args.read_started_at) each.state='closed';
    if(args.asking&&!args.ended&&!requests.some(each=>each.permission===args.asking.id)) requests.push({id:requests.length+1,permission:args.asking.id,content:{description:args.asking.description,command:args.asking.command,choices:args.asking.choices},state:'open',at:args.read_started_at});
@@ -260,23 +264,23 @@ test('a channel\'s Run asking to allow an action keeps its request and waits; it
  const fake=asking();
  const run=/** @type {string} */(await fake.engineFor({}).start({conversation:'s',input:'Clean up',idempotencyKey:'channel:7'}));
  const {service,caller,requests,calls,closes}=channelDatabases(fake,run);
- assert.deepEqual(await driveChannelRuns(service,{hermes,engineFor:fake.engineFor}),{started:0,closed:0},'a Run waiting on its caller is running');
- assert.deepEqual(await driveChannelRuns(service,{hermes,engineFor:fake.engineFor}),{started:0,closed:0});
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{})),{started:0,closed:0},'a Run waiting on its caller is running');
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{})),{started:0,closed:0});
  assert.deepEqual(requests.map(({permission,content,state})=>({permission,content,state})),[{permission:`${run}_p1`,content:{description:'delete the old exports',command:secret,choices:['once','always','deny']},state:'open'}]);
  assert.deepEqual(calls.filter(([name])=>name==='track_channel_permission').map(([,args])=>[args.message,args.run,args.run_profile]),[[7,run,'writer'],[7,run,'writer']]);
  assert.deepEqual(fake.permits,[],'nothing is sent before the caller decides');
  const later=/** @type {(()=>Promise<void>)[]} */([]);
- assert.deepEqual(await decideChannelPermission(caller,service,{company:'co',channel:'ch',request:1,choice:'once',hermes,engineFor:fake.engineFor,later:deliver=>{ later.push(deliver); }}),
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>decideChannelPermission(caller,service,{company:'co',channel:'ch',request:1,choice:'once',later:deliver=>{ later.push(()=>withEngineContract(fake.engineFor,deliver)); }})),
   {state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true});
  assert.deepEqual(fake.permits,[],'nothing is sent before the answer');
  assert.equal(later.length,1);
  await later[0]();
  assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'once'}]);
  assert.equal(requests[0].state,'decided');
- assert.deepEqual(await decideChannelPermission(caller,service,{company:'co',channel:'ch',request:1,choice:'deny',hermes,engineFor:fake.engineFor,later:deliver=>{ later.push(deliver); }}),
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>decideChannelPermission(caller,service,{company:'co',channel:'ch',request:1,choice:'deny',later:deliver=>{ later.push(()=>withEngineContract(fake.engineFor,deliver)); }})),
   {state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:false});
  assert.equal(later.length,1,'a press that was not first delivers nothing');
- assert.deepEqual(await driveChannelRuns(service,{hermes,engineFor:fake.engineFor}),{started:0,closed:1});
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{})),{started:0,closed:1});
  assert.equal(closes[0].reply,'Reply to: Clean up (once)');
  assert.equal(fake.permits.length,1,'the choice went once');
 });
@@ -285,7 +289,7 @@ test('a channel\'s request with no words to show is not allowed at once, and not
  const fake=asking([{description:' ',command:''}]);
  const run=/** @type {string} */(await fake.engineFor({}).start({conversation:'s',input:'Clean up',idempotencyKey:'channel:7'}));
  const {service,requests,calls}=channelDatabases(fake,run);
- await driveChannelRuns(service,{hermes,engineFor:fake.engineFor});
+ await withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{}));
  assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'deny'}]);
  assert.deepEqual(requests,[]);
  assert.equal(calls.find(([name])=>name==='track_channel_permission')?.[1].asking,null);
@@ -320,14 +324,14 @@ test('a choice whose delivery fails after the press logs a fixed line, never the
  const fake=asking();
  const run=/** @type {string} */(await fake.engineFor({}).start({conversation:'s',input:'Clean up',idempotencyKey:'channel:7'}));
  const channel=channelDatabases(fake,run);
- await driveChannelRuns(channel.service,{hermes,engineFor:fake.engineFor});
+ await withEngineContract(fake.engineFor,()=>driveChannelRuns(channel.service,{}));
  const chat=databases(fake); await start(fake); await close(chat.service,fake);
  const leaking=Object.assign(new Error(`approval failed for ${secret}`),{code:'XX000'});
  const lines=/** @type {string[]} */([]); const write=console.error;
  console.error=(/** @type {unknown[]} */ ...values)=>{ lines.push(values.map(value=>value instanceof Error?`${value.message} ${value.stack}`:String(value)).join(' ')); };
  try {
   const later=/** @type {(()=>Promise<void>)[]} */([]);
-  await decideChannelPermission(channel.caller,{rpc:async()=>{ throw leaking; }},{company:'co',channel:'ch',request:1,choice:'once',hermes,engineFor:fake.engineFor,later:deliver=>{ later.push(deliver); }});
+  await withEngineContract(fake.engineFor,()=>decideChannelPermission(channel.caller,{rpc:async()=>{ throw leaking; }},{company:'co',channel:'ch',request:1,choice:'once',later:deliver=>{ later.push(()=>withEngineContract(fake.engineFor,deliver)); }}));
   const {later:chatLater,answered}=pressOf(chat.person,{...chat.service,rpc:async()=>{ throw leaking; }},fake,'once');
   await answered;
   for(const deliver of [...later,...chatLater]) await deliver();

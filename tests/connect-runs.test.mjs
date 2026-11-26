@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -11,6 +13,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // call, as the real one does.
 const encryptionKey=Buffer.alloc(32,7).toString('base64');
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['co',]) engineRecord(company,hermes);
 const conversation='c2030000-0000-0000-0000-000000000001';
 
 function database(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
@@ -20,7 +24,7 @@ function database(/** @type {ReturnType<typeof fakeEngine>} */ fake) {
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  return {cards,closed,service:{
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-   if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'ag-writer',state:'connected'})));
+   if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p',company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'ag-writer',state:'connected'})));
    if(name==='track_run_question'||name==='track_run_permission') return ok([]);
    if(name==='agent_show_card') {
     let index=cards.findIndex(card=>card.run===args.run&&card.call===args.call);
@@ -44,7 +48,7 @@ test('a listed app not connected for the Agent keeps one card for its Run and ca
  const {service,cards,closed}=database(fake);
  const runs=[];
  for(const input of Object.keys(asks)) runs.push(await fake.engineFor({}).start({conversation,input,idempotencyKey:`${conversation}:${input}`}));
- const close=()=>closeOpenRuns(/** @type {any} */(service),{hermes,conversation,engineFor:fake.engineFor});
+ const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(/** @type {any} */(service),{conversation}));
  assert.equal(await close(),3);
  assert.equal(await close(),0,'a second close finds nothing open');
  assert.deepEqual(cards,[{run:runs[0],call:'call-0',kind:'connect',title:'Amplitude',content:{app:'amplitude',reason},state:'open'}]);
@@ -61,7 +65,7 @@ test('while the Engine cannot say which apps the Agent has, the Run stays open a
  fake.settings.toolCalls=()=>[{id:'call-0',name:'ask_for_app',arguments:{app:'canva',reason:'For the designs'}}];
  const {service,cards,closed}=database(fake);
  const run=await fake.engineFor({}).start({conversation,input:'Make the post',idempotencyKey:`${conversation}:post`});
- const close=()=>closeOpenRuns(/** @type {any} */(service),{hermes,conversation,engineFor:fake.engineFor});
+ const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(/** @type {any} */(service),{conversation}));
  assert.equal(await close(),0);
  assert.deepEqual([cards,closed.size],[[],0]);
  fake.settings.apps={canva:'attention'};

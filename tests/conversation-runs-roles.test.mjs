@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { sendMessage } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -7,6 +9,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // profile. The run layer stores a Contributor's message as its turn (#764) and its one starter sends it to the install's
 // Hermes on that profile, and a Viewer the database refuses stores nothing and never reaches the engine.
 const hermes = { address: 'http://127.0.0.1:9', key: 'fake-engine-key' };
+// The Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+engineRecord('co', hermes);
 const owners = 'f9000000-0000-0000-0000-000000000001';
 const agent = 'a9000000-0000-0000-0000-000000000001';
 // The person's and the service's calls: the send stores the turn, the starter claims it, pins its run and records it.
@@ -33,12 +37,12 @@ function databases({ refused = false, listed = null } = {}) {
 test('a Contributor\'s message goes to the agent\'s pinned profile, and a refused Viewer reaches no engine', async () => {
   const fake = fakeEngine();
   const contributor = databases();
-  assert.deepEqual(await sendMessage(contributor.db, contributor.service, { company: 'co', conversation: 'c', sendKey: 'k', agent, message: 'Draft the teaser', hermes, engineFor: fake.engineFor }), { conversation: 'c' });
+  assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(contributor.db, contributor.service, {company: 'co',conversation: 'c',sendKey: 'k',agent,message: 'Draft the teaser'})), { conversation: 'c' });
   assert.equal(contributor.queued.length, 1, 'the message is stored as its turn');
   assert.equal(fake.connections.length, 1);
   assert.deepEqual(fake.connections[0], { ...hermes, profile: 'writer' });
   const viewer = databases({ refused: true });
-  assert.deepEqual(await sendMessage(viewer.db, viewer.service, { company: 'co', conversation: 'c', sendKey: 'k', agent, message: 'Draft the teaser', hermes, engineFor: fake.engineFor }), { code: '42501' });
+  assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(viewer.db, viewer.service, {company: 'co',conversation: 'c',sendKey: 'k',agent,message: 'Draft the teaser'})), { code: '42501' });
   assert.equal(viewer.queued.length, 0, 'nothing is stored for the Viewer');
   assert.equal(fake.runs.length, 1, 'the engine was called once, for the Contributor only');
   assert.equal(fake.connections.length, 1, 'no Connection was opened for the Viewer');
@@ -50,7 +54,7 @@ test('a first message after an Agent is picked starts the Conversation with the 
   const main = 'a9000000-0000-0000-0000-000000000001', picked = 'a9000000-0000-0000-0000-000000000002';
   const { db, service, queued, recorded } = databases({ listed: [{ id: main, name: 'Lead', is_default: true }, { id: picked, name: 'Meta Ads', is_default: false }] });
   const fake = fakeEngine();
-  assert.deepEqual(await sendMessage(db, service, { company: 'co', conversation: 'c', sendKey: 'k', agent: picked, message: 'Plan the week', hermes, engineFor: fake.engineFor }), { conversation: 'c' });
+  assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company: 'co',conversation: 'c',sendKey: 'k',agent: picked,message: 'Plan the week'})), { conversation: 'c' });
   assert.deepEqual(queued.map(turn => turn.agent), [picked], 'the picked Agent is the one the Conversation starts with');
   assert.equal(recorded.length, 1);
   assert.equal(fake.runs.length, 1);

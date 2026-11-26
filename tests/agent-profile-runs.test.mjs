@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns } from '../lib/channel-runs.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
@@ -35,7 +36,7 @@ function databases(fake,{profile}) {
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
   if(name==='pin_lead_brief') return {data:null,error:null};
   if(name==='begin_turn_start') return {data:attempt(given.message_key),error:null};
-  if(name==='channel_runs_due') return {data:[{message:7,run:null}],error:null};
+  if(name==='channel_runs_due') return {data:[{message:7,run:null,company}],error:null};
   if(name==='begin_channel_start') return {data:[{attempt:attempt('channel'),company,profile,session:'s',input:'Omar: draft the offer email',instructions:role,rules:[rule]}],error:null};
   if(['send_conversation_message','record_conversation_turn','keep_unknown_start','answer_channel_start'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; });
@@ -47,9 +48,11 @@ function databases(fake,{profile}) {
 async function engineServer(profile) {
  const fake=await fakeHermes();
  fake.settings.profiles.set(profile,{soul:role,provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ // The Company's Engine record names this Engine.
+ engineRecord(company,fake);
  return fake;
 }
-const send=({db,service,hermes})=>sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Draft the offer email',hermes});
+const send=({db,service,hermes})=>sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Draft the offer email'});
 const starts=fake=>fake.settings.requests.filter(request=>request.method==='POST');
 
 test('a message to an Agent on its own profile starts there without its instructions, and its retry sends the same body',async()=>{
@@ -76,8 +79,8 @@ test('a waiting turn of an Agent on its own profile starts there the same way, a
  try {
   const {service,hermes}=databases(fake,{profile:own});
   fake.settings.loseStarts=2;
-  assert.equal(await startQueuedTurns(service,{hermes}),0);
-  assert.equal(await startQueuedTurns(service,{hermes}),1);
+  assert.equal(await startQueuedTurns(service,{}),0);
+  assert.equal(await startQueuedTurns(service,{}),1);
   assert.deepEqual(starts(fake).map(request=>request.path),[`/p/${own}/v1/runs`,`/p/${own}/v1/runs`,`/p/${own}/v1/runs`]);
   assert.equal(fake.settings.runs.length,1);
   const sent=fake.settings.runs[0].instructions;
@@ -93,8 +96,8 @@ test('a channel Run of an Agent on its own profile starts there without its inst
  try {
   const {service,hermes}=databases(fake,{profile:own});
   fake.settings.loseStarts=2;
-  assert.deepEqual(await driveChannelRuns(service,{hermes}),{started:0,closed:0});
-  assert.deepEqual(await driveChannelRuns(service,{hermes}),{started:1,closed:0});
+  assert.deepEqual(await driveChannelRuns(service,{}),{started:0,closed:0});
+  assert.deepEqual(await driveChannelRuns(service,{}),{started:1,closed:0});
   assert.deepEqual(starts(fake).map(request=>request.path),[`/p/${own}/v1/runs`,`/p/${own}/v1/runs`,`/p/${own}/v1/runs`]);
   assert.equal(fake.settings.runs.length,1);
   const sent=fake.settings.runs[0].instructions;
@@ -109,7 +112,7 @@ test('an Agent on Lead\'s profile still has its instructions first in every Run'
  try {
   const databasesOf=databases(fake,{profile:lead});
   assert.deepEqual(await send(databasesOf),{conversation:'c'});
-  await driveChannelRuns(databasesOf.service,{hermes:databasesOf.hermes});
+  await driveChannelRuns(databasesOf.service,{});
   assert.deepEqual(starts(fake).map(request=>request.path),[`/p/${lead}/v1/runs`,`/p/${lead}/v1/runs`]);
   for(const run of fake.settings.runs) assert.ok(run.instructions.startsWith(role),run.instructions);
  } finally { await fake.close(); }

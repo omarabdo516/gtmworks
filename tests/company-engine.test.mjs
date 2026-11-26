@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { engineOf, onProfile } from '../lib/company-engine.mjs';
+import { engineOf } from '../lib/company-engine.mjs';
 import { engineRecord } from '../lib/engine-record.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { readAgentMemory } from '../lib/agent-memory.mjs';
@@ -90,10 +90,6 @@ test('a Company\'s call asks the module for its Engine, and a Company with no re
  // No Engine record for the Company: the module answers null and the call answers `noEngine`.
  assert.equal(await engineOf(company,records({})),null);
  assert.equal((await readAgentMemory(db,{company,agent,hermes:null})).state,'noEngine');
- // A pin the module refuses is still a value, not a throw: another Company's own profile never opens this Company's Engine.
- assert.deepEqual(onProfile(`co-${company.replaceAll('-','')}`,company,hermes)?.profile,`co-${company.replaceAll('-','')}`);
- assert.equal(onProfile(`co-${other.replaceAll('-','')}`,company,hermes),null);
- assert.equal(onProfile(null,company,hermes),null);
 });
 
 test('the record module returns an Engine or nothing, never its ciphertext, and fails closed on a key it cannot decrypt', async () => {

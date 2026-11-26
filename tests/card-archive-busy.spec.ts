@@ -1,4 +1,6 @@
 import { test, expect, type Page } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -47,8 +49,8 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
  try {
   const {service,person}=await memberClient('reviewer@example.com');
-  expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:'Write the June post',hermes,engineFor:fake.engineFor})).toEqual({conversation});
-  expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(0);
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:'Write the June post'}))).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(0);
   // The chat's Card, as its first reply would put it In progress.
   const [{id}]=rows(`insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id) select company_id,id,'Write the June post','${agent}','${conversation}' from public.work_stages where company_id='${company}' and board_column='progress' and kind='before_review' order by position,id limit 1 returning id`);
   const card=Number(id);
@@ -77,9 +79,9 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   expect(rows(`select state from public.reply_cards where conversation_id='${conversation}' and kind='question'`)).toEqual([{state:'closed'}]);
 
   // The worker stops the Run in the Engine, then closes it as stopped: the Card stays archived and asks nothing.
-  await driveHandovers(service,{hermes,engineFor:fake.engineFor});
+  await withEngineContract(fake.engineFor,()=>driveHandovers(service,{}));
   expect(fake.runs.at(-1)!.stopped).toBe(true);
-  expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
+  expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
   expect(rows(`select archived_at is not null as archived from public.work_cards where id=${card}`)).toEqual([{archived:true}]);
   expect(rows(`select count(*)::int as open from public.reply_cards where conversation_id='${conversation}' and state='open'`)).toEqual([{open:0}]);
 
@@ -89,8 +91,8 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   await sheetOf(page).getByRole('region',{name:'Archived'}).getByRole('button',{name:'Restore'}).click();
   await expect(page.locator('.toast')).toContainText('Restored');
   await expect(sheetOf(page).getByRole('region',{name:'Archived'})).toHaveCount(0);
-  await driveHandovers(service,{hermes,engineFor:fake.engineFor});
-  await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  await withEngineContract(fake.engineFor,()=>driveHandovers(service,{}));
+  await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   expect(fake.runs.length).toBe(runs);
   await page.goto(board);
   await expect(page.locator(`#board-cols [data-column="progress"] .kcard[data-card-id="${card}"]`)).toBeVisible();

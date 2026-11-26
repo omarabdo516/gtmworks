@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -10,6 +12,8 @@ import { startUnknown } from '../lib/hermes.mjs';
 // proves the pin, the roles and the Agents a person sees); this reads what reaches the engine, by Role, for a send and
 // for a turn that waited.
 const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['10000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 const company='10000000-0000-0000-0000-000000000001';
 const agent='a9000000-0000-0000-0000-000000000001';
 const conversation='c1000000-0000-0000-0000-000000000001';
@@ -45,7 +49,7 @@ function database({brief,main=true,tools=null}={}) {
  const queued=withTurnQueue(rpc);
  return {db:{rpc:queued,from:()=>chain},service:{rpc:queued,from:()=>chain},calls};
 }
-const send=async({db,service},fake)=>sendMessage(db,service,{company,conversation,sendKey,agent,message:'Do the Meta ads',hermes,engineFor:fake.engineFor});
+const send=async({db,service},fake)=>withEngineContract(fake.engineFor,()=>sendMessage(db,service,{company,conversation,sendKey,agent,message:'Do the Meta ads'}));
 
 test('an Owner\'s Run is told "Make it?" with "Not now", and the team that person sees, beside Lead',async()=>{
  const fake=fakeEngine(); const store=database({brief:briefs.owner});
@@ -85,9 +89,9 @@ test('a retry sends the same pinned brief, read again from the database for the 
   return {...engine,start:async(/** @type {any} */ args)=>{ started.push(args); const run=await engine.start(args); return lose-->0?startUnknown:run; }}; };
  // The first start's answer is lost, so the one starter of turns (#764) asks again with the same key.
  let lose=1;
- assert.deepEqual(await sendMessage(store.db,store.service,{company,conversation,sendKey,agent,message:'Do the Meta ads',hermes,engineFor}),{conversation,queued:true});
+ assert.deepEqual(await withEngineContract(engineFor,()=>sendMessage(store.db,store.service,{company,conversation,sendKey,agent,message:'Do the Meta ads'})),{conversation,queued:true});
  const first=fake.runs[0].instructions;
- assert.equal(await startQueuedTurns(store.service,{hermes,engineFor}),1);
+ assert.equal(await withEngineContract(engineFor,()=>startQueuedTurns(store.service,{})),1);
  assert.equal(started.length,2,'each attempt asks the Engine to start the Run');
  assert.deepEqual(started.map(start=>start.instructions),[first,first],'and both carry the same pinned brief');
  assert.equal(fake.runs.length,1,'the same send key is the same Run');
@@ -105,7 +109,7 @@ test('another Agent\'s Run is told nothing of the person\'s team: the main Agent
 
 test('a Lead Run that waited starts with the same pinned brief',async()=>{
  const fake=fakeEngine(); const store=database({brief:briefs.manager});
- assert.equal(await startQueuedTurns(store.service,{hermes,engineFor:fake.engineFor}),1);
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(store.service,{})),1);
  assert.match(fake.runs[0].instructions,/"Ask Omar for it\?" with the choices "Ask Omar for it" and "Not now"/);
  assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief'),[['pin_lead_brief',{conversation,message_key:sendKey}]]);
 });

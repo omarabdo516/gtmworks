@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { keepReplyFiles, replyFilePath } from '../lib/reply-files.mjs';
 import { shownReply } from '../lib/media-tags.mjs';
+import { engineServing } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 
 // #708, ADR 0028: an Agent hands a file it made in its own work folder by a `MEDIA:` line in its reply. gtmworks reads
 // the file from that folder only, keeps it with the reply in the place's private folder, and takes the tag out of the
@@ -26,7 +28,16 @@ function drivers() {
  const upload=async(path,body,type)=>{ stored.push({path,size:body.byteLength,type}); };
  return {asked,stored,download,upload};
 }
-const keep=(reply,d)=>keepReplyFiles({connection:{address:'http://hermes',key:'test-only-key',profile},place,run:'run_966dd48422f548c4bfc49c01bca5aa9a',reply,download:d.download,upload:d.upload});
+// The profile's handle as the closer holds it: its files capability reads the stand-in work folder above.
+const keep=(reply,d)=>keepReplyFiles({engine:{profile,files:{download:file=>d.download({profile},file)}},place,run:'run_966dd48422f548c4bfc49c01bca5aa9a',reply,upload:d.upload});
+// The Company's Engine on the wire, its Agent's work folder holding the report (tests/fake-hermes.mjs).
+async function workFolder() {
+ const fake=await engineServing(company);
+ fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ fake.settings.files.set(`/opt/data/work/${profile}/report`,[{name:'market.pdf',size:4,mtime:1764000000}]);
+ fake.settings.fileBytes.set(`/opt/data/work/${profile}/report/market.pdf`,{body:new Uint8Array([37,80,68,70]),type:'application/pdf'});
+ return fake;
+}
 
 test('a PDF and a JPG in the Agent\'s own work folder become two files of the reply, and the tags leave its text',async()=>{
  const d=drivers();
@@ -96,8 +107,8 @@ test('a Conversation\'s finished Run is closed with the files its reply hands ov
   storage:{from:bucket=>({upload:async(path,body,options)=>{ uploads.push({bucket,path,type:options.contentType,upsert:options.upsert}); return {error:null}; }})},
  };
  const engine={read:async()=>({state:'completed',reply:`تمام، التقرير أهو.\nMEDIA:/work/${profile}/report/market.pdf\nMEDIA:/opt/data/auth.json`,session:'s1',usage:null,toolCalls:[]})};
- const d=drivers();
- assert.equal(await closeOpenRuns(db,{hermes:{address:'http://hermes',key:'test-only-key'},conversation,engineFor:()=>engine,download:d.download}),1);
+ const fake=await workFolder();
+ try { assert.equal(await withEngineContract(()=>/** @type {any} */(engine),()=>closeOpenRuns(db,{conversation})),1); } finally { await fake.close(); }
  assert.equal(closes.length,1);
  assert.equal(closes[0].reply,'تمام، التقرير أهو.');
  assert.deepEqual(closes[0].missed_files,['auth.json']);
@@ -119,8 +130,8 @@ test('a channel reply is closed with its file, kept in the channel\'s folder for
   storage:{from:()=>({upload:async path=>{ uploads.push(path); return {error:null}; }})},
  };
  const engine={read:async()=>({state:'completed',reply:`MEDIA:/work/${profile}/report/market.pdf`,session:null,usage:null,toolCalls:[]})};
- const d=drivers();
- await driveChannelRuns(service,{hermes:{address:'http://hermes',key:'test-only-key'},engineFor:()=>engine,download:d.download});
+ const fake=await workFolder();
+ try { await withEngineContract(()=>/** @type {any} */(engine),()=>driveChannelRuns(service,{})); } finally { await fake.close(); }
  assert.equal(closes.length,1);
  assert.equal(closes[0].reply,'');
  assert.deepEqual(closes[0].reply_files.map(file=>file.name),['market.pdf']);

@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -8,6 +10,8 @@ import { fakeEngine } from './fake-engine.mjs';
 // starts no Run at all and keeps its images under its turn. The database is a small stand-in
 // (supabase/tests/channel_message_files.sql proves the real rules).
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
+// Each Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+for(const company of ['c1000000-0000-0000-0000-000000000001']) engineRecord(company,hermes);
 const company='c1000000-0000-0000-0000-000000000001';
 const channel='k1000000-0000-0000-0000-000000000001';
 const png='a png, not really: the Engine is given the bytes and its own type';
@@ -61,7 +65,7 @@ function databases({mention=false,attachments=stored,refusePost=false,failUpload
 
 test('a channel message that calls an Agent gives its Run its text and one image part per file',async()=>{
  const fake=fakeEngine(); const stand=databases({mention:true});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{message:7});
  assert.equal(fake.runs.length,1);
  assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'مراجع: Look at these'},imagePart('image/png',Buffer.from(png).toString('base64')),imagePart('image/jpeg',Buffer.from(jpeg).toString('base64'))]}]);
@@ -74,7 +78,7 @@ test('a channel message that calls an Agent gives its Run its text and one image
 
 test('a Run the worker claims right after the post already has the images',async()=>{
  const fake=fakeEngine(); const stand=databases({mention:true});
- await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  // The post did not start the Run; the worker did, after it saw the new message, and both images were already stored.
  assert.equal(stand.postedAfterUploads,2,'both images were written before the message was posted');
  assert.equal(fake.runs.length,1);
@@ -83,7 +87,7 @@ test('a Run the worker claims right after the post already has the images',async
 
 test('a post the database refuses discards the files kept for it and starts no Run',async()=>{
  const fake=fakeEngine(); const stand=databases({mention:true,refusePost:true});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{refused:'channelFailed',status:400});
  assert.deepEqual(stand.uploads,[`${company}/channels/${channel}/q-0`,`${company}/channels/${channel}/q-1`],'the bytes were written first');
  assert.deepEqual(stand.calls.map(([name])=>name),['reserve_channel_files','post_channel_message','discard_channel_files'],'a failed post takes its files with it');
@@ -92,7 +96,7 @@ test('a post the database refuses discards the files kept for it and starts no R
 
 test('a failed upload posts nothing and gives its rows back',async()=>{
  const fake=fakeEngine(); const stand=databases({mention:true,failUpload:true});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{refused:'channelFailed',status:400});
  assert.deepEqual(stand.calls.map(([name])=>name),['reserve_channel_files','discard_channel_files'],'nothing is stored when its bytes cannot be');
  assert.equal(fake.runs.length,0);
@@ -100,7 +104,7 @@ test('a failed upload posts nothing and gives its rows back',async()=>{
 
 test('a retry of a send whose files a stored message already took keeps nothing again and posts the same message',async()=>{
  const fake=fakeEngine(); const stand=databases({alreadyStored:true});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{message:7},'the send goes on to its message, which the send key already stored');
  assert.deepEqual(stand.uploads,[],'a stored send uploads nothing a second time');
  assert.deepEqual(stand.calls.map(([name])=>name).slice(0,2),['reserve_channel_files','post_channel_message']);
@@ -109,7 +113,7 @@ test('a retry of a send whose files a stored message already took keeps nothing 
 
 test('a retry of a stored send whose first upload failed writes the missing image, and never replaces the stored one',async()=>{
  const fake=fakeEngine(); const stand=databases({alreadyStored:true,inStorage:[`${company}/channels/${channel}/q-0`]});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{message:7});
  assert.deepEqual(stand.uploads,[`${company}/channels/${channel}/q-1`],'only the image missing from storage is written');
  assert.deepEqual(stand.removals,[],'nothing of the stored message is removed');
@@ -117,14 +121,14 @@ test('a retry of a stored send whose first upload failed writes the missing imag
 
 test('a storage error while repairing a stored send never stops it reaching its message',async()=>{
  const fake=fakeEngine(); const stand=databases({alreadyStored:true,failUpload:true});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{message:7},'the send goes on to the message its key stored');
  assert.deepEqual(stand.removals,[],'nothing of the stored message is removed');
 });
 
 test('an image-only retry of a stored send answers that message, with its images kept',async()=>{
  const fake=fakeEngine(); const stand=databases({alreadyStored:true});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'',files}));
  assert.deepEqual(sent,{message:7},'the empty retry reaches the message its send key already stored');
  assert.deepEqual(stand.uploads,[],'a stored send uploads its images no second time');
  assert.deepEqual(stand.calls.map(([name])=>name).slice(0,2),['reserve_channel_files','post_channel_message']);
@@ -134,7 +138,7 @@ test('an image-only retry of a stored send answers that message, with its images
 
 test('a failed upload leaves removal to the guarded discard, never to a path it wrote itself',async()=>{
  const fake=fakeEngine(); const stand=databases({failUploadAt:1,discard:[]});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'@Faye look',files}));
  assert.deepEqual(sent,{refused:'channelFailed',status:400});
  assert.deepEqual(stand.uploads,[`${company}/channels/${channel}/q-0`],'the first image was written before the second failed');
  assert.deepEqual(stand.removals,[],'the guarded discard returned no path, so nothing else is removed');
@@ -143,7 +147,7 @@ test('a failed upload leaves removal to the guarded discard, never to a path it 
 
 test('a channel message with images that calls no Agent starts no Run and keeps its files',async()=>{
  const fake=fakeEngine(); const stand=databases({mention:false});
- const sent=await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fake.engineFor});
+ const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'Look at these',files}));
  assert.deepEqual(sent,{message:7});
  assert.equal(fake.runs.length,0,'ordinary talk between Members starts no Run');
  const reserved=stand.calls.find(([name])=>name==='reserve_channel_files')?.[1];
@@ -170,7 +174,7 @@ test('a discard never removes the object a send of the same key kept again befor
   }
   if(name==='discard_channel_files') {
    const gone=rows.map(row=>row.path); rows=[];
-   failing=false; second??=postChannelMessage(db,service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
+   failing=false; second??=withEngineContract(fakeEngine().engineFor,()=>postChannelMessage(db,service,{company,channel,sendKey:'q',message:'Look at these',files}));
    await second;
    return ok(gone);
   }
@@ -184,7 +188,7 @@ test('a discard never removes the object a send of the same key kept again befor
   remove:async(/** @type {string[]} */ paths)=>{ for(const path of paths) { removed.push(path); objects.delete(path); } return {error:null}; },
  })};
  const db={rpc}; const service={rpc,from:read,storage};
- const first=await postChannelMessage(db,service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
+ const first=await withEngineContract(fakeEngine().engineFor,()=>postChannelMessage(db,service,{company,channel,sendKey:'q',message:'Look at these',files}));
  assert.deepEqual(first,{refused:'channelFailed',status:400},'the first send could not store its images');
  assert.deepEqual(await second,{message:7},'the second send of the key stored its message');
  assert.equal(rows.length,2,'its message keeps both rows');
@@ -197,7 +201,7 @@ test('a send gives back only the rows its own keep attempt holds (#727)',async()
  // reserve named, so the database takes this attempt off the rows and gives back only those no other send still holds
  // (supabase/tests/message_files_holders.sql).
  const stand=databases({refusePost:true});
- await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
+ await withEngineContract(fakeEngine().engineFor,()=>postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'Look at these',files}));
  const reserved=stand.calls.find(([name])=>name==='reserve_channel_files')?.[1];
  const discarded=stand.calls.find(([name])=>name==='discard_channel_files')?.[1];
  assert.match(reserved.attempt,/^[0-9a-f-]{36}$/,'the keep names its attempt');

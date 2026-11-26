@@ -1,4 +1,6 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -40,8 +42,8 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${told}','${company}','${omar}','${agent}','Faye')`);
  query(`insert into public.agent_rules(company_id,agent_id,body,said_by,conversation_id,run_id,call_id) values ('${company}','${agent}','Answer in English','${omar}','${told}','channel-rule','call-0')`);
  try {
-  const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
-  const plain=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team',hermes,engineFor:fake.engineFor});
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{channel}));
+  const plain=await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'Morning, team'}));
   expect(plain).toEqual({message:expect.any(Number)});
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
@@ -77,20 +79,20 @@ test('integration: a start whose answer was lost is asked again with the same ke
  try {
   const engine=fake.engineFor({});
   const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser',hermes};
-  const lost=await postChannelMessage(person,service,{...post,engineFor:()=>({...engine,start:async()=>({state:'unknown'} as const)})}) as {message:number};
+  const lost=await withEngineContract(()=>({...engine,start:async()=>({state:'unknown'} as const)}),()=>postChannelMessage(person,service,{...post})) as {message:number};
   expect(lost).toEqual({message:expect.any(Number)});
-  const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{channel}));
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
   // #152: the post's own drive reads the page again after it starts the Run, so it is held open for that read and the
   // next drive closes it.
   fake.settings.pendingReads=1;
-  expect(await postChannelMessage(person,service,{...post,engineFor:fake.engineFor})).toEqual(lost);
+  expect(await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,{...post}))).toEqual(lost);
   expect(fake.runs.map(run=>run.key)).toEqual([`channel:${lost.message}`]);
   expect(await drive()).toEqual({started:0,closed:1});
   expect(repliesTo(lost.message)).toEqual([{author:'agent',author_name:'Faye',body:'Reply to: عمر: @Faye draft the teaser'}]);
 
-  const refused=await postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started',hermes,engineFor:()=>({...engine,start:async()=>null})}) as {message:number};
+  const refused=await withEngineContract(()=>({...engine,start:async()=>null}),()=>postChannelMessage(person,service,{channel,sendKey:randomUUID(),message:'@Faye never started'})) as {message:number};
   expect(runOf(refused.message)).toEqual([{agent_name:'Faye',outcome:'failed'}]);
   expect(await drive()).toEqual({started:0,closed:0});
   expect(repliesTo(refused.message)).toEqual([]);

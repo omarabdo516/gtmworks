@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { randomUUID } from 'node:crypto';
 import { commandList, jobCommandIn } from '../lib/composer-mentions.mjs';
 import { sendMessage } from '../lib/conversation-runs.mjs';
@@ -53,6 +55,8 @@ const lead = 'a9000000-0000-0000-0000-000000000001';
 const reach = 'a9000000-0000-0000-0000-000000000002';
 const faye = 'a9000000-0000-0000-0000-000000000003';
 const hermes = { address: 'http://127.0.0.1:9', key: 'fake-engine-key' };
+// The Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+engineRecord(company, hermes);
 // Who the person sees and what each Agent was made from; the main Agent and the Agents of the four job roles.
 const visible = [
  { id: lead, name: 'Lead', template: null, is_default: true },
@@ -102,7 +106,7 @@ const runsNamed = (calls, name) => calls.filter(call => call[0] === name).map(ca
 
 test('a job command in the main Agent\'s Conversation is handed to the Agent of its role, and the Lead starts no Run', async () => {
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead });
- const send = message => sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message, hermes, engineFor: fake.engineFor });
+ const send = message => withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message}));
  assert.deepEqual(await send('/campaign Launch the December ads'), { conversation });
  assert.deepEqual(runsNamed(calls, 'command_handover'), [{ conversation, c: company, agent: lead, message_key: runsNamed(calls, 'command_handover')[0].message_key, message: '/campaign Launch the December ads', role: 'meta', goal: 'Launch the December ads' }]);
  assert.deepEqual(fake.runs, [], 'no Run of the Lead\'s: the command hands the job over itself');
@@ -112,7 +116,7 @@ test('a job command in the main Agent\'s Conversation is handed to the Agent of 
 
 test('a job command typed in another Agent\'s Conversation runs there once, as typed, and no handoff starts', async () => {
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: faye });
- const send = message => sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message, hermes, engineFor: fake.engineFor });
+ const send = message => withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message}));
  assert.deepEqual(await send('/campaign Launch the December ads'), { conversation });
  assert.deepEqual(fake.runs.map(run => run.input), ['/campaign Launch the December ads']);
  assert.equal(fake.runs.length, 1, 'one Run per message, and no Run for the Agent the command names elsewhere');
@@ -123,7 +127,7 @@ test('a job command typed in another Agent\'s Conversation runs there once, as t
 test('a command with no job after it, or one no Agent of the Company was made from, is sent as plain text', async () => {
  // A bare command names no job to hand over, and /report's role has no Agent here: both go to the Lead as typed.
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead });
- const send = message => sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message, hermes, engineFor: fake.engineFor });
+ const send = message => withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message}));
  assert.deepEqual(await send('/campaign '), { conversation });
  assert.deepEqual(await send('/report last week by channel'), { conversation });
  assert.deepEqual(fake.runs.map(run => run.input), ['/campaign ', '/report last week by channel']);
@@ -134,7 +138,7 @@ test('a job command handed over but refused by the database falls back to the Co
  // The Agent the command names is hidden from this person, or has no profile: the command is no handover, and the
  // message is sent as typed rather than lost.
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead, handed: false });
- assert.deepEqual(await sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message: '/campaign Launch the December ads', hermes, engineFor: fake.engineFor }), { conversation });
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message: '/campaign Launch the December ads'})), { conversation });
  assert.deepEqual(fake.runs.map(run => run.input), ['/campaign Launch the December ads']);
  assert.deepEqual(runsNamed(calls, 'queue_conversation_turn').map(({ agent }) => agent), [lead]);
 });
@@ -143,7 +147,7 @@ test('a job command typed in a new chat where it is not listed goes to the chat\
  // No Agent was made from numbers in this Company, so /report is not one of its Commands; the message still runs, as
  // typed, on the Agent the new chat was opened with.
  const fake = fakeEngine(); const { db, service, calls } = databases({ chosen: lead });
- const sent = await sendMessage(db, service, { company, conversation, sendKey: randomUUID(), agent: lead, message: '/report last week by channel', hermes, engineFor: fake.engineFor });
+ const sent = await withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),agent: lead,message: '/report last week by channel'}));
  assert.deepEqual(sent, { conversation });
  assert.deepEqual(fake.runs.map(run => run.input), ['/report last week by channel']);
  assert.deepEqual(runsNamed(calls, 'queue_conversation_turn').map(({ agent, message }) => [agent, message]), [[lead, '/report last week by channel']]);
@@ -204,14 +208,14 @@ test('on the fake engine a command sent to the Lead hands the job over, and the 
  // A long article keeps its whole reply in the chat, past the summary a #317 handover carries.
  const fake = fakeEngine(); fake.settings.reply = input => `Reach did it: ${input.split('\n').at(-1)}`.padEnd(9000,' .');
  const { db, service, kept } = handedDatabases(); const sendKey = randomUUID();
- assert.deepEqual(await sendMessage(db, service, { company, conversation, sendKey, message: '/campaign Launch the December ads', hermes, engineFor: fake.engineFor }), { conversation });
+ assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey,message: '/campaign Launch the December ads'})), { conversation });
  assert.deepEqual(kept.message, { author: 'person', body: '/campaign Launch the December ads', run_id: `command:${sendKey}` });
  assert.deepEqual([kept.handover.from, kept.handover.to, kept.handover.goal], [lead, reach, 'Launch the December ads'], 'the handoff row: the Lead to the Agent of /campaign\'s role, with the job');
  assert.deepEqual(fake.runs, [], 'the Lead starts no Run: the command hands the job over itself');
  // The worker moves the handover: the target's job in a session of its own for this chat, then its reply kept as the
  // chat's message from it.
- await driveHandovers(service, { hermes, engineFor: fake.engineFor });
- await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ await withEngineContract(fake.engineFor,()=>driveHandovers(service, {}));
+ await withEngineContract(fake.engineFor,()=>driveHandovers(service, {}));
  assert.deepEqual(fake.runs.map(run => [run.conversation, run.input]), [[`d9000000-0000-0000-0000-000000000001`, 'The job:\nLaunch the December ads']]);
  assert.deepEqual(kept.agentMessage, { author: 'agent', agent_id: reach, author_name: 'Reach', body: `Reach did it: Launch the December ads`.padEnd(9000,' .'), run: fake.runs[0].id }, 'the reply comes from that Agent, in this chat, whole');
  assert.deepEqual(kept.end, { run: `command:${sendKey}`, outcome: 'completed' }, 'and the person\'s own message stops waiting');

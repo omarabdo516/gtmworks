@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { supabaseConfig } from '@/lib/supabase-config';
-import { engineOf, onProfile } from '@/lib/company-engine.mjs';
-import { engineFor } from '@/lib/engine.mjs';
+import { companyEngine } from '@/lib/engine/handle.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { liveLines, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
 
-// While an Agent works, its reader sees each step live (#646): the open Run of a Conversation or a channel, as the
-// database names it to this reader (conversation_live_run, channel_live_run), and that Run's tool calls as the Engine
-// streams them (the engine contract's `steps`), passed on one line of JSON per view (lib/live-steps.mjs) until the Run's
-// events end or the reader goes. Nothing of it is kept or logged. With no Run working, or no Engine to read, the only
-// line is the end, and the page keeps its "Thinking" line (#763).
-const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
 const refuse=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});
@@ -37,9 +28,8 @@ export async function GET(request:NextRequest) {
   const {data}=conversation?await db.rpc('conversation_live_run',{conversation}):await db.rpc('channel_live_run',{ch:channel});
   const target=(data as {run:string,profile:string}[]|null)?.[0];
   if(!target) return only({end:'none'});
-  const connection=onProfile(target.profile,company,await engineOf(company,service()));
-  const read=connection&&engineFor(connection).steps;
-  if(!connection||!read) return only({end:'unreachable'});
+  const read=(await companyEngine(company))?.on(target.profile)?.runs.steps;
+  if(!read) return only({end:'unreachable'});
   const stopped=new AbortController();
   request.signal.addEventListener('abort',()=>stopped.abort(),{once:true});
   const lines=liveLines(target.run,read(target.run,{signal:stopped.signal}))[Symbol.asyncIterator]();

@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import { engineRecord } from './engine-records.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -37,7 +39,12 @@ function databases({pinned,attempt=1,address='http://hermes:8642',held=note}) {
  const service={rpc:queued,from:()=>chain({instructions:null})};
  return {db,service,asked,hermes:{address,key:'test-only-key'}};
 }
-const send=(/** @type {ReturnType<typeof databases>} */ {db,service,hermes},/** @type {object} */ engine)=>sendMessage(db,service,{company:'co',conversation:'c',sendKey:'k',message:'Draft the offer email',hermes,...engine});
+// The Company's Engine record names the databases' Engine; a fake of the contract, when given, answers for it.
+const send=(/** @type {ReturnType<typeof databases>} */ {db,service,hermes},/** @type {{engineFor?:any}} */ engine)=>{
+ engineRecord('co',hermes);
+ const run=()=>sendMessage(db,service,{company:'co',conversation:'c',sendKey:'k',message:'Draft the offer email'});
+ return engine.engineFor?withEngineContract(engine.engineFor,run):run();
+};
 
 test('a later run of the Agent carries no rule, only its sender\'s note, and its retry sends the same',async()=>{
  const fake=fakeEngine(); const starts=/** @type {object[]} */([]);
@@ -55,7 +62,8 @@ test('a later run of the Agent carries no rule, only its sender\'s note, and its
 
 test('a queued turn starts with no rules either',async()=>{
  const fake=fakeEngine(); const {service}=databases({pinned:{tools:[],rules}});
- assert.equal(await startQueuedTurns(service,{hermes,engineFor:fake.engineFor}),1);
+ engineRecord('co',hermes);
+ assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(service,{})),1);
  assert.ok(rules.every(rule=>!fake.runs[0].instructions?.includes(rule)));
  assert.deepEqual(fake.runs[0].tools,[]);
 });
@@ -65,7 +73,7 @@ test('a run of an Agent with no rules is told none and offered only what was pin
  await send(quiet,{engineFor:fake.engineFor});
  assert.equal(fake.runs[0].instructions,null);
  assert.deepEqual(fake.runs[0].tools.map(tool=>tool.name),['create_agent','save_rule']);
- await sendMessage(quiet.db,{...quiet.service,rpc:async(/** @type {string} */ name,/** @type {any} */ given)=>name==='pin_run'?{data:null,error:null}:quiet.service.rpc(name,given)},{company:'co',conversation:'c',sendKey:'k2',message:'Hi',hermes,engineFor:fake.engineFor});
+ await withEngineContract(fake.engineFor,()=>sendMessage(quiet.db,{...quiet.service,rpc:async(/** @type {string} */ name,/** @type {any} */ given)=>name==='pin_run'?{data:null,error:null}:quiet.service.rpc(name,given)},{company:'co',conversation:'c',sendKey:'k2',message:'Hi'}));
  assert.deepEqual([fake.runs[1].instructions,fake.runs[1].tools],[null,[]]);
 });
 

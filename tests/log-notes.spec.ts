@@ -1,4 +1,6 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -105,7 +107,7 @@ test('integration: a note that calls an Agent starts one Run on the fake engine,
   const hidden=await write('@Secret look at this');
   const note=await write('@Faye draft the teaser');
   expect(rows(`select note_id,agent_name from public.note_runs where note_id in (${hidden},${note}) order by note_id`)).toEqual([{note_id:note,agent_name:'Faye'}]);
-  const drive=()=>driveNoteRuns(service,{hermes,engineFor:fake.engineFor,message:note});
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveNoteRuns(service,{message:note}));
   await Promise.all([drive(),drive()]);
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`note:${note}`,input:'مدير: @Faye draft the teaser'}]);
   // The writer keeps the Card open while Faye works; her reply shows there without a reload.

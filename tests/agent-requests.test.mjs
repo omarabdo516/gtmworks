@@ -1,14 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { answerRequest } from '../lib/agent-requests.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 const company='10000000-0000-0000-0000-000000000001';
 const profile='co-10000000000000000000000000000001';
+// The Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
+engineRecord(company,{address:'http://127.0.0.1:9',key:'install-key'});
 function harness(/** @type {{error?:{code:string,message:string}|null,data?:unknown,target?:unknown}} */ {error=null,data='made',target={profile}}={}) {
  const fake=fakeEngine(); const rpcs=/** @type {[string,object][]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {object} */ args)=>{ rpcs.push([name,args]); return name==='company_engine_target'?{data:target?[target]:[],error:null}:{data:error?null:data,error}; }};
- const answer=(/** @type {{make:boolean,reason?:string|null}} */ given)=>answerRequest(db,{company,request:7,hermes:{address:'http://127.0.0.1:9',key:'install-key'},engineFor:connection=>fake.engineFor(connection),...given});
+ const answer=(/** @type {{make:boolean,reason?:string|null}} */ given)=>withEngineContract(connection=>fake.engineFor(connection),()=>answerRequest(db,{company,request:7,...given}));
  return {fake,rpcs,answer};
 }
 

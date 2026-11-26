@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord } from './engine-records.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
@@ -133,25 +134,27 @@ function runDatabases(fake,{history}) {
 
 test('a Run of a moved Agent\'s Conversation carries its record as the Run\'s history, sent now or waiting, and its retry the same body',async()=>{
  const fake=await fakeHermes();
+ engineRecord(company,fake);
  try {
   const {db,service}=runDatabases(fake,{history:record});
   fake.settings.loseStarts=2;
-  const send=()=>sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Next draft',hermes:{address:fake.address,key:fake.settings.key}});
+  const send=()=>sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Next draft'});
   assert.deepEqual(await send(),{conversation:'c',queued:true});
   assert.deepEqual(await send(),{conversation:'c'});
   assert.equal(fake.settings.runs.length,1,'the retry sent the same body, so it was the same run');
   assert.deepEqual(fake.settings.runs[0].history,record);
   assert.deepEqual(fake.settings.requests.filter(request=>request.method==='POST').map(request=>request.path),Array(3).fill(`/p/${own(writer)}/v1/runs`));
-  assert.equal(await startQueuedTurns(service,{hermes:{address:fake.address,key:fake.settings.key}}),1);
+  assert.equal(await startQueuedTurns(service,{}),1);
   assert.deepEqual(fake.settings.runs[1].history,record);
  } finally { await fake.close(); }
 });
 
 test('a Run with no history pinned sends the body it sent before',async()=>{
  const fake=await fakeHermes();
+ engineRecord(company,fake);
  try {
   const {db,service}=runDatabases(fake,{history:null});
-  assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Next draft',hermes:{address:fake.address,key:fake.settings.key}}),{conversation:'c'});
+  assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Next draft'}),{conversation:'c'});
   // No history: the message, and how its Agent hands a file in its reply (#708), as every Run carries.
   assert.deepEqual(JSON.parse(/** @type {string} */(fake.settings.runs[0].body)),{input:'Next draft',instructions:`To give the person a file you made (a PDF, an image, a spreadsheet, a page, any kind of file), save it in your work folder (/work/${own(writer)}) and put its full path on a line of its own in your reply, as MEDIA:/work/${own(writer)}/<path to the file>. gtmworks attaches that file to your reply for the person to open and download, whatever its kind, up to 25 MB; this replaces any other note you have on which files come through. Never convert a file into images to send it, and write no other path to it in your reply. Only files inside your own work folder can be attached.`});
  } finally { await fake.close(); }

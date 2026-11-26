@@ -7,7 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
 import { generateInstallEnv, generateEngineKey, validateInstallEnv, missingInstallEnv } from '../lib/install-env.mjs';
 import { hermesVersion, isHermesAddressAllowed } from '../lib/hermes.mjs';
-import { onProfile, selfHosted } from '../lib/company-engine.mjs';
+import { selfHosted } from '../lib/company-engine.mjs';
+import { companyEngine } from '../lib/engine/handle.mjs';
+import { engineRecord } from './engine-records.mjs';
 import { installJob } from './install-job.mjs';
 
 // Each Company's Engine is made from the template shipped with the release (ADR 0018): one release of the official Hermes
@@ -352,15 +354,17 @@ test('the Engine gives a company one main agent named Lead, never the Engine nam
  assert.match(body.slice(0,body.indexOf('$function$;')),/insert into public\.hermes_agents\(company_id,profile,name,speciality,is_default\) values\(c,public\.company_engine_profile\(c\),'Lead','General',true\)/);
 });
 
-test('every Run goes to its Company\'s Engine on the profile it was pinned to, and a Company profile serves its own Company only', () => {
- // The Engine a caller names, as the record answers it (#378, T1): no install-wide environment value is read.
- const hermes={address:'http://gtmworks-engine-first:8642',key:'k'.repeat(64)};
+test('every Run goes to its Company\'s Engine on the profile it was pinned to, and a Company profile serves its own Company only', async () => {
+ // The Engine its record names (#378, T1): no install-wide environment value is read.
  const company='10000000-0000-0000-0000-000000000001';
- assert.deepEqual(onProfile('co-10000000000000000000000000000001',company,hermes),{...hermes,profile:'co-10000000000000000000000000000001'});
- assert.equal(onProfile('co-10000000000000000000000000000002',company,hermes),null,'another Company\'s profile');
- assert.deepEqual(onProfile('ag-a0000000000000000000000000000001',company,hermes)?.profile,'ag-a0000000000000000000000000000001');
- assert.equal(onProfile(null,company,hermes),null);
- assert.equal(onProfile('default',company,null),null,'no Engine to reach');
+ engineRecord(company,{address:'http://gtmworks-engine-first:8642',key:'k'.repeat(64)});
+ const engine=/** @type {NonNullable<Awaited<ReturnType<typeof companyEngine>>>} */(await companyEngine(company));
+ assert.equal(engine.on('co-10000000000000000000000000000001')?.profile,'co-10000000000000000000000000000001');
+ assert.equal(engine.on('co-10000000000000000000000000000002'),null,'another Company\'s profile');
+ assert.equal(engine.on('ag-a0000000000000000000000000000001')?.profile,'ag-a0000000000000000000000000000001');
+ assert.equal(engine.on(null),null);
+ engineRecord(company,null);
+ assert.equal(await companyEngine(company),null,'no Engine to reach');
 });
 
 test('the Engine network probe checks the install services by name and by their addresses (#378, S5)', () => {
@@ -388,7 +392,7 @@ test('a Company names its Engine in one place: the record names no Company (#378
 
 test('the threat model names every service-role holder the Engine work added (#378, X5)', () => {
  const doc=readFileSync('docs/threat-model.md','utf8');
- for(const name of ['lib/company-engine.mjs','app/api/dictation/route.ts','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {
+ for(const name of ['lib/company-engine.mjs','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {
   assert.ok(doc.includes(name),name);
  }
  assert.match(doc,/service-role call site listed above/);

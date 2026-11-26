@@ -4,8 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { answerQuestion, closeOpenRuns, decidePermission, retryTurn, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
-import { engineOf, onProfile } from '@/lib/company-engine.mjs';
-import { engineFor } from '@/lib/engine.mjs';
+import { companyEngine } from '@/lib/engine/handle.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { readModelAccess, offeredModels, modelEnabled } from '@/lib/provider-models.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -175,8 +174,7 @@ async function models(db:Database,person:string,company:string,conversation:stri
  const {data:found}=await db.from('conversations').select('model,hermes_agents(profile)').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
  const pinned=(found?.hermes_agents as {profile?:string}|null)?.profile;
  if(!found||!pinned) return refuse('conversationNotFound',404);
- const connection=onProfile(pinned,company,await engineOf(company,service()));
- const read=connection&&await engineFor(connection).models?.()||{state:'unreachable',current:null,models:[]};
+ const read=await (await companyEngine(company))?.on(pinned)?.models.read()||{state:'unreachable',current:null,models:[]};
  // Only the models a Provider of the Company has switched on, each once (#620).
  const access=read.state==='found'?await readModelAccess(db,{company}).catch(()=>null):null;
  return reply({state:read.state,models:offeredModels(read.models,access),current:found.model??read.current});

@@ -1,4 +1,6 @@
 import { test, expect } from './fresh-seed';
+import { withEngineContract } from '../lib/engine/handle.mjs';
+import './spec-engine-records';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -54,9 +56,9 @@ test('integration: a pending request is one item with its Agent and what it asks
  try {
   const {service,person}=await memberClient('reviewer@example.com');
   const conversation=randomUUID();
-  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   const send=async(word:string)=>{
-   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:`Clean up the ${word}`,hermes,engineFor:fake.engineFor})).toEqual({conversation});
+   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:`Clean up the ${word}`}))).toEqual({conversation});
    expect(await close()).toBe(0);
    // A chat with no Card: its request is an item of its own (one with a Card is drawn as that Card, #146).
    query(`update public.work_cards set conversation_id=null where conversation_id='${conversation}'`);
@@ -142,8 +144,8 @@ test('integration: in a channel the request sits under the Agent\'s turn; the Me
  try {
   const caller=await memberClient('reviewer@example.com');
   const manager=await memberClient('manager@example.com');
-  const drive=()=>driveChannelRuns(caller.service,{hermes,channel:general,engineFor:fake.engineFor});
-  const sent=await postChannelMessage(caller.person,caller.service,{channel:general,sendKey:randomUUID(),message:'@Faye Clean up the exports',hermes,engineFor:fake.engineFor}) as {message:number};
+  const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(caller.service,{channel:general}));
+  const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(caller.person,caller.service,{channel:general,sendKey:randomUUID(),message:'@Faye Clean up the exports'})) as {message:number};
   expect(await drive()).toEqual({started:0,closed:0});
   const [{id:request}]=JSON.parse(query(`select id from public.channel_permissions where message_id=${sent.message}`)) as {id:number}[];
 
