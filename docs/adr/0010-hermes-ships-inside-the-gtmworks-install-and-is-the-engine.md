@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0033
 ---
 
 # Hermes ships inside the gtmworks install and is the engine
+
+[ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): the engine contract this record keeps ends; gtmworks talks to Hermes directly.
 
 Omar's decision of 2026-11-11, ticket #282. This supersedes the Codex and Claude Code drivers planned in [ADR 0009](0009-conversations-run-on-engines-behind-one-engine-contract.md). The engine contract of ADR 0009 stays; Hermes is its driver.
 
