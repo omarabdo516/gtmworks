@@ -3,6 +3,7 @@ import { signIn } from './sign-in';
 import { idle } from './navigation-measure';
 import { asAdmin } from './slow-reads';
 import { design, differences, expected, placements, split, type Language, type Theme } from './design-components';
+import { laneHermes } from './lane-hermes';
 
 // Every component DESIGN.md names is drawn with its values (#808): its background, text colour, radius, padding, height,
 // shadow and font, read from the computed styles where a screen of the seed draws it, in light and dark, in English and
@@ -11,7 +12,16 @@ const omar = '20000000-0000-0000-0000-000000000001';
 const languages: Language[] = ['en', 'ar'];
 const themes: Theme[] = ['light', 'dark'];
 
-test.afterAll(() => asAdmin(`update public.people set language='en' where id='${omar}'`));
+// The board is the Company's Engine's own Kanban board (spec #831): its tile is drawn from a Card on the fake Engine.
+let fake: Awaited<ReturnType<typeof laneHermes>>;
+test.beforeAll(async () => {
+  fake = await laneHermes();
+  fake.settings.kanban.task({ title: 'Weekly report for the team', status: 'ready' });
+});
+test.afterAll(async () => {
+  asAdmin(`update public.people set language='en' where id='${omar}'`);
+  await fake?.close();
+});
 
 test('every component DESIGN.md names has a place on a screen, and only those', () => {
   expect(Object.keys(placements).sort()).toEqual(Object.keys(design.components).sort());

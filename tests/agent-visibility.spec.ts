@@ -2,6 +2,7 @@ import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn, openNavigation } from './sign-in';
+import { laneHermes } from './lane-hermes';
 import { faceAnimations, faceParts, faceTransitions } from './navigation-measure';
 
 // #15, which Agents each Member sees: the Owner turns a switch in Company settings, and the Contributor (مراجع) finds
@@ -101,61 +102,37 @@ test('a switch\'s thumb springs to the end side and fades its colour, in English
  }
 });
 
-// #190: the board's chips and Cards follow the same switches. Meta Ads is shown to the Contributor again, SEO to
-// nobody; SEO, then Meta Ads, wrote on the Meta Ads Card. The Manager (مدير) holds an approval on an SEO Card, which
-// the board leaves out, so no count names it. The board's read itself is proven in supabase/tests/board_cards.sql.
-test('the board shows a Member chips and Cards of the Agents they see only, and a Viewer filters by them too',async({page,browser})=>{
- query(`do $$ declare stage bigint; card bigint; step bigint; review bigint; begin
+// #190 on the Engine's own board (spec #831, #834): a Card given to an Agent hidden from a reader is not on their board.
+// Meta Ads is shown to the Contributor again, SEO to nobody; each Agent runs on its own Engine profile, and the fake
+// Engine holds one Card for each. The read through the handle is proven in company-board.test.mjs.
+test('the board shows a Member the Cards of the Agents they see only, a Viewer too',async({page,browser})=>{
+ query(`do $$ begin
   update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000003','${ads}') on conflict do nothing;
-  select id into stage from public.work_stages where company_id='${company}' and board_column='ideas' order by position limit 1;
-  insert into public.work_cards(company_id,stage_id,title,channel,agent_id) values
-   ('${company}',stage,'Lead plans the month','Instagram','${lead}'),('${company}',stage,'SEO drafts the blog','Blog','${seo}');
-  insert into public.work_cards(company_id,stage_id,title,channel,agent_id) values ('${company}',stage,'Ads runs the launch','Meta','${ads}') returning id into card;
-  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,body,source,source_id,created_at) values
-   ('${company}','${seo}','agent','SEO','card',card,'${seo}','note_reply','Keywords','note_runs',9190101,now()-interval '2 hours'),
-   ('${company}','${ads}','agent','Meta Ads','card',card,'${ads}','note_reply','Audience','note_runs',9190102,now()-interval '1 hour');
-  perform set_config('approval.internal','yes',true);
-  insert into public.approval_steps(company_id,name,position,person_id) values ('${company}','Manager',9,'20000000-0000-0000-0000-000000000002') returning id into step;
-  select id into review from public.work_stages where company_id='${company}' and kind='review' order by position limit 1;
-  insert into public.work_cards(company_id,stage_id,title,channel,agent_id,approval_step_id,review_entered_at) values ('${company}',review,'SEO waits for the Manager','Blog','${seo}',step,now());
-  perform set_config('approval.internal','',true);
+  insert into public.agent_profiles(agent_id,company_id) values ('${lead}','${company}'),('${ads}','${company}'),('${seo}','${company}') on conflict do nothing;
+  update public.hermes_agents set profile=public.agent_engine_profile(id) where id in ('${lead}','${ads}','${seo}');
+  insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','co-${company.replaceAll('-','')}',true)
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
  end $$;`);
- const chips=(on:typeof page)=>on.getByRole('group',{name:'Filter by agent'}).getByRole('button');
- const card=(on:typeof page,title:string)=>on.locator('#board-cols .kcard').filter({hasText:title});
-
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- await expect(chips(page)).toHaveText(['All','Lead','Meta Ads','SEO']);
- await expect(card(page,'Ads runs the launch').locator('.kcard__crew-t')).toHaveText('Worked on it: SEO, Meta Ads');
- await expect(page.getByRole('link',{name:'Ads runs the launch · Worked on it: SEO, Meta Ads',exact:true})).toBeVisible();
- await expect(card(page,'Lead plans the month').locator('.kcard__crew')).toHaveCount(0);
- await expect(card(page,'SEO waits for the Manager')).toHaveCount(1);
-
- for(const [email,seen] of [['reviewer@example.com',['All','Lead','Meta Ads']],['viewer@example.com',['All','Lead']]] as [string,string[]][]) {
-  const context=await browser.newContext(); const member=await context.newPage();
-  try {
-   await signIn(member,email,'/c/rs-learning/work/board');
-   await expect(chips(member)).toHaveText(seen);
-   await expect(card(member,'Lead plans the month')).toHaveCount(1);
-   await expect(card(member,'SEO drafts the blog')).toHaveCount(0);
-   await expect(card(member,'Ads runs the launch')).toHaveCount(seen.includes('Meta Ads')?1:0);
-   await expect(card(member,'Ads runs the launch').locator('.kcard__crew')).toHaveCount(0);
-   const leadChip=chips(member).filter({hasText:'Lead'});
-   await leadChip.click();
-   await expect(leadChip).toHaveAttribute('aria-pressed','true');
-   await expect(leadChip).toBeFocused();
-   await expect(member.locator('#board-cols .kcard')).toHaveText([/Lead plans the month/]);
-   await chips(member).filter({hasText:'All'}).click();
-   await expect(card(member,'Lead plans the month')).toHaveCount(1);
-  } finally { await context.close(); }
- }
-
- const context=await browser.newContext(); const manager=await context.newPage();
+ const fake=await laneHermes();
  try {
-  await signIn(manager,'manager@example.com','/c/rs-learning/work/board');
-  await expect(chips(manager)).toHaveText(['All','Lead']);
-  await expect(card(manager,'SEO waits for the Manager')).toHaveCount(0);
-  await expect(manager.locator('.board-tools__summary')).toHaveText('Nothing waiting on you');
-  await expect(manager.locator('.sb-count')).toHaveAccessibleName('Nothing waiting on you');
- } finally { await context.close(); }
+  const profileOf=(agent:string)=>`ag-${agent.replaceAll('-','')}`;
+  fake.settings.kanban.task({title:'Lead plans the month',status:'triage',assignee:profileOf(lead)});
+  fake.settings.kanban.task({title:'Ads runs the launch',status:'running',assignee:profileOf(ads)});
+  fake.settings.kanban.task({title:'SEO drafts the blog',status:'ready',assignee:profileOf(seo)});
+  const titles=(on:typeof page)=>on.locator('#board-cols .kcard .kcard__title');
+  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  await expect(titles(page)).toHaveText(['Lead plans the month','SEO drafts the blog','Ads runs the launch']);
+  for(const [email,seen] of [['reviewer@example.com',['Lead plans the month','Ads runs the launch']],['viewer@example.com',['Lead plans the month']],['manager@example.com',['Lead plans the month']]] as [string,string[]][]) {
+   const context=await browser.newContext(); const member=await context.newPage();
+   try {
+    await signIn(member,email,'/c/rs-learning/work/board');
+    await expect(titles(member)).toHaveText(seen);
+    // Nor does the board's own answer hold a hidden Agent's Card or name.
+    const answer=await (await member.request.get(`/api/board?company=${company}`)).text();
+    expect(answer).not.toContain('SEO drafts the blog');
+    expect(answer).not.toContain('"SEO"');
+   } finally { await context.close(); }
+  }
+ } finally { await fake.close(); }
 });

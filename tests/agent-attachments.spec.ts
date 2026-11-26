@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { appOrigin } from './lane.mjs';
+import { oldCard } from './old-card';
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // A real 1 x 1 PNG: the page must show it.
@@ -35,28 +36,16 @@ async function reply(page:Page,text:string) {
  return thumbnail(page,text);
 }
 
-test('a file attached in the composer and in a reply shows as a thumbnail, in both languages',async({page})=>{
+test('a file attached to a reply on a Card shows as a thumbnail, in both languages',async({page})=>{
  await mkdir('test-results/screenshots',{recursive:true});
  const stamp=Date.now();
- await signIn(page,'omar@example.com','/c/rs-learning/work/new');
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  try {
-  // The composer in both languages and at phone and desktop width, kept as screenshots of the run.
-  for(const language of ['en','ar'] as const) {
-   await chooseLanguage(page,language);
-   await page.goto('/c/rs-learning/work/new');
-   await page.getByLabel(language==='en'?'Message':'الرسالة',{exact:true}).fill(`Reference image ${stamp}`);
-   await attach(page).setInputFiles(picture('reference.png'));
-   for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.screenshot({path:`test-results/screenshots/attachments-composer-${language}-${width}.png`}); }
-  }
   await page.setViewportSize({width:1280,height:720});
   await chooseLanguage(page,'en');
-  await page.goto('/c/rs-learning/work/new');
-  await page.getByLabel('Message',{exact:true}).fill(`Reference image ${stamp}`);
-  await attach(page).setInputFiles(picture('reference.png'));
-  await page.getByRole('button',{name:'Create card',exact:true}).click();
-  await expect(page).toHaveURL(/\/work\/board\/\d+$/);
-  const cardPath=new URL(page.url()).pathname;
-  const first=await thumbnail(page,`Reference image ${stamp}`);
+  // An old Card on its own page: New card makes its Cards on the Engine since #836, and a person's file on one is #843's.
+  const {path:cardPath}=await oldCard(page,`Reference image ${stamp}`);
+  const first=await reply(page,`Reference image ${stamp}`);
   // The reply comes below it, with its own file.
   const second=await reply(page,`Here is another one ${stamp}`);
   expect(second).not.toBe(first);

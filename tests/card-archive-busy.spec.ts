@@ -20,6 +20,9 @@ const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','stat
 const company='10000000-0000-0000-0000-000000000001';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const board='/c/rs-learning/work/board';
+// The old board's columns stay on the board opened on Waiting on you until the old board is switched off (#846); its
+// archive returns on the Engine's board with #842.
+const columns='/c/rs-learning/approvals';
 const sheetOf=(page:Page)=>page.getByRole('dialog').filter({has:page.locator('#sheet-title')});
 const confirmOf=(page:Page)=>page.getByRole('dialog',{name:/^Archive/});
 const waitingCount=(page:Page)=>page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
@@ -73,7 +76,7 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   await confirmOf(page).getByRole('button',{name:'Archive and stop'}).click();
   await expect(sheetOf(page).getByRole('region',{name:'Archived'})).toBeVisible();
   await expect(page.locator('.toast')).toContainText('Archived');
-  await page.goto(board);
+  await page.goto(columns);
   await expect(page.locator(`#board-cols .kcard[data-card-id="${card}"]`)).toHaveCount(0);
   await expect.poll(()=>count(page)).toBe(before-1);
   expect(rows(`select state from public.reply_cards where conversation_id='${conversation}' and kind='question'`)).toEqual([{state:'closed'}]);
@@ -94,7 +97,7 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   await withEngineContract(fake.engineFor,()=>driveHandovers(service,{}));
   await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   expect(fake.runs.length).toBe(runs);
-  await page.goto(board);
+  await page.goto(columns);
   await expect(page.locator(`#board-cols [data-column="progress"] .kcard[data-card-id="${card}"]`)).toBeVisible();
   await expect.poll(()=>count(page)).toBe(before-1);
  } finally { query(`delete from public.hermes_agents where id='${agent}'`); }
@@ -117,7 +120,7 @@ test('a Card waiting for an approval asks once; archived, the approval ends with
  expect(rows(`select count(*)::int as decided from public.work_activity where card_id=5 and action in ('approval_rejected','approval_approved')`)).toEqual([{decided:0}]);
  await sheetOf(reviewerPage).getByRole('region',{name:'Archived'}).getByRole('button',{name:'Restore'}).click();
  await expect(reviewerPage.locator('.toast')).toContainText('Restored');
- await reviewerPage.goto(board);
+ await reviewerPage.goto(columns);
  await expect(reviewerPage.locator('#board-cols [data-column="progress"] .kcard[data-card-id="5"]')).toBeVisible();
  await page.reload();
  await expect.poll(()=>count(page)).toBe(before-1);
