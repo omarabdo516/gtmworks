@@ -1,16 +1,12 @@
 /* The Activity log page (#11) and the parts the Numbers page (#35) shares with it, ported from the approved reference
    (design-reference/index.html: page heads, panel-card, link-btn, btn, set-input and "the log, channels and mentions
    round"). A Card's sheet (#116, app/sheet.css) draws its log with the same rules. Colours come from the shell's gw
-   tokens (app/shell.css); the few it does not carry are set here for both themes. */
+   tokens (app/tokens.css); the local names here point at them. */
 .gw :is(.log-page, .numbers-page) {
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
-  --p-wait: #DA830E; --p-btn-secondary-bg: #1C1C1C0F; --p-btn-secondary-ring: transparent; --p-fs-2xl: 28px;
+  --p-wait: var(--gw-wait); --p-btn-secondary-bg: var(--gw-btn2-bg); --p-btn-secondary-ring: var(--gw-btn2-ring); --p-fs-2xl: 28px;
   display: block; position: relative; height: 100%; background: var(--gw-bg-chrome); color: var(--gw-text-1);
   font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
-}
-:root[data-theme="dark"] .gw :is(.log-page, .numbers-page) { --p-wait: #E8962A; --p-btn-secondary-bg: #F5F5F524; --p-btn-secondary-ring: #F5F5F55C; }
-@media (prefers-color-scheme: dark) {
-  :root[data-theme="device"] .gw :is(.log-page, .numbers-page) { --p-wait: #E8962A; --p-btn-secondary-bg: #F5F5F524; --p-btn-secondary-ring: #F5F5F55C; }
 }
 
 /* The reference has no title bar over these pages on a wide screen; on a phone the bar is its slim menu row. */
@@ -18,7 +14,7 @@
 @media (min-width: 768px) { .gw .shell:has(:is(.log-page, .numbers-page)) > .topbar { display: none; } }
 @media (max-width: 767px) {
   .gw .shell:has(:is(.log-page, .numbers-page)) > .topbar { min-height: 56px; height: auto; padding: 0 12px; background: var(--gw-bg-chrome); border: 0; font-family: var(--gw-font); }
-  .gw .shell:has(:is(.log-page, .numbers-page)) > .topbar h1 { font-weight: 600; font-size: var(--gw-fs-base); text-transform: none; letter-spacing: normal; color: var(--gw-text-1); }
+  .gw .shell:has(:is(.log-page, .numbers-page)) > .topbar h1 { font-weight: var(--gw-fw-semibold); font-size: var(--gw-fs-base); text-transform: none; letter-spacing: normal; color: var(--gw-text-1); }
 }
 
 /* shared bits of the reference */
@@ -31,7 +27,7 @@
 .gw :is(.log-page, .numbers-page, .details, .sheet) .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw :is(.log-page, .numbers-page, .details, .sheet) .pg-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw :is(.log-page, .numbers-page) .page-head { display: flex; align-items: flex-end; gap: var(--s4); padding: var(--s8) var(--s8) var(--s4); flex-wrap: wrap; }
-.gw :is(.log-page, .numbers-page) .page-title { margin: 0; font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
+.gw :is(.log-page, .numbers-page) .page-title { margin: 0; font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: var(--gw-fw-semibold); }
 .gw :is(.log-page, .numbers-page) .page-sub { margin: 0; font-size: var(--gw-fs-base); color: var(--gw-text-2); text-wrap: pretty; }
 .gw :is(.log-page, .numbers-page) .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
 .gw :is(.log-page, .numbers-page) .panel-empty { margin: 0; padding: var(--s2); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
@@ -41,7 +37,7 @@
 }
 .gw :is(.log-page, .numbers-page, .sheet) .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-height: 0; padding: 0 var(--s4);
-  border: 0; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; text-decoration: none;
+  border: 0; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: var(--gw-fw-semibold); white-space: nowrap; text-decoration: none;
   --od-icon-size: 16px;
 }
 .gw :is(.log-page, .numbers-page, .sheet) .btn--secondary { background: var(--p-btn-secondary-bg); color: var(--gw-text-1); box-shadow: var(--p-btn-secondary-ring) 0 0 0 1px inset; }
@@ -61,13 +57,13 @@
 /* who did it: a person's initial, an Agent's face, or the gtmworks mark for automatic lines */
 .gw :is(.log-page, .numbers-page, .details, .sheet) .lg-av {
   width: var(--av, 28px); height: var(--av, 28px); border-radius: 50%; flex: none; background: var(--gw-bg-active); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset;
-  color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: 600; line-height: 1;
+  color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-semibold); line-height: 1;
 }
 .gw :is(.log-page, .numbers-page, .details, .sheet) .lg-face { display: inline-flex; flex: none; }
 .gw :is(.log-page, .numbers-page, .details, .sheet) .lg-sys { display: block; flex: none; }
 
 .gw :is(.log-page, .details, .sheet) .lg-day { display: grid; gap: var(--s2); }
-.gw :is(.log-page, .details, .sheet) .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; color: var(--gw-text-3); }
+.gw :is(.log-page, .details, .sheet) .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-regular); line-height: 1.5; color: var(--gw-text-3); }
 .gw :is(.log-page, .details, .sheet) .lg-day__h[data-utc], .gw :is(.log-page, .numbers-page, .details, .sheet) time[data-utc] { visibility: hidden; }
 .gw :is(.log-page, .details, .sheet) .lg-list { list-style: none; margin: 0; padding: 2px var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
 .gw :is(.log-page, .details, .sheet) .lg-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s3); align-items: start; padding: var(--s3) 0; }
@@ -75,7 +71,7 @@
 .gw :is(.log-page, .details, .sheet) .lg-row > :first-child { margin-top: 1px; }
 .gw :is(.log-page, .details, .sheet) .lg-body { display: grid; gap: 6px; min-width: 0; }
 .gw :is(.log-page, .details, .sheet) .lg-line { margin: 0; font-size: var(--gw-fs-base); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
-.gw :is(.log-page, .details, .sheet) .lg-name { font-weight: 600; }
+.gw :is(.log-page, .details, .sheet) .lg-name { font-weight: var(--gw-fw-semibold); }
 .gw :is(.log-page, .details, .sheet) :is(.lg-you, .lg-act) { color: var(--gw-text-2); }
 .gw :is(.log-page, .details, .sheet) .lg-change { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--gw-text-3); --od-icon-size: 14px; }
 .gw :is(.log-page, .details, .sheet) .lg-val { display: inline-block; max-width: 100%; padding: 1px var(--s2); border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
@@ -91,7 +87,7 @@
 /* a note (#22): "Edited", the time its writer has left to edit it, "Locked", and the field that replaces it while its
    writer edits (design-reference: lg-edit, lg-left, lg-edited, lg-lock) */
 .gw :is(.log-page, .details, .sheet) :is(.lg-left, .lg-lock, .lg-edited) { display: inline-flex; align-items: center; gap: 4px; }
-.gw :is(.log-page, .details, .sheet) .lg-left .num { color: var(--gw-text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gw :is(.log-page, .details, .sheet) .lg-left .num { color: var(--gw-text-1); font-weight: var(--gw-fw-semibold); font-variant-numeric: tabular-nums; }
 .gw :is(.log-page, .sheet) .lg-status { color: var(--gw-text-2); }
 .gw :is(.log-page, .sheet) .lg-edit { display: grid; gap: var(--s2, 8px); }
 .gw :is(.log-page, .sheet) .lg-edit__t { height: auto; min-height: 72px; padding: var(--s2, 8px) 10px; font-size: var(--gw-fs-base); line-height: 1.7; resize: vertical; }
