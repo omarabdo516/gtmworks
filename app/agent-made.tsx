@@ -38,9 +38,19 @@ export function AgentMadeToast({company,slug,agent}:{company:string,slug:string,
 }
 
 const never=()=>()=>{};
-// The server cannot know the reader's time zone, so it and the first browser render use UTC, hidden (shell.css); once
+// The server cannot know the reader's time zone, so it and the first browser render use UTC, hidden (globals.css); once
 // hydrated the reader's own zone picks today or the day.
 export const useZone=()=>useSyncExternalStore(never,()=>undefined,()=>'UTC' as string|undefined);
+// A time in the reader's own zone, the one way every screen draws it (#719): in UTC and hidden on the server and the first
+// browser render (globals.css), then in the reader's zone once the page hydrates, so it hydrates without a text mismatch
+// outside UTC (#520, #586). `orDay` gives the time today and the day another day, as a card says when it was answered;
+// `hour` is 2-digit as in a chat, numeric where the reference draws it so (the morning card's "2:40 AM").
+export function ReaderTime({at,className,orDay=false,hour='2-digit'}:{at:string,className?:string,orDay?:boolean,hour?:'2-digit'|'numeric'}) {
+ const {language}=useI18n(); const zone=useZone();
+ const text=orDay&&dayOf(new Date().toISOString(),zone)!==dayOf(at,zone)?madeDay(at,language,zone)
+  :new Date(at).toLocaleTimeString(localeFor(language),{hour,minute:'2-digit',timeZone:zone});
+ return <time className={className} dateTime={at} data-utc={zone}>{text}</time>;
+}
 export function madeDay(at:string,language:Language,zone:string|undefined) {
  const thisYear=dayOf(new Date().toISOString(),zone).slice(0,4)===dayOf(at,zone).slice(0,4);
  return dateFormatter(localeFor(language),{day:'numeric',month:language==='ar'?'long':'short',...(thisYear?{}:{year:'numeric'}),timeZone:zone}).format(new Date(at));
