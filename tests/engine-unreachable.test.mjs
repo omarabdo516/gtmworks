@@ -28,7 +28,7 @@ function databases() {
   if(name==='pin_run') return {data:{tools:null},error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
-  if(name==='pin_lead_brief') return {data:null,error:null};
+  if(name==='pin_run_brief') return {data:null,error:null};
   if(name==='begin_turn_start') return {data:1,error:null};
   if(name==='fail_conversation_turn') { queued.get(args.message_key).failed_at='now'; return {data:null,error:null}; }
   if(name==='record_conversation_turn') { queued.get(args.message_key).started_at='now'; return {data:true,error:null}; }

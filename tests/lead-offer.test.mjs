@@ -78,3 +78,37 @@ test('with no hidden Agent, and for an Owner or a Viewer, no hidden job and no a
  }
  assert.match(leadInstructions({role:'contributor',owner:'Omar',agents}),/that none of those agents does, ask them/);
 });
+
+// Spec #831 (#844): an Agent gives a job to another Agent, or keeps long work of its own, as a Card on the Company's
+// board, with the Engine's own Kanban tool (kanban_create): its Run is told each Agent's board name (the profile the
+// Engine knows it by) and its own, and is offered no tool of gtmworks's own for it. The names are the brief's, pinned
+// with the Run, so a retry sends the same words.
+const team=[{name:'Reach',job:'Plans Facebook and Instagram campaigns.',board:'ag-reach',role:'meta'},{name:'Hook',job:'Reads each ad as a customer would.',board:'ag-hook',role:'hook'}];
+test('the main Agent is told the board name of each Agent the person sees and its own, to give a job as a Card with kanban_create, and no hand_to_agent',()=>{
+ for(const role of ['owner','manager','contributor']) {
+  const text=leadInstructions({role,owner:'Omar',agents:team,main:true,self:'co-rs'});
+  assert.match(text,/- Reach: Plans Facebook and Instagram campaigns\. \(board name: ag-reach\)/,role);
+  assert.match(text,/- Hook: Reads each ad as a customer would\. \(board name: ag-hook\)/,role);
+  assert.match(text,/make a card with kanban_create[^.]*assignee the board name of the agent who does it \(yours is co-rs\)/,role);
+  assert.match(text,/When the job belongs to one of the agents above, give it to that agent as a card on the board instead of asking this\./,role);
+  assert.doesNotMatch(text,/hand_to_agent/,role);
+ }
+ assert.doesNotMatch(leadInstructions({role:'viewer',owner:'Omar',agents:team,main:true,self:'co-rs'}),/kanban_create|board name/,'a Viewer\'s Run is told no board');
+});
+
+test('another Agent is told the board names of the Company\'s other Agents and its own, and nothing of the main Agent\'s offer',()=>{
+ const text=leadInstructions({role:'contributor',owner:'Omar',agents:[{name:'Lead',job:'Runs the team.',board:'co-rs',role:null},team[1]],main:false,self:'ag-reach'});
+ assert.match(text,/^The other agents of your company, each with its board name:\n- Lead: Runs the team\. \(board name: co-rs\)\n- Hook: Reads each ad as a customer would\. \(board name: ag-hook\)\n\n/);
+ assert.match(text,/kanban_create[^.]*\(yours is ag-reach\)/);
+ for(const word of ['Make it','Ask Omar for it','create_agent','request_agent','hand_to_agent','They are the whole team']) assert.ok(!text.includes(word),word);
+ assert.equal(leadInstructions({role:'contributor',owner:'Omar',agents:[],main:false,self:'ag-reach'}).includes('kanban_create'),true,'it may still keep its own work on the board');
+});
+
+test('a job command to the main Agent asks it to make one card for the Agent of that role, with the job after the command; other words ask nothing',()=>{
+ const brief={role:'contributor',owner:'Omar',agents:team,main:true,self:'co-rs'};
+ const text=leadInstructions(brief,'/campaign Plan the March intake ads');
+ assert.match(text,/This message is the job command \/campaign for Reach: make one card for Reach with kanban_create, its assignee ag-reach, for this job: Plan the March intake ads\n/);
+ assert.match(text,/Say in your reply that you gave the job to Reach/);
+ for(const message of ['Plan the March intake ads','/campaign','/report the numbers','hello /campaign x']) assert.doesNotMatch(leadInstructions(brief,message),/This message is the job command/,message);
+ assert.doesNotMatch(leadInstructions({...brief,main:false,self:'ag-hook'},'/campaign Plan the March intake ads'),/job command/,'only the main Agent takes a job command');
+});

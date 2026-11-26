@@ -678,3 +678,19 @@ for (const [kept, face] of [['keeps her id', 'mona'], ['names no Agent', '']] as
   }
  }
 });
+
+// Spec #831 (#844): a Card the Agent made in its Run with the Engine's own Kanban tool is one row under its reply, drawn
+// from the step the Engine reported (no Handover row): the Card's title and its Agent, and the row opens the Card over
+// the board. One given to no Agent of the Company names none.
+for (const [language, made, alone, open] of [['en', 'Card made for Ads · Plan the March ads', 'Card made · Plan the March ads', 'Open the card'], ['ar', 'اتعملت بطاقة لـ Ads · Plan the March ads', 'اتعملت بطاقة · Plan the March ads', 'افتح البطاقة']] as const) test(`in ${language} a reply whose Run made a Card shows one row that names it and its Agent and opens it`, async () => {
+ stubFetch(vi.fn(() => new Promise<Response>(() => {})));
+ const step = (card: { id: string, title: string, agent: { id: string, name: string, face: string } | null }) => ({ tool: 'kanban_create', preview: null, state: 'done' as const, card });
+ const initial = talk([sent, { id: 2, author: 'agent', author_name: 'Mona', body: 'I gave Ads the March plan.', created_at: at,
+  steps: { list: [step({ id: 't_1a2b3c4d', title: 'Plan the March ads', agent: { id: 'ag-1', name: 'Ads', face: 'c-ads' } }), { tool: 'web_search', preview: 'March intake', state: 'done' as const }, step({ id: 't_5e6f7a8b', title: 'Plan the March ads', agent: null })], seconds: 3 } }]);
+ const screen = await render(view(initial, language));
+ await expect.element(screen.getByText('I gave Ads the March plan.')).toBeVisible();
+ const rows = [...document.querySelectorAll('.turns > li')].filter(row => row.querySelector('a')?.textContent === open);
+ expect(rows.map(row => row.textContent)).toEqual([`${made}${open}`, `${alone}${open}`]);
+ expect(rows.map(row => row.querySelector('a')?.getAttribute('href'))).toEqual(['/c/rs-learning/work/board?card=t_1a2b3c4d', '/c/rs-learning/work/board?card=t_5e6f7a8b']);
+ expect(document.querySelectorAll('[data-handover]')).toHaveLength(0);
+});

@@ -24,6 +24,6 @@ export function withTurnQueue(rpc) {
   if(name==='record_conversation_turn') { const turn=turns.get(args.message_key); if(turn) turn.started=true; }
   if(name==='fail_conversation_turn'||name==='refuse_run_model') { const turn=turns.get(args.message_key); if(turn) turn.failed=true; }
   const answer=await rpc(name,args);
-  return answer.error&&/^unexpected/.test(answer.error.message??'')&&['record_conversation_turn','fail_conversation_turn','refuse_run_model','release_queued_start','keep_unknown_start','pin_lead_brief'].includes(name)?{data:true,error:null}:answer;
+  return answer.error&&/^unexpected/.test(answer.error.message??'')&&['record_conversation_turn','fail_conversation_turn','refuse_run_model','release_queued_start','keep_unknown_start','pin_run_brief'].includes(name)?{data:true,error:null}:answer;
  };
 }
