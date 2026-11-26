@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -166,4 +166,34 @@ test('an approval on a Card of an Agent hidden from the reader is not counted, n
  const shown = visibleApprovals(cards, items, new Set(['seen']));
  assert.deepEqual(shown.cards.map(card => card.id), [1, 2]);
  assert.deepEqual(shown.items, [{ kind: 'approval', id: 1 }, { kind: 'approval', id: 2 }, { kind: 'mention', id: 3 }]);
+});
+
+// Spec #831 (#834): the board is the Engine's own Kanban board, its statuses grouped into five columns in one place.
+test('the Engine board has five columns, Waiting on you first and no Live, and each Engine status lands in one of them', () => {
+ assert.deepEqual(cardColumns, ['waiting', 'ideas', 'planned', 'progress', 'done']);
+ const landed = Object.fromEntries(['blocked', 'review', 'triage', 'todo', 'scheduled', 'ready', 'running', 'done'].map(status => [status, columnOfStatus(status)]));
+ assert.deepEqual(landed, { blocked: 'waiting', review: 'waiting', triage: 'ideas', todo: 'planned', scheduled: 'planned', ready: 'planned', running: 'progress', done: 'done' });
+ assert.equal(columnOfStatus('archived'), null);
+ assert.equal(columnOfStatus('something new'), null);
+});
+
+test('a Card\'s symbol says what it is doing: working now, a question, a review, stopped after failures, waiting for other Cards', () => {
+ assert.deepEqual(cardSymbol({ status: 'running', failures: 0, parents: 0 }), { kind: 'working' });
+ assert.deepEqual(cardSymbol({ status: 'blocked', failures: 0, parents: 0 }), { kind: 'question' });
+ assert.deepEqual(cardSymbol({ status: 'blocked', failures: 1, parents: 0 }), { kind: 'question' });
+ assert.deepEqual(cardSymbol({ status: 'blocked', failures: 2, parents: 0 }), { kind: 'failed' });
+ assert.deepEqual(cardSymbol({ status: 'review', failures: 0, parents: 0 }), { kind: 'review' });
+ assert.deepEqual(cardSymbol({ status: 'todo', failures: 0, parents: 1 }), { kind: 'waits', count: 1 });
+ assert.deepEqual(cardSymbol({ status: 'todo', failures: 0, parents: 3 }), { kind: 'waits', count: 3 });
+ for (const status of ['triage', 'todo', 'scheduled', 'ready', 'done']) assert.equal(cardSymbol({ status, failures: 0, parents: 0 }), null, status);
+ // A Card that already started is no longer waiting for its parents, whatever links it keeps.
+ assert.deepEqual(cardSymbol({ status: 'running', failures: 0, parents: 2 }), { kind: 'working' });
+});
+
+test('Waiting on you lists the newest Card first; every other column keeps the Engine\'s own order', () => {
+ const cards = [
+  { id: 't_1', column: 'waiting', createdAt: 100 }, { id: 't_2', column: 'planned', createdAt: 300 }, { id: 't_3', column: 'waiting', createdAt: 300 },
+  { id: 't_4', column: 'planned', createdAt: 100 }, { id: 't_5', column: 'waiting', createdAt: 200 },
+ ];
+ assert.deepEqual(orderCards(cards).map(card => card.id), ['t_3', 't_5', 't_1', 't_2', 't_4']);
 });

@@ -14,7 +14,7 @@ insert into isolation_matrix(name) values
  ('conversation_archives'),('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversation_run_resets'),('conversation_run_ran_out'),('conversations'),
  ('held_agent_changes'),('hermes_agents'),
- ('invitation_agent_access'),('lead_agent_requests'),('lead_agent_temperaments'),('lead_made_agents'),
+ ('invitation_agent_access'),('kanban_cards'),('lead_agent_requests'),('lead_agent_temperaments'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('routine_runs_open'),('stopped_runs'),
  ('waiting_items'),
@@ -67,6 +67,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('conversation_run_ends', $${"outcome": "'completed'"}$$),
  -- An account that ran out on a Run (#731) names its provider, the Engine's id for the account and its place.
  ('conversation_run_ran_out', $${"provider": "'openai-codex'", "account": "'isolat'", "place": "1"}$$),
+ -- A row beside a Card on the Engine's Kanban board (#836) names the Engine's task.
+ ('kanban_cards', $${"task_id": "'t_isolation'"}$$),
  ('members', $${"person_id": "'e3370000-0000-0000-0000-000000000002'", "role": "'contributor'"}$$),
  -- A card sits in one place: a Conversation's or a channel message's (#148); this row names a Conversation, as the
  -- test's own Conversation row does.

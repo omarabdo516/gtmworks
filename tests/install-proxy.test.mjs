@@ -131,8 +131,9 @@ test('the gateway drops a client X-Forwarded-Host on its way to Auth', () => {
 });
 
 // nginx inherits the server-level proxy_set_header lines only into a location that sets none of its own. The Screen's
-// live stream sets its upgrade headers, so it repeats each server-level one: without Host the app reads its own address
-// as web:3000 and refuses the browser's Origin as another site's, and a client's claimed address would reach it (#713).
+// live stream and the board's live changes set their upgrade headers, so they repeat each server-level one: without Host
+// the app reads its own address as web:3000 and refuses the browser's Origin as another site's, and a client's claimed
+// address would reach it (#713, #840).
 test('a gateway location that sets its own headers repeats every server-level one', () => {
  const conf=readFileSync('scripts/install-nginx.conf','utf8');
  const server=conf.replace(/location [^{]*\{[^}]*\}/g,'');
@@ -140,7 +141,8 @@ test('a gateway location that sets its own headers repeats every server-level on
  const inherited=lines(server);
  assert.ok(inherited.includes('host $http_host'));
  const own=[...conf.matchAll(/location ([^{]*)\{([^}]*)\}/g)].filter(([,,body])=>/proxy_set_header/.test(body));
- assert.ok(own.some(([,at])=>at.includes('/api/display/ws')),'the Screen\'s stream sets its own upgrade headers');
+ const upgraded=own.find(([,,body])=>/proxy_set_header\s+Upgrade/.test(body))?.[1]??'';
+ for(const path of ['/api/display/ws','/api/board/events']) assert.match(path,new RegExp(upgraded.replace(/^\s*~\s*/,'').trim()),`${path} is passed on as an upgrade`);
  for(const [,at,body] of own) for(const line of inherited) assert.ok(lines(body).includes(line),`${at.trim()} repeats ${line}`);
 });
 
