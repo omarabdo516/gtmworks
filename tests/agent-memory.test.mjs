@@ -1,13 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { engineRecord, engineServing } from './engine-records.mjs';
+import { engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { editMemoryNote, forgetMemoryNote, readMemoryNotes, resetMemory } from '../lib/engine/memory.mjs';
 import { editAgentMemory, forgetAgentMemory, readAgentMemory, resetAgentMemory } from '../lib/agent-memory.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 import { heldChanges } from './held-changes.mjs';
 import { logHeldAgentChanges, madeAndLogged } from '../lib/agent-change-log.mjs';
 

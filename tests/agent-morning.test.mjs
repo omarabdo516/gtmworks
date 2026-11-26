@@ -7,7 +7,6 @@ import { isSilentReply } from '../lib/engine/sessions.mjs';
 import { readAgentMorning, changeAgentMorning, moveAgentMorning, withMorningLease, morningName } from '../lib/agent-morning.mjs';
 import { changeAgentRoutine } from '../lib/agent-routines.mjs';
 import { morningTime, morningCron, morningMarker } from '../lib/morning-schedule.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'read':'routines.read','create':'routines.create','change':'routines.change','pause':'routines.pause','resume':'routines.resume','delete':'routines.remove','replies':'routines.replies','run':'routines.trigger','runs':'routines.runs','reply':'sessions.reply','running':'routines.running'};
 
@@ -53,7 +52,7 @@ const jobs=(fake,profile)=>fake.settings.cron.get(profile)??[];
 test('switching on makes one job at the chosen time and zone; a new time changes it, off pauses it, on resumes it, and there is never a second', async () => {
  const fake=await engine();
  try {
-  const hermes=install(fake); const {db,logged}=session();
+  const {db,logged}=session();
   const before=await readAgentMorning(db,{company,agent:lead});
   assert.deepEqual([before.state,before.routine],['found',null],'nothing is made until it is switched on');
   const made=await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo'});

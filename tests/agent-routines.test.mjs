@@ -8,7 +8,6 @@ import { readCompanyRoutines, readAgentRoutines, changeAgentRoutine } from '../l
 import { cronOf, formOf, scheduleLabel, whenOf } from '../lib/routine-schedule.mjs';
 import { toolConfig, noAgentGets } from '../lib/agent-toolsets.mjs';
 import { i18n } from '../lib/i18n.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // An Agent's Routines (#31) are the cron jobs of its own Engine profile (ADR 0016, decision of 2026-11-16): the contract
 // lists, makes, changes, pauses, resumes, runs now and deletes them in that one profile, named on every call, and one
@@ -119,7 +118,6 @@ const rows=[
 test('Settings reads every Agent the reader sees with its Routines, and each change is checked, made and logged once', async () => {
  const fake=await twoAgents();
  try {
-  const hermes=install(fake);
   const {db,logged,checked}=session({agents:rows});
   const made=await changeAgentRoutine(db,{company,agent:ads,action:'create',prompt:'Send me the cost per lead',schedule:'0 9 * * *',timezone:'Africa/Cairo'});
   assert.equal(made.state,'done');
@@ -145,7 +143,6 @@ test('Settings reads every Agent the reader sees with its Routines, and each cha
 test('a Contributor or a Viewer changes nothing: the database refuses before the Engine is asked, and nothing is logged', async () => {
  const fake=await twoAgents();
  try {
-  const hermes=install(fake);
   const owner=session({agents:rows});
   const {routine}=await changeAgentRoutine(owner.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *'});
   const before=cronCalls(fake).filter(request=>request.method!=='GET').length;
@@ -225,7 +222,6 @@ test('an Agent still on the Company\'s shared profile reaches no Routine: the ma
 test('the database checks the whole log row before the Engine changes, and a log write that fails afterwards still answers done', async () => {
  const fake=await twoAgents();
  try {
-  const hermes=install(fake);
   const refused=session({agents:rows,refuse:'routineInvalid'});
   assert.equal((await changeAgentRoutine(refused.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *'})).state,'invalid');
   assert.deepEqual(refused.checked,[{c:company,agent:ads,act:'routine_created',routine:'Summary',schedule:'0 9 * * *'}]);
@@ -273,7 +269,6 @@ test('a create whose answer is lost is found in the profile\'s list and answered
 test('an Agent\'s details read its own Routines alone, and an Agent hidden from the reader or not on its own profile is missing', async () => {
  const fake=await twoAgents();
  try {
-  const hermes=install(fake);
   await createRoutine(at(fake,adsProfile),{name:'Ads summary',prompt:'Summary',schedule:'0 9 * * *'});
   await createRoutine(at(fake,seoProfile),{name:'Rankings',prompt:'Rankings',schedule:'0 11 * * 1'});
   const {db}=session({agents:rows});

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { Duplex } from 'node:stream';
 import WebSocket from 'ws';
-import { fakeHermes } from './fake-hermes.mjs';
+import { engineServing } from './engine-records.mjs';
+import { withEngineContract } from '../lib/engine/handle.mjs';
 import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 import { screenStreams, screenStreamPath, screenUpgrades } from '../lib/screen-stream.mjs';
 
@@ -18,7 +19,8 @@ const until=async(what,ready,ms=5000)=>{
 };
 
 async function streams({engine=engineFor,recheck=60000}={}) {
- const fake=await fakeHermes();
+ // The Company's Engine record names this Engine; a test's own driver answers for it through the handle.
+ const fake=await engineServing(company);
  fake.settings.profiles.set('ads',profile); fake.settings.screens.set('ads',{running:true});
  const may={level:'control',name:'Mona'}, rows=[];
  const people={
@@ -26,9 +28,9 @@ async function streams({engine=engineFor,recheck=60000}={}) {
   access:async at=>({...may,...may.level==='control'&&at.person!=='mona'?{name:at.person}:{}}),
   logged:async(_at,row)=>{ rows.push(row); },
  };
- const handle=screenStreams({hermes:{address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'},engine,people,recheck});
+ const handle=screenStreams({people,recheck});
  const server=createServer();
- server.on('upgrade',(request,socket,head)=>{ void handle(request,socket,head,new URL(request.url??'/','http://gtmworks').searchParams); });
+ server.on('upgrade',(request,socket,head)=>{ void withEngineContract(engine,()=>handle(request,socket,head,new URL(request.url??'/','http://gtmworks').searchParams)); });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(undefined)));
  const sockets=[];
  const open=(as='mona',{resume=false}={})=>{

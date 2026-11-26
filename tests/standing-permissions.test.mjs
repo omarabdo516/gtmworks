@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withNoEngine, engineServing } from './engine-records.mjs';
 import { readAgentPermissions, revokeAgentPermission, standingEntry, standingLabel } from '../lib/standing-permissions.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // #166: an Agent's standing permissions are its own profile's entries in the Engine, each with who allowed it and when
 // from gtmworks's record; an Agent the reader does not see is not found, one on the Company's shared profile has none
@@ -11,7 +10,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const [ads,seo,lead]=['3b000000-0000-0000-0000-000000000011','3b000000-0000-0000-0000-000000000021','3b000000-0000-0000-0000-000000000031'];
 const hex=id=>id.replaceAll('-','');
 const adsProfile=`ag-${hex(ads)}`; const seoProfile=`ag-${hex(seo)}`; const shared=`co-${hex(company)}`;
-const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
 const profileOn=(fake,name,list)=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{command_allowlist:list},credentials:{}});
 const rows=[
  {agent:ads,name:'Ads',connection:'f1000000-0000-0000-0000-000000000011',profile:adsProfile,main:false,own:true},

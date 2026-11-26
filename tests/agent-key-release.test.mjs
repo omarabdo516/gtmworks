@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineServing, withNoEngine } from './engine-records.mjs';
 import { hermesEngine } from '../lib/engine/contract.mjs';
 import { releaseKeyWaits } from '../lib/company-profiles.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // #660: an Agent made waiting for the Company's key before this version (#299) is released by the worker alone, once its
 // own profile has the Company's Providers as they stand: the space's key, and the model Lead runs on.
@@ -24,10 +24,10 @@ function database(rows,{released=()=>true}={}) {
   return {data:null,error:{message:'unexpected'}}; }};
 }
 const connection=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:main,key:'test-only-key'});
-const pass=(db,fake,options={})=>releaseKeyWaits(db,{hermes:connection(fake),driverFor:at=>hermesEngine(at),...options});
+const pass=(db,fake,options={})=>releaseKeyWaits(db,options);
 
 test('an Agent waiting from before the update gets the space\'s key and Lead\'s model, its wait ends, and it answers a turn on its own profile', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,waiter);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
@@ -49,7 +49,7 @@ test('an Agent waiting from before the update gets the space\'s key and Lead\'s 
 });
 
 test('a profile that already has a model keeps it, and is only given the key', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,waiter);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
@@ -60,7 +60,7 @@ test('a profile that already has a model keeps it, and is only given the key', a
 });
 
 test('a model of its own the profile cannot answer with is replaced by Lead\'s', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,waiter);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
@@ -75,7 +75,7 @@ test('a model of its own the profile cannot answer with is replaced by Lead\'s',
 });
 
 test('an Agent the Company\'s accounts give no model stays waiting, and is asked again at most once a minute', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,waiter);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
@@ -95,7 +95,7 @@ test('an Agent the Company\'s accounts give no model stays waiting, and is asked
 });
 
 test('a release a key change overtook leaves the wait, and the next pass gives the Providers again; one Agent that fails holds back no other', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   made(fake,space,main,other);
   fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
@@ -110,8 +110,8 @@ test('a release a key change overtook leaves the wait, and the next pass gives t
  } finally { await fake.close(); }
 });
 
-test('no Engine at all releases nothing and asks the database nothing', async () => {
- const db=database([]);
- assert.deepEqual(await releaseKeyWaits(db,{hermes:null}),{released:0});
- assert.deepEqual(db.calls,[]);
+test('a Company with no Engine releases nothing, and the database is asked only for the work', async () => {
+ const db=database([row(waiter)]);
+ assert.deepEqual(await withNoEngine(company,()=>releaseKeyWaits(db)),{released:0});
+ assert.deepEqual(db.calls.map(([name])=>name),['agent_key_wait_work']);
 });

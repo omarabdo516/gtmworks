@@ -19,7 +19,6 @@ const asAdmin=(sql:string)=>execFileSync('docker',['exec','-i',dbContainerOf(),'
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 const noteOf=(body:string)=>Number(rows(`select id from public.work_comments where body='${body}'`)[0].id);
 
 test('the writer edits a note from its Card and again from the Activity log; both show its latest text, marked edited, until it locks',async({page})=>{

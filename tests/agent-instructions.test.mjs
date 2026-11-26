@@ -5,7 +5,6 @@ import { withDriver, engineServing } from './engine-records.mjs';
 import { readAgentInstructions as readDriver, writeAgentInstructions as writeDriver } from '../lib/engine/souls.mjs';
 import { readAgentInstructions, changeAgentInstructions } from '../lib/agent-instructions.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'read':'souls.readInstructions','instructions':'souls.writeInstructions'};
 

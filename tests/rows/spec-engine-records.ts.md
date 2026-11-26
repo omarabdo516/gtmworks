@@ -1,0 +1,1 @@
+| `spec-engine-records.ts` | Browser helper, no tests of its own: a spec that drives library code in its own process (a Run's start and close, with the fake of the contract answering for the Engine) points the Engine handle's service-role client at its lane's database, where the seeded Companies' Engine records are (#782). | — | every spec that imports it | new |

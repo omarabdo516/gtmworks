@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineServing, withDriver, withNoEngine } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { readProfileModels, writeProfileModel, readModels } from '../lib/engine/models.mjs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
@@ -9,7 +10,6 @@ import { answerChange, readChangeContext } from '../lib/agent-changes.mjs';
 import { engineSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeEngine } from './fake-engine.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // #19: an Agent proposes a change to its own Engine profile, or Lead to another Agent's, and nothing changes until the
 // Owner approves it. The propose tool reaches the database alone; approving writes the change through #125's writer to
@@ -78,15 +78,15 @@ test('the database\'s list of settings is #125\'s list, so nothing outside it ca
 });
 
 // Approving, against the fake Engine server: the database as the Owner's session reaches it.
-const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
 const at=fake=>target=>({...target,managementAddress:fake.managementAddress});
+// The settings calls a test answers its own way, as the Engine handle names them.
+const SETTINGS={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
 const settingDriver=fake=>({
  config:target=>readConfig(at(fake)(target)),saved:target=>readSavedConfig(at(fake)(target)),schema:target=>readConfigSchema(at(fake)(target)),
  defaults:target=>readConfigDefaults(at(fake)(target)),write:(target,config)=>writeConfig(at(fake)(target),config),
  writeModel:(target,change)=>writeProfileModel(at(fake)(target),change),profileModels:(target,profiles)=>readProfileModels(at(fake)(target),profiles),
  options:target=>readModels(at(fake)(target)),
 });
-const instructionsDriver=fake=>({read:(target,name)=>readInstructions(at(fake)(target),name),instructions:(target,change)=>writeInstructions(at(fake)(target),change)});
 const agents=[
  {agent:lead,name:'Lead',profile:companyProfile(company),own:true,choosable:true,model_choice:null,subagents:false},
  {agent:ads,name:'Ads',profile:own(ads),own:true,choosable:true,model_choice:null,subagents:false},
@@ -144,13 +144,13 @@ const proposalsOf=()=>({model:{id:1,agent_id:ads,change:'model',setting:null,val
  soul:{id:2,agent_id:writer,change:'instructions',setting:null,value:'You write short posts.',state:'waiting'}});
 
 test('approving a model change and an instructions change writes each to its own Agent\'s profile alone, reads it back, then marks it approved',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   profileOn(fake,own(writer),{soul:`You write long posts.\n${section}\n`});
   const {model,soul}=proposalsOf();
   const {db,calls}=owner([model,soul]);
-  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const options={company};
   assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:true}),{state:'approved'});
   assert.deepEqual(await answerChange(db,{...options,proposal:2,approve:true}),{state:'approved'});
   const writes=fake.settings.managementRequests.filter(request=>request.method==='PUT');
@@ -172,12 +172,12 @@ test('approving a model change and an instructions change writes each to its own
 });
 
 test('declining writes nothing to the Engine and sends the reason; an Engine that refused leaves the claim for another approval',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads),own(writer)]) profileOn(fake,name);
   const {model,soul}=proposalsOf();
   const {db,calls}=owner([model,soul]);
-  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const options={company};
   assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:false,reason:'Keep it this month.'}),{state:'declined'});
   assert.deepEqual(calls.map(call=>call.name),['is_company_owner','answer_agent_change']);
   assert.deepEqual(calls.at(-1).args,{c:company,proposal:1,approve:false,reason:'Keep it this month.',claim:null});
@@ -197,13 +197,13 @@ test('declining writes nothing to the Engine and sends the reason; an Engine tha
 });
 
 test('a change the writer refuses before any Engine write gives the claim back and says it cannot be made as the Agent is now',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   // Sub-agents are off for Ads, so its sub-agent settings cannot be written.
   const depth={id:3,agent_id:ads,change:'setting',setting:'delegation.max_spawn_depth',value:2,state:'waiting'};
   const {db,calls}=owner([depth]);
-  assert.deepEqual(await answerChange(db,{company,proposal:3,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'cannotApply',applied:'subagentsOff'});
+  assert.deepEqual(await answerChange(db,{company,proposal:3,approve:true}),{state:'cannotApply',applied:'subagentsOff'});
   assert.equal(depth.state,'waiting');
   assert.deepEqual(calls.filter(call=>call.name.endsWith('_agent_change')).map(call=>call.name),['claim_agent_change','renew_agent_change','release_agent_change']);
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
@@ -216,22 +216,22 @@ test('a claim taken again after an unconfirmed write is never given back, even w
  const pending={id:4,agent_id:ads,change:'model',setting:null,value:'openai/gpt-5',state:'applying',lease:'over'};
  const {db,calls}=owner([pending]);
  const noEngine={...db,rpc:async(name,args)=>name==='company_engine_target'?{data:[],error:null}:db.rpc(name,args)};
- assert.deepEqual(await answerChange(noEngine,{company,proposal:4,approve:true,hermes:null}),{state:'notApplied',applied:'noEngine'});
+ assert.deepEqual(await withNoEngine(company,()=>answerChange(noEngine,{company,proposal:4,approve:true})),{state:'notApplied',applied:'noEngine'});
  assert.equal(pending.state,'applying');
  assert.deepEqual(calls.filter(call=>call.name==='release_agent_change').map(call=>call.args.uncertain),[true]);
 });
 
 test('a lease another request holds answers busy, and a claim lost before the Engine write writes nothing',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   // The same Owner's other tab holds the lease: this request is busy and never reaches the Engine.
   const held={id:5,agent_id:ads,change:'model',setting:null,value:'openai/gpt-5',state:'applying',lease:'held',token:'other'};
   const tab=owner([held]);
-  assert.deepEqual(await answerChange(tab.db,{company,proposal:5,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'busy'});
+  assert.deepEqual(await answerChange(tab.db,{company,proposal:5,approve:true}),{state:'busy'});
   // The claim is taken away (its lease ran out and it was declined) between the claim and the write: nothing is written.
   const paused=owner([proposalsOf().model],{lost:true});
-  assert.deepEqual(await answerChange(paused.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'busy'});
+  assert.deepEqual(await answerChange(paused.db,{company,proposal:1,approve:true}),{state:'busy'});
   assert.equal(paused.calls.some(call=>call.name==='answer_agent_change'),false);
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
  } finally { await fake.close(); }
@@ -242,12 +242,12 @@ test('a lease another request holds answers busy, and a claim lost before the En
 // be stopped; the decline is recorded as maybe applied (agent_change_proposals.sql), and the Owner whose write landed late
 // is told so rather than "already answered".
 test('a write that lands after the proposal was declined meanwhile says so to the Owner who wrote it',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   const {model}=proposalsOf();
   const declinedMeanwhile=owner([model],{answer:{data:null,error:{code:'22023',message:'agentChangeAnswered'}}});
-  assert.deepEqual(await answerChange(declinedMeanwhile.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'writtenLate'});
+  assert.deepEqual(await answerChange(declinedMeanwhile.db,{company,proposal:1,approve:true}),{state:'writtenLate'});
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT').map(request=>request.path),[`/api/profiles/${own(ads)}/model`]);
   // A write whose request timed out but which the Engine still completes afterwards: the approval reads it as unknown,
   // ends its lease and keeps the proposal applying, so a decline then is recorded as maybe applied while the write lands.
@@ -256,7 +256,7 @@ test('a write that lands after the proposal was declined meanwhile says so to th
   const pendingWrites=[];
   const slow={...settingDriver(fake),writeModel:async(target,change)=>{ pendingWrites.push(()=>settingDriver(fake).writeModel(target,change)); return {state:'unreachable'}; }};
   const timedOutLate=owner([late]);
-  assert.deepEqual(await answerChange(timedOutLate.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:slow}),{state:'notApplied',applied:'unreachable'});
+  assert.deepEqual(await withDriver(SETTINGS,slow,()=>answerChange(timedOutLate.db,{company,proposal:1,approve:true})),{state:'notApplied',applied:'unreachable'});
   assert.deepEqual([late.state,late.lease],['applying','over'],'the proposal is never sent back to waiting while the write may still land');
   assert.equal(fake.settings.profiles.get(own(ads)).model,'openai/gpt-5.5','nothing had landed when the approval answered');
   await Promise.all(pendingWrites.map(write=>write()));
@@ -264,7 +264,7 @@ test('a write that lands after the proposal was declined meanwhile says so to th
   // A write that timed out is uncertain: the lease ends, the proposal stays applying, and a decline then is maybe applied.
   fake.settings.managementStatus=504;
   const timedOut=owner([proposalsOf().model]);
-  assert.deepEqual((await answerChange(timedOut.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)})).state,'notApplied');
+  assert.deepEqual((await answerChange(timedOut.db,{company,proposal:1,approve:true})).state,'notApplied');
   assert.deepEqual(timedOut.calls.filter(call=>call.name==='release_agent_change').map(call=>call.args.uncertain),[true]);
  } finally { await fake.close(); }
 });
@@ -272,7 +272,7 @@ test('a write that lands after the proposal was declined meanwhile says so to th
 // #436: an approval of a setting waits its turn behind the Company's other setting writes. Its claim is renewed once that
 // turn has come, not before the wait, so a claim another Owner declined while it waited writes nothing.
 test('an approval waiting behind a Company-wide write renews its claim only once that write ends, and a claim lost meanwhile writes nothing',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   // The shared space is companyProviders' own, with its keys.
   for(const name of [companyProfile(company),own(ads),own(writer)]) profileOn(fake,name);
@@ -282,9 +282,9 @@ test('an approval waiting behind a Company-wide write renews its claim only once
   const gate=new Promise(resolve=>{ open=resolve; });
   let held=false;
   const slow={...settingDriver(fake),writeModel:async(target,change)=>{ held=true; await gate; return settingDriver(fake).writeModel(target,change); }};
-  const companyWide=changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.4',hermes:install(fake),driver:slow});
+  const companyWide=withDriver(SETTINGS,slow,()=>changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.4'}));
   while(!held) await new Promise(resolve=>setTimeout(resolve,5));
-  const approval=answerChange(db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)});
+  const approval=answerChange(db,{company,proposal:1,approve:true});
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.ok(calls.some(call=>call.name==='claim_agent_change'),'the proposal is claimed at once');
   assert.equal(calls.some(call=>call.name==='renew_agent_change'),false,'the claim is not renewed while the Company-wide write holds the turn');
@@ -302,7 +302,7 @@ test('an approval waiting behind a Company-wide write renews its claim only once
 });
 
 test('only an Owner answers, an unknown proposal is not found, and an answered or busy one is never written again',async()=>{
- const engineless={company,hermes:null};
+ const engineless={company};
  const {model}=proposalsOf();
  const member=owner([model],{isOwner:false});
  assert.deepEqual(await answerChange(member.db,{...engineless,proposal:1,approve:true}),{state:'notAllowed'});
@@ -324,13 +324,13 @@ test('only an Owner answers, an unknown proposal is not found, and an answered o
 // #484: "Edit, then approve". The Owner's value goes with the claim, which the database checks and answers as the value
 // to write; the writer then writes that value, not the proposed one, to the Agent's own profile.
 test('approving with an edit claims the Owner\'s value and writes it, not the proposed one, to the Agent\'s own profile',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   profileOn(fake,own(writer),{soul:`You write long posts.\n${section}\n`});
   const {model,soul}=proposalsOf();
   const {db,calls}=owner([model,soul]);
-  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const options={company};
   assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:true,edited:'openai/gpt-5'}),{state:'approved'});
   assert.deepEqual(await answerChange(db,{...options,proposal:2,approve:true,edited:'You write posts of three lines.'}),{state:'approved'});
   assert.deepEqual(calls.filter(call=>call.name==='claim_agent_change').map(call=>call.args),
@@ -346,11 +346,11 @@ test('approving with an edit claims the Owner\'s value and writes it, not the pr
 });
 
 test('an edit the database refuses writes nothing, and an edit sent with a decline is never sent',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   profileOn(fake,own(ads));
   const {db,calls}=owner([proposalsOf().model]);
-  const options={company,hermes:install(fake),settingDriver:settingDriver(fake)};
+  const options={company};
   assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:true,edited:7}),{state:'editInvalid'});
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
   assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:false,reason:'No',edited:'openai/gpt-5'}),{state:'declined'});
@@ -374,14 +374,14 @@ function reader(proposals,{isOwner=true}={}) {
  return db;
 }
 test('the card reads the Agent\'s current value from its own profile, and an Owner gets the field to edit the proposal in',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(writer)]) profileOn(fake,name);
   profileOn(fake,own(ads),{soul:`You write long ads.\n${section}\n`,provider:'anthropic',model:'claude-sonnet-5-5',credentials:{anthropic:{}},config:{memory:{memory_char_limit:2200}}});
   const rows=[{id:1,agent_id:ads,change:'model',setting:null,state:'waiting'},{id:2,agent_id:ads,change:'instructions',setting:null,state:'waiting'},
    {id:3,agent_id:ads,change:'toolset',setting:'delegation',state:'waiting'},{id:4,agent_id:ads,change:'setting',setting:'memory.memory_char_limit',state:'waiting'},
    {id:5,agent_id:ads,change:'model',setting:null,state:'approved'}];
-  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const options={company};
   const model=await readChangeContext(reader(rows),{...options,proposal:1});
   assert.equal(model.state,'found');
   assert.equal(model.now,'anthropic/claude-sonnet-5-5');
@@ -410,7 +410,7 @@ test('the card reads the Agent\'s current value from its own profile, and an Own
   const member=await readChangeContext(reader(rows,{isOwner:false}),{...options,proposal:1});
   assert.deepEqual({state:member.state,now:member.now,edit:member.edit},{state:'found',now:'anthropic/claude-sonnet-5-5',edit:null});
   // An Engine that cannot be read draws the card without its "Now" row.
-  assert.deepEqual(await readChangeContext(reader(rows),{company,hermes:null,proposal:1}),{state:'found',now:null,edit:null});
+  assert.deepEqual(await withNoEngine(company,()=>readChangeContext(reader(rows),{company,proposal:1})),{state:'found',now:null,edit:null});
  } finally { await fake.close(); }
 });
 
@@ -418,13 +418,13 @@ test('the card reads the Agent\'s current value from its own profile, and an Own
 // provider the sub-agents run on: their own provider, else the Agent's. A model of another provider would be approved
 // into a pair the Engine cannot run (Settings writes both keys together for that reason).
 test('the sub-agents\' model is edited among the models of the provider they run on, never another provider\'s',async()=>{
- const fake=await fakeHermes(); companyProviders(fake);
+ const fake=await engineServing(company); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(writer)]) profileOn(fake,name);
   fake.settings.providerModels.openai=['gpt-5.5','gpt-5-mini'];
   const base={soul:'',provider:'anthropic',model:'claude-sonnet-5-5',key:fake.settings.key,credentials:{anthropic:{}},env:{OPENAI_API_KEY:'test-only-key'}};
   const rows=[{id:1,agent_id:ads,change:'setting',setting:'delegation.model',state:'waiting'}];
-  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const options={company};
   const subagents=agents.map(row=>row.agent===ads?{...row,subagents:true}:row);
   const db=()=>{ const read=reader(rows); return {...read,rpc:(name,args)=>name==='company_agent_models'?Promise.resolve({data:subagents,error:null}):read.rpc(name,args)}; };
   // Its own provider is OpenAI: only OpenAI's models.

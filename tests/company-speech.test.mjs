@@ -7,7 +7,6 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { readSpeech, writeSpeech } from '../lib/engine/speech.mjs';
 import { changeCompanySpeech, readCompanySpeech, deepgramCommand, deepgramArabic } from '../lib/company-speech.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'read':'speech.read','write':'speech.write'};
 
@@ -39,7 +38,6 @@ function sessions({owner,removed=[]}) {
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,asked)=>readSpeech(at(target),asked),write:(target,change)=>writeSpeech(at(target),change)}; };
-const hermesOf=fake=>({address:fake.address,key:'test-only-key'});
 const change=(person,fake,request)=>withDriver(DRIVER,pointedAt(fake),()=>changeCompanySpeech(person.db,{company,...request}));
 const read=(person,fake)=>withDriver(DRIVER,pointedAt(fake),()=>readCompanySpeech(person.db,{company}));
 

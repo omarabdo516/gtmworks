@@ -7,7 +7,6 @@ import { readProfileModels } from '../lib/engine/models.mjs';
 import { readOwnSkill } from '../lib/engine/skills.mjs';
 import { readCompanySkillPage } from '../lib/company-skill-page.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'read':'skills.readOwn','config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','profileModels':'models.ofProfiles'};
 

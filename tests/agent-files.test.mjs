@@ -7,7 +7,6 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { downloadAgentFile, libraryRoot, listAgentFiles, readAgentFile, workSegments } from '../lib/engine/files.mjs';
 import { agentFileDownload, agentLibrary } from '../lib/agent-files.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // The Library of an Agent (#194, #395): one folder of the Agent's own folder in its Company's work folder, read through
 // the Engine and never copied into gtmworks. A Contributor or a Viewer is refused on the server, a hidden
@@ -28,7 +27,6 @@ const sandbox=`/work/${profile}`;
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
 const clock=new Date(mtime*1000).toISOString();
-const hermes=()=>({address:process.env.BUNDLED_HERMES_URL,key:process.env.HERMES_API_KEY});
 
 const require=createRequire(import.meta.url);
 const [permissions,service,attachments]=[await import('../lib/route-permissions.mjs'),await import('../lib/agent-files.mjs'),await import('../lib/attachments.mjs')];

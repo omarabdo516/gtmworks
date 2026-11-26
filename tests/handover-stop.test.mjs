@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { engineRecord } from './engine-records.mjs';
 import { withEngineContract } from '../lib/engine/handle.mjs';
 import { stopConversationRun } from '../lib/conversation-runs.mjs';
 import { stopChannelMessage } from '../lib/channel-runs.mjs';

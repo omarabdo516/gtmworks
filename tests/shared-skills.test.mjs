@@ -7,7 +7,6 @@ import { teamLessons, keepSharedSkills } from '../lib/shared-skills.mjs';
 import { knowledgeSkill, readKnowledge, saveKnowledge } from '../lib/company-knowledge-skill.mjs';
 import { provideSharedSpace, writeSharedSkill, shareSkills } from '../lib/engine/skills.mjs';
 import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'provide':'skills.provideSpace','write':'skills.writeShared','share':'skills.share'};
 

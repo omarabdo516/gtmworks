@@ -18,7 +18,6 @@ const omar='20000000-0000-0000-0000-000000000001';
 const contributor='20000000-0000-0000-0000-000000000003';
 const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 const id=(n:number)=>`68153000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 // Faye's empty chat is the one open; Reach is the Agent called. Reach is hidden from the Contributor (مراجع). Reach was
 // made from the meta role and Sage from the writer role (#159); Faye was made by hand, so its role commands none.

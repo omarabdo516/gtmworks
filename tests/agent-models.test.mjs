@@ -7,7 +7,6 @@ import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writ
 import { readSettings, writeSetting, readCompanyModels, changeCompanySetting, changeCompanySettings } from '../lib/engine-settings.mjs';
 import { readCompanyKeys } from '../lib/provider-keys.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // A profile's handle on the Company's Engine, as the settings reader and writer take it.
 const profileOf=async(/** @type {string} */ profile)=>/** @type {any} */(await companyEngine(company))?.on(profile);
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.

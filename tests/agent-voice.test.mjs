@@ -6,7 +6,6 @@ import { readConfig, readSavedConfig, writeConfig } from '../lib/engine/config.m
 import { readVoices, speakText } from '../lib/engine/speech.mjs';
 import { readAgentVoice, changeAgentVoice, speakAgentSample, voiceSpeeds, voiceLanguages, voiceSample } from '../lib/agent-voice.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
 
@@ -138,7 +137,6 @@ test('an Agent whose profile transcribes with Deepgram may listen in another Ara
  try {
   profileOn(fake,companyProfile(company),{stt:{provider:'deepgram',language:'ar'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   const {db}=sessions(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const read=await withDriver(DRIVER,driverAt(fake),()=>readAgentVoice(db,{company,agent:lead}));
   assert.equal(read?.speech,'deepgram');
   assert.deepEqual(read?.languages,['ar','ar-AE','ar-SA','ar-QA','ar-KW','ar-SY','ar-LB','ar-PS','ar-JO','ar-SD','ar-TD','ar-MA','ar-DZ','ar-TN','ar-IQ','ar-IR','en'],'no detect: the Engine sends Deepgram English for it');

@@ -8,7 +8,6 @@ import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentTools, readCompanyUsage, testAgentTool } from '../lib/company-apps.mjs';
 import { changeCompanyServer } from '../lib/company-servers.mjs';
 import { mergedState } from '../lib/app-catalogue.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'read':'apps.read','testApp':'apps.test','session':'sessions.read','usage':'sessions.usage','prepare':'apps.prepare','prepareServer':'apps.prepareServer','prepareCommand':'apps.prepareCommandServer','test':'apps.testServer','start':'apps.startSignIn','poll':'apps.pollSignIn','cancel':'apps.cancelSignIn','finish':'apps.finishSignIn','disconnect':'apps.disconnect','turnOff':'apps.turnOff'};
 
@@ -75,7 +74,6 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
   const install={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
   await provideProfile(install,{name:companyProfile(company),soul:'',config:toolConfig({profile:companyProfile(company)}),forbidden:toolConfig().agent.disabled_toolsets});
   const driver=driverAt(fake);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const signIns=[];
   const someone=sessions(fake,{person:member,isOwner:false,signIns});
   for(const action of ['connect','poll','cancel','disconnect']) {
@@ -119,7 +117,6 @@ test('each Agent\'s state is read from its own profile: connected, needing atten
  const fake=await engineServing(company);
  try {
   const driver=driverAt(fake);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer),agentProfile(analyst)]) makeProfile(fake,name);
   // Klaviyo was connected in the Company's profile before any Agent moved; Writer's sign-in never finished.
   fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={klaviyo:installed('klaviyo')};
@@ -146,7 +143,6 @@ test('one Agent\'s apps are read from its own profile alone, by key; an Agent th
  const fake=await engineServing(company);
  try {
   const driver=driverAt(fake);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
   fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={amplitude:installed('amplitude')};
   fake.settings.appTokens.add(`${companyProfile(company)}:amplitude`);
@@ -170,7 +166,6 @@ test('an Agent\'s connected tools are its own profile\'s apps with their states,
  const fake=await engineServing(company);
  try {
   const driver=driverAt(fake);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
   fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={amplitude:installed('amplitude')};
   fake.settings.appTokens.add(`${companyProfile(company)}:amplitude`);
@@ -216,7 +211,6 @@ test('an app turned on for one Agent is in that Agent\'s profile and no other, a
  const fake=await engineServing(company);
  try {
   const driver=driverAt(fake);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
   const signIns=[];
   const omar=sessions(fake,{person:owner,isOwner:true,signIns,agents:[leadRow,writerRow,helperRow]});
@@ -255,7 +249,6 @@ test('only an Agent whose profile is its own is changed: one on the main profile
  const fake=await engineServing(company);
  try {
   const driver=driverAt(fake);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   makeProfile(fake,companyProfile(company));
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,helperRow]});
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow]});
@@ -284,7 +277,6 @@ test('an Owner or a Manager reads each Agent\'s token use from its own profile w
   fake.settings.sessions.set('s-writer',{profile:agentProfile(writer),messages:[],input_tokens:5000,output_tokens:60,model:'openai/gpt-5.5',started_at:now-60});
   fake.settings.sessions.set('s-old',{profile:agentProfile(writer),messages:[],input_tokens:9,output_tokens:9,model:'openai/gpt-5.5',started_at:now-40*86400});
   const driver={usage:(target,days)=>readUsage({...target,managementAddress:target.profile===agentProfile(analyst)?'http://8.8.8.8:2':fake.managementAddress},days)};
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const agents=[leadRow,writerRow,analystRow,helperRow];
   const owner_=sessions(fake,{person:owner,isOwner:true,signIns:[],agents});
   const expected=[
@@ -309,7 +301,6 @@ test('only an Owner adds or tests an own server, and a command beside an address
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow]});
   const mark=fake.settings.managementRequests.length;
   for(const action of ['add','test']) assert.deepEqual(await changeCompanyServer(someone.db,{company,person:member,agent:lead,action,name:'My CRM',url:'https://crm.example/mcp',kind:'none'}),{status:403,body:{error:'appsNotAllowed'}},action);
@@ -333,7 +324,6 @@ test('a command server is handed to the Engine as ssh into the work sandbox, fro
  const fake=await engineServing(company);
  try {
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
   const result=await changeCompanyServer(omar.db,{company,person:owner,agent:writer,action:'add',name:'Design tool',kind:'command',command:'node',args:['/work/tools/server.mjs','--quiet']});
   assert.deepEqual(result,{status:200,body:{key:'design-tool',state:'connected'}});
@@ -358,7 +348,6 @@ test('Test probes a command server without leaving it, and a changed command rep
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const ask=(action,args)=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action,name:'Design tool',kind:'command',command:'od',args});
   const tested=await ask('test',['mcp']);
@@ -375,7 +364,6 @@ test('a token goes only to the Engine: never a database argument, a log row or a
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const token='header.payload.signature-value';
   const result=await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'header',token});
@@ -392,7 +380,6 @@ test('a no-sign-in server is on at once, and an OAuth server comes back through 
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const signIns=[];
   const omar=sessions(fake,{person:owner,isOwner:true,signIns,agents:[leadRow]});
   const add=extra=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none',...extra});
@@ -413,7 +400,6 @@ test('a server the Owner added is one card across the profiles it is on, and Rem
  const fake=await engineServing(company);
  try {
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
   for(const agent of [lead,writer]) {
    assert.equal((await changeCompanyServer(omar.db,{company,person:owner,agent,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none'})).status,200);
@@ -433,7 +419,6 @@ test('Test probes a new server without leaving it in the profile', async () => {
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const before=JSON.stringify(serversOf(fake,companyProfile(company)));
   const result=await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My CRM',url:'https://crm.example/mcp',kind:'none'});
@@ -448,7 +433,6 @@ test('adding the same OAuth server again cancels its open sign-in and starts a n
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const signIns=[];
   const omar=sessions(fake,{person:owner,isOwner:true,signIns,agents:[leadRow]});
   const add=()=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My OAuth',url:'https://oauth.example/mcp',kind:'oauth'});
@@ -465,7 +449,6 @@ test('a made server is turned on for another Agent from the address its own prof
  const fake=await engineServing(company);
  try {
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
   const add=extra=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:extra.name,url:extra.url,kind:extra.kind,token:extra.token});
   assert.equal((await add({name:'My CRM',url:'https://crm.example/mcp',kind:'none'})).status,200);
@@ -485,7 +468,6 @@ test('Remove takes a switched-off copy off its Agent too', async () => {
  const fake=await engineServing(company);
  try {
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
   for(const agent of [lead,writer]) assert.equal((await changeCompanyServer(omar.db,{company,person:owner,agent,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none'})).status,200);
   serversOf(fake,agentProfile(writer))['my-crm'].enabled=false;
@@ -501,7 +483,6 @@ test('an app with a declared field asks the browser for the app page instead of 
   makeProfile(fake,companyProfile(company));
   fake.settings.catalog.push('asana');
   fake.settings.catalogEnv.asana=[{name:'ASANA_CLIENT_ID',prompt:'Client ID',required:true}];
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'asana',action:'connect'}),{status:200,body:{needs:'details'}});
   assert.equal(serversOf(fake,companyProfile(company)).asana,undefined,'nothing was installed without its field');
@@ -512,7 +493,6 @@ test('Test probes under a temporary key, leaving an existing server of that name
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://one.example/mcp',kind:'none'});
   const before=JSON.stringify(serversOf(fake,companyProfile(company)));
@@ -530,7 +510,6 @@ test('Test never removes another server: one named like the old probe, or a 64-c
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const long='a'.repeat(64);
   for(const name of ['CRM test',long]) await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name,url:'https://one.example/mcp',kind:'none'});
@@ -544,7 +523,6 @@ test('a Test whose temporary server cannot be removed answers a failure, not its
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const driver={disconnect:async()=>({state:'failed'})};
   assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My CRM',url:'https://crm.example/mcp',kind:'none'})),{status:502,body:{error:'appsFailed'}});
@@ -555,7 +533,6 @@ test('an own server switched off for its only Agent keeps its address and card, 
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none'});
   assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'my-crm',action:'disconnect'}),{status:200,body:{status:'off'}});
@@ -573,7 +550,6 @@ test('connecting a made server uses its target Agent\'s own address, and refuses
  const fake=await engineServing(company);
  try {
   for(const name of [companyProfile(company),agentProfile(writer),agentProfile(analyst)]) makeProfile(fake,name);
-  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow,analystRow]});
   for(const [agent,url] of [[lead,'https://one.example/mcp'],[writer,'https://two.example/mcp']]) assert.equal((await changeCompanyServer(omar.db,{company,person:owner,agent,action:'add',name:'My CRM',url,kind:'none'})).status,200);
   assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:writer,app:'my-crm',action:'connect'}),{status:200,body:{status:'connected'}});

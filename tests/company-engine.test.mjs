@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineServing, withNoEngine } from './engine-records.mjs';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { engineOf } from '../lib/company-engine.mjs';
 import { engineRecord } from '../lib/engine-record.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { readAgentMemory } from '../lib/agent-memory.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // One module answers "the Engine of this Company" (ADR 0018): its address and its key. The database's Engine record for the
 // Company is the source (#380); every Hermes call the app and the worker make asks it for the Company it serves. A Company
@@ -66,7 +66,8 @@ test('no app, worker or library module reads an install-wide Engine address or k
 test('a Company\'s call asks the module for its Engine, and a Company with no reachable Engine gets one named state, not an exception', async t => {
  const saved={BUNDLED_HERMES_URL:process.env.BUNDLED_HERMES_URL,HERMES_API_KEY:process.env.HERMES_API_KEY,WEBHOOK_ENCRYPTION_KEY:process.env.WEBHOOK_ENCRYPTION_KEY};
  t.after(()=>{ for(const [name,value] of Object.entries(saved)) { if(value===undefined) delete process.env[name]; else process.env[name]=value; } });
- const fake=await fakeHermes({managementPort:9119});
+ // The Company's Engine record, as the server reads it (tests/engine-records.mjs), names this Engine.
+ const fake=await engineServing(company);
  t.after(()=>fake.close());
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.memory.set(profile,{memory:['Prefers short subject lines.'],profile:[]});
@@ -77,7 +78,7 @@ test('a Company\'s call asks the module for its Engine, and a Company with no re
  const record=records({[company]:recordFor(fake.address,fake.settings.key)});
  const hermes=await engineOf(company,record);
  assert.deepEqual(hermes,{address:fake.address,key:fake.settings.key});
- const read=await readAgentMemory(db,{company,agent,hermes});
+ const read=await readAgentMemory(db,{company,agent});
  assert.equal(read.state,'found');
  assert.deepEqual(read.notes.map(note=>note.text),['Prefers short subject lines.']);
  // It went to that Engine, with that key, on the Agent's own profile.
@@ -86,10 +87,10 @@ test('a Company\'s call asks the module for its Engine, and a Company with no re
  assert.match(asked[0].path,new RegExp(`profile=${profile}`));
  // The Engine stops answering: the same call answers the one named state the driver gives, and throws nothing.
  await fake.close();
- assert.equal((await readAgentMemory(db,{company,agent,hermes})).state,'unreachable');
+ assert.equal((await readAgentMemory(db,{company,agent})).state,'unreachable');
  // No Engine record for the Company: the module answers null and the call answers `noEngine`.
  assert.equal(await engineOf(company,records({})),null);
- assert.equal((await readAgentMemory(db,{company,agent,hermes:null})).state,'noEngine');
+ assert.equal((await withNoEngine(company,()=>readAgentMemory(db,{company,agent}))).state,'noEngine');
 });
 
 test('the record module returns an Engine or nothing, never its ciphertext, and fails closed on a key it cannot decrypt', async () => {

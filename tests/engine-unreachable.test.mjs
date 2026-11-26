@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { withNoEngine, engineServing } from './engine-records.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 import { readCompanySignIns } from '../lib/company-sign-in.mjs';
 import { sendMessage } from '../lib/conversation-runs.mjs';
 import { readWorkSandbox } from '../lib/engine/files.mjs';

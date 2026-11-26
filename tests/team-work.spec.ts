@@ -7,7 +7,6 @@ import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, sendMessage, startQueuedTurns, stopConversationRun } from '../lib/conversation-runs.mjs';
 import { routeAllowed } from '../lib/route-permissions.mjs';
 import { fakeEngine } from './fake-engine.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import noteEn from '../lib/messages/member-note.en.json' with { type: 'json' };
@@ -23,7 +22,6 @@ const omar='20000000-0000-0000-0000-000000000001';
 const manager='20000000-0000-0000-0000-000000000002';
 const contributor='20000000-0000-0000-0000-000000000005';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 // A Member's own session, signed in by email link, and the service client the route and the worker use.
 async function memberClient(email:string) {
@@ -62,7 +60,7 @@ function attachFakeHermes() {
 
 test('integration: two sends while the Agent is busy run as two turns in order, each after the one before ends',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key}; fake.settings.pendingReads=1e9;
+ const fake=await laneHermes(); fake.settings.pendingReads=1e9;
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();
@@ -96,7 +94,7 @@ test('integration: two sends while the Agent is busy run as two turns in order, 
 // note it was first reserved with included (the fake Hermes, like the pinned release, refuses another body for a key).
 test('integration: a queued turn whose start answer was lost is asked again, not failed, and runs once',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key}; fake.settings.pendingReads=1e9;
+ const fake=await laneHermes(); fake.settings.pendingReads=1e9;
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   const conversation=randomUUID(); const second=randomUUID();
@@ -115,7 +113,7 @@ test('integration: a queued turn whose start answer was lost is asked again, not
 
 test('integration: a send whose answer was lost is kept as its sender\'s turn, and the worker\'s retry sends the note it was first reserved with',async()=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); const hermes={address:fake.address,key:fake.settings.key};
+ const fake=await laneHermes(); 
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachFakeHermes();
  try {
   expect((await person.rpc('save_member_note',{c:company,note:'Answer in short points.'})).error).toBeNull();

@@ -19,7 +19,6 @@ const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','stat
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const general='69000000-0000-0000-0000-000000000001';
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 const five='Five Agents I advise:\n1. Writer — drafts the posts alone\n2. Analyst — reads the numbers, asks you before any spend';
 
 function attachAgent() {

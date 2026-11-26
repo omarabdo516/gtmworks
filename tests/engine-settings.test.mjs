@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
 import { engineSettings, engineOwnsSetting, settingsSchemaProblems, readSettings, writeSetting, readAgentSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // A profile's handle on the Company's Engine, as the settings reader and writer take it.
 const profileOf=async(/** @type {string} */ profile)=>/** @type {any} */(await companyEngine(company))?.on(profile);
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
@@ -28,7 +27,6 @@ const agentProfile=id=>`ag-${hex(id)}`;
 const at=(object,key)=>key.split('.').reduce((found,part)=>found&&typeof found==='object'?found[part]:undefined,object);
 const setup=fake=>{ fake.settings.configDefaults=fixture.defaults; fake.settings.configSchema={fields:fixture.schema,category_order:[]}; };
 const profileOn=(fake,name,config={})=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config,credentials:{}});
-const connection=(fake,profile)=>({address:fake.address,managementAddress:fake.managementAddress,profile,key:fake.settings.key});
 const rows=[
  {agent:lead,name:'Lead',connection:'f1000000-0000-0000-0000-000000000011',profile:companyProfile(company),main:true,own:true},
  {agent:writer,name:'Writer',connection:'f1000000-0000-0000-0000-000000000021',profile:agentProfile(writer),main:false,own:true},

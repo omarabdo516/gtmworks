@@ -20,7 +20,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const general='69000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];

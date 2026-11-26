@@ -8,7 +8,6 @@ import { readSkills, readLearningGraph } from '../lib/engine/skills.mjs';
 import { readAgentSettings, changeLearningMode, learningModeOf } from '../lib/engine-settings.mjs';
 import { readCompanyLearning } from '../lib/company-learning.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
 
@@ -222,7 +221,6 @@ test('an Agent\'s own mode made during a Company-wide mode ends with the Engine 
   profileOn(fake,space);
   const modes=new Map();
   const {db}=database({agents:alone,modes});
-  const hermes={address:fake.address,key:fake.settings.key};
   // Settled once the Agent's own choice has ended; made before the Company-wide write starts, so the hold below waits on it.
   let agentFinished=()=>{};
   const agentEnded=new Promise(resolve=>{ agentFinished=resolve; });

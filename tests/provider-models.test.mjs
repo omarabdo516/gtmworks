@@ -1,12 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { engineRecord, engineServing } from './engine-records.mjs';
+import { engineServing } from './engine-records.mjs';
 import { readModelAccess, readProviderModels, changeProviderModel, offeredModels, modelEnabled } from '../lib/provider-models.mjs';
 import { readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { setProviderKey } from '../lib/engine/providers.mjs';
 import { changeFallbackModel } from '../lib/fallback-model.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // #620 (spec #611): each Provider's models are switched on or off by the Owner, and a model choice is offered once while
 // at least one eligible Provider of its provider has it on. Two Providers of one provider: the Company's Claude

@@ -10,7 +10,6 @@ import { engineSettings, readSettings, writeSetting, readCompanyModels } from '.
 import { changeAgentEffort } from '../lib/agent-effort.mjs';
 import { effortDefault, effortHintKey, effortLabelKey, effortLevels, knownEffort } from '../lib/engine-effort.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 // A profile's handle on the Company's Engine, as the settings reader and writer take it.
 const profileOf=async(/** @type {string} */ profile)=>/** @type {any} */(await companyEngine(company))?.on(profile);
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
@@ -30,7 +29,6 @@ const en=JSON.parse(readFileSync(new URL('../lib/messages/en.json',import.meta.u
 const ar=JSON.parse(readFileSync(new URL('../lib/messages/ar.json',import.meta.url),'utf8'));
 
 const install=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:fake.settings.key});
-const connection=(fake,profile)=>({...install(fake),profile});
 const profileOn=(fake,name,config={})=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config,credentials:{}});
 const driver=fake=>({
  config:target=>readConfig({...target,managementAddress:fake.managementAddress}),

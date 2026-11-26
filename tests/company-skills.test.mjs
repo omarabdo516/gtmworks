@@ -4,7 +4,6 @@ import { withDriver, engineServing } from './engine-records.mjs';
 import { readSkills, writeSkill, setSkillEnabled, readLearningGraph } from '../lib/engine/skills.mjs';
 import { readCompanySkills, readAgentSkills, changeCompanySkill, changeCompanySkillEnabled } from '../lib/company-skills.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 import { heldChanges } from './held-changes.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
@@ -69,7 +68,6 @@ test('a skill is written into the Agent\'s own profile, rewritten whole, and nev
   fake.settings.skills.set(space,new Map([['team-lessons',skillMd('team-lessons')]]));
   const {db}=sessions(fake);
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const change=(agent,content)=>withDriver(DRIVER,driver,()=>changeCompanySkill(db,{company,agent,content}));
   assert.deepEqual(await change(writer,skillMd('weekly-recap')),{state:'written',name:'weekly-recap'});
   assert.equal(fake.settings.skills.get(agentProfile(writer))?.get('weekly-recap'),skillMd('weekly-recap'),'the fake Hermes holds the write');
@@ -103,7 +101,6 @@ test('a write is checked and logged by the database, keeps Unix line endings, an
  try {
   profileOn(fake,agentProfile(writer)); profileOn(fake,companyProfile(company));
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const session=sessions(fake); const {db}=session;
   // A browser sends a form's textarea with CRLF line endings; the Engine reads a SKILL.md back with LF ones.
   assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkill(db,{company,agent:writer,content:skillMd('weekly-recap').replaceAll('\n','\r\n')})),{state:'written',name:'weekly-recap'});
@@ -132,7 +129,6 @@ test('a skill is switched off and on for one Agent\'s own profile, checked and l
   fake.settings.skills.set(space,new Map([['team-lessons',skillMd('team-lessons')]]));
   fake.settings.skills.set(agentProfile(writer),new Map([['weekly-recap',skillMd('weekly-recap')]]));
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const session=sessions(fake); const {db}=session;
   const toggle=(agent,name,enabled,on=db)=>withDriver(DRIVER,driver,()=>changeCompanySkillEnabled(on,{company,agent,name,enabled}));
   assert.deepEqual(await toggle(writer,'weekly-recap',false),{state:'changed',name:'weekly-recap'});
@@ -170,7 +166,6 @@ test('a skill write and a switch whose log fails are still made, and each ends w
  try {
   profileOn(fake,agentProfile(writer));
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const retried=sessions(fake,{failLogs:1});
   assert.deepEqual(await withDriver(DRIVER,driver,()=>changeCompanySkill(retried.db,{company,agent:writer,content:skillMd('weekly-recap')})),{state:'written',name:'weekly-recap'});
   assert.deepEqual(retried.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'written'}],'a log taken on its retry is one row');
@@ -207,7 +202,6 @@ test('the Agent page reads that Agent\'s own profile only, leaves the team\'s an
   fake.settings.learnedSkills.set(agentProfile(writer),new Set(['weekly-recap']));
   const {db}=sessions(fake);
   const driver=driverAt(fake);
-  const hermes={address:fake.address,key:'test-only-key'};
   const read=await withDriver(DRIVER,driver,()=>readAgentSkills(db,{company,agent:writer}));
   assert.deepEqual(read,{state:'found',own:true,skills:[
    {name:'weekly-recap',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true,learned:true},

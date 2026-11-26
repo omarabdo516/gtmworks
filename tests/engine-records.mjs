@@ -26,7 +26,8 @@ const server=createServer((request,response)=>{
  if(url.pathname==='/rest/v1/companies') { reads++; return send(records.has(id)?[{engine_id:id}]:[]); }
  if(url.pathname==='/rest/v1/company_engines') {
   const found=records.get(id);
-  return send(found?[{address:found.address,key_encrypted:encryptSecret(found.key,encryption)}]:[]);
+  // Encrypted with the key the reading process holds now, as the install encrypts with its own.
+  return send(found?[{address:found.address,key_encrypted:encryptSecret(found.key,process.env.WEBHOOK_ENCRYPTION_KEY||encryption)}]:[]);
  }
  response.writeHead(404,{'Content-Type':'application/json'}); response.end('{"message":"not here"}');
 });

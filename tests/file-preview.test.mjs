@@ -8,7 +8,6 @@ import ts from 'typescript';
 import { readAgentFile } from '../lib/engine/files.mjs';
 import { agentFilePreview } from '../lib/agent-files.mjs';
 import { csvRows, filePreviewKind } from '../lib/file-preview.mjs';
-import { fakeHermes } from './fake-hermes.mjs';
 
 // A file of an Agent's Library opens in a read-only preview (#195): a raster picture, text or Markdown as plain text, a
 // CSV as its first rows, or its icon and a download. The text comes from the Engine's own preview (`/api/fs/read-text`,
@@ -29,8 +28,6 @@ const sandbox=`/work/${profile}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
-const clock=new Date(mtime*1000).toISOString();
-const hermes=()=>({address:process.env.BUNDLED_HERMES_URL,key:process.env.HERMES_API_KEY});
 
 const require=createRequire(import.meta.url);
 const [permissions,service]=[await import('../lib/route-permissions.mjs'),await import('../lib/agent-files.mjs')];

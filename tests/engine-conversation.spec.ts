@@ -11,6 +11,7 @@ import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templat
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
+import { hermesHostOf } from './lane.mjs';
 import { hermesEngine as driverFor } from '../lib/engine/contract.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
@@ -82,7 +83,8 @@ test('integration: a message on the fake engine gets its slow reply stored once,
   // A retried send (double click, a lost answer) is the same message and the same run.
   expect(await sendMessage(person,service,message)).toEqual({conversation});
   expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch week'}]);
-  expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
+  // The Company's Engine record names the lane's Engine, and its key (scripts/local-db.sh).
+  expect(fake.connections[0]).toMatchObject({address:`http://${hermesHostOf()}:8642`,key:'test-only-key'});
   const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   // The reply is slow: the first pass finds the run still running.
   expect(await close()).toBe(0);
@@ -547,7 +549,6 @@ function attachHermes() {
 const handTitle='انشر المقال';
 async function handedStep(fake:Awaited<ReturnType<typeof fakeHermes>>) {
  // The lane's fake Hermes is the install's Hermes these sends reach (#342).
- const hermes={address:fake.address,key:fake.settings.key};
  const {service,person}=await clients(); const {agent,detach}=attachHermes();
  const conversation=randomUUID();
  // A message, sent as the route sends it, and its reply closed by whoever reads first (this test, the worker or the page).
@@ -924,9 +925,9 @@ test('integration: Lead makes an Agent from each ready-made role, fitted with th
 // whose key is Lead's Connection key (the install key on a bundled install) and whose root profile has a model with a
 // sign-in that a new profile copies.
 async function ownProfiles(profile:string) {
- const hermes=await fakeHermes();
- hermes.settings.key='fake-engine-key';
- hermes.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:'fake-engine-key',config:{},credentials:{}});
+ // The lane's Engine, at the address the Company's Engine record names, with the record's key.
+ const hermes=await laneHermes();
+ hermes.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}});
  hermes.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
  hermes.settings.defaultCredentials['openai-codex']='root-codex-token';
  const fake=fakeEngine();
@@ -934,7 +935,7 @@ async function ownProfiles(profile:string) {
   const driver=driverFor({...connection,address:hermes.address,managementAddress:hermes.managementAddress});
   return {...fake.engineFor(connection),readAgent:driver.readAgent,provideAgent:driver.provideAgent,removeAgent:driver.removeAgent};
  };
- return {hermes,install:{address:hermes.address,key:'fake-engine-key'},fake,engineFor};
+ return {hermes,install:{address:hermes.address,key:'test-only-key'},fake,engineFor};
 }
 type MadeAgent={id:string,instructions:string,profile:string,derived:boolean,tools_confirmed:boolean|null,tools_pending:boolean|null};
 const madeBy=(conversation:string,lead:string,call='call-0'):MadeAgent[]=>JSON.parse(query(`select a.id,a.instructions,a.profile,
@@ -963,7 +964,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,derived:true,tools_confirmed:true,tools_pending:false});
   expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
   const kept=hermes.settings.profiles.get(own)!;
-  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',toolConfig({profile:own})]);
+  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'test-only-key',toolConfig({profile:own})]);
   const asked=managed(hermes);
   for(const step of ['POST /api/profiles',`PUT /api/env`,`PUT /api/config`,'GET /api/model/options']) expect([1,2]).toContain(asked.filter(request=>request===step).length);
   expect(asked.filter(request=>request.startsWith('DELETE'))).toEqual([]);
@@ -972,7 +973,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
 
   // The same run and call carried out again (a closer stopped before the close) answer the Agent without the Engine.
   const before=hermes.settings.managementRequests.length;
-  expect(await runToolCall({db:service,engine:engineFor({address:'http://127.0.0.1:9',profile,key:'fake-engine-key'}),profile,conversation,run:fake.runs[0].id},
+  expect(await runToolCall({db:service,engine:engineFor({address:hermes.address,profile,key:'test-only-key'}),profile,conversation,run:fake.runs[0].id},
    {id:'call-0',name:'create_agent',arguments:{template:'writer'}})).toEqual({state:'created',agent:agent.id});
   expect(managed(hermes).slice(before)).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
@@ -981,7 +982,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   await keepSharedSkills(service,{});
   const theirs=randomUUID();
   expect(await withEngineContract(engineFor,()=>sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma'}))).toEqual({conversation:theirs});
-  expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'fake-engine-key'});
+  expect(fake.connections.at(-1)).toMatchObject({profile:own,key:'test-only-key'});
   expect(fake.runs.at(-1)).toMatchObject({conversation:theirs});
   expect(fake.runs.at(-1)!.instructions,'no instructions are sent').toBeNull();
   expect(await withEngineContract(engineFor,()=>closeOpenRuns(service,{conversation:theirs}))).toBe(1);
@@ -1043,13 +1044,12 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
 
   // Its own profile gets a model, standing in for the sign-in that lets it answer.
   Object.assign(hermes.settings.profiles.get(own)!,{provider:'openai-codex',model:'gpt-5.5'});
-  const bundled={address:hermes.address,managementAddress:hermes.managementAddress,profile:'default',key:'fake-engine-key'};
   // The worker makes the Company's shared space (#122), makes the Agent's own profile, which does not take the Agent
   // before it reads the space's folder, gives it that folder, and then moves the Agent.
   await keepSharedSkills(service,{});
-  expect((await moveAgentProfiles(service,{driver:driverFor(bundled)})).moved).toBe(0);
+  expect((await moveAgentProfiles(service)).moved).toBe(0);
   await keepSharedSkills(service,{});
-  expect((await moveAgentProfiles(service,{driver:driverFor(bundled)})).moved).toBeGreaterThanOrEqual(1);
+  expect((await moveAgentProfiles(service)).moved).toBeGreaterThanOrEqual(1);
   expect(JSON.parse(query(`select a.profile from public.hermes_agents a where a.id='${agent.id}'`))).toEqual([{profile:own}]);
   expect(JSON.parse(query(`select a.profile from public.hermes_agents a where a.id='${lead}'`))).toEqual([{profile}]);
   expect(record()).toEqual(before);
@@ -1141,7 +1141,6 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
 test('a Card follows Lead\'s handover: the Agent handed the work owns it and a second handover moves it, with the chat\'s line and the Card\'s Log',async({page,browser})=>{
  test.setTimeout(240000);
  const fake=await laneHermes();
- const hermes={address:fake.address,key:fake.settings.key};
  const {lead}=bundledLead();
  const {service,person}=await clients();
  const target=attachTarget('Salma','Runs the March launch.');
@@ -1232,7 +1231,6 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
 test('any Agent hands a job to another Agent of its Company, one hidden from the person included, and the chat draws both',async({page})=>{
  test.setTimeout(240000);
  const fake=await laneHermes();
- const hermes={address:fake.address,key:fake.settings.key};
  const salma=attachTarget('Salma','Writes the ad copy.');
  const tarek=attachTarget('Tarek','Reads the campaign numbers.');
  const reviewer='20000000-0000-0000-0000-000000000003';
