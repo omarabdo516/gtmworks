@@ -234,7 +234,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // desktop comes up; `screenPictureUrl` replaces what a grab sends.
   // The Engine's own dashboard (#869): every request to its pages, code and API, with the key and the cookies it came with
   // and the prefix it was served under, and every socket it opened. See dashboardAnswer.
-  dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string}[]} */([]),
+  dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string,extensions?:string}[]} */([]),
   dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardTheme:'gtmworks',dashboardEvents:0,dashboardSockets:/** @type {Set<import('ws').WebSocket&{path:string}>} */(new Set()),
   // What an Owner changed on the dashboard's other pages (#871): each messaging platform's switch and keys, the plugins
   // installed, whether webhooks are on and each webhook, and the main model.
@@ -1261,7 +1261,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   const url=new URL(request.url||'/','http://management');
   // The dashboard's sockets (#869, #870), each opened with a ticket the dashboard minted, used once.
   if(['/api/ws','/api/pty','/api/plugins/kanban/events'].includes(url.pathname)&&settings.dashboardTickets.delete(url.searchParams.get('ticket')??'')) {
-   settings.dashboardRequests.push({method:'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix:String(request.headers['x-forwarded-prefix']??'')});
+   settings.dashboardRequests.push({method:'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix:String(request.headers['x-forwarded-prefix']??''),extensions:request.headers['sec-websocket-extensions']});
    sockets.handleUpgrade(request,socket,head,ws=>{
     const live=Object.assign(ws,{path:url.pathname});
     settings.dashboardSockets.add(live); ws.on('close',()=>settings.dashboardSockets.delete(live));

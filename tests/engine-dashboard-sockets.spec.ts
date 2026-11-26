@@ -148,3 +148,38 @@ test('an Owner who signs out has every dashboard socket closed within five secon
   await closedWithin(owner,sockets,changed);
  } finally { await owner.close(); }
 });
+
+// #892 (#869, #871 "No response to the browser holds the Engine's key"): every frame the Engine sends a dashboard socket
+// is read before it goes on. One that would carry the Engine's own key, as written or in base64, in one frame or split
+// over several, is not sent, and the socket closes; what came before it was delivered.
+test('a socket frame that would carry the Engine\'s key is not sent, whole or split over frames, and the socket closes',async({browser})=>{
+ const owner=await signedIn(browser,'omar@example.com');
+ const key=fake.settings.key;
+ // The Engine's side of the terminal socket just opened.
+ const engineSide=()=>[...fake.settings.dashboardSockets].filter(socket=>socket.path==='/api/pty').at(-1)!;
+ const sends:[string,(socket:ReturnType<typeof engineSide>)=>void][]=[
+  ['as written',socket=>socket.send(`OPENROUTER=x API_SERVER_KEY=${key}\n`)],
+  ['in base64',socket=>socket.send(Buffer.from(`API_SERVER_KEY=${key}`).toString('base64'))],
+  ['over two messages',socket=>{ socket.send(key.slice(0,24)); socket.send(key.slice(24)); }],
+  ['over the fragments of one message',socket=>{ socket.send(key.slice(0,24),{fin:false}); socket.send(key.slice(24),{fin:true}); }],
+ ];
+ try {
+  for(const [how,send] of sends) {
+   const live=await openSocket(owner,terminal);
+   if(typeof live==='number') throw new Error(`the terminal was refused with ${live}`);
+   const before=live.frames.length;
+   await expect.poll(()=>fake.settings.dashboardSockets.size).toBeGreaterThan(0);
+   engineSide().send('a frame before the key');
+   await expect.poll(()=>live.frames.length,how).toBeGreaterThan(before);
+   expect(live.frames.at(-1),how).toBe('a frame before the key');
+   send(engineSide());
+   await live.closed;
+   expect(live.frames.join(''),how).not.toContain(key);
+   expect(live.frames.join(''),how).not.toContain(Buffer.from(key).toString('base64').slice(4,-4));
+  }
+  // No socket's frames are compressed, which the guard could not read: the browser's offer never reaches the Engine.
+  const upgrades=fake.settings.dashboardRequests.filter(request=>request.path.startsWith('/api/pty?'));
+  expect(upgrades.length).toBeGreaterThan(0);
+  for(const request of upgrades) expect(request.extensions??'').toBe('');
+ } finally { await owner.close(); }
+});
