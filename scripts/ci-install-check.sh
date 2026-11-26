@@ -447,19 +447,6 @@ for service in web worker; do
 done
 docker exec "$(compose ps -q web)" node -e "fetch('http://$second_container:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
   || fail 'the recreated app reaches the second Engine'
-# #773: a healthy Engine is one gtmworks can read and write. With only its management listener stopped, by the image's
-# own supervisor, the Run listener still answers and Docker reports the Engine unhealthy (its health check's sixty
-# retries, five seconds apart); started again, the Engine is healthy again.
-engine_health() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$second_container"; }
-[[ $(engine_health) == healthy ]] || fail 'the second Engine is healthy before its management listener stops'
-docker exec -u 0 "$second_container" /command/s6-svc -wD -d /run/service/dashboard || fail "stop only the second Engine's management listener"
-for _ in $(seq 90); do [[ $(engine_health) == unhealthy ]] && break; sleep 5; done
-[[ $(engine_health) == unhealthy ]] || fail 'an Engine whose management listener is stopped reports unhealthy'
-docker exec "$(compose ps -q web)" node -e "fetch('http://$second_container:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
-  || fail "the second Engine's Run listener answers while its management listener is stopped"
-docker exec -u 0 "$second_container" /command/s6-svc -u /run/service/dashboard || fail "start the second Engine's management listener again"
-for _ in $(seq 60); do [[ $(engine_health) == healthy ]] && break; sleep 2; done
-[[ $(engine_health) == healthy ]] || fail 'the second Engine is healthy again once its management listener answers'
 # From inside the second Engine's network the first Engine cannot be reached, and neither can any install service.
 docker run --rm --network "$second_network" node:22.14.0-alpine3.21 node --input-type=module -e "try { await fetch('http://gtmworks-engine-first:8642/health',{signal:AbortSignal.timeout(5000)}); process.exit(1); } catch { console.log('the other Engine is unreachable'); }" || fail 'one Engine cannot reach another'
 docker run --rm --network "$second_network" -e INSTALL_SERVICE_IPS="$(install_service_ips)" -v "$PWD/scripts:/check:ro" \
@@ -1417,7 +1404,8 @@ docker run --rm --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/c
 # (#378, C3), and the update that pins another Engine image.
 # rollback: this release's installer rolls a failed migration back and leaves the release it was running serving. Its own
 # area since the work sandbox image (#389) made the update area's whole run longer than its 12 minutes: it needs only a
-# source install, none of the releases the update area makes.
+# source install, none of the releases the update area makes. It also reads an Engine with only its management listener
+# stopped as unhealthy (#773): Docker's five minutes of retries fit here, and not in the companies area's 12.
 rollback() {
 cd "$root"
 area_setup
@@ -1434,6 +1422,24 @@ grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_upd
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
 status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) || fail_update 'old version health request'
 [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
+management_listener_stopped gtmworks-engine-first
+}
+
+# A healthy Engine is one gtmworks can read and write (#773). With only its management listener stopped, by the image's
+# own supervisor (its `dashboard` service), the Run listener still answers and Docker reports the Engine unhealthy, after
+# its health check's sixty retries five seconds apart; started again, the Engine is healthy again.
+health_of() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1"; }
+management_listener_stopped() {
+  local engine=$1 management=/run/service/dashboard attempt
+  [[ $(health_of "$engine") == healthy ]] || fail "$engine is healthy before its management listener stops"
+  docker exec -u 0 "$engine" /command/s6-svc -wD -d "$management" || fail "stop only the management listener of $engine"
+  for attempt in $(seq 90); do [[ $(health_of "$engine") == unhealthy ]] && break; sleep 5; done
+  [[ $(health_of "$engine") == unhealthy ]] || fail "$engine reports unhealthy with its management listener stopped"
+  docker exec "$(compose ps -q web)" node -e "fetch('http://$engine:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
+    || fail "the Run listener of $engine answers while its management listener is stopped"
+  docker exec -u 0 "$engine" /command/s6-svc -wu -u "$management" || fail "start the management listener of $engine again"
+  for attempt in $(seq 60); do [[ $(health_of "$engine") == healthy ]] && break; sleep 2; done
+  [[ $(health_of "$engine") == healthy ]] || fail "$engine is healthy again once its management listener answers"
 }
 
 # The previous release installed in release-install/ from its own two files, its first run made, a memory written in
