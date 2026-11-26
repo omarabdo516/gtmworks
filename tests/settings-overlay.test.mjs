@@ -38,7 +38,7 @@ test('the breadcrumb names the group of the open page, and nothing for a page on
 });
 
 test('the Owner alone sees Backup (#33)', () => {
-  assert.equal(visibleSections('owner').length, 13);
+  assert.equal(visibleSections('owner').length, 14);
   for (const role of ['manager', 'contributor', 'viewer']) {
     assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
     assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
