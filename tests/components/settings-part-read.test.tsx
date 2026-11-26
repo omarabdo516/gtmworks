@@ -12,11 +12,12 @@ function Part({url}:{url:string}) {
  const read=useSettingsPart<{who:string}>(url,1,data=>typeof data?.who==='string');
  return <><p data-testid="shown">{read.data?.who??'nothing'}</p><p data-testid="state">{read.state}</p></>;
 }
-// Each read answers when the test lets it, with the reader it is told; one no longer wanted ends as fetch ends it.
-function held() {
+// Each read answers when the test lets it, with the reader it is told; one no longer wanted ends as fetch ends it,
+// except the first when `late`: it ignores being stopped and still answers, as a response already on its way does.
+function held({late=false}:{late?:boolean}={}) {
  const waiting:((who:string)=>void)[]=[];
  vi.stubGlobal('fetch',(_url:string,init?:RequestInit)=>new Promise<Response>((resolve,reject)=>{
-  init?.signal?.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')));
+  if(!(late&&waiting.length===0)) init?.signal?.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')));
   waiting.push(who=>resolve(new Response(JSON.stringify({data:{who},readAt:Date.now()}),{status:200})));
  }));
  return waiting;
@@ -26,21 +27,27 @@ const draw=(person:string,url:string,mount='first')=><LanguageProvider language=
 
 test('a read asked for one reader that lands after another signs in is never shown to the new one, nor kept for them',async()=>{
  const url=partUrl('co-reader-switch','about',{agent:'a'});
- const answers=held();
+ const answers=held({late:true});
  const screen=await render(draw('person-a',url));
  await expect.poll(()=>answers.length).toBe(1);
- // Another person signs in in the same tab while the first read is held, then the first reader's answer lands.
+ // Another person signs in in the same tab while the first read is on its way.
  await screen.rerender(draw('person-b',url));
  await expect.poll(()=>answers.length).toBe(2);
+ // The first reader's answer lands after the change.
  answers[0]('person-a');
+ await new Promise(resolve=>setTimeout(resolve,100));
  await expect.element(screen.getByTestId('shown')).toHaveTextContent('nothing');
  await expect.element(screen.getByTestId('state')).toHaveTextContent('reading');
- // The new reader's own read lands and is shown.
- answers[1]('person-b');
- await expect.element(screen.getByTestId('shown')).toHaveTextContent('person-b');
- // A part drawn again for the new reader is given only their own kept read.
- held();
+ // A part drawn again for the new reader, before their own read lands, finds nothing kept from the first reader.
  await screen.rerender(draw('person-b',url,'again'));
+ await expect.element(screen.getByTestId('shown')).toHaveTextContent('nothing');
+ // The part drawn again asked for its own read; the new reader's answer lands and is shown, and a part drawn again for
+ // them is given it.
+ await expect.poll(()=>answers.length).toBe(3);
+ answers[2]('person-b');
+ await expect.element(screen.getByTestId('shown')).toHaveTextContent('person-b');
+ held();
+ await screen.rerender(draw('person-b',url,'third'));
  await expect.element(screen.getByTestId('shown')).toHaveTextContent('person-b');
 });
 
