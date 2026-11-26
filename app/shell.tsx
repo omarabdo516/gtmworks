@@ -24,7 +24,7 @@ import ChannelList from './channel-list';
 import { AgentTile, SidebarLive } from './sidebar-live';
 import { channelSidebar } from '@/lib/channels';
 import { screenHands } from '@/lib/agent-screen.mjs';
-import FirstRunChoice from './first-run-choice';
+import FirstRunChoice, { FirstRunGate } from './first-run-choice';
 import AgentGrid from './agent-grid';
 import { chooseWorkMode } from './work-mode-actions';
 import NewChatKey from './new-chat-key';
@@ -135,7 +135,7 @@ export default async function Shell({company,companies,personId,personName,role,
  const frame=<Frame sidebar={sidebar}>{children}</Frame>;
  // The apps sheet sits around the whole frame, so the sidebar, the account menu and every composer's "+" open it (#202).
  const framed=company?.id?<AppsSheetProvider company={company.id} person={personId} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
- const shown=question?<><div style={{display:'contents'}} inert>{framed}</div>{question}</>:framed;
+ const shown=question?<FirstRunGate question={question}>{framed}</FirstRunGate>:framed;
  // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153); the "@" list offers the
  // same Agents with the line under each name, their state and role (#154; design-reference: mentionMenu). Each Agent
  // carries the ready-made role it was made from, so the Commands can name it (#159).

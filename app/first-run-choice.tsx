@@ -1,6 +1,6 @@
 'use client';
 import './first-run-choice.css';
-import { useActionState, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { createContext, useActionState, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { useLeave } from '@/lib/motion';
@@ -21,6 +21,16 @@ const freshRow=(id:number):Row=>({id,email:'',role:'contributor',error:''});
 // "Invite a member" keeps an email inside the message one left-to-right run (design-reference: errH).
 const isolateEmails=(text:string):ReactNode[]=>text.split(/([\w.+-]+@[\w.-]+)/).map((part,index)=>index%2?<bdi key={index} dir="ltr">{part}</bdi>:part);
 
+// The workspace behind the question (app/shell.tsx): inert until the question is answered and has left. The Shell is
+// drawn once by the Company's layout (#789) and the page the answer opens does not draw it again, so the answer itself
+// takes the question away and gives the workspace back.
+const Answered=createContext<()=>void>(()=>{});
+export function FirstRunGate({question,children}:{question:ReactNode,children:ReactNode}) {
+ const [answered,setAnswered]=useState(false);
+ const answer=useCallback(()=>setAnswered(true),[]);
+ return <Answered value={answer}><div style={{display:'contents'}} inert={!answered}>{children}</div>{!answered&&question}</Answered>;
+}
+
 // First run (#9, #186; design-reference: dialog#firstrun, frHTML): alone or with a team, then, for a team, who is on
 // it. It covers the whole window over the new workspace, which stays inert behind it, until the Owner answers; the
 // answer is kept on the Company only when the second step ends; once it is saved the question leaves with the dialog's
@@ -40,7 +50,8 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const router=useRouter(); const leaving=useLeave(); const {close}=leaving;
  const opened=result?.opened;
  // Lead's Conversation takes the keyboard once it is drawn (design-reference: #ta-main focused after closeDlg).
- useEffect(()=>{ if(opened) close(()=>{ askComposerFocus(opened); router.push(opened); }); },[opened,close,router]);
+ const answered=useContext(Answered);
+ useEffect(()=>{ if(opened) close(()=>{ answered(); askComposerFocus(opened); router.push(opened); }); },[opened,close,router,answered]);
  const box=useRef<HTMLDivElement>(null);
  const focusTo=useRef<string|null>(null);
  const name=lead?.name||'Lead';
