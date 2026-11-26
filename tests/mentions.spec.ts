@@ -59,10 +59,10 @@ test('in the general channel "@" offers the other Members with their Role, a Vie
  await expect(page.locator('.composer .menu__label')).toHaveText(['Someone on the team', 'Call an agent']);
  // The Owner first, then the Manager, then the Viewer marked "reads only", as the channel lists its Members; the Agent
  // comes last.
- await expect(page.getByRole('option').first()).toContainText('Owner');
+ await expect(page.getByRole('option').first()).toContainText('Administrator');
  await expect(page.getByRole('option').first()).not.toContainText('read');
  await expect(page.getByRole('option').filter({ hasText: 'Manager' })).toHaveCount(1);
- await expect(page.getByRole('option').filter({ hasText: 'Owner' })).toHaveCount(1);
+ await expect(page.getByRole('option').filter({ hasText: 'Administrator' })).toHaveCount(1);
  const reads = page.getByRole('option').filter({ hasText: 'reads only' });
  await expect(reads).toHaveCount(1);
  await expect(reads).toContainText('Viewer');

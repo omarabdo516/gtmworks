@@ -40,7 +40,7 @@ test.beforeAll(async({},testInfo)=>{
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
    ${turn(adsTalk,'acc-1','Run a Meta campaign for the new course',30)},
    ${turn(againTalk,'acc-2','Plan the ads for Ramadan',20)},
-   ${turn(articlesTalk,'acc-3','Write an article about our new course',10,said.replace('مدير (Manager)','عمر (Owner)'))};
+   ${turn(articlesTalk,'acc-3','Write an article about our new course',10,said.replace('مدير (Manager)','عمر (Administrator)'))};
  end $$;`);
  for(const [talk,run,job] of [[adsTalk,'acc-1','Campaigns and ads'],[againTalk,'acc-2','Campaigns and ads'],[articlesTalk,'acc-3','Articles']])
   query(`select public.agent_ask_to_open('${talk}','${run}','call-0','${job}')`);

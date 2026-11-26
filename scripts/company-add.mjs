@@ -46,7 +46,7 @@ const checked=async()=>{
  return true;
 };
 // The link's secret is after `#` and only its hash is stored (#383, ADR 0019), so printing it again is the only way back.
-const printLink=secret=>process.stdout.write(`First-Owner link for "${name}": ${ownerLink(appUrl('/').origin,secret)}\n`);
+const printLink=secret=>process.stdout.write(`First-Administrator link for "${name}": ${ownerLink(appUrl('/').origin,secret)}\n`);
 const waitingLinks=async()=>{
  const links=await press(service.from('company_owner_links').select('id,company_name,engine_id,created_at').is('claimed_at',null).order('created_at'));
  // A waiting Engine is a record no Company names (#378, T3).
@@ -87,7 +87,7 @@ try {
   // A fresh link for a Company still waiting ends the one printed before it: one link is kept per waiting Engine.
   if(validName()) {
    const waiting=(await waitingLinks()).find(link=>link.company_name.toLowerCase()===name.toLowerCase());
-   if(!waiting) sayError(`No Company named "${name}" is waiting for its Owner. Nothing was changed.`);
+   if(!waiting) sayError(`No Company named "${name}" is waiting for its first Administrator. Nothing was changed.`);
    else {
     const secret=generateOwnerSecret();
     await press(service.from('company_owner_links').update({secret_hash:ownerSecretHash(secret)}).eq('id',waiting.id).select('id').single());

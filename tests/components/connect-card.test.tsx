@@ -17,9 +17,9 @@ const reason = 'مش متوصل، فمقدرتش أعرف مين من الليد
 const card = (more: Partial<Connect> = {}): Connect => ({ id: 8, kind: 'connect', title: 'Amplitude', app: 'amplitude', reason, state: 'open', ...more } as Connect);
 const words = {
  en: { label: 'Connect Amplitude', later: 'Later', connect: 'Connect', connecting: 'Connecting…', connected: 'Amplitude connected', postponedLabel: 'Amplitude postponed',
-  postponed: 'Postponed · you can connect it from the details any time', by: 'Apps are connected by Omar and Sara', byOwner: 'Apps are connected by the Owner', failed: 'The sign-in didn’t finish. Try again.' },
+  postponed: 'Postponed · you can connect it from the details any time', by: 'Apps are connected by Omar and Sara', byOwner: 'Apps are connected by an Administrator', failed: 'The sign-in didn’t finish. Try again.' },
  ar: { label: 'وصّل Amplitude', later: 'بعدين', connect: 'وصّل', connecting: 'بيتوصل…', connected: 'Amplitude اتوصل', postponedLabel: 'Amplitude اتأجل',
-  postponed: 'اتأجل · تقدر توصّله من التفاصيل في أي وقت', by: 'ربط التطبيقات بيعمله Omar وSara', byOwner: 'ربط التطبيقات بيعمله المالك', failed: 'الدخول مكملش. جرّب تاني.' },
+  postponed: 'اتأجل · تقدر توصّله من التفاصيل في أي وقت', by: 'ربط التطبيقات بيعمله Omar وSara', byOwner: 'ربط التطبيقات بيعمله الأدمن', failed: 'الدخول مكملش. جرّب تاني.' },
 };
 const owner = (more: Partial<ConnectApps> = {}): ConnectApps => ({ owner: true, owners: [], start: async () => ({ state: 'connected' }), later: async () => ({ state: 'postponed' }), ...more });
 const drawn = (shown: Card, language: 'en' | 'ar', connect?: ConnectApps) =>

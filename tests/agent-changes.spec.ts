@@ -48,7 +48,7 @@ test.beforeAll(async({},testInfo)=>{
    ('${managerTalk}','${company}','${manager}','${writer}','Writer'),('${ownerTalk}','${company}','${omar}','${lead}','Lead');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${managerTalk}','person','${manager}',null,'مدير','The weekly report is late again',gen_random_uuid(),'ch-1',now()-interval '10 minutes'),
-   ('${company}','${managerTalk}','agent',null,'${writer}','Writer','I proposed a faster model. Nothing changes before the Owner’s OK.',null,'ch-1',now()-interval '9 minutes'),
+   ('${company}','${managerTalk}','agent',null,'${writer}','Writer','I proposed a faster model. Nothing changes before an Administrator’s OK.',null,'ch-1',now()-interval '9 minutes'),
    ('${company}','${ownerTalk}','person','${omar}',null,'عمر','Writer’s posts run long',gen_random_uuid(),'ch-2',now()-interval '8 minutes'),
    ('${company}','${ownerTalk}','agent',null,'${lead}','Lead','I proposed shorter instructions for Writer. Nothing changes before your OK.',null,'ch-2',now()-interval '7 minutes');
  end $$;`);

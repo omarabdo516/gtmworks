@@ -51,9 +51,9 @@ Usage:
   gtmworks install          (repair: the same as running the line again)
   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>]
   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>]  (its work sandbox's memory, CPUs and disk)
-  gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
+  gtmworks company link <Company>  (a fresh first-Administrator link for a Company still waiting)
   gtmworks company list     (each Company, the state of its Engine and of its work sandbox)
-  gtmworks update-button on|off  (the Update now button Owners see; on by default)
+  gtmworks update-button on|off  (the Update now button Administrators see; on by default)
   gtmworks auto-update on|off    (install each newer version of this channel by itself; off by default)
   gtmworks updater          (one run of the updater; its timer runs it every minute)
 USAGE
@@ -867,10 +867,10 @@ op_switch() {
   updates "$step" > /dev/null \
     || fail "Could not change it: the database of $dir is not running (see gtmworks status), or comes from before Update now (gtmworks update brings it). Nothing was changed."
   case "$step" in
-    button-on) say 'Update now is on: Owners see the button when a newer gtmworks is out, and the updater installs it when one of them asks.';;
-    button-off) say 'Update now is off: Owners see no button, and the updater ignores any request. Update with: gtmworks update';;
+    button-on) say 'Update now is on: Administrators see the button when a newer gtmworks is out, and the updater installs it when one of them asks.';;
+    button-off) say 'Update now is off: Administrators see no button, and the updater ignores any request. Update with: gtmworks update';;
     auto-on) say "Automatic updates are on: the updater installs each newer gtmworks of this install's channel by itself, backing up first.";;
-    auto-off) say 'Automatic updates are off: a newer gtmworks waits for an Owner to click Update now, or for gtmworks update.';;
+    auto-off) say 'Automatic updates are off: a newer gtmworks waits for an Administrator to click Update now, or for gtmworks update.';;
   esac
   [ -n "$(updater_kind)" ] || say 'The updater is not installed on this machine yet: run gtmworks install.'
 }

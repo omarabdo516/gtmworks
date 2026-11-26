@@ -27,7 +27,7 @@ test('the person in the chat sees the proposal wait for the Owners, change nothi
  const waiting = await card({ ...model, state: 'waiting', owners: ['Omar', 'Sara'] });
  const proposal = waiting.getByRole('group', { name: 'Proposed change: Analyst' });
  await expect.element(proposal.getByText('Waiting for Omar or Sara’s OK')).toBeVisible();
- for (const text of ['Proposed change to the settings of Analyst', 'Lead proposed it for Analyst · nothing changes before the Owner’s OK', 'New model: gemini-2.5-pro', 'google',
+ for (const text of ['Proposed change to the settings of Analyst', 'Lead proposed it for Analyst · nothing changes before an Administrator’s OK', 'New model: gemini-2.5-pro', 'google',
   'After the OK', 'The 90-day report reads a lot of numbers and runs late.', 'Waiting for Omar or Sara’s OK. Until then, the agent’s settings stay as they are.'])
   expect(proposal.element().textContent).toContain(text);
  expect(proposal.element().querySelectorAll('button, a')).toHaveLength(0);

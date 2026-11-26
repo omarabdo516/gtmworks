@@ -90,8 +90,8 @@ for (const [language, notSent, tryAgain] of [['en', 'Not sent to Lead', 'Try aga
 // (#422), instead of that the Agent could not reply: the Owner gets the way to Subscription and models, a Member is told
 // to ask the Owner.
 const noModelWords = {
- en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask the company’s Owner to connect one in Settings.', failed: 'couldn’t reply' },
- ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', failed: 'مقدرش يرد' },
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask an Administrator of the company to connect one in Settings.', failed: 'couldn’t reply' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من أدمن الشركة يوصّل واحد من الإعدادات.', failed: 'مقدرش يرد' },
 } as const;
 for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
@@ -118,15 +118,15 @@ test('two Agents a message called that both had no model say it once, and anothe
   mention: mention('Ads', 'noModel'), mentions: [mention('Ads', 'noModel'), mention('SEO', 'noModel'), mention('Lead', 'unanswered')] };
  const screen = await channel(record([three], { modelLine: { owner: false } }));
  const lines = screen.getByRole('alert').elements().map(line => line.textContent);
- expect(lines).toEqual(['Lead couldn’t reply to this message.', 'This company has no AI subscription or model key connected yet, so its agents can’t reply. Ask the company’s Owner to connect one in Settings.']);
+ expect(lines).toEqual(['Lead couldn’t reply to this message.', 'This company has no AI subscription or model key connected yet, so its agents can’t reply. Ask an Administrator of the company to connect one in Settings.']);
 });
 
 // #530: a channel Run whose model call cannot succeed on a retry says its cause and its Agent, in the words a
 // Conversation uses (#457), instead of that the Agent could not reply: the Owner gets the way to the Agent's model in
 // Providers, a Member is told to ask the Owner.
 const refusedWords = {
- en: { noCredit: 'Lead could not reply: the company’s model key has no credit left.', keyRefused: 'Lead could not reply: the model provider refused the company’s key or sign-in.', modelMissing: 'Lead could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Providers', ask: 'Ask the company’s Owner to check it in Settings.' },
- ar: { noCredit: 'Lead مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', keyRefused: 'Lead مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', modelMissing: 'Lead مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من المزوّدين', ask: 'اطلب من مالك الشركة يتأكد منه من الإعدادات.' },
+ en: { noCredit: 'Lead could not reply: the company’s model key has no credit left.', keyRefused: 'Lead could not reply: the model provider refused the company’s key or sign-in.', modelMissing: 'Lead could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Providers', ask: 'Ask an Administrator of the company to check it in Settings.' },
+ ar: { noCredit: 'Lead مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', keyRefused: 'Lead مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', modelMissing: 'Lead مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من المزوّدين', ask: 'اطلب من أدمن الشركة يتأكد منه من الإعدادات.' },
 } as const;
 for (const language of ['en', 'ar'] as const) for (const cause of ['noCredit', 'keyRefused', 'modelMissing'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run refused for ${cause} says so and tells ${owner ? 'the Owner where to fix it' : 'a Member to ask the Owner'}`, async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
@@ -152,8 +152,8 @@ test('each Agent a message called whose model refused it says its own cause, bes
   mention: mention('Ads', 'noCredit'), mentions: [mention('Ads', 'noCredit'), mention('SEO', 'modelMissing'), mention('Lead', 'unanswered')] };
  const screen = await channel(record([three], { modelLine: { owner: false } }));
  const lines = screen.getByRole('alert').elements().map(line => line.textContent);
- expect(lines).toEqual(['Ads could not reply: the company’s model key has no credit left. Ask the company’s Owner to check it in Settings.',
-  'SEO could not reply: its model is not available from the provider. Ask the company’s Owner to check it in Settings.', 'Lead couldn’t reply to this message.']);
+ expect(lines).toEqual(['Ads could not reply: the company’s model key has no credit left. Ask an Administrator of the company to check it in Settings.',
+  'SEO could not reply: its model is not available from the provider. Ask an Administrator of the company to check it in Settings.', 'Lead couldn’t reply to this message.']);
 });
 
 test('a message is posted to the channel with its own send key', async () => {
@@ -210,7 +210,7 @@ test('a team channel\'s Agent hidden from the reader elsewhere is marked as show
  const rows = Array.from(details.element().querySelectorAll('.panel-row')).map(row => row.textContent);
  expect(rows).toContain('SEOShown to you in this channel only');
  expect(rows).toContain('AdsRuns the ads. · Idle');
- await expect.element(details.getByText('Members and agents are added and removed by Omar (Owner) and Sara Adel (Manager).')).toBeVisible();
+ await expect.element(details.getByText('Members and agents are added and removed by Omar (Administrator) and Sara Adel (Manager).')).toBeVisible();
  await expect.element(details.getByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
  await expect.element(details.getByRole('button', { name: 'Add a member' })).not.toBeInTheDocument();
 });

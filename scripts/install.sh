@@ -1021,9 +1021,9 @@ company_add() {
   add_slug=
   trap 'exit 1' HUP INT TERM
   if [ "$has_owner" = yes ]; then
-    echo "Company \"$company_name\" is made on its own Engine ($(engine_project "$slug")). Its Owner is $owner_email."
+    echo "Company \"$company_name\" is made on its own Engine ($(engine_project "$slug")). Its Administrator is $owner_email."
   else
-    echo "Company \"$company_name\" is waiting for its Owner on its own Engine ($(engine_project "$slug")). Send the first-Owner link above; it works once."
+    echo "Company \"$company_name\" is waiting for its first Administrator on its own Engine ($(engine_project "$slug")). Send the first-Administrator link above; it works once."
   fi
 }
 # `gtmworks company link` (#383, ADR 0019): a fresh first-Owner link for a Company still waiting, which ends the earlier one.

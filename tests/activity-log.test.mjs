@@ -252,8 +252,8 @@ test('a request for an Agent says who asked whom, and the Owner\'s yes or no wit
  const declined = describeEntry({ subject: 'agent', action: 'agent_request_declined', agent_id: lead, details: { agent_name: 'Lead', asked_for: 'WhatsApp Leads', asked_by: 'يوسف', reason: 'Ads follows WhatsApp leads now.' } });
  assert.deepEqual([declined.act, declined.obj, declined.from, declined.to], [['logActAgentRequestDeclined', { text: 'يوسف' }], 'WhatsApp Leads', { key: 'logAgentRequest' }, { text: 'Ads follows WhatsApp leads now.' }]);
  assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActAgentRequestSent', 'Lead'), t('logActAgentRequestMade', 'Youssef'), t('logAgentShowsFor', 'Youssef'), t('logActAgentRequestDeclined', 'Youssef'), t('logAgentRequest'), t('logAgentRequestWaiting')]; }),
-  [['asked Lead for an agent', 'made an agent Youssef asked for', 'Shows for Youssef', 'declined an agent request from Youssef', 'Request', 'Waiting for the Owner’s answer'],
-   ['طلب من Lead وكيل', 'عمل وكيل طلبه Youssef', 'ظهر عند Youssef', 'رفض طلب وكيل من Youssef', 'طلب', 'مستني رد المالك']]);
+  [['asked Lead for an agent', 'made an agent Youssef asked for', 'Shows for Youssef', 'declined an agent request from Youssef', 'Request', 'Waiting for an Administrator’s answer'],
+   ['طلب من Lead وكيل', 'عمل وكيل طلبه Youssef', 'ظهر عند Youssef', 'رفض طلب وكيل من Youssef', 'طلب', 'مستني رد الأدمن']]);
 });
 
 // #167: an Owner's or a Manager's answer to a Member's request for a hidden Agent names that Member and the Agent.
@@ -279,8 +279,8 @@ test('a proposed change to an Agent\'s settings, its approval and its decline na
  const reasoned = describeEntry({ subject: 'agent', action: 'agent_change_declined', agent_id: writer, details: { agent_name: 'Analyst', setting: 'model', reason: 'Keep it this month.' } });
  assert.deepEqual(reasoned.to, { text: 'Keep it this month.' });
  assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActChangeProposed', 'main model', 'Analyst'), t('logActChangeApproved', 'sub-agents', 'Analyst'), t('logActChangeDeclined', 'the instructions', 'Analyst'), t('logChangeWaiting')]; }),
-  [['proposed a change to main model in the settings of Analyst', 'approved a change to sub-agents in the settings of Analyst', 'declined a change to the instructions in the settings of Analyst', 'Waiting for the Owner’s OK'],
-   ['اقترح تغيير main model في إعدادات Analyst', 'وافق على تغيير sub-agents في إعدادات Analyst', 'رفض تغيير the instructions في إعدادات Analyst', 'مستني موافقة المالك']]);
+  [['proposed a change to main model in the settings of Analyst', 'approved a change to sub-agents in the settings of Analyst', 'declined a change to the instructions in the settings of Analyst', 'Waiting for an Administrator’s OK'],
+   ['اقترح تغيير main model في إعدادات Analyst', 'وافق على تغيير sub-agents في إعدادات Analyst', 'رفض تغيير the instructions في إعدادات Analyst', 'مستني موافقة الأدمن']]);
 });
 
 test('the filters: everyone, one person, one Agent, gtmworks itself, one Card', () => {

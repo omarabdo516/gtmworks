@@ -27,7 +27,7 @@ INSTRUCTIONS_LIMIT = 20000
 
 SCHEMA = {
     "name": TOOL,
-    "description": ("Make a new Agent on the Company's team, for recurring or specialist work no Agent does. Only an Owner "
+    "description": ("Make a new Agent on the Company's team, for recurring or specialist work no Agent does. Only an Administrator "
                     "of the Company may ask for one; for anyone else the tool refuses and says why."),
     "parameters": {
         "type": "object",
@@ -40,7 +40,7 @@ SCHEMA = {
     },
 }
 
-NOT_OWNER = "Only an Owner of this Company can make an Agent. Ask an Owner to make it."
+NOT_OWNER = "Only an Administrator of this Company can make an Agent. Ask an Administrator to make it."
 
 
 def _answer(success: bool, **fields) -> str:
@@ -133,7 +133,7 @@ def make_agent(args: dict, **kwargs) -> str:
                     profiles.set_profile_display_name(made, "")
                 except Exception:  # noqa: BLE001
                     pass
-                left = f" A part-made profile {made} is left on the Engine; an Owner can remove it on the Engine's dashboard."
+                left = f" A part-made profile {made} is left on the Engine; an Administrator can remove it on the Engine's dashboard."
         # The Engine's own words, kept short: they reach the Agent's reply, so never a path or a value beyond them.
         return _refused(f"The Engine could not make the Agent: {type(exc).__name__}: {str(exc)[:200]}.{left}")
     return _answer(True, profile=profile, name=name, speciality=speciality)

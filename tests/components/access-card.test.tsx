@@ -43,7 +43,7 @@ test('"No, never mind" sends nothing and says so, with its toast, in Arabic too'
  const screen = await draw({ id: 5, named: { first: 'عمر', name: 'عمر', role: 'owner' }, state: 'offered' }, press, 'ar');
  onTestFinished(() => screen.unmount());
  const card = screen.getByRole('group', { name: 'اطلبه من عمر' });
- expect(card.element().textContent).toContain('اختيار الوكلاء اللي كل واحد بيشتغل معاهم عند عمر (مالك).');
+ expect(card.element().textContent).toContain('اختيار الوكلاء اللي كل واحد بيشتغل معاهم عند عمر (أدمن).');
  await card.getByRole('button', { name: 'لا خلاص' }).click();
  expect(press).toHaveBeenCalledWith(5, false);
  await expect.element(card.getByText('تمام، مفيش طلب اتبعت.')).toBeVisible();

@@ -174,7 +174,7 @@ if(step==='make') {
   const count=(await profiles()).length;
   const refused=await asked(other,{name:`Refused ${marker.slice(-6)}`,speciality:'Should not be made.',instructions:''});
   assert.equal(refused.success,false);
-  assert.match(refused.error,/Only an Owner of this Company can make an Agent/);
+  assert.match(refused.error,/Only an Administrator of this Company can make an Agent/);
   assert.equal((await profiles()).length,count,'a refused call makes no profile');
   assert.deepEqual((await profiles()).map(one=>one.name).filter(one=>!before.includes(one)),[made.profile]);
   console.log(`main Agent plugin: an Owner's session made ${made.profile}, which answered; another session was refused`);

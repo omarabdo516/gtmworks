@@ -41,7 +41,7 @@ const paragraphs: [EmptyChat, string][] = [
  [{ state: 'main', reader: 'alone', owners: [] }, 'Your main point of contact. Need a new agent? Tell it in your own words and it makes it.'],
  [{ state: 'main', reader: 'owner', owners: [] }, 'The team’s main point of contact. Need a new agent? Tell it in your own words and it makes it.'],
  [{ state: 'main', reader: 'member', owners: ['Omar'] }, 'The team’s main point of contact. Need a new agent? Tell it and it prepares the request for Omar.'],
- [{ state: 'main', reader: 'member', owners: [] }, 'The team’s main point of contact. Need a new agent? Tell it and it prepares the request for the Owner.'],
+ [{ state: 'main', reader: 'member', owners: [] }, 'The team’s main point of contact. Need a new agent? Tell it and it prepares the request for an Administrator.'],
 ];
 for (const [empty, paragraph] of paragraphs) test(`the main Agent's empty chat speaks to its reader (${empty.state === 'main' && `${empty.reader}${empty.owners.length ? ' of ' + empty.owners.join(', ') : ''}`}), with three suggestions in two columns, one on a phone`, async () => {
   const wide = await chat({ empty });
@@ -86,12 +86,12 @@ test('with no Owner to name, asking for an Agent and the first-run line say the 
  const hint = await page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
   <AgentChat slug="rs-learning" company="co-1" agent={lead} details={null} writer team empty={{ state: 'main', reader: 'member', owners: [] }} newAgent askOf={[]}/>
  </LanguageProvider></div>));
- await expect.element(hint.getByText('Tell Lead what you need an agent for, and it prepares the request for the Owner.', { exact: true })).toBeVisible();
+ await expect.element(hint.getByText('Tell Lead what you need an agent for, and it prepares the request for an Administrator.', { exact: true })).toBeVisible();
  hint.unmount();
  const welcome = await page.viewport(1440, 900).then(() => render(<div className="gw"><LanguageProvider language="en">
   <AgentChat slug="rs-learning" company="co-1" agent={lead} details={null} writer team empty={{ state: 'fresh' }} askOf={[]}/>
  </LanguageProvider></div>));
- await expect.element(welcome.getByText('I’m Lead and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll prepare the request for the Owner.', { exact: true })).toBeVisible();
+ await expect.element(welcome.getByText('I’m Lead and I run your marketing work with you. Need an agent for any job? Tell me in your own words and I’ll prepare the request for an Administrator.', { exact: true })).toBeVisible();
 });
 
 test('once a message is sent, the box takes no second message or suggestion while the page moves to its Conversation', async () => {

@@ -722,7 +722,7 @@ test('an Engine with no speech-to-text provider leaves the text untouched, says 
  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'still here');
  await hold(boxOf(screen));
  await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
- await expect.element(screen.getByRole('alert')).toHaveTextContent('Voice dictation is unavailable: the Engine has no speech-to-text provider. The Owner can choose one in Settings.');
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Voice dictation is unavailable: the Engine has no speech-to-text provider. An Administrator can choose one in Settings.');
  await expect.element(screen.getByRole('button', { name: 'Voice dictation is unavailable: the Engine has no speech-to-text provider.' })).toHaveAttribute('aria-disabled', 'true');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('still here');
 });
@@ -731,9 +731,9 @@ test('an Engine with no speech-to-text provider leaves the text untouched, says 
 // Owner chooses it, in both languages.
 for (const [owner, language, line, link] of [
  [true, 'en', 'Voice dictation is unavailable: the Engine has no speech-to-text provider. Choose a speech-to-text provider in Settings.', 'Choose a speech-to-text provider in Settings.'],
- [false, 'en', 'Voice dictation is unavailable: the Engine has no speech-to-text provider. The Owner can choose one in Settings.', null],
+ [false, 'en', 'Voice dictation is unavailable: the Engine has no speech-to-text provider. An Administrator can choose one in Settings.', null],
  [true, 'ar', 'الإملاء بالصوت مش متاح: مفيش مزوّد تحويل الكلام لنص على المحرك. اختار مزوّد تحويل الكلام لنص من الإعدادات.', 'اختار مزوّد تحويل الكلام لنص من الإعدادات.'],
- [false, 'ar', 'الإملاء بالصوت مش متاح: مفيش مزوّد تحويل الكلام لنص على المحرك. المالك يقدر يختار واحد من الإعدادات.', null],
+ [false, 'ar', 'الإملاء بالصوت مش متاح: مفيش مزوّد تحويل الكلام لنص على المحرك. الأدمن يقدر يختار واحد من الإعدادات.', null],
 ] as const) {
  test(`with no provider the line ${link ? 'links an Owner to the setting' : 'tells a Member the Owner sets it'} (${language})`, async () => {
   vi.useFakeTimers(); mic(); dictate({ state: 'unavailable', owner, slug: 'acme' });

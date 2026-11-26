@@ -1,5 +1,11 @@
 [
  {
+  "issue": 902,
+  "date": "2026-11-26",
+  "en": { "title": "Owner is now Administrator", "body": "The Role that can do everything in a Company is called Administrator everywhere you read it, since a Company may have several; what it may do is unchanged." },
+  "ar": { "title": "المالك بقى اسمه الأدمن", "body": "الدور اللي يقدر يعمل كل حاجة في الشركة بقى اسمه أدمن في كل مكان بتقراه، لأن الشركة ممكن يكون فيها أكتر من أدمن؛ واللي يقدر يعمله زي ما هو." }
+ },
+ {
   "issue": 898,
   "date": "2026-11-26",
   "en": { "title": "Every Settings page opens at once", "body": "Moving between Settings pages no longer waits for the agent engine: each page shows straight away, every part the engine keeps (an Agent's About, skills, voice and model, usage, learning, routines, apps) fills in on its own, and each app says it is checking until its own test answers." },
