@@ -347,6 +347,18 @@ test('DESIGN.md names every token app/tokens.css carries, with its value in ligh
   assert.deepEqual(tokenDifferences(designTokens(frontMatter(read('DESIGN.md'))), cssTokens(read('app/tokens.css'))), []);
 });
 
+// HTML the server writes outside the app's stylesheets (the Owner's Engine dashboard's refusal page and its way back,
+// #869, #871) takes its values from lib/design-tokens.mjs, which is DESIGN.md's front matter as written by
+// `node scripts/design-tokens.mjs write`, never from a value of its own.
+test('lib/design-tokens.mjs is DESIGN.md\'s front matter, and the server\'s own pages write no raw colour', async () => {
+  const { designTokens: written } = await import('../lib/design-tokens.mjs');
+  const design = frontMatter(read('DESIGN.md'));
+  assert.deepEqual(written, { colors: design.colors, rounded: design.rounded, spacing: design.spacing, shadows: design.shadows, typography: design.typography },
+    'lib/design-tokens.mjs is out of date: run node scripts/design-tokens.mjs write');
+  for (const file of ['lib/engine-dashboard.mjs', 'lib/engine-dashboard-refusals.mjs'])
+    assert.deepEqual(read(file).replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, '').match(/#[0-9a-f]{3,8}\b|\b(?:oklch|rgba?|hsla?)\(/gi) ?? [], [], `${file} writes a raw colour: take it from lib/design-tokens.mjs`);
+});
+
 test('the Paperclip values DESIGN.md names are the ones its stylesheet, Tailwind and the Agent faces carry', () => {
   assert.deepEqual(paperclipDifferences(frontMatter(read('DESIGN.md')), {
     theme: read('components/paperclip/theme.css'), tailwind: read('node_modules/tailwindcss/theme.css'), agentLook: read('lib/agent-look.ts'), tokens: read('app/tokens.css'),
