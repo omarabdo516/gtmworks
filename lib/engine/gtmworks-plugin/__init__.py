@@ -122,13 +122,20 @@ def make_agent(args: dict, **kwargs) -> str:
     except Exception as exc:  # noqa: BLE001 - the Agent says what the Engine answered
         # A profile this call made and could not finish goes again, so a half-made Agent never holds the name; nothing
         # else is removed.
+        left = ""
         if made:
             try:
                 profiles.delete_profile(made, yes=True)
-            except Exception:  # noqa: BLE001 - the refusal below still says why the Agent was not made
-                pass
+            except Exception:  # noqa: BLE001 - a profile that cannot go gives up its name and is named below
+                # It no longer holds the Agent's name, so asking again is not refused as taken; the reply names it for
+                # an Owner to remove on the Engine's dashboard.
+                try:
+                    profiles.set_profile_display_name(made, "")
+                except Exception:  # noqa: BLE001
+                    pass
+                left = f" A part-made profile {made} is left on the Engine; an Owner can remove it on the Engine's dashboard."
         # The Engine's own words, kept short: they reach the Agent's reply, so never a path or a value beyond them.
-        return _refused(f"The Engine could not make the Agent: {type(exc).__name__}: {str(exc)[:200]}")
+        return _refused(f"The Engine could not make the Agent: {type(exc).__name__}: {str(exc)[:200]}.{left}")
     return _answer(True, profile=profile, name=name, speciality=speciality)
 
 
