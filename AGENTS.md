@@ -29,3 +29,12 @@ In a cloud session, before every push, bring the app up with `npm run cloud:up`,
 - Learning what a table, policy, function or grant is today: `supabase/schema.sql`, generated from a freshly migrated database by `node scripts/schema-snapshot.mjs write` and checked by the database job; never edit it by hand (#780).
 - Touching tests, CI, the `check` job or `ci.sh`: `docs/agents/checks.md` (CI layout and lanes; `docs/testing.md` lists the tests).
 - Reviewing a pull request (yours or another's): `docs/agents/code-review-rules.md`.
+
+## Cloud sessions
+
+A cloud session starts with only `/implement issue #<n>: <title>`, so these rules live here (Omar, 2026-11-26):
+
+- Use only local or test credentials: no production keys, every email to `delivered@resend.dev`, Paymob in test mode.
+- In a cloud session `gh pr` and `gh issue` fail (the proxy blocks GraphQL): use `gh api repos/...` REST calls or the GitHub MCP tools.
+- Open one PR whose body says `Closes #<n>`, and follow its CI and review activity until it merges.
+- Nobody reads the session chat: a decision only Omar can make goes as one short comment on the issue.
