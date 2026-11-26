@@ -25,12 +25,14 @@ export function VoiceSettings({company,slug,owner}:{company:string,slug:string,o
  const {t,language:shownIn}=useI18n();
  const [read,setRead]=useState<Read>({data:null,readAt:0,state:'reading'});
  const [asked,setAsked]=useState(0);
+ // A read that fails keeps the last good one (ADR 0030); with none, the page says it could not read.
  useEffect(()=>{
   const controller=new AbortController();
+  const fail=()=>setRead(was=>({...was,state:'failed'}));
   fetch(`/api/voice-settings?company=${encodeURIComponent(company)}`,{cache:'no-store',signal:controller.signal})
    .then(async response=>{ const body=response.ok?await response.json() as {data:CompanyVoice,readAt:number}:null;
-    setRead(body&&body.data.keys!==null?{data:body.data,readAt:body.readAt,state:'read'}:{data:null,readAt:0,state:'failed'}); },
-   ()=>{ if(!controller.signal.aborted) setRead({data:null,readAt:0,state:'failed'}); });
+    if(body&&body.data.keys!==null) setRead({data:body.data,readAt:body.readAt,state:'read'}); else fail(); },
+   ()=>{ if(!controller.signal.aborted) fail(); });
   return ()=>controller.abort();
  },[company,asked]);
  const saved=useSave<CompanyVoice>(`voice:${company}`,read.data??unread,read.readAt);
@@ -57,6 +59,7 @@ export function VoiceSettings({company,slug,owner}:{company:string,slug:string,o
   :(()=>{ try { return new Intl.DisplayNames([shownIn],{type:'language'}).of(value)||value; } catch { return value; } })();
  const keys=order.filter(id=>current.keys?.includes(id));
  const words=vocabulary??current.prompt??'';
+ const saveWords=()=>{ if(vocabulary===null) return; void change({prompt:vocabulary}); setVocabulary(null); };
  const row=(id:string,title:string,hint:string,control:ReactNode,tip?:string)=><li className="panel-row" id={`vc-${id}-row`}>
   <span className="panel-row__text"><span className="panel-row__t"><span id={`vc-${id}-t`}>{title}</span>{tip&&<InfoTip about={title} id={`vc-${id}-tip`}>{tip}</InfoTip>}</span>
    <span className="panel-row__d" id={`vc-${id}-d`}>{hint}</span></span>{control}</li>;
@@ -82,9 +85,9 @@ export function VoiceSettings({company,slug,owner}:{company:string,slug:string,o
      {!(current.languages??[]).includes(current.language)&&<option value={current.language}>{languageLabel(current.language)}</option>}</select>
    :shown(languageLabel(current.language)))}
   {current.provider&&row('vocabulary',t('settingsVoiceVocabulary'),t('settingsVoiceVocabularyD'),owner
-   ?<span className="vc-words"><input className="set-input" id="vc-vocabulary" dir="auto" maxLength={896} value={words} aria-labelledby="vc-vocabulary-t" aria-describedby="vc-vocabulary-d"
-      onChange={event=>setVocabulary(event.target.value)} onKeyDown={event=>{ if(event.key==='Enter'&&vocabulary!==null) { void change({prompt:vocabulary}); setVocabulary(null); } }}/>
-     {vocabulary!==null&&vocabulary!==current.prompt&&<button type="button" className="btn btn--primary btn--sm" id="vc-vocabulary-save" onClick={()=>{ void change({prompt:vocabulary}); setVocabulary(null); }}>{t('settingsSave')}</button>}</span>
+   ?<span className="vc-words"><input className="set-input" id="vc-vocabulary" dir="auto" value={words} aria-labelledby="vc-vocabulary-t" aria-describedby="vc-vocabulary-d"
+      onChange={event=>setVocabulary(event.target.value)} onKeyDown={event=>{ if(event.key==='Enter') saveWords(); }}/>
+     {vocabulary!==null&&vocabulary!==current.prompt&&<button type="button" className="btn btn--primary btn--sm" id="vc-vocabulary-save" onClick={saveWords}>{t('settingsSave')}</button>}</span>
    :shown(current.prompt||'—'),t('settingsVoiceVocabularyTip'))}
   {current.provider&&row('trim',t('settingsVoiceTrim'),t('settingsVoiceTrimD'),owner
    ?<button type="button" className="switch" role="switch" id="vc-trim" aria-checked={current.trimSilence!==false} aria-labelledby="vc-trim-t" aria-describedby="vc-trim-d" onClick={()=>change({trimSilence:current.trimSilence===false})}/>
@@ -93,6 +96,7 @@ export function VoiceSettings({company,slug,owner}:{company:string,slug:string,o
  return <section className="dp-sec" aria-labelledby="sov-h">
   {body}
   {saved.saving&&<p className="set-hint is-saving" role="status">{t('settingsSaving')}</p>}
+  {read.state==='failed'&&read.data&&<p className="set-hint" role="status">{t('settingsPartReadAgain')}</p>}
   {saved.error&&<p className="set-err" role="alert">{t(saved.error==='speechNotAllowed'?'settingsVoiceOwnerOnly':'settingsVoiceError')}</p>}
   {missed.length>0&&<p className="set-err" role="alert">{t('settingsSpeechNotReached',missed.join(', '))}</p>}
   {!owner&&<p className="set-hint">{t('settingsVoiceOwnerOnly')}</p>}

@@ -84,7 +84,11 @@ test('the model, the vocabulary and the silence trim reach every profile of the 
   const eleven=await voice(owner,fake,{model:'scribe_v1'});
   assert.deepEqual([eleven.body.model,eleven.body.prompt,eleven.body.trimSilence],['scribe_v1','gtmworks, Hermes, Omar',false]);
   for(const name of all) assert.deepEqual(profileOf(fake,name).config.stt.elevenlabs,{model_id:'scribe_v1'},name);
-  assert.deepEqual(await readVoice(owner,fake),{provider:'elevenlabs',keys:['elevenlabs','groq'],language:'en',model:'scribe_v1',prompt:'gtmworks, Hermes, Omar',trimSilence:false,
+  // A language ElevenLabs keeps of its own would win over the Company's: a language save leaves it blank.
+  profileOf(fake,one.agents[0]).config.stt.elevenlabs.language_code='eng';
+  await voice(owner,fake,{language:'ar'});
+  for(const name of all) assert.deepEqual([profileOf(fake,name).config.stt.language,profileOf(fake,name).config.stt.elevenlabs.language_code],['ar',''],name);
+  assert.deepEqual(await readVoice(owner,fake),{provider:'elevenlabs',keys:['elevenlabs','groq'],language:'ar',model:'scribe_v1',prompt:'gtmworks, Hermes, Omar',trimSilence:false,
    languages:['','ar','en'],models:['scribe_v2','scribe_v1']});
  } finally { await fake.close(); }
 });
@@ -97,7 +101,7 @@ test('a choice Hermes does not offer for the provider, a non-Owner and an unread
   await change(owner,fake,{provider:'deepgram',intent:'set',value:key});
   const before=JSON.stringify(all.map(name=>profileOf(fake,name).config));
   // Deepgram has no automatic and no Hermes model; its Arabic variants stay.
-  for(const request of [{language:''},{language:'fr'},{model:'whisper-1'},{prompt:'x'.repeat(897)},{trimSilence:'no'},{},{language:7}])
+  for(const request of [{language:''},{language:'fr'},{model:'whisper-1'},{trimSilence:'no'},{},{language:7}])
    assert.deepEqual(await voice(owner,fake,request),{status:400,body:{error:'speechInvalid'}},JSON.stringify(request));
   assert.deepEqual(await voice(sessions({owner:false}),fake,{language:'ar'}),{status:403,body:{error:'speechNotAllowed'}});
   assert.equal(JSON.stringify(all.map(name=>profileOf(fake,name).config)),before);
