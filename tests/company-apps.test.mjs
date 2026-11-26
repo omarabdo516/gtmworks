@@ -173,10 +173,10 @@ test('an Agent\'s session is read from its own profile as the reader sees it, an
   const asked=fake.settings.managementRequests.length;
   assert.equal(await readAgentSession(sees.db,{company,agent:analyst,session:'s-analyst'}),'notSeen','Analyst is hidden from this reader');
   assert.equal(fake.settings.managementRequests.length,asked,'nothing is asked of the Engine for a hidden Agent');
-  const owner_=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow,analystRow]});
-  const own=await readAgentSession(owner_.db,{company,agent:analyst,session:'s-analyst'});
+  const ownerSees=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow,analystRow]});
+  const own=await readAgentSession(ownerSees.db,{company,agent:analyst,session:'s-analyst'});
   assert.ok(own&&own!=='notSeen'&&own.turns.length===1,'the Owner, who sees every Agent, reads it');
-  assert.equal(await readAgentSession(owner_.db,{company,agent:writer,session:'s-analyst'}),null,'a session of another profile is not read on this one');
+  assert.equal(await readAgentSession(ownerSees.db,{company,agent:writer,session:'s-analyst'}),null,'a session of another profile is not read on this one');
  } finally { await fake.close(); }
 });
 

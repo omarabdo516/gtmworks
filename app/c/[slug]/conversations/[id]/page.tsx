@@ -11,8 +11,8 @@ import ConversationView, { ConversationLoaded, ConversationNotRead } from './con
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
-import { conversationRecord, tiedCard, type ConversationSteps } from '@/lib/conversation-record';
-import { conversationSteps } from '@/lib/conversation-steps';
+import { conversationRecord, tiedCard } from '@/lib/conversation-record';
+import { conversationSteps, type ConversationSteps } from '@/lib/conversation-steps';
 import { agentAppStates } from '@/lib/company-app-items';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';

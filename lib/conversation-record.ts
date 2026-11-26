@@ -2,7 +2,6 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import type { RunSteps } from './conversations';
 import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { placedName, readProviderNames } from './provider-names.mjs';
@@ -202,10 +201,6 @@ async function ranOutNames(db:Database,company:string,rows:RanOutRow[]):Promise<
 export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>&{unread?:true};
 // The Conversation's own rows could not be read (#768): a state of its own, never an empty Conversation.
 class ConversationUnread extends Error { constructor() { super('conversationUnread'); this.name='ConversationUnread'; } }
-
-// Each reply's steps and the Conversation's token use (#346, #347), read by lib/conversation-steps.ts on their own
-// request, after the messages are drawn (ADR 0030, #766), by the id of the reply they go under.
-export type ConversationSteps={steps:Record<number,RunSteps>,usage:SessionUsage|null};
 
 // A done hand card says its turn could not start until its person writes to the Agent after that.
 const handPickup=(card:ReplyCard|null,queued:QueuedTurn[],messages:{author:string,created_at:string}[]):ReplyCard|null=>{
