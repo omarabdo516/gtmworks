@@ -41,7 +41,8 @@ ENGINE_HOST=${ENGINE_MANAGE#http://}
 WORK_NET=$NAME-work
 SANDBOX=$NAME-sandbox
 keys=$(mktemp -d)
-ssh-keygen -q -t ed25519 -N '' -C engine-dashboard-probe -f "$keys/id_ed25519"
+docker run --rm -u 0 -v "$keys:/keys" --entrypoint ssh-keygen "$SANDBOX_IMAGE" -q -t ed25519 -N '' -C engine-dashboard-probe -f /keys/id_ed25519
+docker run --rm -u 0 -v "$keys:/keys" --entrypoint chmod "$SANDBOX_IMAGE" 644 /keys/id_ed25519 /keys/id_ed25519.pub
 docker network create --internal "$WORK_NET" >/dev/null
 docker run -d --name "$SANDBOX" --network "$WORK_NET" --network-alias sandbox --cap-drop ALL --security-opt no-new-privileges:true \
   -e SSH_AUTHORIZED_KEY="$(cat "$keys/id_ed25519.pub")" "$SANDBOX_IMAGE" >/dev/null

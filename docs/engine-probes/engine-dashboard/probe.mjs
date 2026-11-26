@@ -118,7 +118,7 @@ await main(async()=>{
     const sockets=[];
     tab.on('websocket',socket=>{
      const one={path:new URL(socket.url()).pathname,query:[...new URL(socket.url()).searchParams.keys()],frames:0,first:'',closed:false,label};
-     sockets.push(one); seen.sockets.push(one);
+     sockets.push(one); seen.sockets.push(one); seen.urls.push(socket.url());
      socket.on('framereceived',frame=>{ one.frames++; if(!one.first) one.first=String(frame.payload).slice(0,120); });
      socket.on('close',()=>{ one.closed=true; });
     });
@@ -177,6 +177,9 @@ await main(async()=>{
    const grew=[`board +${frames(board.sockets)-boardAt}`,`pty +${frames(chat.sockets.filter(one=>one.path.endsWith('/api/pty')))-ptyAt}`];
    say(`after the change, the same browser: the first page ${afterPage?.status()}, ${JSON.stringify(afterApi)}, the ticket minted before the change on a new socket: ${stale}; sockets opened before the change still open: ${JSON.stringify(stillOpen)}; frames they got after it: ${JSON.stringify(grew)}`);
    if(afterPage?.status()!==404||Object.values(afterApi).some(status=>status!==404)||stale==='opened') fail('nothing the browser holds opens the dashboard after the Role changes',JSON.stringify({page:afterPage?.status(),afterApi,stale}));
+   // The record's answer for a socket already open: the gate is asked at the upgrade only, so it stays open and works.
+   // If this changes (the Engine or the gateway closes it), the record must be read again.
+   if(!stillOpen.length||!grew.some(one=>!/\+0$/.test(one))) fail('the record names sockets opened before the change as still working',JSON.stringify({stillOpen,grew}));
    await page.screenshot({path:`${shots}/05-after-role.png`});
    await setRole(ownerA.id,A,'owner');
 
@@ -215,6 +218,7 @@ await main(async()=>{
    say(`messaging platforms: ${reach.messaging.status} ${JSON.stringify(reach.messaging.body)?.slice(0,160)}`);
    say(`MCP servers: ${reach.mcp.status} ${JSON.stringify(reach.mcp.body)?.slice(0,120)}; dashboard plugins: ${reach.plugins.status} ${JSON.stringify(reach.plugins.body)?.slice(0,120)}`);
    say(`a shell on the Engine (/api/host-terminal): ${JSON.stringify(reach.hostTerminal)}`);
+   if(reach.reveal.status!==200||revealed!==engine.key) fail('the record names the Engine\'s key as readable from the dashboard',`${reach.reveal.status}`);
    await context2.close();
   } finally {
    await browser.close();
