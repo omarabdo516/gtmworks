@@ -1,9 +1,11 @@
 ---
-status: accepted
+status: accepted, superseded by ADR 0033 when its Conversation spec lands
 date: 2026-11-25
 ---
 
 # A person's message is stored before its Run starts
+
+[ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): a Conversation's messages are kept in the Engine only, on the condition that record names. Until its spec lands, this record describes the product.
 
 Omar's decision of 2026-11-25 (vault decision 0071), after issue #756 and the audit of the same day.
 

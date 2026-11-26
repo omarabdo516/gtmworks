@@ -11,9 +11,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
 import { useI18n } from '@/lib/i18n-client';
-import { localeFor } from '@/lib/i18n.mjs';
-import { madeDay, useZone } from '@/app/agent-made';
-import { dayOf } from '@/lib/activity-log.mjs';
+import { ReaderTime } from '@/app/agent-made';
 import type { PermissionChoice, ReplyCard } from '@/lib/conversations';
 
 type PermissionRequest=Extract<ReplyCard,{kind:'permission'}>;
@@ -28,7 +26,7 @@ const outcomes:Record<PermissionChoice,string>={once:'permissionAllowedOnce',alw
 const plainTile={key:'',mark:'·'};
 
 export function PermissionCard({card,fresh,offered,decide}:{card:PermissionRequest,fresh:boolean,offered:PermissionChoice[],decide?:DecidePermission}) {
- const {t,language}=useI18n(); const zone=useZone();
+ const {t}=useI18n();
  const [pressed,setPressed]=useState<PermissionOutcome|null>(null); const [error,setError]=useState(''); const [just,setJust]=useState(false);
  const [pending,setPending]=useState<PermissionChoice|null>(null); const busy=useRef(false);
  useEffect(()=>{
@@ -46,9 +44,6 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
   if('state' in result) { setPressed(result); setJust(result.first&&result.state==='decided'); }
   else { setError(result.error==='conversationFailed'?'permissionFailed':result.error); busy.current=false; }
  };
- // Today its time, another day its day, as a handed step's card says when it was done.
- const when=(value:string)=>dayOf(new Date().toISOString(),zone)===dayOf(value,zone)
-  ?new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone}):madeDay(value,language,zone);
  const title=card.description.trim()||card.command.trim();
  const command=card.description.trim()?card.command.trim():'';
  const line=(icon:'check'|'x'|'clock',words:ReactNode)=><div className="card__outcome"><ShellIcon name={icon}/><span>{words}</span></div>;
@@ -56,7 +51,7 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
   <div className="card__head"><AppTile app={plainTile} size="lg"/>
    <div className="card__titles"><span className="card__title" dir="auto">{title}</span></div></div>
   {command&&<dl className="kv"><div className="kv__row"><dt>{t('permissionCommand')}</dt><dd><bdi dir="auto">{command}</bdi></dd></div></dl>}
-  {shown?.state==='decided'?line(shown.choice==='deny'?'x':'check',<>{t(outcomes[shown.choice])} · <time dateTime={shown.at} data-utc={zone}>{when(shown.at)}</time></>)
+  {shown?.state==='decided'?line(shown.choice==='deny'?'x':'check',<>{t(outcomes[shown.choice])} · <ReaderTime at={shown.at} orDay/></>)
    :shown?.state==='closed'?line('clock',t('permissionClosed'))
    :decide&&offered.length?<div className="card__actions" aria-busy={pending?true:undefined}>{offered.map(choice=>
     <button key={choice} type="button" className={`btn ${choice==='once'?'btn--primary':'btn--secondary'}`} disabled={!!pending} aria-busy={pending===choice||undefined} onClick={()=>void press(choice)}>{t(labels[choice])}</button>)}</div>

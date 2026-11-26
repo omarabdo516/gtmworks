@@ -16,7 +16,7 @@ import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
-import { madeDay, useZone } from '@/app/agent-made';
+import { madeDay, ReaderTime, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 import { channelCallable, channelTitle, firstName, mentionsOf, sentMessage, withMention, type ChannelAgent, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
@@ -257,13 +257,6 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
-// A message's or a Handover's time, in the reader's own zone: the server draws it in UTC, hidden, and the page redraws it
-// once it hydrates, so it hydrates without a text mismatch outside UTC (#586, as the Conversation page does since #520).
-function When({at,className}:{at:string,className?:string}) {
- const {language}=useI18n(); const zone=useZone();
- return <time className={className} dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
-}
-
 function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,done,retry,owner}:{message:ChannelMessage,rise:string,opened?:boolean,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,retry?:(message:number,ordinal:number)=>Promise<void>,owner:boolean}) {
  const {t}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
@@ -283,7 +276,7 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
   return message.model?<>{row}<li className="note" role="alert" data-outcome={modelOutcome(message.model.cause)}><ModelLine cause={message.model.cause} agent={message.model.agent} slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
-  <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<When at={message.at} className="sender__time"/></div>
+  <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<ReaderTime at={message.at} className="sender__time"/></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
   {!!message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
   <ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/channel/${id}`}/>
@@ -306,12 +299,12 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
  // A message being sent has no stored files to open yet: their names alone (#756).
  const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=>message.sending?<span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>:<a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
  if(message.mine) return <li className={`turn turn--user msg${message.sending?.posting?' is-sending':''}${rise}`} data-author="person" data-msg={message.sending?undefined:message.id} aria-busy={message.sending?.posting?true:undefined}>
-  {!!message.body.trim()&&<div className="bubble-row"><When at={message.at} className="bubble__time"/><div className="bubble bubble--user" dir="auto">{body}</div></div>}
+  {!!message.body.trim()&&<div className="bubble-row"><ReaderTime at={message.at} className="bubble__time"/><div className="bubble bubble--user" dir="auto">{body}</div></div>}
   {files}
   {failed}
  </li>;
  return <li className={`turn turn--peer msg${rise}`} data-author="person" data-msg={message.id}>
-  <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<When at={message.at} className="sender__time"/></div>
+  <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<ReaderTime at={message.at} className="sender__time"/></div>
   {!!message.body.trim()&&<div className="bubble bubble--peer" dir="auto">{body}</div>}
   {files}
   {failed}
@@ -402,7 +395,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,refresh}:{panel:Det
      {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.stopped?{'data-stopped':''}:handoff.failed?{'data-failed':''}:{})}>
       <span className="handed__faces"><AgentFace agent={handoff.from.face} name={handoff.from.name} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={handoff.to.face} name={handoff.to.name} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandoverAsked',handoff.from.name,handoff.to.name)}</span>
-       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}<When at={handoff.at}/></span></span>
+       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}<ReaderTime at={handoff.at}/></span></span>
      </li>)}
     </ul>
    </section>}

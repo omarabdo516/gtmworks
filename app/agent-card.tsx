@@ -13,7 +13,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
 import { markOf } from '@/lib/app-mark.mjs';
 import { knownApp } from '@/lib/app-catalogue.mjs';
-import { madeDay, useZone } from '@/app/agent-made';
+import { madeDay, ReaderTime, useZone } from '@/app/agent-made';
 import type { AgentRequestView, MadeAgent } from '@/lib/conversations';
 
 // `cb` isolates each value in its own direction (a name or a reason in the other script).
@@ -55,8 +55,8 @@ export function MadeCard({slug,agent,fresh=false}:{slug:string,agent:MadeAgent,f
 // have (#696), so the request's card and the made Agent have one face. An `unread` request leaves out its
 // apps and the message that asked, which could not be read, rather than show them empty.
 export function RequestCard({slug,request,owner=false,unread=false,answer}:{slug:string,request:AgentRequestView,owner?:boolean,unread?:boolean,answer?:ReactNode}) {
- const {language}=useI18n(); const zone=useZone(); const {c,cb}=useCardText();
- const when=(at:string)=><time dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
+ const {language}=useI18n(); const {c,cb}=useCardText();
+ const when=(at:string)=><ReaderTime at={at}/>;
  const made=request.state==='made'?request.agent:null;
  const coming=useRequestAgent(request.id), madeAgent=made?.id??coming;
  const badge=request.state==='waiting'?<span className="badge badge--req"><ShellIcon name="userPlus"/>{owner?cb('requestBadgeFrom',request.askedBy):c('requestBadge')}</span>
