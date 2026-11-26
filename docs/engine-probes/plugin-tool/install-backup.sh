@@ -32,7 +32,7 @@ say() { echo "$@"; }
 
 PLUGIN=gtmworks-people
 reset_install
-install_source "$work/install.log" > /dev/null || fail 'the source install'
+install_source "$work/install.log" > /dev/null || { tail -40 "$work/install.log" >&2; fail 'the source install'; }
 complete_setup > "$work/setup.log" 2>&1 || { cat "$work/setup.log" >&2; fail 'first run'; }
 say "install: $(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1) as the first Company's Engine"
 
@@ -77,7 +77,7 @@ grep -q "^engines/first/profiles/$profile/plugin-data/$PLUGIN/data.db$" "$work/a
 # Emptied, installed again and restored by the install's own commands, as the proof's backup areas do.
 remove_install > /dev/null 2>&1 || fail 'remove the install'
 rm -f .env.install
-install_source "$work/reinstall.log" > /dev/null || fail 'the fresh install before the restore'
+install_source "$work/reinstall.log" > /dev/null || { tail -40 "$work/reinstall.log" >&2; fail 'the fresh install before the restore'; }
 say "a fresh, empty install: the plugin's folder $(docker exec "$(first_engine_id)" sh -c "test -d /opt/data/profiles/$profile/plugins/$PLUGIN && echo present || echo absent")"
 sh scripts/install.sh restore "$archive" > "$work/restore.log" 2>&1 || { cat "$work/restore.log" >&2; fail 'sh scripts/install.sh restore'; }
 engine_healthy "$(first_engine_id)" 180 || fail 'the restored Engine is healthy'
