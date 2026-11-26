@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fakeHermes } from './fake-hermes.mjs';
-import { backoffFrom, backoffTo, callLimit, engineRequest, EngineFailure, forgetListeners, listenerHealth } from '../lib/engine/transport.mjs';
+import { callLimit, engineRequest, EngineFailure, forgetListeners, listenerHealth } from '../lib/engine/transport.mjs';
 import { hermesEngine } from '../lib/engine/contract.mjs';
 import { engineOf, enginePass } from '../lib/company-engine.mjs';
 
@@ -80,7 +80,7 @@ test('a listener nothing connects to is down, asked one call at a time by every 
   assert.deepEqual(await hermesEngine(at).start({conversation:'c',input:'hi',idempotencyKey:'i'}),{state:'notReached'},'a Run start nothing connected to is not reached (#413)');
   assert.equal(warned.mock.callCount(),1,'one log line for the change, none for the same state again');
   assert.match(String(warned.mock.calls[0].arguments[0]),/is down \(refused\)/);
-  // It comes back: the next call reaches it once its pause has passed, and restores it.
+  // It comes back: the very next call reaches it, with no wait held over from the outage, and restores it.
   await engine.start();
   const answered=await engineRequest(at,{path:'/health'});
   assert.equal(answered.status,200);
@@ -91,29 +91,6 @@ test('a listener nothing connects to is down, asked one call at a time by every 
  // An address gtmworks never calls is refused before anything is sent.
  const outside=await failureOf(engineRequest({address:'http://8.8.8.8:8642',key:'k'},{path:'/health'}));
  assert.equal(outside.cause,'notAllowed'); assert.equal(outside.sent,false);
-});
-
-test('a listener that does not answer is asked less often, each pause twice the last, and an answer ends the pause', async()=>{
- const engine=await listener();
- const warned=mock.method(console,'warn',()=>{}); const told=mock.method(console,'info',()=>{});
- try {
-  const at={address:engine.address,key:'k',profile:'default'};
-  await engine.stop();
-  const sentAt=[];
-  for(let n=0;n<4;n++) { const started=Date.now(); await failureOf(engineRequest(at,{path:'/health'})); sentAt.push(Date.now()-started); }
-  // The first call goes at once; each next one waits the pause the last failure set: 250, 500 and 1000 ms.
-  assert.ok(sentAt[0]<backoffFrom,`the first call waits for nothing (${sentAt[0]} ms)`);
-  for(const [n,pause] of [[1,backoffFrom],[2,backoffFrom*2],[3,backoffFrom*4]]) assert.ok(sentAt[n]>=pause-20&&sentAt[n]<pause+backoffFrom,`call ${n+1} waited ${sentAt[n]} ms for its pause of ${pause}`);
-  // A call whose deadline ends before its pause fails unsent, as timed out.
-  const early=await failureOf(engineRequest(at,{path:'/health',deadline:50}));
-  assert.equal(early.cause,'timedOut'); assert.equal(early.sent,false);
-  assert.ok(backoffTo>=backoffFrom*16,'the pause stops growing only well after a few failures');
-  await engine.start();
-  await new Promise(resolve=>setTimeout(resolve,backoffFrom*8));
-  assert.equal((await engineRequest(at,{path:'/health'})).status,200);
-  const after=Date.now(); assert.equal((await engineRequest(at,{path:'/health'})).status,200);
-  assert.ok(Date.now()-after<backoffFrom,'an answer ends the pause');
- } finally { warned.mock.restore(); told.mock.restore(); await engine.stop(); }
 });
 
 test('an outcome that got no answer keeps its cause beside its state, without changing its shape', async()=>{

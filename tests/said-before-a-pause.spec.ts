@@ -1,6 +1,6 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -8,6 +8,7 @@ import { answerQuestion, closeOpenRuns, sendMessage } from '../lib/conversation-
 import { answerChannelQuestion, driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
+test.beforeAll(()=>laneEngineRecords());
 
 // #647: an Agent writes its whole answer and asks about it with clarify in the same message. The Engine keeps those
 // words only in its session while the Run waits (the driver's own test, tests/hermes-runs.test.mjs, reads them there);

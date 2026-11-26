@@ -1,11 +1,12 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
@@ -13,7 +14,6 @@ const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const channel='69000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
@@ -49,8 +49,8 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   expect(fake.runs).toEqual([]);
   expect(runOf((plain as {message:number}).message)).toEqual([]);
 
-  const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week',hermes,engineFor:fake.engineFor};
-  const sent=await postChannelMessage(person,service,mention) as {message:number};
+  const mention={channel,sendKey:randomUUID(),message:'@Faye plan the launch week'};
+  const sent=await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,mention)) as {message:number};
   expect(fake.runs.map(run=>({key:run.key,input:run.input}))).toEqual([{key:`channel:${sent.message}`,input:'عمر: @Faye plan the launch week'}]);
   expect(fake.connections[0]).toMatchObject({address:'http://127.0.0.1:9',key:'fake-engine-key'});
   // The Agent's rules are in its profile's SOUL.md (#345), and no channel Run is told the Company knowledge (#344): the
@@ -58,7 +58,7 @@ test('integration: ordinary talk starts no Run; a mention starts exactly one, an
   expect(fake.runs[0].instructions??'').not.toContain('Answer in English');
   expect(fake.runs[0].instructions??'').not.toContain('## Brand voice');
   expect(await drive()).toEqual({started:0,closed:0});
-  expect(await postChannelMessage(person,service,mention)).toEqual(sent);
+  expect(await withEngineContract(fake.engineFor,()=>postChannelMessage(person,service,mention))).toEqual(sent);
   expect(fake.runs).toHaveLength(1);
   expect(repliesTo(sent.message)).toEqual([]);
   const passes=await Promise.all([drive(),drive()]);
@@ -78,7 +78,7 @@ test('integration: a start whose answer was lost is asked again with the same ke
  const {service,person}=await memberClient('omar@example.com'); const {detach}=attachAgent();
  try {
   const engine=fake.engineFor({});
-  const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser',hermes};
+  const post={channel,sendKey:randomUUID(),message:'@Faye draft the teaser'};
   const lost=await withEngineContract(()=>({...engine,start:async()=>({state:'unknown'} as const)}),()=>postChannelMessage(person,service,{...post})) as {message:number};
   expect(lost).toEqual({message:expect.any(Number)});
   const drive=()=>withEngineContract(fake.engineFor,()=>driveChannelRuns(service,{channel}));

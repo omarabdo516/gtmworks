@@ -1,6 +1,6 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -11,6 +11,7 @@ import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import noteEn from '../lib/messages/member-note.en.json' with { type: 'json' };
 import noteAr from '../lib/messages/member-note.ar.json' with { type: 'json' };
+test.beforeAll(()=>laneEngineRecords());
 
 // Team-work rules of 2026-11-13 (a, b, c, d, g) on the local database, through the same run layer the conversation
 // route and the worker use, with the fake engine (tests/fake-engine.mjs) in place of Hermes. A Conversation stays

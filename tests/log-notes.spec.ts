@@ -1,6 +1,6 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -8,6 +8,7 @@ import { signIn } from './sign-in';
 import { driveNoteRuns } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { dbContainerOf } from './lane.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 // Notes and mentions in the log (#22). Seed people of RS Learning: Omar owns it, مدير (manager@) is a Manager, مراجع
 // (reviewer@) a Contributor and مشاهد (viewer@) a Viewer.

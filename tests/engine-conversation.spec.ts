@@ -1,6 +1,6 @@
 import { test, expect } from './fresh-seed';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import './spec-engine-records';
+import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
@@ -21,6 +21,7 @@ import { i18n } from '../lib/i18n.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
+test.beforeAll(()=>laneEngineRecords());
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -29,7 +30,6 @@ const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','stat
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 // The install's Hermes as these runs are given it: the fake engine answers in its place (#342), or the lane's fake Hermes.
-const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
 
 // Omar's own session (the company's Owner), as the conversation route receives it; and the service client the route
 // and the worker use.
@@ -78,10 +78,10 @@ test('integration: a message on the fake engine gets its slow reply stored once,
  const {service,person}=await clients(); const {agent,detach}=attachAgent();
  try {
   const conversation=randomUUID(); const sendKey=randomUUID();
-  const message={person:omar,company,conversation,sendKey,agent,message:'Plan the launch week',hermes,engineFor:fake.engineFor};
-  expect(await sendMessage(person,service,message)).toEqual({conversation});
+  const message={person:omar,company,conversation,sendKey,agent,message:'Plan the launch week'};
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,message))).toEqual({conversation});
   // A retried send (double click, a lost answer) is the same message and the same run.
-  expect(await sendMessage(person,service,message)).toEqual({conversation});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,message))).toEqual({conversation});
   expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch week'}]);
   // The Company's Engine record names the lane's Engine, and its key (scripts/local-db.sh).
   expect(fake.connections[0]).toMatchObject({address:`http://${hermesHostOf()}:8642`,key:'test-only-key'});
@@ -778,12 +778,12 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
 
   // A pick: the claim, then the answer delivered once to the same Run, which goes on to its reply.
   const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
-  const pick={company,conversation,card:Number(card),choice:1,answerKey:randomUUID(),hermes,engineFor:fake.engineFor};
-  expect(await answerQuestion(person,service,pick)).toEqual({state:'claimed'});
+  const pick={company,conversation,card:Number(card),choice:1,answerKey:randomUUID()};
+  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,pick))).toEqual({state:'claimed'});
   expect(fake.answers).toEqual([{run:fake.runs[0].id,question:`${fake.runs[0].id}_q1`,text:angles[1]}]);
   // The same click again, and a click in a second tab, send nothing.
-  expect(await answerQuestion(person,service,pick)).toEqual({state:'claimed'});
-  expect(await answerQuestion(person,service,{...pick,choice:0,answerKey:randomUUID()})).toEqual({state:'taken'});
+  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,pick))).toEqual({state:'claimed'});
+  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,{...pick,choice:0,answerKey:randomUUID()}))).toEqual({state:'taken'});
   expect(fake.answers).toHaveLength(1);
   expect(fake.runs).toHaveLength(1);
   expect(agentRows(conversation)).toEqual([{body:`Reply to: Plan the Meta campaign (${angles[1]})`}]);
@@ -796,9 +796,9 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
   // Typed words while the next question is open are its answer: no Run starts and nothing is queued.
   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Plan the Google campaign'}))).toEqual({conversation});
   expect(await close()).toBe(0);
-  const typed={person:omar,company,conversation,sendKey:randomUUID(),agent,message:'الاتنين مع بعض',hermes,engineFor:fake.engineFor};
-  expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
-  expect(await sendMessage(person,service,typed)).toEqual({conversation,answered:true});
+  const typed={person:omar,company,conversation,sendKey:randomUUID(),agent,message:'الاتنين مع بعض'};
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,typed))).toEqual({conversation,answered:true});
+  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,typed))).toEqual({conversation,answered:true});
   expect(fake.runs).toHaveLength(2);
   expect(fake.answers.map(answer=>answer.text)).toEqual([angles[1],'الاتنين مع بعض']);
   // Every message is stored as its turn first (#764): none is left waiting.
