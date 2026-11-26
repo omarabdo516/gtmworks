@@ -28,8 +28,8 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select array_agg(person::text order by person) from public.channel_members((select id from general))),
- array['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000005','30000000-0000-0000-0000-000000000004'],
- 'the general channel holds every Member who is a person, and no legacy role Agent');
+ array['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000005','30000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000004','30000000-0000-0000-0000-000000000005'],
+ 'the general channel holds every Member, those once named for the legacy role agents too (spec #695)');
 select is((select role::text from public.channel_members((select id from general)) where person='20000000-0000-0000-0000-000000000004'),'viewer','each Member comes with their role');
 
 reset role;
@@ -39,7 +39,7 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select ok(exists(select 1 from public.channel_members((select id from general)) where person='b2300000-0000-0000-0000-000000000001' and name='Nour Hassan'),'a Member added later is in the general channel');
 select set_config('request.jwt.claim.sub','b2300000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.channels where id=(select id from general)),1,'and reads it');
-select is((select count(*)::int from public.channel_members((select id from general))),7,'and reads who is in it');
+select is((select count(*)::int from public.channel_members((select id from general))),11,'and reads who is in it');
 reset role;
 insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','Invited@example.test','viewer');
 set local role authenticated;
@@ -48,7 +48,7 @@ select is((select count(*)::int from public.channels),0,'before accepting, no ch
 select lives_ok($$select public.claim_invitations()$$,'the invited person accepts');
 select ok(public.in_channel((select id from general)),'and is in the general channel');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is((select count(*)::int from public.channel_members((select id from general))),8,'the Owner reads both newcomers in it');
+select is((select count(*)::int from public.channel_members((select id from general))),12,'the Owner reads both newcomers in it');
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select isnt(public.post_channel_message((select id from general),'c2300000-0000-0000-0000-000000000001','Morning, team'),null,'the Owner writes');

@@ -21,10 +21,10 @@ test.beforeAll(({},testInfo)=>{ freshSeed(testInfo); query(`update public.people
 test('the Owner invites a person, who joins the general channel with "Invite sent" and the channel\'s counts; a Contributor reads the row without the email',async({page,browser})=>{
  await signIn(page,'omar@example.com',general);
  const details=page.getByRole('complementary',{name:'Channel details'});
- // Before the invite: six Members, counted in the intro, the heading and the head.
- await expect(page.locator('.ch-intro')).toContainText('6 members');
- await expect(details.locator('#ch-h-p .muted')).toHaveText('6');
- await expect(details.locator('.dp-id__role')).toContainText('6 members');
+ // Before the invite: ten Members, counted in the intro, the heading and the head.
+ await expect(page.locator('.ch-intro')).toContainText('10 members');
+ await expect(details.locator('#ch-h-p .muted')).toHaveText('10');
+ await expect(details.locator('.dp-id__role')).toContainText('10 members');
 
  await page.goto('/c/rs-learning/settings?section=members');
  const overlay=page.getByRole('dialog',{name:'Settings'});
@@ -39,9 +39,9 @@ test('the Owner invites a person, who joins the general channel with "Invite sen
 
  // The general channel holds them from the invite: a row, the quiet line, and the counts.
  await page.goto(general);
- await expect(page.locator('.ch-intro')).toContainText('7 members');
- await expect(details.locator('#ch-h-p .muted')).toHaveText('7');
- await expect(details.locator('.dp-id__role')).toContainText('7 members');
+ await expect(page.locator('.ch-intro')).toContainText('11 members');
+ await expect(details.locator('#ch-h-p .muted')).toHaveText('11');
+ await expect(details.locator('.dp-id__role')).toContainText('11 members');
  const invited=details.locator('.panel-row').filter({hasText:name});
  await expect(invited.locator('.panel-row__t')).toHaveText(name);
  await expect(invited.locator('.panel-row__d')).toHaveText(`Contributor · ${email} · Invite sent`);

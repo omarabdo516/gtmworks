@@ -7,6 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
 import { appOrigin } from './lane.mjs';
+import { ensureRequestAgent } from './request-agent';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
@@ -21,6 +22,7 @@ test.beforeAll(async ({ browser }, testInfo) => {
   const context = await browser.newContext({ baseURL: appOrigin });
   try {
     const page = await context.newPage();
+    ensureRequestAgent();
     await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
     const title = `بطاقة قياس الوارد ${randomUUID()}`;
     await page.getByRole('button', { name: "+ New card" }).click();
@@ -202,6 +204,7 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
 });
 
 test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
+  ensureRequestAgent();
   await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
   await idle(page); // Home, board and the inbox are prepared before any write.
   await page.getByRole('button', { name: "+ New card" }).click();

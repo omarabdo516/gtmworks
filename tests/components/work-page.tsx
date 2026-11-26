@@ -26,7 +26,7 @@ export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفك
 export const workProps = (more: Partial<WorkProps> = {}): WorkProps => ({
  workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), addIdea: vi.fn<AddIdeaAction>(async () => ({ card: 9 })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
  cards: [card()], items: [{ id: 1, card_id: 1, title: 'Script Ready', done: false }], members: [{ person_id: 'p-1', people: { name: 'عمر' } }],
- activity: [], creatives: [], versions: [], cardLabels: [], projects: [], assignees: [], approvableIds: [], agents: [],
+ activity: [], creatives: [], versions: [], cardLabels: [], projects: [], assignees: [], approvableIds: [],
  canCreate: true, initialCreating: false, attachments: [], ...more,
 });
 export const sent = (props: WorkProps) => vi.mocked(props.workAction).mock.calls.map(([form]) => Object.fromEntries(form));

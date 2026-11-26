@@ -7,7 +7,9 @@ import { signIn } from './sign-in';
 const board = '/c/rs-learning/work/board';
 const sheetOf = (page: Page) => page.getByRole('dialog');
 const cardLink = (page: Page, id: number) => page.locator(`#board-cols .kcard[data-card-id="${id}"] a`);
-const agentOn = async (page: Page, id: number) => (await page.locator(`#board-cols .kcard[data-card-id="${id}"] .kcard__agent bdi`).textContent())!.trim();
+// What the board's Card says it is for: its Agent's job, else its channel. The seed's Cards have no Agent of the Company
+// (spec #695 made the old role agents people), so the sheet's head names the same channel.
+const jobOn = async (page: Page, id: number) => (await page.locator(`#board-cols .kcard[data-card-id="${id}"] .kcard__foot bdi`).first().textContent())!.trim();
 const at = (path: string) => new RegExp(`${path.replace('?', '\\?')}$`);
 
 test('a click or Enter opens a Card over the board at an address that reloads; Escape and Close give the Card the keyboard back', async ({ page }) => {
@@ -36,19 +38,19 @@ test('a click or Enter opens a Card over the board at an address that reloads; E
  await expect(cardLink(page, 1)).toBeFocused();
 });
 
-test('for the Owner the head names the Agent and where the Card stands; Chat is not open and Log is', async ({ page }) => {
+test('for the Owner the head names the Agent, else the channel, and where the Card stands; Chat is not open and Log is', async ({ page }) => {
  // A shared address opens the sheet once its reader has signed in.
  await signIn(page, 'omar@example.com', `${board}?card=5`);
  const sheet = sheetOf(page);
  await expect(sheet.locator('.sheet__meta .badge--wait')).toHaveText('Waiting on you');
- await expect(sheet.locator('.sheet__meta > bdi')).toHaveText(await agentOn(page, 5));
+ await expect(sheet.locator('.sheet__meta > bdi')).toHaveText(await jobOn(page, 5));
  await expect(sheet.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-disabled', 'true');
  await expect(sheet.getByRole('tab', { name: /^Log \d+$/ })).toHaveAttribute('aria-selected', 'true');
  await expect(sheet.getByRole('link', { name: 'Open in Chats' })).toHaveCount(0);
  await page.goto(`${board}?card=1`);
  await expect(sheet.locator('.sheet__meta .badge')).toHaveText('Ideas');
  await expect(sheet.locator('.sheet__meta .badge--wait')).toHaveCount(0);
- await expect(sheet.locator('.sheet__meta > bdi')).toHaveText(await agentOn(page, 1));
+ await expect(sheet.locator('.sheet__meta > bdi')).toHaveText(await jobOn(page, 1));
 });
 
 test('a Viewer reads the sheet: the waiting Card waits on the team, and the log has no note field', async ({ page }) => {

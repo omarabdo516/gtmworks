@@ -119,7 +119,8 @@ export const placements: Record<string, Placement> = {
   'column-title': { path: board, selector: 'main .col:not(:has(.dot--waiting)) .col__name' },
   'table-header': { path: '/c/rs-learning/work/list', selector: 'main .table th' },
   'label-chip': { path: `${board}/1`, selector: 'main .label-chip' },
-  avatar: { path: '/c/rs-learning/agents', selector: 'main .avatar' },
+  // A person's first letter, beside the next actor in the work list (spec #695 took the role agents' avatars off Agents).
+  avatar: { path: '/c/rs-learning/work/list', selector: 'main .table .avatar' },
   stat: { path: '/c/rs-learning/home', selector: 'main .stat', text: 'main .stat strong:not(.unavailable)' },
   dialog: { path: '/c/rs-learning/home', selector: '.gw.modal', open: async page => { await page.locator('.sb-add').first().click(); } },
 };

@@ -12,11 +12,11 @@ async function chooseLanguage(page:Page,language:'en'|'ar') {
  await expect(page.locator('html')).toHaveAttribute('lang',language);
 }
 
-test('people and agents reply inside one card, in order, each labelled and in its own direction', async ({page}) => {
+test('two people reply inside one card, in order, each labelled and in its own direction', async ({page}) => {
  await mkdir('test-results/screenshots',{recursive:true});
  const stamp=Date.now();
  const first=`Draft is ready مسودة جاهزة ${stamp}`;
- // A card with the Writer's message on it, written as the Writer (seed.sql's way): the note's activity row takes its
+ // A card with a Contributor's message on it, written as that Contributor (seed.sql's way): the note's activity row takes its
  // author from the signed-in id, auth.uid().
  const card=Number(rows(`with writer as (select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true)),
  card as (insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Conversation ${stamp}' from public.work_stages,writer
@@ -27,11 +27,12 @@ test('people and agents reply inside one card, in order, each labelled and in it
  await signIn(page,'omar@example.com',`/c/rs-learning/work/board/${card}`);
  const messages=page.locator('.conversation .message');
  await expect(messages).toHaveCount(1);
- // The agent's message carries its name and the agent label; the word tells it apart, as role colours are gone (#697).
+ // A message on a Card is a person's: it carries its writer's name and the person label (spec #695: no role agent writes
+ // one). A Company Agent's reply is a note's (NoteReplyRow), not a Card message.
  const fromAgent=messages.first();
- await expect(fromAgent).toHaveAttribute('data-author','agent');
+ await expect(fromAgent).toHaveAttribute('data-author','person');
  await expect(fromAgent.locator('strong')).toHaveText(writerName);
- await expect(fromAgent.locator('.author-chip')).toHaveText('Agent');
+ await expect(fromAgent.locator('.author-chip')).toHaveText('Person');
 
  // A person replies below it.
  const reply=`شكرا، نكمل ${stamp} thanks`;
@@ -40,7 +41,7 @@ test('people and agents reply inside one card, in order, each labelled and in it
  await expect(messages).toHaveCount(2);
  await expect(messages.nth(1)).toHaveAttribute('data-author','person');
  await expect(messages.nth(1).locator('.author-chip')).toHaveText('Person');
- // Both labels are drawn alike: an agent's carries no colour of its role.
+ // Both labels are drawn alike.
  const border=(chip:Locator)=>chip.evaluate(element=>[getComputedStyle(element).borderTopColor,!!element.querySelector('i')]);
  expect(await border(fromAgent.locator('.author-chip'))).toEqual(await border(messages.nth(1).locator('.author-chip')));
  await expect(messages.nth(1).locator('strong')).toContainText('عمر');

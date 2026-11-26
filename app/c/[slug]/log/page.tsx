@@ -54,9 +54,8 @@ export default async function ActivityLogPage({params,searchParams}:{params:Prom
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const writer=canCreateCard({role:membership?.role}); const drawn=drawnAt();
  const live=people.members.filter(member=>!member.removed_at);
- const peopleOptions=live.filter(member=>!member.agent_role).map(member=>({value:`p:${member.person_id}`,label:member.people?.name||t('logSomeone')}));
- const agentOptions=[...live.filter(member=>member.agent_role).map(member=>({value:`a:${member.person_id}`,label:people.identities.find(agent=>agent.id===member.person_id)?.name||member.people?.name||t('logSomeone')})),
-  ...people.agents.map(agent=>({value:`a:${agent.id}`,label:agent.name}))];
+ const peopleOptions=live.map(member=>({value:`p:${member.person_id}`,label:member.people?.name||t('logSomeone')}));
+ const agentOptions=people.agents.map(agent=>({value:`a:${agent.id}`,label:agent.name}));
  const cardOptions=loggedCards.filter(id=>people.cards.has(id)).map(id=>({value:String(id),label:people.cards.get(id)!}));
  const whoValue=who.kind==='system'?'s':who.kind==='all'?'all':`${who.kind==='person'?'p':'a'}:${who.id}`;
  // Every matching row is counted, whatever page is open; `left` counts this page and the rows older than it.
