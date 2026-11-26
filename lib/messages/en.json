@@ -1806,5 +1806,18 @@
   "logActConversationRestored": "restored the conversation",
   "cardLinkCopyFailed": "The link was not copied: this browser did not allow it. Copy it from the address bar.",
   "archiveCheckFailed": "Nothing was archived: what archiving would stop could not be checked. Try again.",
-  "cardArchiveFailedRetry": "That did not go through. The board was read again: check it, then try again."
+  "cardArchiveFailedRetry": "That did not go through. The board was read again: check it, then try again.",
+  "boardReading": "Reading the board…",
+  "boardRefreshFailed": "Couldn’t refresh the board. Showing what it last read.",
+  "boardReadFailed": "The board couldn’t be read. Trying again.",
+  "boardCardAssignee": "Assignee: {0}",
+  "boardCardNoOne": "No one",
+  "boardCardComment": "1 comment",
+  "boardCardComments": "{0} comments",
+  "symWorking": "Working on it now",
+  "symQuestion": "Has a question",
+  "symReview": "Needs review",
+  "symFailed": "Stopped after 2 tries",
+  "symWaits": "Waiting for another card",
+  "symWaitsN": "Waiting for {0} cards"
 }

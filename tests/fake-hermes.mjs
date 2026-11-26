@@ -43,6 +43,54 @@ export function screenFrame(grab) {
  const note=Buffer.from(`grab ${grab}`);
  return Buffer.concat([screenJpeg.subarray(0,2),Buffer.from([0xff,0xfe,0,note.length+2]),note,screenJpeg.subarray(2)]);
 }
+// The pinned release's Kanban board (spec #831; hermes_cli/kanban_workflow.py DEFAULT_WORKFLOW, hermes_cli/kanban_db.py
+// Task): its statuses in column order, and its tasks as the Task dataclass holds them. A test puts a task on it with
+// `task(fields)` (an id `t_` and eight hex digits, as _new_task_id makes), links a child to the parent it waits for with
+// `link`, and comments with `comment`; `board()` is GET /board's answer.
+export const kanbanStatuses=['triage','todo','scheduled','ready','running','blocked','review','done'];
+function kanbanBoard() {
+ const tasks=/** @type {any[]} */([]);
+ const links=/** @type {{parent_id:string,child_id:string}[]} */([]);
+ const comments=/** @type {{id:number,task_id:string,author:string,body:string,created_at:number}[]} */([]);
+ let clock=Math.floor(Date.now()/1000);
+ return {tasks,links,comments,
+  /** @param {Record<string,any>} fields */
+  task(fields) {
+   const at=++clock;
+   const task={id:`t_${randomUUID().replaceAll('-','').slice(0,8)}`,title:'',body:null,assignee:null,status:fields.assignee?'ready':'todo',priority:0,created_by:'dashboard',
+    created_at:at,started_at:null,completed_at:null,workspace_kind:'scratch',workspace_path:null,claim_lock:null,claim_expires:null,tenant:null,branch_name:null,
+    project_id:null,result:null,idempotency_key:null,consecutive_failures:0,worker_pid:null,last_failure_error:null,max_runtime_seconds:null,
+    last_heartbeat_at:null,current_run_id:null,workflow_template_id:null,current_step_key:null,skills:null,model_override:null,provider_override:null,
+    reasoning_effort:null,max_retries:null,goal_mode:false,goal_max_turns:null,session_id:null,block_kind:null,block_recurrences:0,completion_contract:null,...fields};
+   if(task.status==='done'&&task.completed_at==null) task.completed_at=at;
+   tasks.push(task);
+   return task;
+  },
+  /** @param {string} parent @param {string} child */
+  link(parent,child) { links.push({parent_id:parent,child_id:child}); },
+  /** @param {string} task @param {string} author @param {string} body */
+  comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); },
+  // GET /board (get_board): every task not archived, in its status's column, each with its link, comment and child counts
+  // and its latest Run's summary; the queue columns by priority then age, Done newest finished first.
+  board() {
+   const counts=id=>({parents:links.filter(link=>link.child_id===id).length,children:links.filter(link=>link.parent_id===id).length});
+   const progress=id=>{ const children=links.filter(link=>link.parent_id===id).map(link=>tasks.find(task=>task.id===link.child_id)).filter(Boolean);
+    return children.length?{done:children.filter(child=>child.status==='done').length,total:children.length}:null; };
+   const now=Math.floor(Date.now()/1000);
+   const columns=kanbanStatuses.map(name=>{
+    const listed=tasks.filter(task=>task.status===name).map(task=>({...task,age:{created_age_seconds:now-task.created_at,started_age_seconds:task.started_at==null?null:now-task.started_at,
+     time_to_complete_seconds:task.completed_at==null?null:task.completed_at-(task.started_at??task.created_at)},latest_summary:task.latest_summary??null,current_run_started_at:null,
+     link_counts:counts(task.id),comment_count:comments.filter(comment=>comment.task_id===task.id).length,progress:progress(task.id),warnings:null}));
+    if(name==='done') listed.sort((a,b)=>(b.completed_at??0)-(a.completed_at??0)||(b.id<a.id?-1:1));
+    else listed.sort((a,b)=>b.priority-a.priority||a.created_at-b.created_at);
+    return {name,tasks:listed};
+   });
+   return {columns,tenants:[...new Set(tasks.flatMap(task=>task.tenant?[task.tenant]:[]))].sort(),assignees:[...new Set(tasks.flatMap(task=>task.assignee?[task.assignee]:[]))].sort(),
+    latest_event_id:0,now};
+  },
+ };
+}
+
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -176,6 +224,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // chat Run's input asks for: the Run makes it with the Engine's own cronjob tool, so only on a profile whose Runs are
   // offered that toolset, in that Run's own profile (tools/cronjob_tools.py).
   cron:/** @type {Map<string,any[]>} */(new Map()),cronOutcome:/** @type {'ok'|'error'} */('ok'),loseCronCreates:0,
+  // The Engine's default Kanban board (spec #831): its tasks, links and comments, served on the management listener's
+  // /api/plugins/kanban routes as the pinned release serves them (plugins/kanban/dashboard/plugin_api.py).
+  kanban:kanbanBoard(),
   // What a Routine's run now answers (#182): each run is a cron session of the job's profile, `cron_<id>_<time>`, holding
   // the prompt and this reply, listed newest first by the job's runs route.
   // A function of the job answers each job its own way (#183: the night's results beside the morning's greeting).
@@ -1078,6 +1129,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      return send(response,200,annotated(job,owner));
     }
    }
+   // The Kanban board's routes (plugins/kanban/dashboard/plugin_api.py, mounted at /api/plugins/kanban), the default
+   // board when no ?board= is named.
+   if(url.pathname==='/api/plugins/kanban/board'&&request.method==='GET') return send(response,200,settings.kanban.board());
    send(response,404,{detail:'Not Found'});
   });
  };

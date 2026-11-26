@@ -1806,5 +1806,18 @@
   "logActConversationRestored": "رجّع المحادثة",
   "cardLinkCopyFailed": "اللينك ماتنسخش: المتصفح ماسمحش بكده. انسخه من شريط العنوان.",
   "archiveCheckFailed": "متأرشفش حاجة: معرفناش نشوف الأرشفة هتوقّف إيه. جرّب تاني.",
-  "cardArchiveFailedRetry": "ده ماتمّش. البورد اتقرا تاني: بص عليه وبعدين جرّب تاني."
+  "cardArchiveFailedRetry": "ده ماتمّش. البورد اتقرا تاني: بص عليه وبعدين جرّب تاني.",
+  "boardReading": "بنقرا اللوحة…",
+  "boardRefreshFailed": "معرفناش نحدّث اللوحة. ده آخر اللي اتقرا منها.",
+  "boardReadFailed": "معرفناش نقرا اللوحة. هنحاول تاني.",
+  "boardCardAssignee": "المسؤول: {0}",
+  "boardCardNoOne": "محدش",
+  "boardCardComment": "تعليق واحد",
+  "boardCardComments": "{0} تعليقات",
+  "symWorking": "شغال عليها دلوقتي",
+  "symQuestion": "عنده سؤال",
+  "symReview": "محتاجة مراجعة",
+  "symFailed": "وقف بعد محاولتين",
+  "symWaits": "مستنية بطاقة تانية",
+  "symWaitsN": "مستنية {0} بطاقات"
 }

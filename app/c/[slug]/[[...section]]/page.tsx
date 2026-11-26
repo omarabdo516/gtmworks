@@ -19,6 +19,7 @@ import CompanyHermesAgents from './company-hermes-agents';
 import Skills from './skills';
 import { companySkillAgents } from '@/lib/company-skill-items';
 import Work, { type Card } from './work';
+import Board from './board';
 import { addIdea, archiveCards, archivedCardList, placeMove, workAction, undoMove } from './work-actions';
 import { archivedCardCount, archivedCardPage } from '@/lib/archived-cards';
 import Projects from './projects';
@@ -41,6 +42,9 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const manage=['owner','manager'].includes(role); const canOwner=role==='owner';
  // Usage is the Owner's and the Managers' (#32), checked here for the page as the database checks each read.
  if(section==='usage'&&!manage) notFound();
+ // The board (spec #831): the Company's Engine's own Kanban board. Its frame is drawn here from nothing the Engine keeps,
+ // and the browser reads its Cards after (ADR 0030); a person who is no Member found no Company above.
+ if(section==='work/board'&&!cardId) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate}/></main></Page>;
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
  const {data:companyHermesAgents}=section==='agents'?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]};
  const skillAgents=section==='skills'?await companySkillAgents(company.id):null;

@@ -385,3 +385,25 @@
   .gw .board-view .col__head .col__act { min-width: 44px; height: 44px; }
   .gw .board-view .link-btn { min-height: 44px; }
 }
+
+/* The Engine board's tile (spec #831, #834; design-reference-card: kcardHTML, .kt-head, .kt-syms, .sym, .kcard__foot): its
+   title and one state symbol, then its assignee's face and only the counts above zero. */
+.gw .kcard > .kt-head { display: flex; align-items: flex-start; gap: var(--s2, 8px); }
+.gw .kt-head > .kcard__title { flex: 1 1 0; min-width: 0; }
+.gw .kt-syms { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: calc(var(--gw-fs-base) * 1.55); }
+.gw .sym { display: inline-flex; align-items: center; gap: 2px; flex: none; line-height: 1; -webkit-touch-callout: none; }
+.gw .sym .gw-icon { width: 16px; height: 16px; }
+.gw .sym--wait { color: var(--gw-wait-text); }
+.gw .sym--bad { color: var(--gw-danger-text); }
+.gw .sym--ok { color: var(--gw-accent); }
+.gw .sym--mute { color: var(--gw-text-2); }
+.gw .sym__n { font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-semibold); line-height: 1; }
+.gw .sym__dot { position: relative; display: inline-block; width: 8px; height: 8px; margin: 4px; border-radius: 50%; background: var(--gw-accent); flex: none; }
+.gw .sym__dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
+.gw .kcard > .kcard__foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; padding-top: 2px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .kt-face { display: inline-flex; flex: none; }
+.gw .kt-face .cw-noone { width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; display: inline-block; box-sizing: border-box; border: 1px solid var(--gw-border-1); }
+.gw .kt-metas { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--s3, 12px); flex: none; }
+.gw .kt-m { display: inline-flex; align-items: center; gap: 3px; }
+.gw .kt-m .gw-icon { width: 13px; height: 13px; }
+@media (prefers-reduced-motion: reduce) { .gw .sym__dot::after { animation: none; } }
