@@ -7124,6 +7124,38 @@ end $$;
 ALTER FUNCTION public.log_conversation_archive(v uuid, archived boolean, actor uuid) OWNER TO postgres;
 
 --
+-- Name: log_engine_dashboard(uuid, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.log_engine_dashboard(c uuid, act text, page text, kind text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare me uuid := auth.uid();
+begin
+ if me is null or not public.is_company_owner(c) then raise exception 'engineDashboardNotAllowed' using errcode='42501'; end if;
+ if act='opened' and page is null and kind is null then
+  -- Two first pages loaded at once are still one visit.
+  perform pg_advisory_xact_lock(hashtextextended('engine_dashboard_opened '||c::text||' '||me::text,0));
+  if exists(select 1 from public.company_log l where l.company_id=c and l.source='engine_dashboard' and l.action='engine_dashboard_opened'
+   and l.actor_id=me and l.created_at>now()-interval '30 minutes') then return; end if;
+ elsif act='changed' and kind in ('keySaved','keyRemoved','pluginInstalled','platformSet','platformConnected','settingSaved','added','removed','changed')
+  and (page is null or page in ('keys','config','plugins','mcp','channels','webhooks','pairing','cron','skills','models','profiles','files','system','sessions','kanban')) then
+  null;
+ elsif act='refused' and page is null and kind in ('engineKey','hermesUpdate','backupImport','agentProfile') then
+  null;
+ else raise exception 'engineDashboardLineUnknown' using errcode='22023';
+ end if;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
+  values(c,me,public.log_actor_kind(c,me),(select name from public.people where id=me),'company','engine_dashboard_'||act,
+   case act when 'changed' then jsonb_strip_nulls(jsonb_build_object('page',page,'change',kind)) when 'refused' then jsonb_build_object('refused',kind) else '{}'::jsonb end
+    ||jsonb_build_object('private','owners'),
+   'engine_dashboard',nextval('public.engine_dashboard_log_ids'),now());
+end $$;
+
+ALTER FUNCTION public.log_engine_dashboard(c uuid, act text, page text, kind text) OWNER TO postgres;
+
+--
 -- Name: log_engine_setting(uuid, uuid, text, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -12759,7 +12791,7 @@ CREATE TABLE public.company_log (
     CONSTRAINT company_log_actor_kind_check CHECK ((actor_kind = ANY (ARRAY['person'::text, 'agent'::text, 'system'::text]))),
     CONSTRAINT company_log_check CHECK (((subject = 'card'::text) = (card_id IS NOT NULL))),
     CONSTRAINT company_log_check1 CHECK (((actor_kind = 'system'::text) = (actor_id IS NULL))),
-    CONSTRAINT company_log_source_check CHECK ((source = ANY (ARRAY['work_activity'::text, 'work_comments'::text, 'member_audit'::text, 'hermes_agent_audit'::text, 'company_audit'::text, 'note_runs'::text, 'reply_cards'::text, 'member_invitations'::text, 'reply_card_answers'::text, 'channel_permissions'::text, 'agent_handovers'::text, 'channel_handover_replies'::text, 'channel_cards'::text, 'channel_replies'::text, 'conversation_archives'::text, 'channel_archives'::text]))),
+    CONSTRAINT company_log_source_check CHECK ((source = ANY (ARRAY['work_activity'::text, 'work_comments'::text, 'member_audit'::text, 'hermes_agent_audit'::text, 'company_audit'::text, 'note_runs'::text, 'reply_cards'::text, 'member_invitations'::text, 'reply_card_answers'::text, 'channel_permissions'::text, 'agent_handovers'::text, 'channel_handover_replies'::text, 'channel_cards'::text, 'channel_replies'::text, 'conversation_archives'::text, 'channel_archives'::text, 'engine_dashboard'::text]))),
     CONSTRAINT company_log_subject_check CHECK ((subject = ANY (ARRAY['card'::text, 'member'::text, 'agent'::text, 'company'::text])))
 );
 
@@ -13061,6 +13093,19 @@ CREATE TABLE public.conversation_run_resets (
 );
 
 ALTER TABLE public.conversation_run_resets OWNER TO postgres;
+
+--
+-- Name: engine_dashboard_log_ids; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.engine_dashboard_log_ids
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.engine_dashboard_log_ids OWNER TO postgres;
 
 --
 -- Name: good_morning_results; Type: TABLE; Schema: public; Owner: postgres
@@ -20621,6 +20666,13 @@ GRANT ALL ON FUNCTION public.log_company_knowledge(c uuid, part text, cleared bo
 --
 
 REVOKE ALL ON FUNCTION public.log_conversation_archive(v uuid, archived boolean, actor uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION log_engine_dashboard(c uuid, act text, page text, kind text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.log_engine_dashboard(c uuid, act text, page text, kind text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.log_engine_dashboard(c uuid, act text, page text, kind text) TO authenticated;
 
 --
 -- Name: FUNCTION log_engine_setting(c uuid, agent uuid, setting text, old_value jsonb, new_value jsonb); Type: ACL; Schema: public; Owner: postgres
