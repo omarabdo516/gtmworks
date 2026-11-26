@@ -313,8 +313,8 @@ test('the recent cards endpoint refuses what it cannot trust and never reads for
 });
 
 test('an account menu opened while the next page is still arriving stays open when that page lands',async({page})=>{
- // Every page draws its own shell, so closing a card draws a new one. After a comment (which makes the prepared board
- // stale) the board's data is held back until the menu is open, so the new shell always lands under an open menu.
+ // Closing a card lands the board under the menu. After a comment (which makes the prepared board stale) the board's
+ // data is held back until the menu is open, so the board always lands under an open menu.
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
  await expect(page.locator('.modal')).toBeVisible();

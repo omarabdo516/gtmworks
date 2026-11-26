@@ -23,8 +23,8 @@ const languages=[{key:'en',name:'languageNameEnglish',description:'languageEngli
 // overlay (app/settings-overlay.tsx), which closes back to the page it was opened from.
 // "Team" (#187) is the reference's own item, for an Owner and a Manager: it closes the menu and opens the Team dialog
 // over the page (app/team-dialog.tsx). Its data is read by the server, which refuses it to anyone else.
-// Every page draws its own shell, so a page landing (closing a card, a refresh after a save) draws a new account
-// menu. Whether it is open is kept here, outside the shell, for the page it was opened on: that page, or the page the
+// A refresh after a save, or a sign-in in another tab, can draw the account menu again (the Company's layout draws
+// the Shell, #789). Whether it is open is kept here, outside the shell, for the page it was opened on: that page, or the page the
 // person had already set out to open through a link (lib/link pageBeingOpened; never a prefetch). A menu opened while
 // that page was still arriving stays open when it lands instead of closing under the pointer, with focus on the item
 // that had it. Any other page, another company or Back and Forward close it, as do choosing an item, Escape and a

@@ -139,6 +139,8 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
       if (run) answers.push(answer);
       await expect(page.getByRole('progressbar', { name: "Opening page" })).toBeVisible();
       release();
+      // The page left stays mounted, out of sight, under the loading frame until Numbers lands (#771).
+      await expect(page.locator('.app-content[aria-busy]')).toHaveCount(0);
       await expect(page.locator('.heading h1')).toHaveText("Numbers");
       await expect(page.getByRole('progressbar')).toHaveCount(0);
       await expect(page.locator('.link-pending')).toHaveCount(0);

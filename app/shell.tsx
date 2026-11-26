@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
-import { conversationTitle } from '@/lib/conversation-title.mjs';
+import { chatsOf, recentChats } from '@/lib/sidebar-chats';
 import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
 import { Birth } from '@/components/face-moments';
 import ApprovalsCount from './approvals-count';
@@ -41,20 +41,13 @@ import { SidebarEntry } from './sidebar-entry';
 
 // The sidebar's reads, once per request: they go out together, as a page's own do, each one round trip (decision 0042).
 // Every Agent's state for this reader (#699) is read in one call beside the Agents themselves; a failed read leaves them
-// idle, and the sidebar's poll (app/sidebar-live) follows it from there. The Company's looks are read here once for every face under the Shell (#697). A page may start them before it
-// draws the Shell (the chat does), so they wait beside its own reads.
+// idle, and the sidebar's poll (app/sidebar-live) follows it from there. The Company's looks are read here once for every face under the Shell (#697). The Company's layout starts them
+// beside the page's own reads (app/c/[slug]/layout.tsx), and Home finds its Agents here too.
 export const sidebarReads=cache(async(id:string|undefined)=>{
  const db=await supabase();
  return Promise.all([
   id?Promise.all([companyAgents(db,id),agentFaceStates(db,id).then(({states})=>states)]):[[],{} as Record<string,AgentFaceState>] as const,
-  // Each listed chat with its own first message (a limit per chat), so a long chat never crowds another out of the titles.
-  // The twenty current ones with the newest messages (#673); All conversations holds the rest, and the archived (#674).
-  // A chat whose first message still waits for its Run (#764) is named by that waiting turn and the files sent with it.
-  id?db.from('conversations').select('id,agent_id,agent_name,last_message_at,good_morning_day,conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),waiting_files:conversation_attachments(name)').eq('company_id',id).is('archived_at',null).eq('conversation_messages.author','person')
-   .is('waiting_files.message_id',null)
-   .order('last_message_at',{ascending:false}).order('id',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'})
-   .order('queued_at',{referencedTable:'conversation_queued_turns'}).limit(1,{referencedTable:'conversation_queued_turns'}).order('position',{referencedTable:'waiting_files'}).limit(1,{referencedTable:'waiting_files'}).limit(20)
-   .then(({data,error})=>error?null:(data||[]) as {id:string,agent_id:string|null,agent_name:string,last_message_at:string,good_morning_day:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],waiting_files:{name:string}[]}[]):[],
+  id?recentChats(db,id):[],
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
   // A list whose read failed is null (#776): the sidebar keeps the one it shows (app/recent-chats, app/sidebar-live).
   id?channelSidebar(db,id).catch(()=>null):[],
@@ -84,14 +77,12 @@ export default async function Shell({company,companies,personId,personName,role,
  const [[agents,states],conversations,workMode,channels,manage,canWrite,ids,looks,handed]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
- // A chat is named as everywhere else (lib/conversation-title.mjs).
- const chats=conversations?.map(c=>{ const first=c.conversation_messages[0]; const waiting=first?undefined:c.conversation_queued_turns?.[0];
-  return {id:c.id,at:c.last_message_at,title:conversationTitle({morningDay:c.good_morning_day,body:first?first.body:waiting?.message,file:first?first.conversation_attachments?.[0]?.name:waiting&&c.waiting_files?.[0]?.name,agent:c.agent_name},t,language)}; })??null;
+ const chats=conversations&&chatsOf(conversations,t,language);
  const asksForAgents=writer&&!owner;
  // What the sidebar already knows of the open page's Agent (app/shell-place): Lead's chat at /chat, and the Agent of each
  // listed Conversation.
  const lead=(agents.find(agent=>agent.is_default)??agents[0])?.id;
- const chatAgents=Object.fromEntries((conversations||[]).flatMap(c=>c.agent_id?[[c.id,c.agent_id]]:[]));
+ const chatAgents=Object.fromEntries((chats||[]).flatMap(chat=>chat.agent?[[chat.id,chat.agent]]:[]));
  const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -109,7 +100,7 @@ export default async function Shell({company,companies,personId,personName,role,
   <nav className="sb-scroll nav" aria-label={t('navigation')}>{slug&&<>
    <div className="sb-nav">{shellNav.map(([path,label,icon])=><div key={path} className="sb-row">
     <SidebarEntry className="sb-item" href={`/c/${slug}/${path}`} entry={path}><ShellIcon name={icon}/><span className="od-fill">{t(label)}</span></SidebarEntry>
-    {path==='work/board'&&<ApprovalsCount slug={slug} count={approvalCount} t={t}/>}
+    {path==='work/board'&&<ApprovalsCount slug={slug} count={approvalCount}/>}
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>

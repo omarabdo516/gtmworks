@@ -10,11 +10,15 @@ import type { FaceState } from '@/components/face-life';
 import { toast } from '@/app/toast';
 import { onHandDone, stepOf, type ScreenHand } from '@/app/screen-hands';
 import { useShellPlace } from '@/app/shell-place';
+import type { SidebarChat } from '@/lib/sidebar-chats';
 
 const pollEvery=5000;
 // What the sidebar shows that changes while a page stays open: the reader's channels with their unread counts (#24),
-// the state of each Agent they see (#699), by Agent id, and the steps handed to them on an Agent's Screen (#714).
-export type SidebarNow={channels:ChannelSummary[],agents:Record<string,AgentFaceState>,handed:ScreenHand[]};
+// the state of each Agent they see (#699), by Agent id, and the steps handed to them on an Agent's Screen (#714); and,
+// since the Shell is drawn once by the Company's layout and a page move no longer draws it again (#789), their recent
+// chats (null when that read failed: the list shown stays) and how many things wait on them. The page's own draw leaves
+// the last two to the Shell's props until the first poll answers.
+export type SidebarNow={channels:ChannelSummary[],agents:Record<string,AgentFaceState>,handed:ScreenHand[],chats?:SidebarChat[]|null,approvals?:number};
 type Live=SidebarNow&{refresh:()=>void};
 const Now=createContext<Live|null>(null);
 
@@ -96,14 +100,23 @@ const same=(a:unknown,b:unknown)=>a===b||JSON.stringify(a)===JSON.stringify(b);
 function kept(was:{basis:SidebarNow,now:SidebarNow}|null,basis:SidebarNow,answer:SidebarNow) {
  const prior=was?.basis===basis?was.now:basis;
  const handed=Array.isArray(answer.handed)?answer.handed:prior.handed;
+ // A chats read that failed (null) keeps the list shown.
+ const chats=Array.isArray(answer.chats)?answer.chats:prior.chats;
+ const approvals=typeof answer.approvals==='number'?answer.approvals:prior.approvals;
  const now={channels:same(prior.channels,answer.channels)?prior.channels:answer.channels,agents:same(prior.agents,answer.agents)?prior.agents:answer.agents,
-  handed:same(prior.handed,handed)?prior.handed:handed};
- if(now.channels===prior.channels&&now.agents===prior.agents&&now.handed===prior.handed) return was?.basis===basis?was:{basis,now:prior};
+  handed:same(prior.handed,handed)?prior.handed:handed,chats:same(prior.chats,chats)?prior.chats:chats,approvals};
+ if(now.channels===prior.channels&&now.agents===prior.agents&&now.handed===prior.handed&&now.chats===prior.chats&&now.approvals===prior.approvals) return was?.basis===basis?was:{basis,now:prior};
  return {basis,now};
 }
 
 // The reader's channels as the sidebar last read them.
 export const useSidebarChannels=()=>useContext(Now)?.channels??[];
+// The reader's recent chats and the count of what waits on them as the sidebar's poll last read them; undefined until
+// it has answered, when the Shell's own read stands.
+export const useSidebarChats=()=>useContext(Now)?.chats;
+export const useSidebarApprovals=()=>useContext(Now)?.approvals;
+// Asks the sidebar's poll at once.
+export const useSidebarRefresh=()=>useContext(Now)?.refresh;
 // The newest step this reader was handed on an Agent's Screen, as the sidebar last read it (#714), or null; outside the
 // sidebar's reach none. `ask` reads it again at once.
 export function useScreenHand(agent:string):{hand:ScreenHand|null,ask:()=>void} {

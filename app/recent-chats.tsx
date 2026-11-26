@@ -1,8 +1,9 @@
 'use client';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { useShellPlace } from './shell-place';
+import { useSidebarChats, useSidebarRefresh } from './sidebar-live';
 import { localeFor } from '@/lib/i18n.mjs';
 import { groupRecents, matchChats } from '@/lib/sidebar.mjs';
 import { useSidebarQuery } from './sidebar-search';
@@ -17,13 +18,20 @@ const labels={today:'today',yesterday:'yesterday',earlier:'earlier'} as const;
 // in the browser's time zone, never the server's), narrowed by the sidebar's search. Each row's menu archives it (#674;
 // design-reference-card: .thread-row, .thread-more); an archived one leaves the list, which holds current ones only.
 // A page whose read of them failed passes null (#776): the list shown last for this Company in this tab stays. The Shell is
-// drawn by each page, so the list is kept here, outside any one page's components, and in the browser only: the server
+// drawn again by a refresh, so the list is kept here, outside its components, and in the browser only: the server
 // never draws a list from shared state, which could be another reader's. Keyed by the reader and the Company: another
 // account signed in from another tab never gets this reader's list.
 const shownLast=new Map<string,Chat[]>();
 const inBrowser=typeof window!=='undefined';
-export default function RecentChats({slug,company,person,chats:read,current:drawn,lead}:{slug:string,company:string,person:string,chats:Chat[]|null,current?:string,lead:string}) {
+export default function RecentChats({slug,company,person,chats:drawnChats,current:drawn,lead}:{slug:string,company:string,person:string,chats:Chat[]|null,current?:string,lead:string}) {
  const place=useShellPlace(); const current=drawn??place.conversation;
+ // The Shell's list until the sidebar's poll has read them again (#789: a page move does not draw the Shell again).
+ const polled=useSidebarChats(); const read=polled!==undefined?polled:drawnChats;
+ // A Conversation opened that the list does not hold (one just started, an older one) asks the poll at once, so a new
+ // chat joins the list as the page opens on it.
+ const refresh=useSidebarRefresh(); const missing=!!current&&!!read&&!read.some(chat=>chat.id===current);
+ const asked=useRef<string|null>(null);
+ useEffect(()=>{ if(!missing||!current||asked.current===current) return; asked.current=current; refresh?.(); },[missing,current,refresh]);
  const {t,language}=useI18n();
  const shownKey=`${person}:${company}`;
  if(read&&inBrowser) shownLast.set(shownKey,read);

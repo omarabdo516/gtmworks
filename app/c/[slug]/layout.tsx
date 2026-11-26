@@ -7,7 +7,7 @@ import Shell from '@/app/shell';
 
 // Every Company page, with Settings as a layer over it (#612). The Shell (the sidebar and the frame) is drawn here once
 // (#789): moving between the Company's pages draws only the page, which draws its own top bar and content
-// (app/page-frame), and a press paints the page's loading frame inside the Shell at once (./loading.tsx, #771).
+// (app/page-frame), and a press paints the page's loading frame inside the Shell at once (app/frame.tsx, #771).
 // The `settings` slot holds the overlay: opened from a page of the Company it is drawn over that page, which stays as it
 // was (its scroll, its drafts) and is out of reach while the dialog is open (data-workspace,
 // app/settings-overlay-frame.tsx); opened at its own address it is drawn over the Company's frame. Closing returns to the

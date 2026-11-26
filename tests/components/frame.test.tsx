@@ -3,6 +3,7 @@ import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { Frame, PageFrame } from '@/app/frame';
 import { continuePage } from '@/lib/page-fade';
+import { setPageBeingOpened } from '@/lib/page-opening';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -137,6 +138,35 @@ test('a loading frame does not fade, and the page that arrives in its place fade
  await screen.rerender(frame('numbers'));
  await expect.poll(() => starts).toEqual(['gw-fade-in']);
  expect(content().hasAttribute('aria-busy')).toBe(false);
+});
+
+// #771: a press whose page has not landed after 100ms draws that page's loading frame in the page's place, inside the
+// same sidebar; the page left stays mounted out of sight, and the page that lands takes the frame's place. A press on
+// the page shown, or on Settings (drawn over the page), draws none.
+test('a press whose page is on its way draws its loading frame in the page\'s place until the page lands', async () => {
+ const screen = await show(1440);
+ const pageShown = () => getComputedStyle(document.querySelector('.app-content:not([aria-busy])')!).display !== 'none';
+ setPageBeingOpened('/c/rs-learning/log');
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(document.querySelector('.app-content[aria-busy]'), 'not before 100ms').toBeNull();
+ const loading = screen.getByRole('status');
+ await expect.element(loading).toHaveTextContent('Opening page');
+ expect(document.querySelector('.app-content[aria-busy="true"]')).not.toBeNull();
+ expect(document.querySelector('.topbar h1')!.textContent).toBe('Activity log');
+ expect(pageShown()).toBe(false);
+ expect(document.querySelector('a[href="#card"]'), 'the page left stays mounted').not.toBeNull();
+ await expect.element(screen.getByRole('navigation', { name: 'Navigation' })).toBeVisible();
+ route.pathname = '/c/rs-learning/log';
+ await screen.rerender(frame('log'));
+ expect(document.querySelector('.app-content[aria-busy]'), 'the page landed').toBeNull();
+ expect(pageShown()).toBe(true);
+ setPageBeingOpened(null);
+ for (const pressed of ['/c/rs-learning/log', '/c/rs-learning/settings']) {
+  setPageBeingOpened(pressed);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(document.querySelector('.app-content[aria-busy]'), pressed).toBeNull();
+  setPageBeingOpened(null);
+ }
 });
 
 // A new chat whose first message starts its Conversation goes on as the same page (lib/page-fade), as the reference's

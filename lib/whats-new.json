@@ -1,5 +1,11 @@
 [
  {
+  "issue": 771,
+  "date": "2026-11-26",
+  "en": { "title": "A press opens its page at once", "body": "Pressing a link now shows the page's frame straight away, with the sidebar staying as it is, and the page fills in when it arrives; moving between pages no longer redraws the sidebar." },
+  "ar": { "title": "الضغطة بتفتح صفحتها على طول", "body": "لما تدوس على لينك، إطار الصفحة بيظهر على طول والشريط الجانبي فاضل زي ما هو، والصفحة بتكمل لما توصل؛ والتنقل بين الصفحات مبقاش بيرسم الشريط الجانبي من الأول." }
+ },
+ {
   "issue": 507,
   "date": "2026-11-25",
   "en": { "title": "Each Company has a disk of its own", "body": "A Company's Agents now work on a disk of a fixed size, 10 GB by default and changed with gtmworks company limits --disk, so a command that fills it stops there and the rest of the install keeps running." },

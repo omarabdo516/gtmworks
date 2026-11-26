@@ -5,6 +5,7 @@ import NextLink, { useLinkStatus } from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useState, type ComponentProps } from 'react';
+import { pageBeingOpened, setPageBeingOpened } from './page-opening';
 
 const requests = new Set<{ path: string }>();
 const started = new EventTarget();
@@ -28,17 +29,14 @@ function trackPageRequests() {
   return () => { window.fetch = fetch; requests.clear(); };
 }
 
-// The page a person is opening right now through one of these links (a click or Enter), until it has landed or the
-// link stops waiting for it. Prefetches never count: only a link the person activated.
-let opening: string | null = null;
-/** The page whose navigation the person started and that has not landed yet, if any. */
-export const pageBeingOpened = () => opening;
+// The page a person is opening through one of these links lives in lib/page-opening, which the frame reads too.
+export { pageBeingOpened } from './page-opening';
 
 export function NavigationFeedback() {
   useLayoutEffect(trackPageRequests, []);
   // A page that landed is no longer being opened.
   const pathname = usePathname();
-  useEffect(() => { opening = null; }, [pathname]);
+  useEffect(() => { setPageBeingOpened(null); }, [pathname]);
   return null;
 }
 
@@ -63,25 +61,25 @@ function Pending({ href }: { href: string }) {
   useEffect(() => {
     if (!pending) return;
     const path = new URL(href, location.href).pathname;
-    return () => { if (opening === path) opening = null; };
+    return () => { if (pageBeingOpened() === path) setPageBeingOpened(null); };
   }, [pending, href]);
   return pending ? <Feedback href={href} /> : null;
 }
 
-// A link loads its page's frame only when the person points at it, focuses it or touches it (#771, #739), as the
-// framework prefetches by default (up to the page's loading frame, app/c/[slug]/loading.tsx): never every link on screen
-// in the background, and never a whole page (a Conversation's included) that was not asked for. A press shows that
-// frame at once and the page fills it when its data arrives.
+// A link loads its page only when the person points at it, focuses it or touches it (#771, #739): never every link on
+// screen in the background, which rendered a whole page (a Conversation's included) for each. A press right after the
+// intent opens the page it prepared; a press with none, or before it is ready, paints the page's loading frame at once
+// (app/frame.tsx, from lib/page-opening) and the page takes its place when it arrives.
 export default function Link({ children, ...props }: ComponentProps<typeof NextLink>) {
   const router = useRouter();
   const target = props.as || props.href;
   const href = typeof target === 'string' ? target : target.pathname || '';
-  const intent = () => { try { router.prefetch(href); } catch { /* A prefetch never stands in the way of a press. */ } };
+  const intent = () => { try { router.prefetch(href, { kind: 'full' } as Parameters<typeof router.prefetch>[1]); } catch { /* A prefetch never stands in the way of a press. */ } };
   // A plain click or Enter (which the browser turns into a click) opens the page here; a modified click opens it
   // elsewhere and is not this page being opened.
   const onClick: ComponentProps<typeof NextLink>['onClick'] = event => {
     props.onClick?.(event);
-    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) opening = new URL(href, location.href).pathname;
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) setPageBeingOpened(new URL(href, location.href).pathname);
   };
   return <NextLink {...props} onClick={onClick} prefetch={false}
     onMouseEnter={event => { props.onMouseEnter?.(event); intent(); }} onFocus={event => { props.onFocus?.(event); intent(); }}
