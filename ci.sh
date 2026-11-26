@@ -86,6 +86,8 @@ case "${1:-check}" in
   bash scripts/local-db.sh
   # Every verify file in one psql session, each reported by name (#259).
   container=$(< supabase/.temp/lanes/0/db-container)
+  # The committed schema snapshot is what the migrations produce (#780).
+  node scripts/schema-snapshot.mjs check "$container"
   node scripts/verify-db-session.mjs "$container" supabase/migrations/*.verify.sql scripts/check-rls.sql
   # The session itself, on real psql: a file whose statement fails must fail with that statement's error.
   if canary=$(node scripts/verify-db-session.mjs "$container" tests/verify-db-session-canary.sql 2>&1) \

@@ -49,7 +49,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   The component tests run when `app/`, `components/`, `lib/` or the component tests change, and when a file the motion
   test reads changes: the motion table (with the widths and languages it is compared at) and its reader, the reference
   and `postcss.config.mjs` (#127); otherwise their step is listed as skipped.
-- `database` runs the migration verifications, `check-rls.sql` and `tests/db.sh` (RLS, grants, migrations replayed on
+- `database` compares `supabase/schema.sql` with the shape the migrations produce (`scripts/schema-snapshot.mjs check`, #780), and runs the migration verifications, `check-rls.sql` and `tests/db.sh` (RLS, grants, migrations replayed on
   legacy data) on one local stack, when `supabase/` or a database test file changes. The verifications run in one psql
   session, each file in its own connection and read-only transaction and reported by name (`scripts/verify-db-session.mjs`);
   a verify file is one statement with no psql command, and a canary file checks on every run that the session fails a

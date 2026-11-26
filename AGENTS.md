@@ -26,5 +26,6 @@ In a cloud session, before every push, bring the app up with `npm run cloud:up`,
 
 - Naming anything: `GLOSSARY.md` (the product's words; «براند» in Omar's words is a **Company** here) and `docs/adr/` (decisions that bind the code).
 - Building a screen: `DESIGN.md`, `design/` and the approved prototype named in the issue; every screen matches them. A UI change with no approved look names its approved prototype in the issue. `PRODUCT.md` holds the product record.
+- Learning what a table, policy, function or grant is today: `supabase/schema.sql`, generated from a freshly migrated database by `node scripts/schema-snapshot.mjs write` and checked by the database job; never edit it by hand (#780).
 - Touching tests, CI, the `check` job or `ci.sh`: `docs/agents/checks.md` (CI layout and lanes; `docs/testing.md` lists the tests).
 - Reviewing a pull request (yours or another's): `docs/agents/code-review-rules.md`.
