@@ -171,6 +171,15 @@ YAML
   docker restart "$1" > /dev/null || fail 'restart the Engine'
   engine_healthy "$1" 60 || fail 'the Engine is healthy after configuration'
 }
+# Whether an Engine's managed scope approves a board worker's dangerous command (spec #831, #833): the dispatcher runs a
+# Card's worker as a single-query Run, which refuses one unless `approvals.single_query_mode` is approve. Read from inside
+# the Engine, at the managed scope's own path, so a template that mounts another file fails here; read whole before it is
+# parsed, so no early exit of a pipe can pass for a match.
+engine_board_settings() {
+  local managed
+  managed=$(docker exec "$1" cat /etc/hermes/config.yaml) || return 1
+  awk '/^[^[:space:]#]/ {section=$1} section == "approvals:" && $1 == "single_query_mode:" && $2 == "approve" {found=1} END {exit !found}' <<< "$managed"
+}
 # The registry's own digest is the one named: Docker's containerd image store also lists the digest of a local tag.
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks:$1" | grep -m 1 '^localhost:5000/gtmworks@'; }
 # The work sandbox image the source install built (or CI loaded), pushed beside the app image so a release file pins it

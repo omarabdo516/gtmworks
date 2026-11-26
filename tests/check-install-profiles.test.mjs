@@ -98,3 +98,22 @@ test('the verify and second steps make the first Company\'s second Agent through
  assert.match(branch('second'),/writeFileSync\(state,/,'second keeps the Agent for the sandbox steps');
  assert.match(branch('second'),/checkProfile\(firstEngine,first\.secondProfile\)/,'second checks the moved Agent\'s profile');
 });
+
+// Spec #831 (#833): the board's proof works only through the Engine's own Kanban routes and the dispatcher. It asks for a
+// dispatch tick and starts no Run for a Card itself: its one Conversation is the main Agent's, asked to make a Card for
+// the second Agent. A Card is never deleted, only worked to its end; and what the step found is printed through the
+// proof's own named field, so the install job and a reader of the log see it.
+test('the Kanban step works a Card through the Engine\'s own routes and its dispatcher, never a Run of its own', () => {
+ const start=script.indexOf("step==='kanban') {");
+ assert.ok(start>0,'the step exists');
+ const branch=script.slice(start,script.indexOf('} else if(',start)>0?script.indexOf('} else if(',start):undefined);
+ assert.match(branch,/\/api\/plugins\/kanban/);
+ assert.match(branch,/'\/dispatch/,'the step asks the Engine for a dispatch tick');
+ assert.doesNotMatch(branch,/method:'DELETE'/,'no Card is deleted');
+ assert.equal(branch.match(/sendMessage\(/g)?.length,1,'one Conversation, the main Agent\'s');
+ assert.doesNotMatch(branch,/\/v1\/runs|\/v1\/chat|\/v1\/responses/,'no Run API call of its own');
+ assert.match(branch,/single_query_mode:'deny'/,'a profile\'s own write tries to turn the board worker\'s setting off');
+ assert.match(branch,/writeProof\(\{step:'kanban',marker,sandbox_host:/);
+ const kept=JSON.parse(proof({step:'kanban',board:{card:'t_1',told:true},secret:'x'}));
+ assert.deepEqual(kept,{step:'kanban',board:{card:'t_1',told:true}},'the board\'s findings are a named field of the proof');
+});

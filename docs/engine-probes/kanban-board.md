@@ -13,7 +13,7 @@ and when they are offered), `model_tools.py` and `hermes_cli/tools_config.py` (t
 
 ## 1. The routes, on the management listener
 
-All under `/api/plugins/kanban`, behind `Authorization: Bearer <the Engine's key>` (the dashboard session token the
+All under `/api/plugins/kanban`, behind `Authorization: Bearer <the Engine's key>` (the dashboard's own credential, which the
 install sets to the Engine key). With no `?board=` every route is the Engine's default board.
 
 | Route | What it does |
@@ -85,3 +85,47 @@ done. Title: … Assignee: @delta … Result: <summary>`. It also woke on `crash
 - A Run API request for a named profile needs that profile's own `API_SERVER_KEY`; the install already writes it.
 - A reviewer Run on a profile made with `no_skills` exited before the model (`Kanban owner refused: Kanban execution
   unknown`); every Agent profile gtmworks makes keeps the bundled Skills, and the install check proves review on one.
+
+## 7. The settings the install writes
+
+| Setting | Where | Why |
+| --- | --- | --- |
+| `approvals.single_query_mode: approve` | `scripts/engine-managed.yml`, mounted read-only at the managed scope (`/etc/hermes/config.yaml`) of every Company's Engine, the first one's, one `gtmworks company add` makes and one `gtmworks update` brings up | a worker's Run is single-query (`gateway/session_kanban.py`) and refuses a dangerous command by default (section 3). The managed scope is applied per leaf after a profile's own config, so a profile's `approvals.unattended_mode` stays its own and a profile's write of `single_query_mode: deny` changes nothing |
+| `kanban` offered, never disabled | every profile's `platform_toolsets.api_server`, written by the worker (`lib/agent-toolsets.mjs`, `everyAgentGets`), no longer in `noAgentGets` | the Kanban tools are offered to Runs started through the Run API, and a board worker keeps its lifecycle tools (section 4). It cannot be a managed setting, which would replace each Agent's whole list. A child Run never gets it: the Engine keeps `kanban` from sub-agents (`childToolsets`) |
+| `kanban.dispatch_in_gateway`, `kanban.review_dispatch`, `kanban.dispatch_interval_seconds` | not written | the dispatcher and the review dispatch stay on, every 60 s, as Hermes ships them |
+
+Why the board's tools pass ADR 0020's rule that no tool reads a path an Agent chooses on the Engine: `kanban_attach`
+takes the file's bytes, not a path, and a declared artifact (`kanban_complete` and `kanban_request_review`'s
+`artifacts`) is copied into the Card's attachments only from the Card's own scratch folder on the Engine; any other
+path stays a string (`hermes_cli/kanban_db.py`, `_persist_scratch_completion_artifacts`). The notifier's upload of a
+declared path goes through the gateway's own delivery check (`gateway/platforms/base.py`,
+`filter_local_delivery_paths`), and a Run API session has no messaging platform to upload to.
+
+## 8. The install proof's Kanban check
+
+One step of the agents-sandbox area, `kanban` (`scripts/check-install-profiles.mjs`, run from
+`scripts/ci-install-check.sh`), on the pinned Engine with the fake model, the Work sandbox's `ssh` backend and the
+first Company's two Agents. No CI job is added. The job reads the host's Docker for where the worker's files landed,
+which a tool's own answer cannot fake.
+
+| Acceptance criterion of #833 | Where the check holds it |
+| --- | --- |
+| A Card made through the Kanban routes and given to an Agent is started by the dispatcher after one tick, no Run started by the check | `POST /tasks` with the second Agent's profile, then one `POST /dispatch`; the Card's first Run, on that profile, within 30 s. The step's only Conversation is the main Agent's, for Card B |
+| The worker leaves a file in the Work sandbox and nothing on the Engine's disk outside its Kanban folders | the worker's `terminal` writes `/work/<marker>-card.txt`; the job reads it from the sandbox, compares the hostname the command printed with the sandbox's, and finds no file of the marker's name on the Engine outside `/opt/data/kanban` and the read-only `/opt/data/work` |
+| The worker stops on a question, and after a comment and a move to ready its next Run reads the comment and goes on | `kanban_block`, then `POST /comments` under the person's name and `PATCH status: ready`; the next Run's prompt holds the answer under that name and it sends the work for review |
+| Review: a pass ends the Card done with its summary, a return puts it back to the same Agent | the person's return: the reason as a comment, then `PATCH status: ready`, read back `ready` on the same Agent, whose next Run reads the reason; the pass: `PATCH status: done` with the worker's summary and the line naming the person |
+| A dangerous command runs in a worker's Run and is not refused | `rm -rf /tmp/<marker>-danger/gone` after the profile wrote `single_query_mode: deny`: exit 0 and no refusal, and the job finds the folder gone in the sandbox |
+| An Agent in a Run API Run makes a Card for another Agent, and whether its session is told | the main Agent's Conversation calls `kanban_create` for the second Agent: `created_by` is the main Agent's profile; the Card is worked and the Engine's reviewing Agent passes it by itself; the proof prints `told` |
+| What a Card in `triage` does in two dispatcher ticks, and the decomposer's model | a Card with `triage: true` and no Agent, read after 125 s; the proof prints its status, its children, and the model each decomposer request named |
+| The settings are in a new Company's Engine and one `gtmworks update` brought up, and a profile's write does not change them | `engine_board_settings` (`scripts/ci-install-lib.sh`) on every Engine of the agents-sandbox area, the second Company's included, and after the update in the update and engines-update areas; the profile's own `deny` above |
+| No CI job is added | the check is one step of the agents-sandbox area (`tests/ci-install.test.mjs`) |
+
+A person's return while the Engine's own tick has started a reviewing Agent on the Card: `PATCH status: ready` from
+`running` keeps the Card in review (`_set_status_direct` resumes a reviewer's Run to `review`), so the check first stops
+the reviewer's Run (`POST /tasks/{id}/reclaim`) and prints what the Card was after it (`reviewer_stopped`). A pass
+(`PATCH status: done`) is forced over an open Run and needs no stop.
+
+The proof prints one line, `{"step":"kanban",…,"board":{…}}`, in the agents-sandbox log (`kanban-proof.log`): the
+Card, whether the tick the check asked for spawned it, the seconds to its first Run, the Agent a return went back to,
+Card B's maker, Agent, `subscribed`, `told`, the triage Card's status and children, and the decomposer's calls and
+models. Its results are added here from the first green run.

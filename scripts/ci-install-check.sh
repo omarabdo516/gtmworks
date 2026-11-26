@@ -806,8 +806,9 @@ scan_engines
 # agents-sandbox: an Agent's work in its Company's work sandbox (#393, #395, #459, ADR 0018, ADR 0024), split from the
 # agents area to keep each within its minutes (#553): its command, file and code run in the sandbox and never on its
 # Engine, a command MCP server runs there, its Library shows the work folder, the Engine pins the sandbox's host key, no
-# file sync runs between them, the Company's Screen opens a page for an Agent's Run and sleeps and wakes (#711), the apps
-# still answer, and the same scan of every Engine, sandbox and exit. It makes its
+# file sync runs between them, the Company's Screen opens a page for an Agent's Run and sleeps and wakes (#711), an Agent
+# works a Card on the Engine's own Kanban board in the sandbox (spec #831, #833), the apps still answer, and the same
+# scan of every Engine, sandbox and exit. It makes its
 # own install, first run and second Company, and the first Company's second Agent the sandbox checks start in.
 agents_sandbox() {
 cd "$root"
@@ -1036,6 +1037,31 @@ screen_xvnc "$sandbox" || fail "the woken Screen's X server runs in the sandbox 
 engine_node "$engine_key" - screen-live "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-live.log \
   || { screen_logs; fail "a browser holds the Screen's live stream through gtmworks and takes and gives back control"; }
 grep -q '"screen":{"width":1440,"height":900}' screen-live.log || fail 'the live stream is the Screen at 1440 by 900'
+# The Engine's own Kanban board (spec #831, #833, ADR 0033 item 2), with settings alone and the image unmodified: every
+# Engine of the install, the new Company's included, holds the board worker's setting in its managed scope. On the first
+# Company's Engine a Card given to its second Agent is started by the dispatcher after one tick the check asks for,
+# runs a command that writes in the work sandbox and a command the Engine marks dangerous, stops on a question, goes on
+# after a person's comment and a move to ready, is sent for review, returned to the same Agent and passed; the main
+# Agent, in a Run started through the Run API, makes a Card for the second Agent with the Engine's own tool; and a Card
+# in triage is watched for two dispatcher ticks. The job reads the host's Docker for where the worker's files landed.
+for folder in .engines/*/; do
+  name=$(engine_value "$folder" NAME)
+  engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope"
+done
+kanban_marker="kanban-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - kanban "$kanban_marker" < scripts/check-install-profiles.mjs | tee kanban-proof.log \
+  || { docker exec "$engine_id" sh -c 'grep -hiE "kanban|dispatch" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 40' >&2 || true
+       fail "an Agent works a Card on the Engine's own board in the Company's work sandbox"; }
+kanban_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
+[[ -n $kanban_host && $kanban_host == "$(docker exec "$sandbox" hostname)" ]] || fail "a board worker's command runs in the Company's work sandbox"
+[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-card.txt") == "$kanban_marker-card" ]] || fail "a board worker's command wrote in the Company's work folder"
+docker exec "$sandbox" test -d "/tmp/$kanban_marker-danger" -a ! -e "/tmp/$kanban_marker-danger/gone" \
+  || fail "a board worker's dangerous command ran in the work sandbox"
+# Nothing of the worker's is on the Engine's own disk outside its Kanban folders; the work folder the Engine reads, read
+# only, is the sandbox's own.
+engine_left=$(docker exec "$engine_id" sh -c 'find / \( -path /proc -o -path /sys -o -path /dev -o -path /opt/data/kanban -o -path /opt/data/work \) -prune -o -name "$1*" -print 2> /dev/null; true' sh "$kanban_marker") \
+  || fail "read the Engine's disk for the board worker's files"
+[[ -z $engine_left ]] || fail "a board worker left a file on the Engine's own disk: $engine_left"
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.
@@ -1643,6 +1669,9 @@ engine=$(first_engine_id)
 [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
 hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
+# The Engine the update brought up holds the board worker's setting in its managed scope (spec #831, #833), which the
+# previous release never wrote.
+engine_board_settings "$engine" || fail "the updated Engine approves a board worker's dangerous command in its managed scope"
 ! publishes_host_port "$engine" || fail 'the Engine publishes no host port'
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | grep . | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
@@ -2165,6 +2194,7 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
+  engine_board_settings "$engine" || fail "the updated Engine $name approves a board worker's dangerous command in its managed scope"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done

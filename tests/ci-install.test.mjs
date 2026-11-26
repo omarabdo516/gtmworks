@@ -296,7 +296,7 @@ test('the agents and backup areas are each split in two, each half making the in
   assert.match(agents, /check-install-profiles\.mjs - verify|- verify "\$marker" < scripts\/check-install-profiles\.mjs/);
   assert.doesNotMatch(sandbox, / - verify /);
   assert.ok(sandbox.indexOf(' - prepare <') < sandbox.indexOf(' - second <') && sandbox.indexOf(' - second <') < sandbox.indexOf(' - sandbox "$sandbox_marker"'), 'prepare, then the second Agent, then the sandbox steps');
-  for (const step of ['sandbox', 'sandbox-mcp-add', 'sandbox-mcp', 'library', 'sandbox-key', 'sandbox-sync']) {
+  for (const step of ['sandbox', 'sandbox-mcp-add', 'sandbox-mcp', 'library', 'sandbox-key', 'sandbox-sync', 'kanban']) {
     assert.ok(sandbox.includes(` - ${step} `), `agents-sandbox runs ${step}`);
     assert.equal(agents.includes(` - ${step} `), false, `agents no longer runs ${step}`);
   }
@@ -485,5 +485,59 @@ test('tell_engine hands the profile folder and the memories it wrote to the Engi
     assert.deepEqual(readFileSync(`${dir}/chowns`, 'utf8').split('\n').filter(Boolean), [`hermes:hermes ${data}/profiles/co-1`, `-R hermes:hermes ${data}/profiles/co-1/memories`]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Spec #831 (#833): a board worker's dangerous command runs because the Engine's managed scope says approve, and the
+// proof reads it from inside each Engine, where the Engine reads it, never from the checkout. A stand-in `docker exec`
+// answers with a managed file: the install's own holds, and one with no approvals, one that denies, one that names the
+// setting under another key and an Engine docker cannot reach each fail.
+test('engine_board_settings holds only for an Engine whose managed scope approves a board worker\'s dangerous command', () => {
+  const dir = mkdtempSync(`${tmpdir()}/board-settings-`);
+  try {
+    writeFileSync(`${dir}/docker`, [
+      '#!/bin/sh', '[ "$1" = exec ] && [ "$2" = some-engine ] && [ "$3" = cat ] && [ "$4" = /etc/hermes/config.yaml ] || exit 2',
+      '[ -f "$MANAGED" ] || exit 1', 'cat "$MANAGED"', '',
+    ].join('\n'));
+    chmodSync(`${dir}/docker`, 0o755);
+    const holds = managed => {
+      if (managed !== null) writeFileSync(`${dir}/managed.yml`, managed);
+      else rmSync(`${dir}/managed.yml`, { force: true });
+      const out = spawnSync('bash', ['-c', 'set -o pipefail; . scripts/ci-install-lib.sh; engine_board_settings some-engine'], {
+        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MANAGED: `${dir}/managed.yml` },
+      });
+      assert.ok(out.status === 0 || out.status === 1, out.stderr);
+      return out.status === 0;
+    };
+    const terminal = 'terminal:\n  backend: ssh\n';
+    assert.equal(holds(readFileSync('scripts/engine-managed.yml', 'utf8')), true, 'the install\'s own managed file');
+    assert.equal(holds(terminal), false, 'no approvals at all: a single-query Run refuses a dangerous command');
+    assert.equal(holds(`${terminal}approvals:\n  single_query_mode: deny\n`), false, 'a managed scope that denies');
+    assert.equal(holds(`${terminal}approvals:\n  cron_mode: approve\n`), false, 'another approval is not the board worker\'s');
+    assert.equal(holds(`approvals:\n  cron_mode: deny\nterminal:\n  single_query_mode: approve\n`), false, 'the key under another section');
+    assert.equal(holds(null), false, 'an Engine whose managed file docker cannot read');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Spec #831 (#833): the board's proof on the real Engine is one step of an area the proof already runs, never a job of
+// its own. The agents-sandbox area runs it once its second Agent exists, and reads where the worker's file landed from
+// the host's Docker; every Engine it made, the new Company's included, and every Engine an update brings up holds the
+// board worker's setting.
+test('the Kanban check runs inside the agents-sandbox area, and every Engine made or updated holds the board setting', () => {
+  const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
+  const sandbox = area('agents_sandbox', '\n# open-design:');
+  assert.ok(sandbox.indexOf(' - second <') < sandbox.indexOf(' - kanban "$kanban_marker" <'), 'the Card is worked by the second Agent, which exists by then');
+  assert.equal(script.split(' - kanban ').length - 1, 1, 'the Kanban check runs once in the whole proof');
+  assert.ok(!matrix.includes('kanban') && !cases.some(({ name }) => /kanban|board/.test(name)), 'no area of its own');
+  // Where the worker's file and its dangerous command landed is read from the host's Docker, which a tool's answer
+  // cannot fake: in the Company's sandbox, and nowhere on the Engine outside its Kanban folders.
+  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-card.txt"', '/opt/data/kanban']) assert.ok(sandbox.includes(read), read);
+  assert.match(sandbox, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
+  for (const [name, update] of [['update', "sh install.sh update || fail 'release update'"], ['engines_update', "sh install.sh update || fail 'update every Company Engine'"]]) {
+    const body = area(name, '\n}\n');
+    const updated = body.indexOf(update);
+    assert.ok(updated > 0 && body.indexOf('engine_board_settings', updated) > updated, `${name}: an Engine the update brought up holds the setting`);
   }
 });

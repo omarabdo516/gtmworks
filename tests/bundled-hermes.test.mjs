@@ -84,9 +84,12 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.notEqual(refused.status,0);
  assert.equal(refused.stdout,'');
  assert.match(refused.stderr,/The Engine has no key/);
- // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it.
+ // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it, and a board
+ // worker's dangerous command runs (spec #831, ADR 0033 item 2): a worker's Run is single-query, which refuses one by
+ // default. The dispatcher and the review dispatch are not named, so they stay as Hermes ships them, on.
  const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
- assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false}});
+ assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false},
+  approvals:{single_query_mode:'approve'}});
  // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
  // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
  // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is
