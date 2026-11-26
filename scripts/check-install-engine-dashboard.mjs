@@ -6,7 +6,7 @@
 // - a Manager, a Contributor and a Viewer of the same Company, an Owner of another Company only, all made here, and a
 //   signed-out person each get the missing page there (the answer for a Company that does not exist) on a page, a code
 //   file and an API route, and no socket;
-// - no answer to any of them holds the Engine's key (ENGINE_KEY, given by name);
+// - no answer to any of them, and no socket's upgrade or frames, holds the Engine's key (ENGINE_KEY, given by name);
 // - the dashboard's live parts close with the Role (#870): a second Owner, made here, opens the chat, its terminal and
 //   the board's event stream beside the first Owner's; within five seconds of the second Owner's Role being changed every
 //   one of theirs is closed and gets nothing after that line, the terminal included, a new one is refused, and the first
@@ -63,6 +63,8 @@ function socketOpens(path,cookie) {
   asked.end();
  });
 }
+// Every socket opened here, its upgrade's head and every byte it got, so none is found to hold the Engine's key either.
+const sockets=[];
 // A socket kept open: every byte it gets, the time it closed, and the bytes it got after `line` once that is set.
 function liveSocket(path,cookie) {
  const url=new URL(path,origin);
@@ -70,9 +72,10 @@ function liveSocket(path,cookie) {
  return new Promise((resolve,reject)=>{
   const asked=request(url,{headers:{Connection:'Upgrade',Upgrade:'websocket','Sec-WebSocket-Version':'13','Sec-WebSocket-Key':randomBytes(16).toString('base64'),origin:url.origin,cookie}});
   asked.setTimeout(15000,()=>asked.destroy(new Error(`${path} did not open`)));
-  asked.on('upgrade',(_answer,socket,early)=>{
+  asked.on('upgrade',(answer,socket,early)=>{
    asked.setTimeout(0);
-   const live={path,socket,text:early.toString('latin1'),closedAt:null,line:null,after:0};
+   const live={path,socket,head:JSON.stringify(answer.rawHeaders),text:early.toString('latin1'),closedAt:null,line:null,after:0};
+   sockets.push(live);
    socket.on('data',data=>{ live.text+=data.toString('latin1'); if(live.line&&Date.now()>live.line) live.after+=data.length; });
    socket.on('close',()=>{ live.closedAt??=Date.now(); });
    socket.on('error',()=>{});
@@ -289,4 +292,8 @@ assert.equal(writeRoot.status,400,`the file tools' write root is not written: HT
 console.log(`On Hermes ${version}, the update, an import, a profile made and one deleted, a key shown and a backup downloaded were each refused, and the version stayed; a key was written; the terminal backend stayed ssh and the write root stayed the work folder`);
 
 for(const answer of seen) assert.ok(!answer.includes(engineKey),`no answer holds the Engine's key: ${answer.slice(0,120)}`);
-console.log(`None of ${seen.length} answers held the Engine's key`);
+for(const live of sockets) {
+ assert.ok(!live.head.includes(engineKey),`no socket's upgrade holds the Engine's key: ${live.path}`);
+ assert.ok(!live.text.includes(engineKey),`no socket's frames hold the Engine's key: ${live.path}`);
+}
+console.log(`None of ${seen.length} answers and ${sockets.length} sockets held the Engine's key`);

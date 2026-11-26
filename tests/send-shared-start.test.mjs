@@ -13,7 +13,8 @@ const connection='f9000000-0000-0000-0000-000000000003';
 const agent='a9000000-0000-0000-0000-000000000003';
 
 // The database as a send and its starter see it, with one other starter, `other`, that claims the turn first: it begins
-// its attempt as soon as the turn is queued, and settles it (recorded, or handed back as never reached) a moment later.
+// its attempt as soon as the turn is queued, and settles it (recorded, or handed back as never reached) a moment later;
+// or, `after`, that starts it the moment this send's own start is handed back.
 function databases(other) {
  const calls=[]; const turns=new Map(); const reservations=new Map();
  const settle=(key,how)=>setTimeout(()=>{
@@ -26,8 +27,8 @@ function databases(other) {
   if(name==='queue_conversation_turn') {
    turns.set(args.message_key,{message:args.message,started_at:null,failed_at:null,model_refused:false});
    // The other starter's claim and attempt land before this send's own pass.
-   reservations.set(args.message_key,{start_attempts:1,start_unknown_at:null,start_unreached_at:null,abandoned_at:null,in_flight:true});
-   settle(args.message_key,other);
+   reservations.set(args.message_key,{start_attempts:other==='after'?0:1,start_unknown_at:null,start_unreached_at:null,abandoned_at:null,in_flight:other!=='after'});
+   if(other!=='after') settle(args.message_key,other);
    return {data:{state:'queued'},error:null};
   }
   const due=[...turns.entries()].find(([,turn])=>!turn.started_at&&!turn.failed_at);
@@ -40,6 +41,14 @@ function databases(other) {
    const reservation=reservations.get(args.message_key);
    if(reservation.in_flight) return {data:0,error:null};
    reservation.in_flight=true; reservation.start_attempts++; return {data:reservation.start_attempts,error:null};
+  }
+  // This send's own start never reached the Engine and is handed back; `after`: the other starter claims the turn now
+  // due again and records its Run before this send's pass has told what became of it.
+  if(name==='release_queued_start') {
+   const reservation=reservations.get(args.message_key);
+   reservation.start_attempts--; reservation.start_unreached_at='now'; reservation.in_flight=false;
+   if(other==='after') { turns.get(args.message_key).started_at='now'; reservation.abandoned_at='done'; }
+   return {data:true,error:null};
   }
   if(name==='record_conversation_turn') { turns.get(args.message_key).started_at='now'; reservations.get(args.message_key).abandoned_at='done'; return {data:true,error:null}; }
   // Where a turn stands, as the database answers the service role (queued_turn_start).
@@ -83,4 +92,13 @@ test('a send whose turn the worker could not get to the Engine starts it itself,
   assert.equal(fake.settings.runs.length,1);
   assert.equal(calls.filter(call=>call.name==='record_conversation_turn').length,1);
  } finally { await fake.close(); }
+});
+
+test('a send whose own start never reached the Engine answers started when another starter started the turn meanwhile', async () => {
+ const fake=await engineServing(company);
+ await fake.close();
+ const {db,service,calls}=databases('after');
+ assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k-3',agent,message:'Draft the newsletter'}),{conversation:'c'});
+ assert.equal(calls.filter(call=>call.name==='release_queued_start').length,1,'its own start was handed back');
+ assert.ok(calls.some(call=>call.name==='queued_turn_start'),'where the turn stands is read before the send answers');
 });

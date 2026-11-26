@@ -155,23 +155,24 @@ test('an Owner who signs out has every dashboard socket closed within five secon
 test('a socket frame that would carry the Engine\'s key is not sent, whole or split over frames, and the socket closes',async({browser})=>{
  const owner=await signedIn(browser,'omar@example.com');
  const key=fake.settings.key;
+ // Split where both halves are part of the key, whatever its length.
+ const middle=Math.floor(key.length/2);
  // The Engine's side of the terminal socket just opened.
  const engineSide=()=>[...fake.settings.dashboardSockets].filter(socket=>socket.path==='/api/pty').at(-1)!;
  const sends:[string,(socket:ReturnType<typeof engineSide>)=>void][]=[
   ['as written',socket=>socket.send(`OPENROUTER=x API_SERVER_KEY=${key}\n`)],
   ['in base64',socket=>socket.send(Buffer.from(`API_SERVER_KEY=${key}`).toString('base64'))],
-  ['over two messages',socket=>{ socket.send(key.slice(0,24)); socket.send(key.slice(24)); }],
-  ['over the fragments of one message',socket=>{ socket.send(key.slice(0,24),{fin:false}); socket.send(key.slice(24),{fin:true}); }],
+  ['over two messages',socket=>{ socket.send(key.slice(0,middle)); socket.send(key.slice(middle)); }],
+  ['over the fragments of one message',socket=>{ socket.send(key.slice(0,middle),{fin:false}); socket.send(key.slice(middle),{fin:true}); }],
  ];
  try {
   for(const [how,send] of sends) {
    const live=await openSocket(owner,terminal);
    if(typeof live==='number') throw new Error(`the terminal was refused with ${live}`);
-   const before=live.frames.length;
    await expect.poll(()=>fake.settings.dashboardSockets.size).toBeGreaterThan(0);
    engineSide().send('a frame before the key');
-   await expect.poll(()=>live.frames.length,how).toBeGreaterThan(before);
-   expect(live.frames.at(-1),how).toBe('a frame before the key');
+   // The terminal's own prompt may come before or after it: the marker is waited for itself.
+   await expect.poll(()=>live.frames.at(-1),how).toBe('a frame before the key');
    send(engineSide());
    await live.closed;
    expect(live.frames.join(''),how).not.toContain(key);
