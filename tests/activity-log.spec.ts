@@ -5,7 +5,7 @@ import { i18n } from '../lib/i18n.mjs';
 import { logPageSize } from '../lib/activity-log.mjs';
 
 // One log for the Company (#11): the Activity log page filters by person or Agent and by Card, a Card opens from its
-// rows, and a Member reads only their own Company's log. The seed's Card activity is made by its role Agents.
+// rows, and a Member reads only their own Company's log. The seed's Card activity is made by five of its Contributors.
 const writer='30000000-0000-0000-0000-000000000001';
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -24,9 +24,9 @@ test('the Activity log filters by who and by Card, and opens a Card',async({page
  expect(everyone).toBeGreaterThan(5);
  await expect(page.locator('.lg-forever')).toHaveText(tr('logForever'));
 
- // One Agent: only its own rows remain, and the address carries the filter.
- await page.locator('#lg-who').selectOption(`a:${writer}`);
- await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a%3A${writer}$`));
+ // One person: only their own rows remain, and the address carries the filter.
+ await page.locator('#lg-who').selectOption(`p:${writer}`);
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=p%3A${writer}$`));
  await expect(rows.first()).toBeVisible();
  const names=await page.locator('.lgp-body .lg-row .lg-name').allInnerTexts();
  expect(names.length).toBeGreaterThan(0);

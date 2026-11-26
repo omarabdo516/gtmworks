@@ -1,8 +1,10 @@
 ---
-status: accepted, partly superseded by #341 and ADR 0020
+status: superseded by ADR 0034 (and partly before by #341 and ADR 0020)
 ---
 
 # Agents have their own identities, company grants and card-scoped runs; the dashboard runs no AI
+
+Superseded by [ADR 0034](0034-agents-are-the-companys-own-and-nothing-else.md) (spec #695): the role agents, their identities and their company grants are removed.
 
 Decisions: Omar, 2026-11-06/07. Today's runtime design is in [ADR 0008](0008-gtmworks-connects-to-hermes-with-encrypted-profile-keys.md) and [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md).
 

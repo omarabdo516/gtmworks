@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(61);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
@@ -103,15 +103,11 @@ select is((select concat_ws('|',input,instructions,session::text) from public.no
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 insert into notes values ('owner secret',public.change_work_card('10000000-0000-0000-0000-000000000001',(select id from card),'comment','{"body":"@Secret look"}'::jsonb));
-select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
-insert into notes values ('agent',public.change_work_card('10000000-0000-0000-0000-000000000001',(select id from card),'comment','{"body":"@Faye and @مدير see this"}'::jsonb));
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$insert into public.work_comments(company_id,card_id,body) values ('10000000-0000-0000-0000-000000000001',(select id from card),'@Faye from the Viewer')$$,'42501',null,'a Viewer cannot write a note');
 select throws_ok($$select public.change_work_card('10000000-0000-0000-0000-000000000001',(select id from card),'comment','{"body":"@Faye from the Viewer"}'::jsonb)$$,'P0001','not permitted','not through the Card either');
 reset role;
 select is((select agent_name from public.note_runs where note_id=(select id from notes where label='owner secret')),'Secret','the Owner, who sees every Agent, can call it');
-select is((select count(*)::int from public.note_runs where note_id=(select id from notes where label='agent'))+(select count(*)::int from public.waiting_items where note_id=(select id from notes where label='agent')),0,
- 'a note an Agent writes through the API calls no one');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select array_agg(agent_name order by note_id) from public.note_runs where note_id in (select id from notes)),array['Faye'],'the Manager reads the Run of the Agent they see');

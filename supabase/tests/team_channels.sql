@@ -1,6 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(79);
+-- Spec #695: an old role agent's membership was marked removed by 20270418000000; 30000…001 stands in for one.
+update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='30000000-0000-0000-0000-000000000001';
 -- RS Learning's seeded Members: the Owner (عمر), the Manager (مدير), a Contributor (مراجع), the Viewer (مشاهد) and a
 -- second Contributor (عضو). Lead is the main Agent, Faye is shown to the Manager and the Contributor, Secret to nobody
 -- but the Owner.
@@ -46,7 +48,7 @@ select throws_ok($$select public.create_channel('10000000-0000-0000-0000-0000000
 select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',gen_random_uuid(),'  # ',null,null)$$,'22023','channelNameMissing','a channel needs a name');
 select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',gen_random_uuid(),repeat('a',33),null,null)$$,'22023','channelNameTooLong','of at most 32 characters');
 select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Hidden',null,array['a2400000-0000-0000-0000-000000000003']::uuid[])$$,'P0002','agentNotFound','a Manager cannot put in an Agent hidden from them');
-select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Robots',array['30000000-0000-0000-0000-000000000001']::uuid[],null)$$,'P0002','memberNotFound','nor a legacy role Agent as a person');
+select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Robots',array['30000000-0000-0000-0000-000000000001']::uuid[],null)$$,'P0002','memberNotFound','nor an old role agent, whose membership was removed');
 select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Outsider',array['b2400000-0000-0000-0000-000000000001']::uuid[],null)$$,'P0002','memberNotFound','nor someone outside the Company');
 select throws_ok($$select public.create_channel('10000000-0000-0000-0000-000000000001',null,'No key',null,null)$$,'22023','channelFailed','a request without a key is refused');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -61,7 +63,7 @@ select lives_ok($$select public.set_channel_person((select id from made where la
 select lives_ok($$select public.set_channel_person((select id from made where label='ads'),'20000000-0000-0000-0000-000000000005',true)$$,'adding them again changes nothing');
 select is((select count(*)::int from public.channel_members((select id from made where label='ads')) where person='20000000-0000-0000-0000-000000000005'),1,'they are in it once');
 select throws_ok($$select public.set_channel_person((select id from made where label='ads'),'20000000-0000-0000-0000-000000000002',false)$$,'42501','channelNotAllowed','nobody takes themselves out');
-select throws_ok($$select public.set_channel_person((select id from made where label='ads'),'30000000-0000-0000-0000-000000000001',true)$$,'P0002','memberNotFound','a legacy role Agent is not added as a person');
+select throws_ok($$select public.set_channel_person((select id from made where label='ads'),'30000000-0000-0000-0000-000000000001',true)$$,'P0002','memberNotFound','an old role agent, whose membership was removed, is not added');
 select throws_ok($$select public.set_channel_person((select id from made where label='launch'),'20000000-0000-0000-0000-000000000005',true)$$,'P0002','channelNotFound','a Manager outside a channel cannot change it');
 select throws_ok($$select public.set_channel_person('69000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005',false)$$,'42501','channelNotAllowed','the general channel''s people are never chosen');
 select lives_ok($$select public.set_channel_agent((select id from made where label='ads'),'a2400000-0000-0000-0000-000000000001',true)$$,'the Manager adds an Agent');

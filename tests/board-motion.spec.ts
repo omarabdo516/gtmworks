@@ -1,6 +1,7 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
+import { ensureRequestAgent } from './request-agent';
 
 // The board's motion as built (#131; design-reference: dragStart, dragMove, dragScroll, dragEnd, land, boardEnter,
 // syncWaitMarks): a carried Card leans with the pointer and scrolls the columns at an edge, flies back when it moves
@@ -238,6 +239,7 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
  const tab=await context.newPage();
+ ensureRequestAgent();
  await tab.goto('/c/rs-learning/work/new');
  await tab.getByLabel('Message',{exact:true}).fill(`Nudge ${Date.now()}`);
  await tab.getByRole('button',{name:'Create card'}).click();

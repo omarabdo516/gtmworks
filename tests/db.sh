@@ -27,7 +27,6 @@ replay() {
 }
 replay tests/hosted-default-privileges.mjs
 replay tests/function-grants-migration.mjs
-replay tests/agent-role-backfill.mjs
 replay tests/bootstrap-db.mjs
 replay tests/first-run-migration.mjs
 replay tests/lead-agent-migration.mjs
@@ -40,6 +39,7 @@ replay tests/card-places-migration.mjs
 replay tests/staged-cutover-migration.mjs
 replay tests/agent-looks-migration.mjs
 replay tests/agent-birth-migration.mjs
+replay tests/role-agents-removal-migration.mjs
 status=0
 npx --no-install supabase test db "$replays" 2>&1 | tee "$session" || status=$?
 # pg_prove's result line for each file, as "<file> <result>".

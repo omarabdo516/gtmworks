@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, cardAgent, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -128,13 +128,6 @@ test('a place before a Card or at the column\'s end gives the column\'s new orde
  assert.equal(placeChanges([1, 2, 3], 3, null), false);
  assert.equal(placeChanges([1, 2, 3], 1, null), true);
  assert.equal(placeChanges([1, 2, 3], 2, 1), true);
-});
-
-test('a card belongs to its first assigned Agent, else to its next actor when that is an Agent', () => {
- const agents = new Set(['writer', 'lead']);
- assert.equal(cardAgent({ id: 1, next_actor: 'lead' }, [{ card_id: 1, person_id: 'person' }, { card_id: 1, person_id: 'writer' }], agents), 'writer');
- assert.equal(cardAgent({ id: 2, next_actor: 'lead' }, [], agents), 'lead');
- assert.equal(cardAgent({ id: 3, next_actor: 'person' }, [{ card_id: 3, person_id: 'person' }], agents), null);
 });
 
 test('a drag scrolls a box by itself only while the finger is in the box\'s own edge bands', () => {

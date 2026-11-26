@@ -1,3 +1,4 @@
+-- The role agents' identities went with them (spec #695, 20270418000001_legacy_role_agents_cutover).
 select json_build_object(
- 'signed_in_identity_read',has_function_privilege('authenticated','public.agent_identities()','execute') and not has_function_privilege('anon','public.agent_identities()','execute')
+ 'identities_removed_by_20270418000001',to_regprocedure('public.agent_identities()') is null
 );

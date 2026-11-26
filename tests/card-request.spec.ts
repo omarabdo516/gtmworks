@@ -1,8 +1,15 @@
 import { test, expect, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
-const accountManager='30000000-0000-0000-0000-000000000005';
+// Supabase CLI targets the local test database by default; never pass --remote.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+// Spec #695: a new Card's request goes to one of the Company's own Agents; the seed gives RS Learning none, so this file
+// makes its main Agent and removes it after each test.
+const lead='a6950000-0000-0000-0000-000000000001';
+test.beforeEach(()=>{ query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${lead}','10000000-0000-0000-0000-000000000001','Lead','General','request-lead-${process.pid}',true) on conflict (id) do nothing`); });
+test.afterEach(()=>{ query(`delete from public.hermes_agents where id='${lead}'`); });
 async function chooseLanguage(page:Page,language:'en'|'ar') {
  await chooseLanguageInSettings(page,language);
  await expect(page.locator('html')).toHaveAttribute('lang',language);
@@ -16,8 +23,8 @@ test('a message to an agent makes one card in Ideas with its message, assignment
   const title=message.split('\n')[0];
   await chooseLanguage(page,'en');
   await page.goto('/c/rs-learning/work/new');
-  // The account manager is preselected and the mode is chosen before sending.
-  await expect(page.locator('input[name=agent]')).toHaveValue(accountManager);
+  // The main Agent is preselected and the mode is chosen before sending.
+  await expect(page.locator('input[name=agent]')).toHaveValue(lead);
   await page.getByLabel('Message',{exact:true}).fill(message);
   await page.locator('select[name=mode]').selectOption('do');
   // A double click is one submit; the key is also reused by a retried request.
@@ -64,5 +71,5 @@ test('the composer loads when it is opened and shows the page-opening bar while 
  release();
  await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
  await expect(page.getByRole('progressbar',{name:'Opening page'})).toHaveCount(0);
- await expect(page.locator('input[name=agent]')).toHaveValue(accountManager);
+ await expect(page.locator('input[name=agent]')).toHaveValue(lead);
 });

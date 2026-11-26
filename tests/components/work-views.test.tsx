@@ -95,13 +95,12 @@ test('the board shows the six columns of the approved design, Waiting on you fir
 });
 
 // The Company's Agents (#190): Lead (main) and two Lead made, given in the sidebar's order. Cards 1 and 3 are Ads's,
-// card 2 is SEO's, card 4 has no Agent; Ads and SEO both wrote on card 1. The old role agents still hold grants.
+// card 2 is SEO's, card 4 has no Agent; Ads and SEO both wrote on card 1. Two people are Members too.
 const lead = { id: 'h-lead', connection_id: 'c-lead', name: 'Lead', speciality: 'General', is_default: true };
 const ads = { id: 'h-ads', connection_id: 'c-ads', name: 'Ads', speciality: 'Meta ads', is_default: false };
 const seo = { id: 'h-seo', connection_id: 'c-seo', name: 'SEO', speciality: 'Search', is_default: false };
 const crewBoard = (more: Partial<WorkProps> = {}) => workProps({
  cardAgents: [lead, ads, seo],
- agents: [{ person_id: 'ag-w', role: 'writer', granted: true }, { person_id: 'ag-d', role: 'designer', granted: true }],
  members: [{ person_id: 'ag-w', people: { name: 'Writer' } }, { person_id: 'ag-d', people: { name: 'Designer' } }],
  cards: [card({ agent_id: 'h-ads', crew: ['h-seo', 'h-ads'] }), card({ id: 2, title: 'Design', agent_id: 'h-seo', crew: ['h-seo'] }),
   card({ id: 3, title: 'Script', stage_id: 2, agent_id: 'h-ads' }), card({ id: 4, title: 'Untold', channel: 'Facebook' })],
@@ -110,7 +109,7 @@ const crewBoard = (more: Partial<WorkProps> = {}) => workProps({
 const shown = () => [...document.querySelectorAll('#board-cols .kcard')].map(item => item.getAttribute('data-card-id')).sort();
 const foot = (id: number) => document.querySelector(`#board-cols .kcard[data-card-id="${id}"] .kcard__foot`)!;
 
-test('the chips are All and the Company\'s Agents, the main Agent first, and no old role agent', async () => {
+test('the chips are All and the Company\'s Agents, the main Agent first, and no Member', async () => {
  const screen = await showWork(crewBoard({ canCreate: false }));
  const tools = screen.getByRole('group', { name: 'Filter by agent' });
  expect(tools.getByRole('button').elements().map(chip => chip.textContent)).toEqual(['All', 'Lead', 'Ads', 'SEO']);

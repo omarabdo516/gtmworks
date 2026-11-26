@@ -14,13 +14,12 @@ export const changeMember=withActionLog('changeMember',async function changeMemb
  if(!['update','remove'].includes(op)||!await actionAllowed(db,'changeMember',company,op)) error={code:'42501',message:'not permitted'};
  else if(op==='remove') ({error}=await db.rpc('remove_member',{target_company:company,target_person:person}));
  else {
-  const agentRole=values.role!=='contributor' ? {agent_role:null} : form.has('agent_role') ? {agent_role:String(form.get('agent_role')) || null} : {};
-  ({error}=await db.from('members').update({...values,...agentRole}).eq('company_id',company).eq('person_id',person));
+  ({error}=await db.from('members').update(values).eq('company_id',company).eq('person_id',person));
  }
  if(error) logActionFailure('changeMember',error,{form});
  revalidatePath(`/c/${slug}/settings/members`);
  revalidatePath(`/c/${slug}/home`);
  // A catalogue key the page draws in the reader's language (lib/page-alert.mjs, #778), never text.
- const message=error ? (error.code==='23505' && error.message.includes('members_active_agent_role')?'thisAgentRoleIsAssignedToAnotherActive':error.message.includes('last owner')?'theLastOwnerCannotBeRemovedOrHave':'couldNotSaveTheChangeCheckPermissionsAnd') : 'changeSaved';
+ const message=error ? (error.message.includes('last owner')?'theLastOwnerCannotBeRemovedOrHave':'couldNotSaveTheChangeCheckPermissionsAnd') : 'changeSaved';
  redirect(`/c/${slug}/settings/members?message=${message}`);
 });

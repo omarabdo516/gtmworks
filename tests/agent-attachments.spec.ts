@@ -9,6 +9,11 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 // A real 1 x 1 PNG: the page must show it.
 const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64');
 const picture=(name:string)=>({name,mimeType:'image/png',buffer:bytes});
+// Spec #695: a new Card's request goes to one of the Company's own Agents; the seed gives RS Learning none, so this file
+// makes its main Agent and removes it after each test.
+const lead='a6950000-0000-0000-0000-000000000001';
+test.beforeEach(()=>{ query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${lead}','10000000-0000-0000-0000-000000000001','Lead','General','request-lead-${process.pid}',true) on conflict (id) do nothing`); });
+test.afterEach(()=>{ query(`delete from public.hermes_agents where id='${lead}'`); });
 const attach=(page:Page)=>page.locator('input[type=file][name=files]');
 async function chooseLanguage(page:Page,language:'en'|'ar') {
  await chooseLanguageInSettings(page,language);
