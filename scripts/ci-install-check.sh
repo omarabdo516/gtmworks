@@ -1411,6 +1411,7 @@ cd "$root"
 area_setup
 reset_install
 install_source source-install.log || fail 'source install before the failed update'
+management_listener_stopped gtmworks-engine-first
 old_web=$(compose ps -q web)
 cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
 # The failing migration leaves the checkout as soon as the update tried it, failed or not, so no later area in it meets
@@ -1422,7 +1423,6 @@ grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_upd
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
 status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) || fail_update 'old version health request'
 [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
-management_listener_stopped gtmworks-engine-first
 }
 
 # A healthy Engine is one gtmworks can read and write (#773). With only its management listener stopped, by the image's
