@@ -48,7 +48,8 @@
 //     same Agent and passed. The main Agent, in a Conversation, makes a Card for the second Agent with the Engine's own
 //     tool, which the Engine's reviewing Agent passes; whether the main Agent's session is told, and what a Card in
 //     triage does in two dispatcher ticks with the model its decomposer called, are printed. The job reads the host's
-//     Docker for where the worker's files landed.
+//     Docker for where the worker's files landed. The open-design area runs it, in 270 s of its own, a line as each
+//     phase ends.
 //   library <marker>: one Agent writes a text file and a picture in its own folder of the Company's work folder (#395),
 //     and the Owner's Library of it lists, previews and downloads both with the bytes the Agent wrote. In the same Run it
 //     plants a link to the Company's second Agent's memory on the Engine's disk (the job wrote `<marker>-leak` in it), a
@@ -67,7 +68,7 @@ const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSettingsDiffer}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/engine/agents.mjs`);
-const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
+const {writeProof,writeName,stepClock}=await import(`${process.cwd()}/lib/install-proof.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
 
 const [step,marker]=process.argv.slice(2);
@@ -855,7 +856,14 @@ try {
 // Engine's own tool, which the second Agent works and the Engine's reviewing Agent passes; the step records whether the
 // main Agent's session is told. A Card in triage is watched for two dispatcher ticks, with the model its decomposer
 // called. The install job reads the host's Docker for where the worker's files landed.
+// Its time is its clock's (lib/install-proof.mjs): the open-design area runs it after about 6 of its 12 minutes, so the
+// step has 270 s, prints a line as each phase ends, and holds every wait inside them. The triage Card's two ticks are the
+// Engine's own (its decomposer runs on no tick a caller asks for), so Card A, Card B and the triage Card run side by side
+// from its start; a failure prints the Cards as the board reads them before the step ends.
 assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const clock=stepClock('kanban',270);
+// A request the Engine never answers cannot hold the step past its budget either.
+setTimeout(()=>{ clock.phase('the budget is spent with a request still open'); process.exit(1); },(clock.left()+20)*1000).unref();
 const first=JSON.parse(readFileSync(state,'utf8'))[0];
 const firstEngine=await engineFor(first.company);
 const worker=first.secondProfile;
@@ -865,16 +873,29 @@ for(const profile of [first.profile,worker]) {
  // The board's tools are offered to the profile's Runs, the Run API's included (lib/agent-toolsets.mjs).
  await checkProfile(firstEngine,profile);
 }
+clock.phase('both Agents are on the fake model and offered the board',{profile:worker});
 const person='Proxy Owner';
 const tag={card:`KANBAN-CARD ${marker}`,job:`KANBAN-JOB ${marker}`,idea:`KANBAN-IDEA ${marker}`,ask:`KANBAN-ASK ${marker}`,
  answer:`ANSWER-${marker}`,back:`RETURN-${marker}`};
-const board=(path,init={})=>manage(firstEngine,`/api/plugins/kanban${path}`,init);
+const board=(path,init={})=>manage(firstEngine,`/api/plugins/kanban${path}`,{...init,signal:AbortSignal.timeout(20_000)});
 const answered=async(response,what)=>{ assert.ok(response.ok,`${what} (HTTP ${response.status}: ${await response.clone().text()})`); return response.json(); };
 const read=async id=>answered(await board(`/tasks/${encodeURIComponent(id)}`),`read Card ${id}`);
 const make=async card=>(await answered(await board('/tasks',{method:'POST',body:JSON.stringify(card)}),`make the Card ${card.title}`)).task;
 const move=async(id,change,what)=>answered(await board(`/tasks/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(change)}),what);
 const comment=async(id,body)=>answered(await board(`/tasks/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({body,author:person})}),`comment on ${id}`);
-const tick=async()=>answered(await board('/dispatch?max=8',{method:'POST'}),'ask the Engine for a dispatch tick');
+// One dispatcher tick that ran. Two dispatchers never tick one board at once: a tick asked for while another holds the
+// board's lock (the Engine's own, or one this step asked for beside it) does nothing and says `skipped_locked`, so it is
+// asked again. Each tick prints what it did, by Card id.
+const ticked=result=>Object.fromEntries(Object.entries(result).filter(([,value])=>Array.isArray(value)?value.length:Boolean(value))
+ .map(([key,value])=>[key,Array.isArray(value)?value.map(entry=>Array.isArray(entry)?entry[0]:entry):value]));
+const tick=async what=>{
+ const result=await until('a dispatch tick that ran',async()=>{
+  const asked=await answered(await board('/dispatch?max=8',{method:'POST'}),'ask the Engine for a dispatch tick');
+  return asked.skipped_locked?null:asked;
+ },clock.within(15));
+ clock.phase(`a dispatch tick asked for ${what}`,{board:ticked(result)});
+ return result;
+};
 // A Card in one of the statuses named. A Card in review may already be `running` again: the dispatcher's own tick
 // (every 60 s, as shipped) starts a reviewing Agent on it, which this step's fake model holds for the person.
 const reaches=(id,statuses,seconds,also=()=>true)=>until(`Card ${id} ${[statuses].flat().join(' or ')}`,async()=>{
@@ -884,13 +905,17 @@ const lastRun=found=>found.runs.at(-1);
 // The fake model, scripted by what each session was told: the main Agent's Conversation, Card A's worker and reviewer,
 // Card B's worker and reviewer, and the decomposer. A session is told its Card's title in its own prompt; a tool's
 // result is kept by the call it answers.
+// A message's content as its lines read, whether one string or a list of parts.
 const textOf=messages=>messages.filter(message=>message.role==='user'||message.role==='system')
- .map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content??'')).join('\n');
+ .map(({content})=>typeof content==='string'?content:Array.isArray(content)
+  ?content.map(part=>typeof part?.text==='string'?part.text:JSON.stringify(part)).join('\n'):JSON.stringify(content??'')).join('\n');
 const call=(name,args,id=`call_${name}_${randomUUID().slice(0,8)}`)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
 const results=new Map();
 const seen={work:[],reviews:0,decomposer:[],told:false};
 let personActed=()=>{};
 const acted=new Promise(resolve=>{ personActed=resolve; });
+// The step's end, which no hold of the fake model outlasts.
+const spent=new Promise(resolve=>{ setTimeout(resolve,clock.left()*1000).unref(); });
 const work=`hostname; pwd; printf '%s' '${marker}-card' > /work/${marker}-card.txt`;
 // Hermes flags a recursive delete under the root path as dangerous (tools/approval_detection.py, probe section 3).
 const danger=`mkdir -p /tmp/${marker}-danger/gone && rm -rf /tmp/${marker}-danger/gone && echo removed`;
@@ -899,21 +924,24 @@ const plan=async(messages,body)=>{
  const called=messages.filter(message=>message.role==='assistant').flatMap(message=>(message.tool_calls||[]).map(made=>made.function?.name));
  for(const message of messages) if(message.role==='tool') results.set(message.tool_call_id,typeof message.content==='string'?message.content:JSON.stringify(message.content));
  const kanbanTools=(body.tools||[]).some(tool=>String(tool.function?.name).startsWith('kanban_'));
+ // A board session's own Card is the one its prompt's header names (hermes_cli/kanban_db_context.py): the prompt also
+ // lists the Agent's recent work on other Cards, and Card A and Card B, worked side by side, are each that of the other.
+ const own=text.match(/^# Kanban task [^:\n]+: (.*)$/m)?.[1]??'';
  if(text.includes(tag.ask)) {
   // The main Agent: it makes Card B for the second Agent once, and may be told of its result in a later user turn.
   if(messages.some(message=>message.role==='user'&&textOf([message]).includes('[kanban]'))) seen.told=true;
   if(!called.includes('kanban_create')) return call('kanban_create',{title:tag.job,body:'Write the job and send it for review. NO-QUESTION',assignee:worker},'call_kanban_create');
   return null;
  }
- if(kanbanTools&&text.includes('sdlc-review')) {
+ if(kanbanTools&&own&&text.includes('sdlc-review')) {
   seen.reviews++;
-  if(text.includes(tag.job)) return called.includes('kanban_complete')?null:call('kanban_complete',{summary:`Reviewed and passed by the reviewing Agent. JOB-PASSED-${marker}`});
+  if(own.includes(tag.job)) return called.includes('kanban_complete')?null:call('kanban_complete',{summary:`Reviewed and passed by the reviewing Agent. JOB-PASSED-${marker}`});
   // Card A's review is the person's: a reviewer the Engine's own tick starts meanwhile waits for them, then says nothing.
-  await Promise.race([acted,new Promise(resolve=>setTimeout(resolve,150_000))]);
+  await Promise.race([acted,spent]);
   return null;
  }
- if(kanbanTools&&text.includes(tag.job)) return called.includes('kanban_request_review')?null:call('kanban_request_review',{summary:`The job is written. JOB-DONE-${marker}`});
- if(kanbanTools&&text.includes(tag.card)) {
+ if(kanbanTools&&own.includes(tag.job)) return called.includes('kanban_request_review')?null:call('kanban_request_review',{summary:`The job is written. JOB-DONE-${marker}`});
+ if(kanbanTools&&own.includes(tag.card)) {
   const run={answer:text.includes(tag.answer),back:text.includes(tag.back),person:text.includes(person)};
   seen.work.push(run);
   if(!run.answer) {
@@ -927,98 +955,144 @@ const plan=async(messages,body)=>{
  return null;
 };
 const parsed=value=>{ try { return JSON.parse(value); } catch { return null; } };
+const cards={};
+// The Cards as the board reads them, by id, status, Agent, each Run's profile and outcome and the latest events' kinds:
+// what a failure prints.
+const shownCards=async()=>Object.fromEntries(await Promise.all(Object.entries(cards).map(async([name,id])=>{
+ try {
+  const found=await read(id);
+  return [name,{id,status:found.task.status,assignee:found.task.assignee,runs:found.runs.map(run=>[run.profile,run.status,run.outcome]),
+   events:(found.events||[]).slice(-8).map(event=>event.kind)}];
+ } catch(error) { return [name,{id,unread:String(error?.message??error).slice(0,200)}]; }
+})));
 const {model,reply}=await fakeModel([],[],plan);
 try {
- // A Card in triage with no Agent, watched from now for two of the dispatcher's own ticks (60 s each, as shipped).
- const ideaMade=Date.now();
+ // A Card in triage with no Agent, watched from now for two of the dispatcher's own ticks (60 s each, as shipped), beside
+ // the rest of the step: it is read once the decomposer was called twice, or once two ticks' time is past.
  const idea=await make({title:tag.idea,body:'An idea to split later.',triage:true});
+ cards.triage=idea.id;
  assert.equal(idea.status,'triage');
+ clock.phase('a Card in triage is made',{board:{triage:idea.id}});
+ const triage=(async()=>{
+  await until('the decomposer called on two ticks',async()=>seen.decomposer.length>=2||null,clock.within(125)).catch(()=>{});
+  const calls=seen.decomposer.length;
+  // The second call's answer is the Engine's to apply: a Card it splits leaves triage within seconds.
+  await until('the triage Card leaves triage',async()=>(await read(idea.id)).task.status!=='triage'||null,clock.within(5)).catch(()=>{});
+  const found=await read(idea.id);
+  clock.phase('the triage Card is read after two of the Engine\'s own ticks',{board:{status:found.task.status,decomposer_calls:calls}});
+  return {status:found.task.status,children:found.links?.children?.length??0,decomposer_calls:calls,decomposer_models:[...new Set(seen.decomposer)]};
+ })();
+ // Joined with the other two below; until then a failed read of it waits there, not as an unhandled rejection.
+ triage.catch(()=>{});
  // A profile's own write cannot turn the board worker's setting off: the managed scope is applied after it, per leaf.
  const denied=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(worker)}`,{method:'PUT',body:JSON.stringify({config:{approvals:{single_query_mode:'deny'}}})});
  assert.equal(denied.status,200,`a profile write is answered as stored (HTTP ${denied.status})`);
+ clock.phase('the second Agent\'s profile wrote single_query_mode deny');
  // Card A, given to the second Agent through the board's routes: ready, and nothing runs until a tick.
  const card=await make({title:tag.card,body:`Write a short brief for the launch. ${marker}`,assignee:worker});
+ cards.a=card.id;
  assert.equal(card.status,'ready');
  assert.equal(card.created_by,'dashboard');
  assert.deepEqual((await read(card.id)).runs,[],'no Run before the tick');
+ clock.phase('Card A is made, ready, with no Run',{board:{card:card.id}});
  const tickAsked=Date.now();
- const spawned=(await tick()).spawned??[];
- const started=await until('the dispatcher starts Card A',async()=>{ const found=await read(card.id); return found.runs.length?found:null; },30);
+ const spawned=(await tick('for Card A')).spawned??[];
+ const started=await until('the dispatcher starts Card A',async()=>{ const found=await read(card.id); return found.runs.length?found:null; },clock.within(30));
  const startSeconds=Math.round((Date.now()-tickAsked)/1000);
  assert.equal(lastRun(started).profile,worker,'the Card is worked by the Agent it was given to');
- // The worker runs its command and the dangerous one in the sandbox, then stops on its question.
- const blocked=await reaches(card.id,'blocked',240);
- assert.equal(lastRun(blocked).outcome,'blocked');
- assert.match(String(lastRun(blocked).summary??blocked.task.latest_summary),new RegExp(`QUESTION-${marker}`));
- const ran=parsed(results.get('call_kanban_work'));
- assert.equal(ran?.exit_code,0,`the worker's command ran: ${results.get('call_kanban_work')}`);
- const [host,pwd]=String(ran.output??'').trim().split('\n');
- const dangerous=results.get('call_kanban_danger')??'';
- assert.doesNotMatch(dangerous,/\bBLOCKED\b/,`the dangerous command is not refused: ${dangerous}`);
- assert.equal(parsed(dangerous)?.exit_code,0,`the dangerous command ran: ${dangerous}`);
- // The person answers: a comment under their name, then a move to ready; the worker's next Run reads it and goes on.
- await comment(card.id,`${tag.answer}: use blue.`);
- assert.equal((await move(card.id,{status:'ready'},'move Card A to ready after the answer')).task.status,'ready');
- await tick();
- const reviewed=await reaches(card.id,['review','running'],240,found=>String(found.task.latest_summary).includes(`SUMMARY-1-${marker}`));
- assert.ok(seen.work.some(run=>run.answer&&run.person),'the next Run read the answer under the person\'s name');
- assert.ok(reviewed.runs.filter(run=>run.profile===worker).length>=2,'the answer started a second Run of the same Agent');
- // The person returns the review with a reason: the reason is a comment (the move takes none), then a move to ready
- // puts the Card back to the same Agent. A reviewer the Engine's own tick started meanwhile is stopped first.
- await comment(card.id,`${tag.back}: make it shorter.`);
- let reviewerStopped=false;
- if((await read(card.id)).task.status==='running') {
-  await answered(await board(`/tasks/${encodeURIComponent(card.id)}/reclaim`,{method:'POST',body:JSON.stringify({reason:'A person returns the review.'})}),'stop the reviewer\'s Run');
-  reviewerStopped=(await reaches(card.id,['review','ready'],60)).task.status;
- }
- const returned=reviewerStopped==='ready'?(await read(card.id)).task:(await move(card.id,{status:'ready'},'return Card A')).task;
- assert.equal(returned.status,'ready','a return moves the Card to ready');
- assert.equal(returned.assignee,worker,'a return puts the Card back to the same Agent');
- await tick();
- const again=await reaches(card.id,['review','running'],240,found=>String(found.task.latest_summary).includes(`SUMMARY-2-${marker}`));
- assert.ok(seen.work.some(run=>run.back),'the Agent\'s next Run read the reason it was sent back');
- assert.equal(again.task.assignee,worker);
- // The person passes it: the Card is done with the Agent's summary and the line naming the person.
- const passedLine=`Passed by ${person}.`;
- await move(card.id,{status:'done',summary:`${again.task.latest_summary}\n\n${passedLine}`},'pass Card A');
- personActed();
- const done=await reaches(card.id,'done',30);
- assert.ok(String(done.task.latest_summary).includes(`SUMMARY-2-${marker}`)&&String(done.task.latest_summary).includes(passedLine),String(done.task.latest_summary));
- assert.ok(done.comments.some(found=>found.author===person&&found.body.startsWith(tag.answer)),'the answer is on the Card under the person\'s name');
- // Card B: the main Agent, in a Conversation, gives a job to the second Agent with the Engine's own tool.
- const owner=await signedIn();
- const {data:{user}}=await owner.auth.getUser();
- assert.ok(user,'the first-run Owner signs in');
- const conversation=randomUUID();
- const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`${tag.ask}: give the job to the second Agent.`};
- const sent=await until('the main Agent ready for a run',async()=>{ const result=await sendMessage(owner,service,send); return 'queued' in result?null:result; },180);
- assert.deepEqual(sent,{conversation});
- const answer=await until('reply on the board Conversation',async()=>(await checked(owner.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
- assert.ok(answer.body.includes(reply),answer.body);
- const createdAnswer=results.get('call_kanban_create')??'';
- const columns=(await answered(await board('/board'),'read the board')).columns;
- const job=columns.flatMap(column=>column.tasks).find(found=>found.title===tag.job);
- assert.ok(job,`the main Agent made Card B: ${createdAnswer}`);
- assert.equal(job.created_by,first.profile,'Card B is made by the main Agent');
- assert.equal(job.assignee,worker,'Card B is given to the second Agent');
- await tick();
- await reaches(job.id,['review','running','done'],240,found=>found.task.status==='done'||String(found.task.latest_summary).includes(`JOB-DONE-${marker}`));
- await tick();
- const jobDone=await reaches(job.id,'done',240);
- assert.ok(String(jobDone.task.latest_summary).includes(`JOB-PASSED-${marker}`),'the reviewing Agent passed Card B by itself');
- // Whether the main Agent's session is told: the Engine's notifier, which polls every 5 s, wakes the session that made
- // the Card. Recorded, not required.
- const told=await until('the main Agent is told',async()=>seen.told||null,30).then(()=>true,()=>false);
- // The Card in triage, after two of the dispatcher's own ticks.
- const left=Math.max(0,ideaMade+125_000-Date.now());
- await until('two dispatcher ticks',async()=>seen.decomposer.length>=2||null,Math.ceil(left/1000)+1).catch(()=>{});
- const ideaAfter=await read(idea.id);
- writeProof({step:'kanban',marker,sandbox_host:host,pwd,profile:worker,board:{
+ clock.phase('the dispatcher started Card A',{board:{card:card.id,spawned_by_tick:spawned.some(([id])=>id===card.id),started_seconds:startSeconds}});
+ // Card B, beside Card A: the main Agent, in a Conversation, gives a job to the second Agent with the Engine's own tool;
+ // the second Agent works it and the Engine's reviewing Agent passes it by itself.
+ const jobFlow=(async()=>{
+  const owner=await signedIn();
+  const {data:{user}}=await owner.auth.getUser();
+  assert.ok(user,'the first-run Owner signs in');
+  const conversation=randomUUID();
+  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`${tag.ask}: give the job to the second Agent.`};
+  const sent=await until('the main Agent ready for a run',async()=>{ const result=await sendMessage(owner,service,send); return 'queued' in result?null:result; },clock.within(60));
+  assert.deepEqual(sent,{conversation});
+  const answer=await until('reply on the board Conversation',async()=>(await checked(owner.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),clock.within(90));
+  assert.ok(answer.body.includes(reply),answer.body);
+  const createdAnswer=results.get('call_kanban_create')??'';
+  const columns=(await answered(await board('/board'),'read the board')).columns;
+  const job=columns.flatMap(column=>column.tasks).find(found=>found.title===tag.job);
+  assert.ok(job,`the main Agent made Card B: ${createdAnswer}`);
+  cards.b=job.id;
+  assert.equal(job.created_by,first.profile,'Card B is made by the main Agent');
+  assert.equal(job.assignee,worker,'Card B is given to the second Agent');
+  clock.phase('the main Agent\'s Conversation made Card B',{board:{job:job.id}});
+  await tick('for Card B');
+  await reaches(job.id,['review','running','done'],clock.within(90),found=>found.task.status==='done'||String(found.task.latest_summary).includes(`JOB-DONE-${marker}`));
+  clock.phase('Card B is sent for review',{board:{job:job.id}});
+  await tick('for Card B\'s review');
+  const jobDone=await reaches(job.id,'done',clock.within(90));
+  assert.ok(String(jobDone.task.latest_summary).includes(`JOB-PASSED-${marker}`),'the reviewing Agent passed Card B by itself');
+  clock.phase('the reviewing Agent passed Card B',{board:{job:job.id}});
+  // Whether the main Agent's session is told: the Engine's notifier, which polls every 5 s, wakes the session that made
+  // the Card, on its review request as on its end. Recorded, not required.
+  const told=await until('the main Agent is told',async()=>seen.told||null,clock.within(20)).then(()=>true,()=>false);
+  clock.phase('the main Agent\'s session told of Card B, or not',{board:{told}});
+  return {id:job.id,created_by:job.created_by,assignee:job.assignee,subscribed:/"subscribed"\s*:\s*true/.test(createdAnswer),done:jobDone.task.status,told};
+ })();
+ // Card A, the person's: its question, its answer, its return and its pass.
+ const cardFlow=(async()=>{
+  // The worker runs its command and the dangerous one in the sandbox, then stops on its question.
+  const blocked=await reaches(card.id,'blocked',clock.within(90));
+  assert.equal(lastRun(blocked).outcome,'blocked');
+  assert.match(String(lastRun(blocked).summary??blocked.task.latest_summary),new RegExp(`QUESTION-${marker}`));
+  const ran=parsed(results.get('call_kanban_work'));
+  assert.equal(ran?.exit_code,0,`the worker's command ran: ${results.get('call_kanban_work')}`);
+  const [host,pwd]=String(ran.output??'').trim().split('\n');
+  const dangerous=results.get('call_kanban_danger')??'';
+  assert.doesNotMatch(dangerous,/\bBLOCKED\b/,`the dangerous command is not refused: ${dangerous}`);
+  assert.equal(parsed(dangerous)?.exit_code,0,`the dangerous command ran: ${dangerous}`);
+  clock.phase('Card A ran its two commands and is blocked on its question',{board:{card:card.id}});
+  // The person answers: a comment under their name, then a move to ready; the worker's next Run reads it and goes on.
+  await comment(card.id,`${tag.answer}: use blue.`);
+  assert.equal((await move(card.id,{status:'ready'},'move Card A to ready after the answer')).task.status,'ready');
+  await tick('for Card A after the answer');
+  const reviewed=await reaches(card.id,['review','running'],clock.within(90),found=>String(found.task.latest_summary).includes(`SUMMARY-1-${marker}`));
+  assert.ok(seen.work.some(run=>run.answer&&run.person),'the next Run read the answer under the person\'s name');
+  assert.ok(reviewed.runs.filter(run=>run.profile===worker).length>=2,'the answer started a second Run of the same Agent');
+  clock.phase('Card A read the answer and is sent for review',{board:{card:card.id}});
+  // The person returns the review with a reason: the reason is a comment (the move takes none), then a move to ready
+  // puts the Card back to the same Agent. A reviewer the Engine's own tick started meanwhile is stopped first.
+  await comment(card.id,`${tag.back}: make it shorter.`);
+  let reviewerStopped=false;
+  if((await read(card.id)).task.status==='running') {
+   await answered(await board(`/tasks/${encodeURIComponent(card.id)}/reclaim`,{method:'POST',body:JSON.stringify({reason:'A person returns the review.'})}),'stop the reviewer\'s Run');
+   reviewerStopped=(await reaches(card.id,['review','ready'],clock.within(30))).task.status;
+   clock.phase('the reviewer the Engine\'s own tick started on Card A is stopped',{board:{card:card.id,reviewer_stopped:reviewerStopped}});
+  }
+  const returned=reviewerStopped==='ready'?(await read(card.id)).task:(await move(card.id,{status:'ready'},'return Card A')).task;
+  assert.equal(returned.status,'ready','a return moves the Card to ready');
+  assert.equal(returned.assignee,worker,'a return puts the Card back to the same Agent');
+  clock.phase('the person returned Card A to the same Agent',{board:{card:card.id,returned_to:returned.assignee}});
+  await tick('for Card A after the return');
+  const again=await reaches(card.id,['review','running'],clock.within(90),found=>String(found.task.latest_summary).includes(`SUMMARY-2-${marker}`));
+  assert.ok(seen.work.some(run=>run.back),'the Agent\'s next Run read the reason it was sent back');
+  assert.equal(again.task.assignee,worker);
+  clock.phase('Card A read the reason and is sent for review again',{board:{card:card.id}});
+  // The person passes it: the Card is done with the Agent's summary and the line naming the person.
+  const passedLine=`Passed by ${person}.`;
+  await move(card.id,{status:'done',summary:`${again.task.latest_summary}\n\n${passedLine}`},'pass Card A');
+  personActed();
+  const done=await reaches(card.id,'done',clock.within(20));
+  assert.ok(String(done.task.latest_summary).includes(`SUMMARY-2-${marker}`)&&String(done.task.latest_summary).includes(passedLine),String(done.task.latest_summary));
+  assert.ok(done.comments.some(found=>found.author===person&&found.body.startsWith(tag.answer)),'the answer is on the Card under the person\'s name');
+  clock.phase('the person passed Card A, done with its summary',{board:{card:card.id}});
+  return {host,pwd,reviewerStopped,returned:returned.assignee,done:done.task.status};
+ })();
+ // The three side by side: the first to fail fails the step at once.
+ const [a,job,ideaAfter]=await Promise.all([cardFlow,jobFlow,triage]);
+ writeProof({step:'kanban',marker,sandbox_host:a.host,pwd:a.pwd,profile:worker,board:{
   card:card.id,spawned_by_tick:spawned.some(([id])=>id===card.id),started_seconds:startSeconds,dangerous:'ran',
-  reviewer_stopped:reviewerStopped,returned_to:returned.assignee,done:done.task.status,
-  job:{id:job.id,created_by:job.created_by,assignee:job.assignee,subscribed:/"subscribed"\s*:\s*true/.test(createdAnswer),done:jobDone.task.status,told},
-  triage:{status:ideaAfter.task.status,children:ideaAfter.links?.children?.length??0,decomposer_calls:seen.decomposer.length,decomposer_models:[...new Set(seen.decomposer)]},
-  reviews:seen.reviews}});
+  reviewer_stopped:a.reviewerStopped,returned_to:a.returned,done:a.done,job,triage:ideaAfter,reviews:seen.reviews}});
+} catch(error) {
+ // How far it got, and the Cards as the board reads them, before the step ends; nothing left open holds it past a second.
+ clock.phase('failed',{marker,board:{error:String(error?.message??error).slice(0,400),cards:await shownCards()}});
+ setTimeout(()=>process.exit(1),1000).unref();
+ throw error;
 } finally { personActed(); model.close(); model.closeAllConnections(); }
 } else if(step==='library') {
 // The Library shows the Company's work folder (#395): an Agent writes a text file with its file tool and a picture with

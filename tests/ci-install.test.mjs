@@ -296,7 +296,7 @@ test('the agents and backup areas are each split in two, each half making the in
   assert.match(agents, /check-install-profiles\.mjs - verify|- verify "\$marker" < scripts\/check-install-profiles\.mjs/);
   assert.doesNotMatch(sandbox, / - verify /);
   assert.ok(sandbox.indexOf(' - prepare <') < sandbox.indexOf(' - second <') && sandbox.indexOf(' - second <') < sandbox.indexOf(' - sandbox "$sandbox_marker"'), 'prepare, then the second Agent, then the sandbox steps');
-  for (const step of ['sandbox', 'sandbox-mcp-add', 'sandbox-mcp', 'library', 'sandbox-key', 'sandbox-sync', 'kanban']) {
+  for (const step of ['sandbox', 'sandbox-mcp-add', 'sandbox-mcp', 'library', 'sandbox-key', 'sandbox-sync']) {
     assert.ok(sandbox.includes(` - ${step} `), `agents-sandbox runs ${step}`);
     assert.equal(agents.includes(` - ${step} `), false, `agents no longer runs ${step}`);
   }
@@ -522,19 +522,28 @@ test('engine_board_settings holds only for an Engine whose managed scope approve
 });
 
 // Spec #831 (#833): the board's proof on the real Engine is one step of an area the proof already runs, never a job of
-// its own. The agents-sandbox area runs it once its second Agent exists, and reads where the worker's file landed from
-// the host's Docker; every Engine it made, the new Company's included, and every Engine an update brings up holds the
-// board worker's setting.
-test('the Kanban check runs inside the agents-sandbox area, and every Engine made or updated holds the board setting', () => {
+// its own. It ran in agents-sandbox until that area reached its 12 minutes with the step still waiting (run 45841934073);
+// the open-design area, which used 5 of its 12, runs it after its own checks, once it has made the first Company's second
+// Agent as agents-sandbox does, and reads where the worker's file landed from the host's Docker; every Engine it made, the
+// new Company's included, and every Engine an update brings up holds the board worker's setting.
+test('the Kanban check runs inside the open-design area after its own checks, and every Engine made or updated holds the board setting', () => {
   const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
+  const design = area('open_design', '\n# backup:');
   const sandbox = area('agents_sandbox', '\n# open-design:');
-  assert.ok(sandbox.indexOf(' - second <') < sandbox.indexOf(' - kanban "$kanban_marker" <'), 'the Card is worked by the second Agent, which exists by then');
+  const kanban = design.indexOf(' - kanban "$kanban_marker" <');
+  assert.ok(kanban > 0, 'open-design runs the Kanban check');
+  assert.equal(sandbox.includes(' - kanban '), false, 'agents-sandbox no longer runs it');
+  assert.ok(design.indexOf(' - prepare <') < design.indexOf(' - second <') && design.indexOf(' - second <') < kanban, 'the Card is worked by the second Agent, which exists by then');
+  assert.ok(design.lastIndexOf("fail 'no sign-in or key file of the Engine is in the sandbox'") < kanban, 'after every Open Design check');
   assert.equal(script.split(' - kanban ').length - 1, 1, 'the Kanban check runs once in the whole proof');
   assert.ok(!matrix.includes('kanban') && !cases.some(({ name }) => /kanban|board/.test(name)), 'no area of its own');
   // Where the worker's file and its dangerous command landed is read from the host's Docker, which a tool's answer
   // cannot fake: in the Company's sandbox, and nowhere on the Engine outside its Kanban folders.
-  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-card.txt"', '/opt/data/kanban']) assert.ok(sandbox.includes(read), read);
-  assert.match(sandbox, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
+  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-card.txt"', '/opt/data/kanban']) {
+    assert.ok(design.includes(read), read);
+    assert.equal(sandbox.includes(read), false, `agents-sandbox no longer reads ${read}`);
+  }
+  assert.match(design, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
   for (const [name, update] of [['update', "sh install.sh update || fail 'release update'"], ['engines_update', "sh install.sh update || fail 'update every Company Engine'"]]) {
     const body = area(name, '\n}\n');
     const updated = body.indexOf(update);

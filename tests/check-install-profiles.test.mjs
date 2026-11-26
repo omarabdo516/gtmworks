@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 import { generateInstallEnv } from '../lib/install-env.mjs';
-import { proof, proofName, writeProof, writeName } from '../lib/install-proof.mjs';
+import { proof, proofName, writeProof, writeName, stepClock } from '../lib/install-proof.mjs';
 import { installJob } from './install-job.mjs';
 
 // The agents area's proof (#126) runs on the pinned Engine, against a real install: four Agents in two Companies, the
@@ -116,4 +116,49 @@ test('the Kanban step works a Card through the Engine\'s own routes and its disp
  assert.match(branch,/writeProof\(\{step:'kanban',marker,sandbox_host:/);
  const kept=JSON.parse(proof({step:'kanban',board:{card:'t_1',told:true},secret:'x'}));
  assert.deepEqual(kept,{step:'kanban',board:{card:'t_1',told:true}},'the board\'s findings are a named field of the proof');
+});
+
+// Spec #831 (#833): the step ran past its area's 12 minutes on run 45841934073 having printed nothing. Its time is now its
+// clock's: a budget that fits the open-design area beside what it ran before, a line as each phase ends, every wait
+// held inside the budget (the waits it makes itself and the fake model's hold on a reviewer alike), and no fixed wait for
+// the triage Card, which is read once the decomposer was called twice or its two ticks are past. A failure prints the
+// Cards as the board reads them, through the proof's named field, before the step ends.
+test('the Kanban step holds every wait inside its own budget and says how far it got', () => {
+ const start=script.indexOf("step==='kanban') {");
+ const branch=script.slice(start,script.indexOf('} else if(',start));
+ const budget=Number(branch.match(/stepClock\('kanban',(\d+)\)/)?.[1]);
+ assert.ok(budget>0&&budget<=270,`a budget inside the area's minutes: ${budget}`);
+ assert.ok(branch.match(/clock\.phase\(/g)?.length>=10,'a line as each phase ends');
+ // Each call whole, to its closing parenthesis; the one helper that passes its caller's seconds on is not a wait itself.
+ const calls=name=>[...branch.matchAll(new RegExp(`\\b${name}\\(`,'g'))].map(({index})=>{
+  let depth=0;
+  for(let at=index+name.length;at<branch.length;at++) if(branch[at]==='(') depth++; else if(branch[at]===')'&&--depth===0) return branch.slice(index,at+1);
+  return branch.slice(index);
+ });
+ const waits=[...calls('until'),...calls('reaches')].filter(found=>!found.endsWith(',seconds)'));
+ assert.ok(waits.length>=8,`the step waits on the board: ${waits.length}`);
+ for(const wait of waits) assert.match(wait,/clock\.within\(/,`every wait is inside the budget: ${wait}`);
+ assert.doesNotMatch(branch,/setTimeout\(resolve,\d/,'no fixed wait of its own');
+ assert.doesNotMatch(branch,/125_000/,'the triage Card is read when its two ticks are seen, not after a fixed wait');
+ assert.match(branch,/catch\(error\) \{[\s\S]*?clock\.phase\('failed',\{marker,board:\{[\s\S]*?cards:await shownCards\(\)/,'a failure prints the Cards as the board reads them');
+});
+
+// Spec #831 (#833): a long step of the proof says how far it got as it goes and holds a deadline of its own inside its
+// area's minutes. Its clock prints one line of named fields as each phase ends, with the whole seconds since the step
+// began, and gives each wait the seconds it asked for, never more than the step has left; once they are spent a wait
+// fails naming the step, its budget and the last phase it reached, so a slow Engine fails the step with how far it got
+// before the job's own limit cancels it with nothing said.
+test('a step\'s clock prints each phase as it ends and keeps every wait inside the step\'s own deadline', () => {
+ let at=1_000_000;
+ const written=[];
+ const clock=stepClock('kanban',100,{now:()=>at,write:figures=>written.push(proof(figures))});
+ at+=12_400;
+ clock.phase('Card A started',{board:{card:'t_1'},secret:'x'});
+ assert.deepEqual(written.map(line=>JSON.parse(line)),[{step:'kanban',seconds:12,board:{card:'t_1'},phase:'Card A started'}],'named fields only');
+ assert.equal(clock.within(30),30,'a wait gets what it asks for while the step has time');
+ at+=80_000;
+ assert.equal(clock.within(30),7,'and never more than the step has left');
+ at+=7_600;
+ assert.throws(()=>clock.within(30),/kanban: its 100 s are spent after Card A started/);
+ assert.equal(clock.left(),0);
 });

@@ -4,7 +4,7 @@ Measured on 2026-11-26 on `nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de
 the image `scripts/engine-template.yml` pins, unmodified, with a fake OpenAI-style model whose answers a script chose.
 This first pass ran the Engine alone, with its terminal on its own disk (`local` backend), to learn the board's
 routes and its lifecycle; the Work-sandbox steps (the `ssh` backend, the start folder, the files) are proven by the
-install proof's Kanban check (`scripts/ci-install-check.sh`, agents-sandbox area), and its results are added below.
+install proof's Kanban check (`scripts/ci-install-check.sh`, open-design area), and its results are added below.
 
 Sources read in the image: `plugins/kanban/dashboard/plugin_api.py` (the routes), `hermes_cli/kanban_db*.py` (states,
 review reopen), `hermes_cli/kanban_db_dispatch.py` (the worker's spawn), `tools/kanban_tools*.py` (the Agent's tools
@@ -103,29 +103,69 @@ declared path goes through the gateway's own delivery check (`gateway/platforms/
 
 ## 8. The install proof's Kanban check
 
-One step of the agents-sandbox area, `kanban` (`scripts/check-install-profiles.mjs`, run from
-`scripts/ci-install-check.sh`), on the pinned Engine with the fake model, the Work sandbox's `ssh` backend and the
-first Company's two Agents. No CI job is added. The job reads the host's Docker for where the worker's files landed,
+One step of the open-design area, `kanban` (`scripts/check-install-profiles.mjs`, run from
+`scripts/ci-install-check.sh` after every Open Design check), on the pinned Engine with the fake model, the Work
+sandbox's `ssh` backend and the first Company's two Agents: the area makes the second Agent for it with the `second`
+step, as agents-sandbox does. No CI job is added. The job reads the host's Docker for where the worker's files landed,
 which a tool's own answer cannot fake.
+
+It first ran at the end of agents-sandbox, which had used about 8.5 of its 12 minutes when the step began; on run
+45841934073 the step printed nothing and the job was cancelled at its limit four minutes later. open-design used 5 of
+its 12 minutes on the same run, and the second Agent takes about one more.
 
 | Acceptance criterion of #833 | Where the check holds it |
 | --- | --- |
-| A Card made through the Kanban routes and given to an Agent is started by the dispatcher after one tick, no Run started by the check | `POST /tasks` with the second Agent's profile, then one `POST /dispatch`; the Card's first Run, on that profile, within 30 s. The step's only Conversation is the main Agent's, for Card B |
+| A Card made through the Kanban routes and given to an Agent is started by the dispatcher after one tick, no Run started by the check | `POST /tasks` with the second Agent's profile, then one `POST /dispatch` that ran (asked again only while another tick holds the board's lock and answers `skipped_locked`, having done nothing); the Card's first Run, on that profile, within 30 s. The step's only Conversation is the main Agent's, for Card B |
 | The worker leaves a file in the Work sandbox and nothing on the Engine's disk outside its Kanban folders | the worker's `terminal` writes `/work/<marker>-card.txt`; the job reads it from the sandbox, compares the hostname the command printed with the sandbox's, and finds no file of the marker's name on the Engine outside `/opt/data/kanban` and the read-only `/opt/data/work` |
 | The worker stops on a question, and after a comment and a move to ready its next Run reads the comment and goes on | `kanban_block`, then `POST /comments` under the person's name and `PATCH status: ready`; the next Run's prompt holds the answer under that name and it sends the work for review |
 | Review: a pass ends the Card done with its summary, a return puts it back to the same Agent | the person's return: the reason as a comment, then `PATCH status: ready`, read back `ready` on the same Agent, whose next Run reads the reason; the pass: `PATCH status: done` with the worker's summary and the line naming the person |
 | A dangerous command runs in a worker's Run and is not refused | `rm -rf /tmp/<marker>-danger/gone` after the profile wrote `single_query_mode: deny`: exit 0 and no refusal, and the job finds the folder gone in the sandbox |
 | An Agent in a Run API Run makes a Card for another Agent, and whether its session is told | the main Agent's Conversation calls `kanban_create` for the second Agent: `created_by` is the main Agent's profile; the Card is worked and the Engine's reviewing Agent passes it by itself; the proof prints `told` |
-| What a Card in `triage` does in two dispatcher ticks, and the decomposer's model | a Card with `triage: true` and no Agent, read after 125 s; the proof prints its status, its children, and the model each decomposer request named |
-| The settings are in a new Company's Engine and one `gtmworks update` brought up, and a profile's write does not change them | `engine_board_settings` (`scripts/ci-install-lib.sh`) on every Engine of the agents-sandbox area, the second Company's included, and after the update in the update and engines-update areas; the profile's own `deny` above |
-| No CI job is added | the check is one step of the agents-sandbox area (`tests/ci-install.test.mjs`) |
+| What a Card in `triage` does in two dispatcher ticks, and the decomposer's model | a Card with `triage: true` and no Agent, made first and read once the decomposer was called twice (at most 125 s, then up to 5 s for the Card to leave triage); the proof prints its status, its children, and the model each decomposer request named |
+| The settings are in a new Company's Engine and one `gtmworks update` brought up, and a profile's write does not change them | `engine_board_settings` (`scripts/ci-install-lib.sh`) on every Engine of the open-design area, the second Company's included, and after the update in the update and engines-update areas; the profile's own `deny` above |
+| No CI job is added | the check is one step of the open-design area (`tests/ci-install.test.mjs`) |
 
 A person's return while the Engine's own tick has started a reviewing Agent on the Card: `PATCH status: ready` from
 `running` keeps the Card in review (`_set_status_direct` resumes a reviewer's Run to `review`), so the check first stops
 the reviewer's Run (`POST /tasks/{id}/reclaim`) and prints what the Card was after it (`reviewer_stopped`). A pass
 (`PATCH status: done`) is forced over an open Run and needs no stop.
 
-The proof prints one line, `{"step":"kanban",…,"board":{…}}`, in the agents-sandbox log (`kanban-proof.log`): the
+### Its time
+
+The step has 270 s of its own (`stepClock`, `lib/install-proof.mjs`) and prints one line,
+`{"step":"kanban","seconds":…,"phase":"…"}`, as each phase ends, so a timeout shows how far it got. Every wait takes
+the seconds it names or what is left of the 270, whichever is less, and each request to the board gives up after 20 s;
+past the budget plus 20 s the step ends itself. A failure prints `"phase":"failed"` with the error and each Card as the
+board reads it (status, Agent, each Run's profile, status and outcome, the last eight events' kinds), before the job
+prints the Engine's own board log.
+
+Three things run side by side from the step's start, since the triage Card's two ticks are the Engine's own: the
+decomposer runs only on the dispatcher's own tick (`gateway/kanban_watchers.py`, `auto_decompose_tick`), never on
+`POST /dispatch`, which runs `dispatch_once` alone. Card A, the person's; Card B, from the main Agent's Conversation
+once Card A has started; and the triage Card. The first to fail fails the step. Every other wait is on a tick the step
+asks for, never on the Engine's 60 s one. The fake model tells a board session's own Card by its prompt's header line,
+`# Kanban task <id>: <title>`: the prompt also lists the Agent's recent work on its other Cards
+(`hermes_cli/kanban_db_context.py`, `_ctx_role_history`), and Card A and Card B are each in the other's.
+
+| Phase | Its deadline | Expected on the fake model |
+| --- | --- | --- |
+| Both Agents on the fake model, their toolsets read | (requests) | about 2 s |
+| The triage Card, the profile's `deny` write, Card A made with no Run | (requests) | under 1 s |
+| One tick, Card A's first Run | 15 s for a tick that ran, 30 s for the Run | 1 to 5 s |
+| Card A's two commands in the sandbox, then blocked | 90 s | 10 to 30 s: a worker spawn, three model calls, two commands over ssh |
+| The answer, a tick, Card A sent for review | 90 s | 10 to 20 s |
+| The return (a reviewer the Engine's own tick started is stopped first, 30 s), a tick, Card A sent for review again | 90 s | 10 to 20 s |
+| The pass, Card A done | 20 s | under 2 s |
+| Card B, beside Card A: the Conversation's send and reply | 60 s and 90 s | 5 to 15 s |
+| A tick, Card B sent for review; a tick, the reviewing Agent passes it | 90 s each | 10 to 20 s each |
+| The main Agent's session told | 20 s | 0 to 5 s: the notifier polls every 5 s and wakes it on the review request already |
+| The triage Card after two of the Engine's own ticks | 125 s from its making, then 5 s | 60 to 125 s, then 5 s |
+
+So the step takes about 130 s, set by the triage Card's two ticks while both Cards finish inside them, and 270 s at
+most; with the second Agent (about 66 s on run 45841934073) the open-design area grows from 5 to about 8.5 minutes, and
+to 11 at the worst.
+
+The proof prints one line, `{"step":"kanban",…,"board":{…}}`, in the open-design log (`kanban-proof.log`): the
 Card, whether the tick the check asked for spawned it, the seconds to its first Run, the Agent a return went back to,
 Card B's maker, Agent, `subscribed`, `told`, the triage Card's status and children, and the decomposer's calls and
 models. Its results are added here from the first green run.
