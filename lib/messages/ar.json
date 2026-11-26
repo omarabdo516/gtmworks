@@ -1494,6 +1494,8 @@
   "settingsSpeechUnread": "مقدرناش نقرا مزوّد تحويل الكلام لنص دلوقتي.",
   "settingsVoiceArabicEgypt": "عربي (مصري)",
   "settingsSpeechNotReached": "التغيير موصلش لـ {0}. جرّب تاني.",
+  "settingsSpeechKeySaved": "المفتاح محفوظ · مش شغّال",
+  "settingsSpeechUseLabel": "استخدم {0} بمفتاحه المحفوظ",
   "updateReady": "في تحديث جاهز",
   "updateReadyOut": "gtmworks {0} نزل {1}.",
   "updateReadyFixes": "إصلاحات وتحسينات.",

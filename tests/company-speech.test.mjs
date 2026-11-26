@@ -47,7 +47,7 @@ test('an Owner sets Deepgram with a key: every profile holds the key and transcr
   madeCompany(fake,one); madeCompany(fake,two);
   const owner=sessions({owner:true});
   const set=await change(owner,fake,{provider:'deepgram',intent:'set',value:` ${key} `});
-  assert.deepEqual(set,{status:200,body:{provider:'deepgram',missing:[],failed:[]}});
+  assert.deepEqual(set,{status:200,body:{provider:'deepgram',keys:['deepgram'],missing:[],failed:[]}});
   for(const name of all) {
    const profile=profileOf(fake,name);
    assert.equal(profile.env.DEEPGRAM_API_KEY,key,name);
@@ -60,7 +60,7 @@ test('an Owner sets Deepgram with a key: every profile holds the key and transcr
   // key from the variable the Engine passes through.
   for(const part of ['{input_path}','{language}','[ "$lang" = ar ] && lang=ar-EG','model=nova-3','language=$lang','$DEEPGRAM_API_KEY','curl ','/opt/hermes/.venv/bin/python'])
    assert.ok(deepgramCommand.includes(part),part);
-  assert.deepEqual(await read(owner,fake),{provider:'deepgram',missing:[]});
+  assert.deepEqual(await read(owner,fake),{provider:'deepgram',keys:['deepgram'],missing:[]});
   assert.ok(!JSON.stringify(fake.settings.managementRequests.filter(request=>request.method==='GET')).includes(key));
  } finally { await fake.close(); }
 });
@@ -71,7 +71,7 @@ for(const [provider,env] of [['elevenlabs','ELEVENLABS_API_KEY'],['openai','VOIC
   try {
    madeCompany(fake,one);
    const owner=sessions({owner:true});
-   assert.deepEqual(await change(owner,fake,{provider,intent:'set',value:key}),{status:200,body:{provider,missing:[],failed:[]}});
+   assert.deepEqual(await change(owner,fake,{provider,intent:'set',value:key}),{status:200,body:{provider,keys:[provider],missing:[],failed:[]}});
    for(const name of all) {
     assert.equal(profileOf(fake,name).env[env],key,name);
     assert.deepEqual(profileOf(fake,name).config.stt,{provider},name);
@@ -80,7 +80,7 @@ for(const [provider,env] of [['elevenlabs','ELEVENLABS_API_KEY'],['openai','VOIC
  });
 }
 
-test('a switch takes the previous key away, except Groq\'s model key, and an Arabic variant only Deepgram has goes back to Arabic', async () => {
+test('a switch keeps every other provider\'s key where the Engine keeps it, a held key is chosen again with no new one, and an Arabic variant only Deepgram has goes back to Arabic', async () => {
  const fake=await engineServing(company);
  try {
   madeCompany(fake,one);
@@ -90,18 +90,58 @@ test('a switch takes the previous key away, except Groq\'s model key, and an Ara
   assert.equal(profileOf(fake,one.main).config.stt.language,'en','"detect" is English on Deepgram, as the Engine sends it');
   profileOf(fake,one.agents[0]).config.stt.language=deepgramArabic[1];
   profileOf(fake,one.agents[1]).config.stt.language='en';
-  await change(owner,fake,{provider:'openai',intent:'set',value:key});
-  for(const name of all) assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,undefined,name);
+  const openai='sk-voice-0123456789abcdef';
+  assert.deepEqual(await change(owner,fake,{provider:'openai',intent:'set',value:openai}),{status:200,body:{provider:'openai',keys:['deepgram','openai'],missing:[],failed:[]}});
+  for(const name of all) {
+   assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,key,name);
+   assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,openai,name);
+   assert.equal(profileOf(fake,name).config.stt.provider,'openai',name);
+  }
   assert.equal(profileOf(fake,one.agents[0]).config.stt.language,'ar');
   assert.equal(profileOf(fake,one.agents[1]).config.stt.language,'en','a language every provider has is kept');
-  await change(owner,fake,{provider:'groq',intent:'set',value:key});
-  await change(owner,fake,{provider:'elevenlabs',intent:'set',value:key});
+  // Deepgram again, with no key: its held key is used and the OpenAI key stays.
+  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'set'}),{status:200,body:{provider:'deepgram',keys:['deepgram','openai'],missing:[],failed:[]}});
   for(const name of all) {
-   assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,undefined,name);
-   assert.equal(profileOf(fake,name).env.GROQ_API_KEY,key,'Groq\'s key is also its models\' key, so a switch leaves it');
+   assert.equal(profileOf(fake,name).config.stt.provider,'deepgram',name);
+   assert.deepEqual(profileOf(fake,name).config.stt.providers.deepgram.env_passthrough,['DEEPGRAM_API_KEY']);
+   assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,key,name);
+   assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,openai,name);
+  }
+  // A profile that lacks the held key keeps the provider it transcribes with, and is named as waiting for the key.
+  delete profileOf(fake,one.agents[1]).env.VOICE_TOOLS_OPENAI_KEY;
+  assert.deepEqual(await change(owner,fake,{provider:'openai',intent:'set'}),{status:200,body:{provider:'openai',keys:['deepgram','openai'],missing:[{agent:agentId(one.agents[1]),name:'Designer'}],failed:[]}});
+  assert.equal(profileOf(fake,one.agents[1]).config.stt.provider,'deepgram','it is not moved onto a key it lacks');
+  assert.equal(profileOf(fake,one.agents[0]).config.stt.provider,'openai');
+  await change(owner,fake,{provider:'deepgram',intent:'set'});
+  // A provider with no key held cannot be chosen without one, and nothing is written.
+  const writes=fake.settings.managementRequests.filter(request=>request.method!=='GET').length;
+  assert.deepEqual(await change(owner,fake,{provider:'elevenlabs',intent:'set'}),{status:400,body:{error:'speechInvalid'}});
+  assert.equal(fake.settings.managementRequests.filter(request=>request.method!=='GET').length,writes);
+  assert.deepEqual(await read(owner,fake),{provider:'deepgram',keys:['deepgram','openai'],missing:[]});
+ } finally { await fake.close(); }
+});
+
+test('removing a provider takes only its key; leaving the one in use turns the provider off, and Groq\'s model key stays', async () => {
+ const fake=await engineServing(company);
+ try {
+  madeCompany(fake,one);
+  const owner=sessions({owner:true});
+  await change(owner,fake,{provider:'deepgram',intent:'set',value:key});
+  await change(owner,fake,{provider:'openai',intent:'set',value:key});
+  // Removing a provider not in use takes its key and leaves the one in use as it is.
+  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'remove'}),{status:200,body:{provider:'openai',keys:['openai'],missing:[],failed:[]}});
+  for(const name of all) {
+   assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,undefined,name);
+   assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,key,name);
+   assert.equal(profileOf(fake,name).config.stt.provider,'openai',name);
   }
   await change(owner,fake,{provider:'groq',intent:'set',value:key});
-  assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:null,missing:[],failed:[]}});
+  assert.deepEqual(await change(owner,fake,{provider:'openai',intent:'remove'}),{status:200,body:{provider:'groq',keys:['groq'],missing:[],failed:[]}});
+  for(const name of all) {
+   assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,undefined,name);
+   assert.equal(profileOf(fake,name).env.GROQ_API_KEY,key,name);
+  }
+  assert.deepEqual(await change(owner,fake,{provider:'groq',intent:'remove'}),{status:200,body:{provider:null,keys:['groq'],missing:[],failed:[]}});
   for(const name of all) {
    assert.equal(profileOf(fake,name).env.GROQ_API_KEY,key,'leaving Groq turns the provider off and keeps the models\' key');
    assert.equal(profileOf(fake,name).config.stt.provider,'none');
@@ -116,24 +156,24 @@ test('a removal takes the key from every profile, the removed Agents\' too, and 
   madeCompany(fake,one); made(fake,gone);
   const owner=sessions({owner:true,removed:[gone]});
   fake.settings.envFail.add(one.agents[1]);
-  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'set',value:key}),{status:200,body:{provider:'deepgram',missing:[{agent:agentId(one.agents[1]),name:'Designer'}],failed:[{agent:agentId(one.agents[1]),name:'Designer'}]}});
+  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'set',value:key}),{status:200,body:{provider:'deepgram',keys:['deepgram'],missing:[{agent:agentId(one.agents[1]),name:'Designer'}],failed:[{agent:agentId(one.agents[1]),name:'Designer'}]}});
   fake.settings.envFail.clear();
   profileOf(fake,gone).env={DEEPGRAM_API_KEY:key};
-  assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:null,missing:[],failed:[]}});
+  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'remove'}),{status:200,body:{provider:null,keys:[],missing:[],failed:[]}});
   for(const name of [...all,gone]) {
    assert.equal(profileOf(fake,name).env?.DEEPGRAM_API_KEY,undefined,name);
    assert.ok([undefined,'none'].includes(profileOf(fake,name).config.stt?.provider),'no provider; one that never held any is left alone');
   }
   assert.equal(profileOf(fake,one.main).config.stt.provider,'none');
-  assert.deepEqual(await read(owner,fake),{provider:null,missing:[]});
+  assert.deepEqual(await read(owner,fake),{provider:null,keys:[],missing:[]});
   // A removal that stops part way names the profile it missed, and the next removal finishes it from what that profile
   // holds, though the space already holds no provider.
   await change(owner,fake,{provider:'deepgram',intent:'set',value:key});
   fake.settings.configWriteFail.add(one.agents[0]);
-  assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:null,missing:[],failed:[{agent:agentId(one.agents[0]),name:'Writer'}]}});
+  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'remove'}),{status:200,body:{provider:null,keys:[],missing:[],failed:[{agent:agentId(one.agents[0]),name:'Writer'}]}});
   assert.equal(profileOf(fake,one.agents[0]).env.DEEPGRAM_API_KEY,key,'the key stays where the config could not be written');
   fake.settings.configWriteFail.clear();
-  assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:null,missing:[],failed:[]}});
+  assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'remove'}),{status:200,body:{provider:null,keys:[],missing:[],failed:[]}});
   assert.equal(profileOf(fake,one.agents[0]).env.DEEPGRAM_API_KEY,undefined);
   assert.equal(profileOf(fake,one.agents[0]).config.stt.provider,'none');
  } finally { await fake.close(); }
@@ -145,7 +185,7 @@ test('only an Owner changes it, a provider outside the list or a bad key is refu
   madeCompany(fake,one);
   assert.deepEqual(await change(sessions({owner:false}),fake,{provider:'deepgram',intent:'set',value:key}),{status:403,body:{error:'speechNotAllowed'}});
   const owner=sessions({owner:true});
-  for(const request of [{provider:'mistral',intent:'set',value:key},{provider:'deepgram',intent:'set'},{provider:'deepgram',intent:'replace',value:key}])
+  for(const request of [{provider:'mistral',intent:'set',value:key},{provider:'deepgram',intent:'set'},{provider:'deepgram',intent:'replace',value:key},{intent:'remove'},{provider:'mistral',intent:'remove'}])
    assert.deepEqual(await change(owner,fake,request),{status:400,body:{error:'speechInvalid'}},JSON.stringify(request));
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method!=='GET'),[]);
   assert.deepEqual(await change(owner,fake,{provider:'deepgram',intent:'set',value:'short'}),{status:400,body:{error:'speechInvalid'}});
@@ -183,17 +223,17 @@ test('the route never answers the key back, and the key is removable', async () 
   const setText=await set.text();
   // `savedAt` is the server's time the save finished, which the page holds the provider until (#663).
   const {savedAt,...setBody}=JSON.parse(setText);
-  assert.deepEqual(setBody,{provider:'deepgram',missing:[],failed:[]});
+  assert.deepEqual(setBody,{provider:'deepgram',keys:['deepgram'],missing:[],failed:[]});
   assert.equal(typeof savedAt,'number');
   const got=await route.GET(new NextRequest(`http://app.test/api/speech-provider?company=${company}`));
   const gotText=await got.text();
-  assert.deepEqual(JSON.parse(gotText),{provider:'deepgram',missing:[]});
+  assert.deepEqual(JSON.parse(gotText),{provider:'deepgram',keys:['deepgram'],missing:[]});
   for(const text of [setText,gotText]) for(const secret of [key,key.slice(0,4),key.slice(-4),'DEEPGRAM_API_KEY']) assert.ok(!text.includes(secret),secret);
   assert.equal(set.headers.get('cache-control'),'no-store');
-  const removed=await post(route,{company,intent:'remove'});
+  const removed=await post(route,{company,provider:'deepgram',intent:'remove'});
   assert.equal(removed.status,200);
   const {savedAt:removedAt,...removedBody}=await removed.json();
-  assert.deepEqual(removedBody,{provider:null,missing:[],failed:[]});
+  assert.deepEqual(removedBody,{provider:null,keys:[],missing:[],failed:[]});
   assert.ok(removedAt>=savedAt);
   for(const name of all) assert.equal(profileOf(fake,name).env.DEEPGRAM_API_KEY,undefined,name);
   const member=await loadRoute(fake,false);
