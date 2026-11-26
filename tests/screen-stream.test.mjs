@@ -224,17 +224,23 @@ test('an open socket whose session has run out is closed for the page to sign in
  } finally { await at.close(); }
 });
 
-test('the web server takes the Screen\'s upgrade, leaves others to Next in development, and ends any other in production',()=>{
+test('the web server takes the Screen\'s upgrade and the Hermes dashboard\'s, leaves others to Next in development, and ends any other in production',()=>{
  const taken=[];
  const socket=()=>Object.assign(new Duplex({read(){},write(_chunk,_encoding,done){ done(); }}),{});
  const asked=path=>new URL(path,'http://gtmworks'), request=/** @type {any} */({});
  for(const dev of [true,false]) {
-  const route=screenUpgrades({dev,screen:(_request,_socket,_head,query)=>{ taken.push([dev,query.get('agent')]); }});
-  const screen=socket(), other=socket();
+  const route=screenUpgrades({dev,screen:(_request,_socket,_head,query)=>{ taken.push([dev,query.get('agent')]); },dashboard:(_request,_socket,_head,at)=>{ taken.push([dev,at.pathname]); }});
+  const screen=socket(), dashboard=socket(), other=socket(), near=socket();
   route(asked(`${screenStreamPath}?agent=a`),request,screen,Buffer.alloc(0));
-  route(asked('/_next/webpack-hmr'),request,other,Buffer.alloc(0));
+  // A socket of a Company's Hermes dashboard goes to its gate (#869).
+  // Taken here, so Next's own handler, which ends an upgrade on a path an app route matches, never sees it.
+  assert.equal(route(asked('/c/rs-learning/hermes/api/ws?ticket=t'),request,dashboard,Buffer.alloc(0)),true);
+  assert.equal(route(asked('/_next/webpack-hmr'),request,other,Buffer.alloc(0)),!dev);
+  route(asked('/c/rs-learning/hermesx/api/ws'),request,near,Buffer.alloc(0));
   assert.equal(screen.destroyed,false);
+  assert.equal(dashboard.destroyed,false);
   assert.equal(other.destroyed,!dev,dev?'hot reload is Next\'s':'nothing else upgrades');
+  assert.equal(near.destroyed,!dev);
  }
- assert.deepEqual(taken,[[true,'a'],[false,'a']]);
+ assert.deepEqual(taken,[[true,'a'],[true,'/c/rs-learning/hermes/api/ws'],[false,'a'],[false,'/c/rs-learning/hermes/api/ws']]);
 });

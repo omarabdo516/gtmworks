@@ -446,3 +446,46 @@ test('a change of an Agent\'s look says which part changed, from what to what, a
  const part = describeEntry({ subject: 'agent', action: 'agent_look_changed', agent_id: lead, details: { agent_name: 'Reach', part: 'size' } });
  assert.deepEqual([part.act, part.obj], [['logActAgentChanged'], 'Reach']);
 });
+
+// #873 (spec #866): the Owner's Engine dashboard writes who opened it, each change made there with its page and kind, and
+// each refused action. A line reads by its words alone: no key, value or body, and every word in both languages.
+test('a visit to the Engine dashboard, a change made there and a refused action each read in both languages', () => {
+ const say = (language, line) => { const { t } = i18n(language); const [key, ...args] = line.act; return t(key, ...args.map(arg => 'text' in arg ? arg.text : t(arg.key))); };
+ const opened = describeEntry({ subject: 'company', action: 'engine_dashboard_opened', details: {} });
+ assert.deepEqual(opened.act, ['logActDashboardOpened']);
+ assert.deepEqual(['en', 'ar'].map(language => say(language, opened)), ['opened the Engine dashboard', 'فتح لوحة تحكم المحرك']);
+ const saved = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'keys', change: 'keySaved' } });
+ // The page is a name: English keeps its capital inside the sentence.
+ assert.deepEqual(saved.act, ['logActDashboardChanged', { key: 'logDashboardChangeKeySaved' }, { key: 'logDashboardPageKeys', proper: true }]);
+ assert.deepEqual(['en', 'ar'].map(language => say(language, saved)), ['saved a key on the Keys page of the Engine dashboard', 'حفظ مفتاح في صفحة المفاتيح في لوحة تحكم المحرك']);
+ const installed = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'plugins', change: 'pluginInstalled' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, installed)), ['installed a plugin on the Plugins page of the Engine dashboard', 'نزّل إضافة في صفحة المكوِّنات الإضافية في لوحة تحكم المحرك']);
+ const connected = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'channels', change: 'platformConnected' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, connected)), ['connected a messaging platform on the Channels page of the Engine dashboard', 'وصّل منصة رسايل في صفحة القنوات في لوحة تحكم المحرك']);
+ const setting = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'config', change: 'settingSaved' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, setting)), ['saved a setting on the Config page of the Engine dashboard', 'حفظ إعداد في صفحة الإعدادات في لوحة تحكم المحرك']);
+ // A change on a route no page is known for names no page; a page or kind this version has no words for reads plainly.
+ const elsewhere = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: null, change: 'changed' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, elsewhere)), ['made a change on the Engine dashboard', 'عمل تغيير في لوحة تحكم المحرك']);
+ const unknown = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'later', change: 'later' } });
+ assert.deepEqual(unknown.act, ['logActDashboardChangedSomewhere', { key: 'logDashboardChangeChanged' }]);
+ for (const [kind, en, ar] of [['engineKey', 'show a key', 'يشوف مفتاح'], ['hermesUpdate', 'update the Engine', 'يحدّث المحرك'],
+  ['backupImport', 'import a backup', 'يستورد نسخة احتياطية'], ['agentProfile', 'make, rename or delete an Agent', 'يعمل وكيل أو يغيّر اسمه أو يمسحه']]) {
+  const refused = describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { refused: kind } });
+  // Its words name the Engine or an Agent: English keeps their capitals inside the sentence.
+  assert.equal(refused.act[1].proper, true, kind);
+  assert.deepEqual(['en', 'ar'].map(language => say(language, refused)), [`tried to ${en} on the Engine dashboard and was refused`, `حاول ${ar} في لوحة تحكم المحرك واترفض`], kind);
+ }
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { refused: 'later' } }).act, ['logActOther']);
+ // From the review of #889: a refused action names its page when the line has one, and a change the Engine did not take
+ // reads as a change that was not taken.
+ const refusedOn = describeEntry({ subject: 'company', action: 'engine_dashboard_refused', details: { page: 'profiles', refused: 'agentProfile' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, refusedOn)), ['tried to make, rename or delete an Agent on the Profiles page of the Engine dashboard and was refused', 'حاول يعمل وكيل أو يغيّر اسمه أو يمسحه في صفحة الملفات الشخصية في لوحة تحكم المحرك واترفض']);
+ const notTaken = describeEntry({ subject: 'company', action: 'engine_dashboard_rejected', details: { page: 'webhooks', change: 'added' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, notTaken)), ['tried to add something new on the Webhooks page of the Engine dashboard, and it was not taken', 'حاول يضيف حاجة جديدة في صفحة الويب هوكس في لوحة تحكم المحرك، وماتاخدش']);
+ const notTakenElsewhere = describeEntry({ subject: 'company', action: 'engine_dashboard_rejected', details: { change: 'changed' } });
+ assert.deepEqual(['en', 'ar'].map(language => say(language, notTakenElsewhere)), ['tried to make a change on the Engine dashboard, and it was not taken', 'حاول يعمل تغيير في لوحة تحكم المحرك، وماتاخدش']);
+ // Whatever else a row's details held, the line names none of it.
+ const leaky = describeEntry({ subject: 'company', action: 'engine_dashboard_changed', details: { page: 'keys', change: 'keySaved', value: 'sk-secret', body: '{"value":"sk-secret"}' } });
+ assert.ok(!JSON.stringify(leaky).includes('sk-secret'));
+});

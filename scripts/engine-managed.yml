@@ -17,3 +17,11 @@ terminal:
   # scripts/engine-ssh-sync-files.sh adds `terminal.ssh_sync_files` and passes it there (default true, so an install that
   # sets nothing behaves as the release does). With it false nothing is copied in and nothing back; Agents see /work only.
   ssh_sync_files: false
+# The tools no Agent gets (ADR 0018, lib/agent-toolsets.mjs noAgentGets), pinned so a write from the Owner's Hermes
+# dashboard (#871) cannot turn one on: the dashboard's toolset switch takes a toolset it turns on out of the profile's
+# disabled list (hermes_cli/tools_config.py _save_platform_tools), and its config pages write any key. This list is
+# applied after everything else (tools_config.py _get_platform_tools), and a managed key is never saved into a profile,
+# so it is every profile's whole list: each Agent's own tools stay its own in its platform list
+# (platform_toolsets.api_server), which gtmworks writes and the dashboard changes.
+agent:
+  disabled_toolsets: [browser, tts, video, video_gen, project, desktop_ui, catalog, onboarding, kanban, connections]
