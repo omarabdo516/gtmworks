@@ -5,7 +5,11 @@
 //   code at the root /assets/ for the page that asks for it, an API route, and a socket through gtmworks's web server;
 // - a Manager, a Contributor and a Viewer of the same Company, made here, and a signed-out person each get the missing
 //   page there (the answer for a Company that does not exist) on a page, a code file and an API route, and no socket;
-// - no answer to any of them holds the Engine's key (ENGINE_KEY, given by name).
+// - no answer to any of them holds the Engine's key (ENGINE_KEY, given by name);
+// - the dashboard's live parts close with the Role (#870): a second Owner, made here, opens the chat, its terminal and
+//   the board's event stream beside the first Owner's; within five seconds of the second Owner's Role being changed every
+//   one of theirs is closed and gets nothing after that line, the terminal included, a new one is refused, and the first
+//   Owner's board stream still reports the next Card.
 //   APP_ORIGIN, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SIGN_IN_EMAIL, SIGN_IN_PASSWORD, ENGINE_KEY, and
 //   SUPABASE_URL where the sign-in and the database are not behind APP_ORIGIN (a local app, not an install).
 import assert from 'node:assert/strict';
@@ -34,8 +38,8 @@ async function sessionOf(who,secret) {
 const cookieOf=async(who,secret)=>(await sessionOf(who,secret)).cookie;
 // Every answer read here, so none is found to hold the Engine's key.
 const seen=[];
-async function get(path,{cookie='',referer='',method='GET'}={}) {
- const answer=await fetch(`${origin}${path}`,{method,redirect:'manual',headers:{...(cookie?{cookie}:{}),...(referer?{referer}:{}),...(method==='POST'?{origin}:{})}});
+async function get(path,{cookie='',referer='',method='GET',sent=undefined}={}) {
+ const answer=await fetch(`${origin}${path}`,{method,redirect:'manual',body:sent===undefined?undefined:JSON.stringify(sent),headers:{...(cookie?{cookie}:{}),...(referer?{referer}:{}),...(method==='POST'?{origin}:{}),...(sent===undefined?{}:{'content-type':'application/json'})}});
  const body=await answer.text();
  seen.push(`${path} ${JSON.stringify([...answer.headers])} ${body}`);
  return {status:answer.status,body,type:answer.headers.get('content-type')??''};
@@ -53,6 +57,27 @@ function socketOpens(path,cookie) {
   asked.end();
  });
 }
+// A socket kept open: every byte it gets, the time it closed, and the bytes it got after `line` once that is set.
+function liveSocket(path,cookie) {
+ const url=new URL(path,origin);
+ const request=url.protocol==='https:'?httpsRequest:httpRequest;
+ return new Promise((resolve,reject)=>{
+  const asked=request(url,{headers:{Connection:'Upgrade',Upgrade:'websocket','Sec-WebSocket-Version':'13','Sec-WebSocket-Key':randomBytes(16).toString('base64'),origin:url.origin,cookie}});
+  asked.setTimeout(15000,()=>asked.destroy(new Error(`${path} did not open`)));
+  asked.on('upgrade',(_answer,socket,early)=>{
+   asked.setTimeout(0);
+   const live={path,socket,text:early.toString('latin1'),closedAt:null,line:null,after:0};
+   socket.on('data',data=>{ live.text+=data.toString('latin1'); if(live.line&&Date.now()>live.line) live.after+=data.length; });
+   socket.on('close',()=>{ live.closedAt??=Date.now(); });
+   socket.on('error',()=>{});
+   resolve(live);
+  });
+  asked.on('response',answer=>{ answer.resume(); reject(new Error(`${path}: HTTP ${answer.statusCode}`)); });
+  asked.on('error',reject);
+  asked.end();
+ });
+}
+const until=async(what,done,within)=>{ const end=Date.now()+within; while(!done()) { assert.ok(Date.now()<end,what); await new Promise(resolve=>setTimeout(resolve,200)); } };
 
 const {person:ownerId,cookie:owner}=await sessionOf(email,password);
 // The Owner's own Company: first run made one.
@@ -108,6 +133,47 @@ for(const [who,cookie] of people) {
  assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,cookie),404,`${who} opens no socket`);
 }
 console.log('A Manager, a Contributor, a Viewer and a signed-out person each got the missing page and no socket');
+
+// The live parts close with the Role (#870): the chat, its terminal and the board's event stream of a second Owner.
+const second=await (async()=>{
+ const address='dashboard-owner@example.com', secret='dashboard-owner-password';
+ const made=await json('/auth/v1/admin/users',{method:'POST',headers:asService,body:JSON.stringify({email:address,password:secret,email_confirm:true})});
+ await json('/rest/v1/people',{method:'POST',headers:{...asService,Prefer:'resolution=ignore-duplicates'},body:JSON.stringify({id:made.id,name:'second owner'})});
+ await json('/rest/v1/members',{method:'POST',headers:asService,body:JSON.stringify({company_id:company,person_id:made.id,role:'owner'})});
+ return {id:made.id,cookie:await cookieOf(address,secret)};
+})();
+async function liveParts(cookie,who) {
+ const opened=[];
+ for(const path of ['/api/ws',`/api/pty?channel=gtmworks-check-${who}`,'/api/plugins/kanban/events']) {
+  const ticket=await get(`${prefix}/api/auth/ws-ticket`,{cookie,method:'POST'});
+  assert.equal(ticket.status,200,`a socket ticket for the ${who} Owner's ${path}: HTTP ${ticket.status}`);
+  const url=new URL(`${prefix}${path}`,origin); url.searchParams.set('ticket',JSON.parse(ticket.body).ticket);
+  opened.push(await liveSocket(`${url.pathname}${url.search}`,cookie));
+ }
+ return {chat:opened[0],terminal:opened[1],board:opened[2],all:opened};
+}
+const card=async title=>{ const made=await get(`${prefix}/api/plugins/kanban/tasks`,{cookie:owner,method:'POST',sent:{title}}); assert.ok(made.status>=200&&made.status<300,`the Owner makes the Card "${title}" from the dashboard: HTTP ${made.status} ${made.body.slice(0,200)}`); };
+const firstLive=await liveParts(owner,'first'), secondLive=await liveParts(second.cookie,'second');
+await until('the second Owner\'s terminal writes to them',()=>secondLive.terminal.text.length>0,30000);
+await card('A Card both board streams report');
+await until('both Owners\' board streams report the Card',()=>firstLive.board.text.includes('A Card both board streams report')&&secondLive.board.text.includes('A Card both board streams report'),30000);
+for(const live of secondLive.all) assert.equal(live.closedAt,null,`the second Owner's ${live.path} is open before the change`);
+const changed=Date.now();
+for(const live of secondLive.all) live.line=changed+5000;
+await json(`/rest/v1/members?company_id=eq.${company}&person_id=eq.${second.id}`,{method:'PATCH',headers:asService,body:JSON.stringify({role:'manager'})});
+await until('every socket of the Owner whose Role changed is closed',()=>secondLive.all.every(live=>live.closedAt!==null),7000);
+for(const live of secondLive.all) assert.ok(live.closedAt-changed<5000,`${live.path} closed ${live.closedAt-changed} ms after the change, within five seconds`);
+await card('A Card after the Role changed');
+await until('the first Owner\'s board stream still reports',()=>firstLive.board.text.includes('A Card after the Role changed'),30000);
+for(const live of secondLive.all) {
+ assert.equal(live.after,0,`${live.path} got nothing after the line`);
+ assert.ok(!live.text.includes('A Card after the Role changed'),`${live.path} never reported the Card made after the change`);
+}
+for(const live of firstLive.all) assert.equal(live.closedAt,null,`the first Owner's ${live.path} stayed open`);
+assert.equal((await get(`${prefix}/api/auth/ws-ticket`,{cookie:second.cookie,method:'POST'})).status,404,'the changed Owner mints no new ticket');
+assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,second.cookie),404,'the changed Owner opens no new socket');
+for(const live of firstLive.all) live.socket.destroy();
+console.log(`The chat, the terminal and the board stream of an Owner made a Manager closed within ${Math.max(...secondLive.all.map(live=>live.closedAt-changed))} ms and got nothing after; the other Owner's stayed open`);
 
 for(const answer of seen) assert.ok(!answer.includes(engineKey),`no answer holds the Engine's key: ${answer.slice(0,120)}`);
 console.log(`None of ${seen.length} answers held the Engine's key`);
