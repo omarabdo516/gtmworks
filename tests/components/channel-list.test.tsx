@@ -2,27 +2,24 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import ChannelList from '@/app/channel-list';
-import { ShellPageProvider } from '@/app/shell-page';
 import { SidebarLive } from '@/app/sidebar-live';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { ChannelSummary } from '@/lib/channels';
 
-const place = vi.hoisted(() => ({ segments: [] as string[] }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }), usePathname: () => '/c/rs/home', useSelectedLayoutSegments: () => place.segments, useSearchParams: () => new URLSearchParams() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }), usePathname: () => '/c/rs/home', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ channelChoices: vi.fn(() => new Promise(() => {})), createChannel: vi.fn() }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 const general: ChannelSummary = { kind: 'general', id: 'ch-g', unread: 2 };
 const launch: ChannelSummary = { kind: 'team', name: 'Launch week', id: 'ch-t', unread: 1 };
-// The open channel is the one in the layout's address (app/shell-page).
-const list = ({ initial = [general, launch], ...props }: Partial<ComponentProps<typeof ChannelList>> & { initial?: ChannelSummary[] } = {}, language: 'en' | 'ar' = 'en', open?: string) => { place.segments = open ? ['channels', open] : []; return render(<LanguageProvider language={language}>
- <ShellPageProvider company={{ name: 'RS', slug: 'rs' }} approvals={Promise.resolve(0)}><SidebarLive person="p-1" company="co-1" channels={initial} states={{}}><ChannelList slug="rs" company="co-1" person="p-1" manage={false} {...props}/></SidebarLive></ShellPageProvider>
-</LanguageProvider>); };
+const list = ({ initial = [general, launch], ...props }: Partial<ComponentProps<typeof ChannelList>> & { initial?: ChannelSummary[] } = {}, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>
+ <SidebarLive person="p-1" company="co-1" channels={initial} states={{}}><ChannelList slug="rs" company="co-1" person="p-1" manage={false} {...props}/></SidebarLive>
+</LanguageProvider>);
 
 test('each channel shows how many messages are new, and the one being read shows none', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await list({}, 'en', 'ch-t');
+ const screen = await list({ current: 'ch-t' });
  const links = screen.getByRole('link');
  await expect.element(links.nth(0)).toHaveAttribute('href', '/c/rs/channels/ch-g');
  await expect.element(links.nth(0)).toHaveClass(/is-unread/);

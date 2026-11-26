@@ -6,12 +6,6 @@
   "ar": { "title": "إعدادات المزوّدين بتفتح على طول", "body": "الإعدادات ← المزوّدين بقت بتظهر على طول وكل جزء بيتملي لما محرك الوكلاء يرد عليه؛ والجزء اللي المحرك بطيء فيه بيقول إنه بيتقري، واللي مقدرش يتقري بيفضل باللي كان ظاهر آخر مرة." }
  },
  {
-  "issue": 789,
-  "date": "2026-11-26",
-  "en": { "title": "Moving between pages is quicker", "body": "The sidebar is drawn once for a Company, so opening another page from it shows that page at once, while the Agents' faces and the counts keep up on their own." },
-  "ar": { "title": "التنقّل بين الصفحات بقى أسرع", "body": "الشريط الجانبي بيترسم مرة واحدة للشركة، فلما تفتح منه صفحة تانية بتظهر على طول، ووشوش الوكلاء والأرقام بتفضل تتحدّث لوحدها." }
- },
- {
   "issue": 695,
   "date": "2026-11-26",
   "en": { "title": "The four old role agents are gone", "body": "The Account manager, Writer, Designer and Critic are no longer in menus, pickers or the Members page: New card goes to one of your Company's Agents, anyone who held a role by mistake is an ordinary Contributor again, and what those agents wrote keeps their names." },

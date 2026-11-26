@@ -38,20 +38,9 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const [dismissed,setDismissed]=useState<Record<number,boolean>>({});
  const [result,action,pending]=useActionState(finish,{});
  const router=useRouter(); const leaving=useLeave(); const {close}=leaving;
- const routerRef=useRef(router);
- useEffect(()=>{ routerRef.current=router; },[router]);
  const opened=result?.opened;
  // Lead's Conversation takes the keyboard once it is drawn (design-reference: #ta-main focused after closeDlg).
- // The Company's layout draws the Shell and this question once (#789): opening the Conversation also draws the layout
- // again, which leaves the question and its inert frame out now that the Company has its way of working. A question
- // taken away before its leave ends (the answer drew the layout first) still opens the Conversation.
- useEffect(()=>{
-  if(!opened) return;
-  let gone=false;
-  const go=()=>{ if(gone) return; gone=true; askComposerFocus(opened); routerRef.current.push(opened); routerRef.current.refresh(); };
-  close(go);
-  return go;
- },[opened,close]);
+ useEffect(()=>{ if(opened) close(()=>{ askComposerFocus(opened); router.push(opened); }); },[opened,close,router]);
  const box=useRef<HTMLDivElement>(null);
  const focusTo=useRef<string|null>(null);
  const name=lead?.name||'Lead';

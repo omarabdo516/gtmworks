@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { companyReader } from '@/lib/company-reader';
-import { ShellPage } from '@/app/shell-page';
+import { signedInUser, supabase } from '@/lib/supabase';
+import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { uuid } from '@/lib/conversations';
 import { isNewFor, orderAgents } from '@/lib/sidebar.mjs';
@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import AgentChat from './agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
+import { mustRead } from '@/lib/read-failed';
 
 // One of the Company's Agents as this page reads it, the details' `made` columns included.
 type AgentRow={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,template:string|null,created_at?:string|null,requested_by?:string|null,requester?:unknown,lead_made_agents?:unknown};
@@ -26,18 +27,21 @@ type AgentRow={id:string,connection_id:string,name:string,speciality:string,is_d
 // Viewer gets the plain chat, with no gallery drawn. The server decides it, as the database decides who may write.
 // ?tab=<key> opens the details on that tab.
 export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string,tab?:string,first?:string,invites?:string}>}) {
- const {language}=await getI18n(); const {slug,agent:parts}=await params; const {new:mode,tab,first,invites}=await searchParams;
- const reader=await companyReader(slug);
- if(!reader) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/chat${parts?.length?`/${parts.join('/')}`:''}`)}`);
- const {db,user,company,role,owner,personName}=reader;
+ const {t,language}=await getI18n(); const {slug,agent:parts}=await params; const {new:mode,tab,first,invites}=await searchParams;
+ const db=await supabase(); const {data:{user}}=await signedInUser();
+ if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/chat${parts?.length?`/${parts.join('/')}`:''}`)}`);
+ const companies=mustRead(await db.from('companies').select('id,slug,name,work_mode').order('name'),'companies'); const company=companies?.find(c=>c.slug===slug);
  if(!company||(parts&&(parts.length!==1||!uuid.test(parts[0])))) notFound();
  const {data:agents}=await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,template,${madeColumns}`).eq('company_id',company.id).order('name');
  const visible=orderAgents((agents||[]) as AgentRow[]);
  const agent=parts?visible.find(a=>a.id===parts[0]):visible.find(a=>a.is_default)||visible[0];
  if(parts&&!agent) notFound();
+ const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
+ const membership=mustRead(await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),'membership');
  // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
  const {data:writer}=await db.rpc('conversation_can_write',{c:company.id});
- const {count:waitingCount}=await approvalQueue(db,company.id,user.id,role);
+ const {count:waitingCount}=await approvalQueue(db,company.id,user.id,membership?.role||'');
+ const owner=membership?.role==='owner';
  // Every Member who may write opens the gallery: the Owner adds a role there, a Manager or a Contributor asks for one (#189).
  const newAgent=(mode==='agent'||mode==='ready')&&!!agent?.is_default&&!!writer;
  const alone=company.work_mode==='alone';
@@ -47,7 +51,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const main=!!agent?.is_default, fresh=main&&visible.length===1;
  const asks=!owner&&(newAgent||(fresh&&!!writer));
  const factsRead=agent?emptyChatFacts(db,{company:company.id,agent:agent.id,me:user.id,main,fresh,alone,owner,asks}):Promise.resolve(null);
- const detailsRead=agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role,tab}):Promise.resolve(null);
+ const detailsRead=agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):Promise.resolve(null);
  // A Company with no model at all says so above the composer before anyone writes (#422); only a writer has a composer,
  // and only a read that tells "none" for certain draws the line.
  const modelRead=agent&&writer?companyHasModel(db,{company:company.id}).catch(()=>null):Promise.resolve(null);
@@ -58,7 +62,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  // a visit goes back to the opening, so one written by a link's prefetch (which renders this page too) is still found.
  if(agent&&owner&&main&&!mode) {
   const opened=await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
-   {model:modelRead,company:company.id,person:user.id,language,owner:personName,lead:agent.name,companyName:company.name});
+   {model:modelRead,company:company.id,person:user.id,language,owner:person?.name||'',lead:agent.name,companyName:company.name});
   // The reads already on their way are not awaited once the page moves.
   if(opened) { factsRead.catch(()=>{}); detailsRead.catch(()=>{}); redirect(`/c/${slug}/conversations/${opened}${first?`?first=${encodeURIComponent(first)}${invites?`&invites=${encodeURIComponent(invites)}`:''}`:''}`); }
  }
@@ -81,8 +85,9 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  })):null;
  const details=pickers?pickers.find(choice=>choice.agent.id===agent?.id)?.details??null:await detailsRead;
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone,await readyRoleLooks(db,company.id)),owner,owners:facts?.owners??[]}:null;
- return <><ShellPage agentId={agent?.id} approvals={waitingCount}/>
+ const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
+ return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={agent?.id}>
   <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} agents={pickers??[]} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0} noModel={await modelRead===false?{owner}:null}/></main>
- </>;
+ </Shell>;
 }
 
