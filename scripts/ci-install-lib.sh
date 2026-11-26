@@ -303,6 +303,24 @@ publishes_host_port() {
   bindings=$(docker inspect -f '{{json .NetworkSettings.Ports}} {{json .HostConfig.PortBindings}}' "$1") || return 0
   [[ $bindings == *'"HostPort"'* ]]
 }
+# Whether an Engine holds the release's managed configuration (ADR 0018, #871): the release's own file, mounted read-only,
+# from which Hermes reads the work sandbox's terminal backend and the tools no Agent gets, whatever a profile or the
+# Owner's Hermes dashboard wrote. The file is the one beside the template in scripts/ (or the one named second). And its
+# managed environment (#893), which holds the file tools' write root: the Engine refuses to save it into any profile.
+engine_pinned() {
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/hermes/config.yaml"}}{{.RW}}{{end}}{{end}}' "$1") == false ]] || return 1
+  docker exec "$1" cat /etc/hermes/config.yaml | cmp -s - "${2:-scripts/engine-managed.yml}" || return 1
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/hermes/.env"}}{{.RW}}{{end}}{{end}}' "$1") == false ]] || return 1
+  docker exec "$1" cat /etc/hermes/.env | cmp -s - scripts/engine-managed.env || return 1
+  docker exec -u hermes -e HERMES_HOME=/opt/data "$1" /opt/hermes/.venv/bin/python -c 'import sys
+from hermes_cli.config import env_write_refusal
+sys.exit(0 if env_write_refusal("HERMES_WRITE_SAFE_ROOT", "set") else 1)' || return 1
+  docker exec -u hermes -e HERMES_HOME=/opt/data "$1" /opt/hermes/.venv/bin/python -c 'import sys
+from hermes_cli.config import load_config
+config = load_config()
+sys.exit(0 if config["terminal"]["backend"] == "ssh" and set(sys.argv[1:]) <= set(config["agent"]["disabled_toolsets"]) else 1)' \
+    browser tts video video_gen project desktop_ui catalog onboarding kanban connections
+}
 # Every address a container has, on every network it joins, comma-separated.
 addresses_of() { docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$1" | grep . | paste -sd, -; }
 # The sandbox exit proof (scripts/check-install-sandbox-exit.mjs) run inside a Company's sandbox the way an Agent's

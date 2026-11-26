@@ -5,7 +5,8 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
-// #162: the Voice section of an Agent's page shows its own Engine profile's speaking language, voice and speed. The Owner
+// #162: the Voice section of an Agent's page shows its own Engine profile's voice and speed; the language it listens in is
+// the Company's, on Settings → Voice (#863), so the page has no row of it. The Owner
 // and a Manager change them and save with the page's bar; the Engine then holds the new values and the log has one row.
 // A Contributor and a Viewer read the same rows with no control, and the server refuses their save and their Listen.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -43,13 +44,14 @@ const hydrated=(page:Page)=>page.waitForFunction(()=>{
 // The sample Listen speaks carries the reader's own first name as the database holds it (the seed's Omar is «عمر»).
 const sample='Hi عمر, I finished the December campaign analysis and I have three new angles.';
 
-test('the Owner changes the speaking language and the speed, saves, and the Engine and the log hold them; Listen plays the saved voice',async({page})=>{
+test('the Owner changes the speed, saves, and the Engine and the log hold it; Listen plays the saved voice',async({page})=>{
  await agentPage('omar@example.com',page);
  await hydrated(page);
  const overlay=page.getByRole('dialog',{name:'Settings'});
- const language=overlay.locator('#set-voice-lang'), speed=overlay.locator('#set-speed-2'), bar=overlay.locator('#dp-savebar');
- // The profile's real values: English, the Engine's default voice, normal speed, and the line on who speaks the sample.
- await expect(language).toHaveValue('en');
+ const speed=overlay.locator('#set-speed-2'), bar=overlay.locator('#dp-savebar');
+ // The profile's real values: the Engine's default voice, normal speed, and the line on who speaks the sample; no
+ // listening language.
+ await expect(overlay.locator('#set-voice-lang')).toHaveCount(0);
  await expect(overlay.locator('#set-voice')).toHaveValue('en-US-AriaNeural');
  await expect(overlay.locator('#set-voice')).toBeDisabled();
  await expect(overlay.getByText('The agent engine offers no list of voices for this provider, so the saved voice stays.')).toBeVisible();
@@ -69,8 +71,7 @@ test('the Owner changes the speaking language and the speed, saves, and the Engi
  expect(direct.ok()).toBe(true);
  expect(spoken()?.body.text).toContain('Hi عمر, I finished');
  expect(spoken()?.body.text).not.toContain('Say something else entirely.');
- // A change of language and of speed (in Advanced since #615), saved with the bar; Listen is off while they are unsaved.
- await language.selectOption('ar');
+ // A change of speed (in Advanced since #615), saved with the bar; Listen is off while it is unsaved.
  await overlay.getByText('Advanced',{exact:true}).click();
  await overlay.getByRole('radio',{name:'1.25×'}).click();
  await expect(bar).toBeVisible();
@@ -79,19 +80,18 @@ test('the Owner changes the speaking language and the speed, saves, and the Engi
  await overlay.getByRole('button',{name:'Save',exact:true}).click();
  await expect(bar).toBeHidden();
  await expect(page.locator('.toast')).toContainText('Saved. Lead will use the new settings from the next message');
- // The Engine's profile holds both, and the log has one row naming the section.
+ // The Engine's profile holds it, and the log has one row naming the section.
  const held=fake.settings.profiles.get(profile)?.config;
- expect(held?.stt?.language).toBe('ar');
+ expect(held?.stt?.language).toBeUndefined();
  expect(held?.tts?.speed).toBe(1.25);
  expect(JSON.parse(query(`select jsonb_build_object('field',details->>'field','agent',details->>'agent_name','actor',actor_id) as row
   from public.company_log where action='agent_setting_changed' and details->>'field'='voice' order by id desc limit 1`))[0].row)
   .toEqual({field:'voice',agent:'Lead',actor:'20000000-0000-0000-0000-000000000001'});
  // Reloaded, the page shows what the Engine now holds.
  await page.reload();
- await expect(language).toHaveValue('ar');
+ await hydrated(page);
  await overlay.getByText('Advanced',{exact:true}).click();
  await expect(overlay.getByRole('radio',{name:'1.25×'})).toHaveAttribute('aria-checked','true');
- await expect(overlay.locator('#set-voice-lang-hint')).toHaveText('It understands you in this language when you dictate.');
 });
 
 test('a Contributor and a Viewer read the voice rows with no control, and the server refuses their save and their Listen',async({page})=>{
@@ -99,7 +99,6 @@ test('a Contributor and a Viewer read the voice rows with no control, and the se
   await page.context().clearCookies();
   await agentPage(email,page);
   const overlay=page.getByRole('dialog',{name:'Settings'});
-  await expect(overlay.locator('#set-voice-lang-val')).toHaveText('Arabic');
   await expect(overlay.locator('#set-voice-val')).toHaveText('en-US-AriaNeural');
   // The speed is read in Advanced (#615), as text.
   await overlay.getByText('Advanced',{exact:true}).click();
@@ -108,13 +107,13 @@ test('a Contributor and a Viewer read the voice rows with no control, and the se
   await expect(overlay.locator('#set-voice')).toHaveCount(0);
   await expect(overlay.locator('#set-speed-l')).toHaveCount(0);
   await expect(overlay.locator('#dp-savebar')).toHaveCount(0);
-  for(const [path,body] of [['/api/agent-page',{company,agent:lead,changes:{voice:{language:'en'}}}],['/api/agent-speak',{company,agent:lead}]] as const){
+  for(const [path,body] of [['/api/agent-page',{company,agent:lead,changes:{voice:{speed:'1'}}}],['/api/agent-speak',{company,agent:lead}]] as const){
    const refused=await page.request.post(path,{data:body});
    expect(refused.status(),path).toBe(403);
    expect(await refused.json()).toEqual({error:path.endsWith('speak')?'voiceNotAllowed':'agentPageNotAllowed'});
   }
  }
  // Nothing they sent reached the Engine.
- expect(fake.settings.profiles.get(profile)?.config?.stt?.language).toBe('ar');
+ expect(fake.settings.profiles.get(profile)?.config?.tts?.speed).toBe(1.25);
  expect(fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/audio/speak')).length).toBe(2);
 });

@@ -144,6 +144,21 @@ test('a gateway location that sets its own headers repeats every server-level on
  for(const [,at,body] of own) for(const line of inherited) assert.ok(lines(body).includes(line),`${at.trim()} repeats ${line}`);
 });
 
+// #869: a Company's Hermes dashboard and its sockets reach gtmworks's web server, which gates them; the gateway names
+// no Engine, so the Engine is reached from the web server only.
+test('the gateway passes a Company\'s Hermes dashboard and its sockets to the web server, unbuffered, and names no Engine', () => {
+ const conf=readFileSync('scripts/install-nginx.conf','utf8');
+ const [,at,body]=[...conf.matchAll(/location ([^{]*)\{([^}]*)\}/g)].find(([,where])=>where.includes('hermes'))??[];
+ assert.ok(body,'the dashboard has its own location');
+ const path=new RegExp(at.trim().replace(/^~\s*/,''));
+ for(const asked of ['/c/rs-learning/hermes','/c/rs-learning/hermes/','/c/rs-learning/hermes/api/ws']) assert.ok(path.test(asked),asked);
+ for(const other of ['/c/rs-learning/hermesx','/c/rs-learning/chat']) assert.ok(!path.test(other),other);
+ assert.match(body,/proxy_pass http:\/\/\$web;/);
+ assert.match(body,/proxy_set_header Upgrade \$http_upgrade;/);
+ assert.match(body,/proxy_buffering off;/);
+ assert.doesNotMatch(conf,/9119|gtmworks-engine/);
+});
+
 test('the install job runs first run and sign-in through an HTTPS proxy whose origin is APP_ORIGIN', () => {
  const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
  const run=step.run;

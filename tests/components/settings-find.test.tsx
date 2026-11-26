@@ -48,7 +48,7 @@ test('/ outside a field finds a setting by name, Enter opens it, and clearing th
  await screen.getByRole('button', { name: 'Clear search' }).click();
  await expect.element(find).toHaveValue('');
  await expect.element(find).toHaveFocus();
- expect(names(screen)).toHaveLength(12);
+ expect(names(screen)).toHaveLength(14);
 });
 
 test('a name nothing is called says so, offers to clear, and Escape clears the search without closing Settings', async () => {
@@ -59,7 +59,7 @@ test('a name nothing is called says so, offers to clear, and Escape clears the s
  expect(names(screen)).toEqual([]);
  await userEvent.keyboard('{Escape}');
  await expect.element(find).toHaveValue('');
- expect(names(screen)).toHaveLength(12);
+ expect(names(screen)).toHaveLength(14);
  expect(push).not.toHaveBeenCalled();
  await expect.element(screen.getByRole('dialog')).toBeVisible();
 });
@@ -96,7 +96,7 @@ test('/ typed in a field of the page stays in that field', async () => {
  await expect.element(note).toHaveFocus();
  await expect.element(note).toHaveValue('a/b');
  await expect.element(screen.getByRole('searchbox', { name: 'Find a setting' })).toHaveValue('');
- expect(names(screen)).toHaveLength(12);
+ expect(names(screen)).toHaveLength(14);
 });
 
 test('on a phone the search sits above the row of sections, its field and Clear search each a 44px tap area', async () => {

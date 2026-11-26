@@ -1,5 +1,17 @@
 [
  {
+  "issue": 866,
+  "date": "2026-11-26",
+  "en": { "title": "The Engine's own dashboard, for Owners", "body": "As an Owner, you open the Engine's own dashboard from Settings, in gtmworks's colours and your language, with every page and setting it has (messaging platforms, plugins, webhooks, MCP, config, logs and more); showing a key, updating the Engine, importing a backup and making or removing an Agent stay in gtmworks, and only Owners can open it." },
+  "ar": { "title": "لوحة تحكم المحرك نفسه، للمالك", "body": "لو إنت المالك، بتفتح لوحة تحكم المحرك نفسه من الإعدادات، بألوان gtmworks وبلغتك، وفيها كل صفحاته وإعداداته (منصات الرسايل والإضافات والويب هوكس والـ MCP والإعدادات والسجلات وغيرهم)؛ أما إظهار المفاتيح وتحديث المحرك واستيراد نسخة احتياطية وعمل وكيل أو شيله فبيفضلوا في gtmworks، ومحدش يقدر يفتحها غير الملاك." }
+ },
+ {
+  "issue": 863,
+  "date": "2026-11-26",
+  "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },
+  "ar": { "title": "إعدادات الصوت مرة واحدة للشركة كلها", "body": "الإعدادات ← الصوت بتظبط إزاي كل وكيل بيكتب اللي بتمليه: المزوّد والموديل بتاعه، واللغة (تلقائي بيعرف العربي من الإنجليزي)، والأسامي اللي لازم يكتبها صح، وقص السكوت؛ وصفحة كل وكيل مبقاش فيها لغة لوحدها." }
+ },
+ {
   "issue": 862,
   "date": "2026-11-26",
   "en": { "title": "Switching speech-to-text keeps your other keys", "body": "Choosing another speech-to-text provider no longer deletes the key you gave the last one: every provider with a saved key says so, and you switch back to it without pasting the key again." },
