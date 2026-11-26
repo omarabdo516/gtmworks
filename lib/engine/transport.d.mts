@@ -3,7 +3,6 @@ export const bodyLimit:number;
 export function isHermesAddressAllowed(address:string):boolean;
 export type EngineListener='api'|'management';
 export type ListenerConnection={address:string,key?:string,managementAddress?:string};
-export function listenerRoot(connection:ListenerConnection,listener:EngineListener):string;
 export function bothListeners(connection:ListenerConnection):boolean;
 export function onProfile(profile:string,path:string):string;
 export type FailureCause='timedOut'|'refused'|'nameNotFound'|'noNetwork'|'failed';

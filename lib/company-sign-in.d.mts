@@ -9,4 +9,3 @@ export type SubscriptionAccount={provider:SignInProvider,account:string,exhauste
 export type CompanySignIns={profile:string|null,profiles:string[]|null,signIns:Record<SignInProvider,{state:SubscriptionState,flow:'device_code'|'external'}>|null,accounts?:SubscriptionAccount[]|null,noEngine?:boolean,unread?:boolean};
 export function readCompanySignIns(db:SupabaseClient,request:{company:string}):Promise<CompanySignIns>;
 export function changeCompanySignIn(db:SupabaseClient,request:{company:string,provider:unknown,intent:unknown,session?:unknown,account?:unknown}):Promise<{status:number,body:Record<string,unknown>}>;
-export function signInTarget(db:SupabaseClient,company:string):ReturnType<typeof import('./engine/handle.mjs').companyEngine>;
