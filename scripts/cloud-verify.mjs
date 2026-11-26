@@ -2,7 +2,7 @@
 // app `npm run cloud:up` started: Chromium, driven by Playwright, clicks, types and submits, and every step is checked
 // on the page and in the local database. Screenshots of each step land in the output folder.
 //   node scripts/cloud-verify.mjs            the whole journey: first run on an empty install, sign-in, a message to
-//                                            Lead, Numbers; then, on the seed put back, a Card made and moved on the board
+//                                            Lead, Numbers; then, on the seed put back, the Engine's Card on the board
 //   node scripts/cloud-verify.mjs --sign-in  only: the seeded Owner signs in and reaches a signed-in page
 //   --out DIR                                where the screenshots go (default $TMPDIR/gtmworks-cloud/screens)
 // It refuses any app or database but the local stack's (scripts/first-run-db.mjs assertLocalTarget).
@@ -146,42 +146,22 @@ async function journey(page) {
  await expect(page.getByText('Leads per day',{exact:true})).toBeVisible();
  await screenshot(page,'numbers');
  step('opened Numbers from the sidebar');
- // 5. The board, on the seed put back. A new Card is asked of one of the Company's own Agents (spec #695); the seed gives
- // RS Learning none, so the journey gives it its main Agent, which the seed put back at the end takes away again. The
- // seeded Owner makes a Card in RS Learning and carries it by mouse from Ideas to Planned; the move is in the database.
+ // 5. The board, on the seed put back: the Company's Engine's own Kanban board (spec #831). The fake Engine cloud:up
+ // started holds one Card being worked (scripts/cloud-hermes.mjs), and the seeded Owner finds it in In progress, read
+ // through gtmworks, with its symbol.
  putSeedBack();
  step('the seeded data is back');
- query(`insert into public.hermes_agents(company_id,name,speciality,profile,is_default) select id,'Lead','General','cloud-verify-lead',true from public.companies where slug='${seeded.company}' returning id`);
  await page.context().clearCookies();
  await signIn(page,seeded.email,seeded.password);
- // The seeded Owner lands in another of their Companies; RS Learning is the one whose Agents take Cards.
  await page.goto(`${origin}/c/${seeded.company}/home`);
  await page.locator('.sidebar').getByRole('link',{name:'Marketing board',exact:true}).click();
  await expect(page).toHaveURL(`${origin}/c/${seeded.company}/work/board`);
- await expect(page.locator('#board-cols > .col')).toHaveCount(6);
- await page.goto(`${origin}/c/${seeded.company}/work/new`);
- const title=`Cloud card ${Date.now()}`;
- const create=page.getByRole('button',{name:'Create card'});
- await hydrated(page.getByLabel('Message',{exact:true}),title,create);
- await create.click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/,{timeout:30000});
- const card=Number(new URL(page.url()).pathname.split('/').pop());
- await page.goto(`${origin}/c/${seeded.company}/work/board`);
- const source=page.locator(`.kcard[data-card-id="${card}"]`);
- await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
- await screenshot(page,'board-before-move');
- const from=await source.boundingBox(),to=await page.locator('.col[data-column="planned"] .col__body').boundingBox();
- await page.mouse.move(from.x+from.width/2,from.y+20);
- await page.mouse.down();
- await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
- await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
- await page.mouse.up();
- await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
- await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card}"]`)).toBeVisible();
- await screenshot(page,'board-after-move');
- await expect.poll(()=>query(`select c.title,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.id=${card}`))
-  .toEqual([{title,board_column:'planned'}]);
- step(`made the Card "${title}" and dragged it from Ideas to Planned; work_cards has it in the planned column`);
+ await expect(page.locator('#board-cols > .col .col__name')).toHaveText(['Waiting on you','Ideas','Planned','In progress','Done']);
+ const engineCard=page.locator('.col[data-column="progress"]').getByRole('article',{name:/^Weekly report for the team/});
+ await expect(engineCard).toBeVisible({timeout:15000});
+ await expect(engineCard.getByRole('img',{name:'Working on it now'})).toBeVisible();
+ await screenshot(page,'board');
+ step('the board reads the Engine: its Card "Weekly report for the team" is in In progress, working now');
 }
 
 const browser=await chromium.launch();

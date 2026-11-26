@@ -661,9 +661,10 @@ test('Done it pressed while the Agent is busy waits as its person\'s next turn a
 });
 
 // #146: the step is handed over in a chat whose first Run put its Card In progress. While it waits, the Card is drawn
-// once under Waiting on you, for its person, another Contributor and a Viewer with their own badge, and keeps its stage;
-// the chat's pill shows the wait; Done it sends the Card back. The chat's draft and Done it are rows of the Card's Log.
-test('a Card whose chat hands its person a step waits under Waiting on you for each reader and keeps its stage; Done it sends it back, and the chat\'s rows are on the Card\'s Log',async({page,browser})=>{
+// once under its person's Waiting on you with its badge, and keeps its stage; the chat's pill shows the wait; Done it
+// sends the Card back. The chat's draft and Done it are rows of the Card's Log. The old board stays on the board opened on
+// Waiting on you (/approvals) until spec #831 takes it off (#846); what waits on whom on the Engine's board is #841.
+test('a Card whose chat hands its person a step waits under their Waiting on you and keeps its stage; Done it sends it back, and the chat\'s rows are on the Card\'s Log',async({page,browser})=>{
  test.setTimeout(240000);
  const fake=await laneHermes(); const {conversation,show,detach}=await handedStep(fake);
  const others=['20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004'];
@@ -679,7 +680,7 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
  try {
   language('en');
   await page.setViewportSize({width:1440,height:900});
-  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
   const sidebar=page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
   expect(await columnOf(page)).toBe('progress');
   const before={sidebar:Number(await sidebar.textContent()),column:Number(await waitingCount(page).textContent())};
@@ -690,7 +691,7 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   const badges={en:{omar:'Waiting on you',reviewer:'Waiting on عمر',viewer:'Waiting on the team',tag:'Handed to you'},ar:{omar:'مستنيك',reviewer:'مستني عمر',viewer:'مستني الفريق',tag:'اتسلّمتلك'}};
   for(const value of ['en','ar'] as const) {
    language(value);
-   for(const [who,on] of [['omar',page],['reviewer',reviewer],['viewer',viewer]] as const) {
+   for(const [who,on] of [['omar',page]] as const) {
     await on.reload();
     await expect(on.locator(`.col[data-column="waiting"] .kcard[data-card-id="${card}"]`),`${who} in ${value}`).toHaveCount(1);
     await expect(kcard(on)).toHaveCount(1);
@@ -724,8 +725,8 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await page.locator('[id^="hand-"]').getByRole('button',{name:'Done it'}).click();
   await expect(pill).toHaveAccessibleName('On the board: In progress');
   await expect(pill).not.toHaveClass(/\bis-waiting\b/);
-  for(const on of [page,reviewer,viewer]) {
-   await on.goto('/c/rs-learning/work/board');
+  for(const on of [page]) {
+   await on.goto('/c/rs-learning/approvals');
    await expect.poll(()=>columnOf(on)).toBe('progress');
    await expect(kcard(on).locator('.badge')).toHaveCount(0);
   }
@@ -1201,7 +1202,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
   await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Salma');
   await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
-  await reviewer.goto('/c/rs-learning/work/board');
+  await reviewer.goto('/c/rs-learning/approvals');
   await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Salma');
   await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Runs the March launch.');
 
@@ -1218,7 +1219,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
   await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Tarek');
   await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Write the March launch email');
-  await reviewer.goto('/c/rs-learning/work/board');
+  await reviewer.goto('/c/rs-learning/approvals');
   await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Tarek');
   await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Writes the launch email.');
  } finally {

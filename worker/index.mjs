@@ -10,6 +10,7 @@ import { selfHosted as isSelfHosted, enginePass } from '../lib/company-engine.mj
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
+import { keepKanbanCards } from '../lib/kanban-card-rows.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 import { keepProviderAccounts } from '../lib/provider-switches.mjs';
 import { keepFallbackModels } from '../lib/fallback-model.mjs';
@@ -54,6 +55,9 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // new Agent's profile or an Agent waiting for a model key.
  selfHosted&&loop('Agent upkeep',async()=>{ await keepSharedSkills(db,{}); await keepAgentRules(db,{}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),
+ // A row kept beside a Card whose task is gone from its Company's Engine is forgotten by the slow check for drift, every
+ // five minutes and never on a page read (#836, ADR 0031 item 4): any install whose Companies have Engines.
+ loop('Card rows',()=>keepKanbanCards(db,{}),60000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000),
  // Each Company's Engine takes its subscription accounts in the Owner's order, and each move it made from one account to
  // the next is logged once (#621).

@@ -43,6 +43,118 @@ export function screenFrame(grab) {
  const note=Buffer.from(`grab ${grab}`);
  return Buffer.concat([screenJpeg.subarray(0,2),Buffer.from([0xff,0xfe,0,note.length+2]),note,screenJpeg.subarray(2)]);
 }
+// The pinned release's Kanban board (spec #831; hermes_cli/kanban_workflow.py DEFAULT_WORKFLOW, hermes_cli/kanban_db.py
+// Task): its statuses in column order, and its tasks as the Task dataclass holds them. A test puts a task on it with
+// `task(fields)` (an id `t_` and eight hex digits, as _new_task_id makes), links a child to the parent it waits for with
+// `link`, and comments with `comment`; `board()` is GET /board's answer. Each change is a row of its append-only
+// `events` (kanban_db.py task_events: an id, the task, its Run, its kind and payload), which the board's event socket
+// tails and GET /tasks/{id} lists; a test moves a task to another status with `move`, as a worker or another person
+// would, records any other change with `event`, and gives a task its Runs with `run` (the Run dataclass). A Card whole
+// is `detail(id)`, GET /tasks/{id}'s answer.
+export const kanbanStatuses=['triage','todo','scheduled','ready','running','blocked','review','done'];
+function kanbanBoard() {
+ const tasks=/** @type {any[]} */([]);
+ const links=/** @type {{parent_id:string,child_id:string}[]} */([]);
+ const comments=/** @type {{id:number,task_id:string,author:string,body:string,created_at:number}[]} */([]);
+ const events=/** @type {{id:number,task_id:string,run_id:number|null,kind:string,payload:any,created_at:number}[]} */([]);
+ const runs=/** @type {any[]} */([]);
+ let clock=Math.floor(Date.now()/1000);
+ /** @param {string} task @param {string} kind @param {any} [payload] @param {number|null} [run] */
+ const event=(task,kind,payload=null,run=null)=>{ events.push({id:events.length+1,task_id:task,run_id:run,kind,payload,created_at:++clock}); };
+ const summaryOf=id=>runs.filter(run=>run.task_id===id&&run.summary).at(-1)?.summary??tasks.find(task=>task.id===id)?.latest_summary??null;
+ return {tasks,links,comments,events,event,runs,
+  /** @param {string} id @param {string} status */
+  move(id,status) {
+   const task=tasks.find(found=>found.id===id); if(!task) return;
+   task.status=status; if(status==='done') task.completed_at=++clock;
+   event(id,'status',{status});
+  },
+  /** @param {Record<string,any>} fields */
+  task(fields) {
+   const at=++clock;
+   const task={id:`t_${randomUUID().replaceAll('-','').slice(0,8)}`,title:'',body:null,assignee:null,status:fields.assignee?'ready':'todo',priority:0,created_by:'dashboard',
+    created_at:at,started_at:null,completed_at:null,workspace_kind:'scratch',workspace_path:null,claim_lock:null,claim_expires:null,tenant:null,branch_name:null,
+    project_id:null,result:null,idempotency_key:null,consecutive_failures:0,worker_pid:null,last_failure_error:null,max_runtime_seconds:null,
+    last_heartbeat_at:null,current_run_id:null,workflow_template_id:null,current_step_key:null,skills:null,model_override:null,provider_override:null,
+    reasoning_effort:null,max_retries:null,goal_mode:false,goal_max_turns:null,session_id:null,block_kind:null,block_recurrences:0,completion_contract:null,...fields};
+   if(task.status==='done'&&task.completed_at==null) task.completed_at=at;
+   tasks.push(task);
+   event(task.id,'created',{assignee:task.assignee,status:task.status});
+   return task;
+  },
+  /** @param {string} task @param {Record<string,any>} fields */
+  run(task,fields={}) {
+   const run={id:runs.length+1,task_id:task,profile:null,step_key:null,status:'running',claim_lock:null,claim_expires:null,worker_pid:null,max_runtime_seconds:null,
+    last_heartbeat_at:null,started_at:++clock,ended_at:null,outcome:null,summary:null,metadata:null,error:null,...fields};
+   runs.push(run);
+   return run;
+  },
+  // GET /tasks/{id} (get_task): the task with its full latest summary, its comments, events, attachments, links (each
+  // linked task's id, title and status), its children's results and its Runs; null for a task that is not there.
+  /** @param {string} id */
+  detail(id) {
+   const task=tasks.find(found=>found.id===id);
+   if(!task) return null;
+   const parents=links.filter(link=>link.child_id===id).map(link=>link.parent_id).sort();
+   const children=links.filter(link=>link.parent_id===id).map(link=>link.child_id).sort();
+   const linked=[...new Set([...parents,...children])].map(other=>tasks.find(found=>found.id===other)).filter(Boolean);
+   return {task:{...task,latest_summary:summaryOf(id),current_run_started_at:null},
+    comments:comments.filter(comment=>comment.task_id===id),events:events.filter(event=>event.task_id===id),attachments:[],
+    links:{parents,children},link_tasks:linked.map(other=>({id:other.id,title:other.title,status:other.status})),
+    child_results:children.map(child=>tasks.find(found=>found.id===child)).filter(Boolean).map(child=>({id:child.id,title:child.title,status:child.status,latest_summary:summaryOf(child.id),result:child.result})),
+    runs:runs.filter(run=>run.task_id===id)};
+  },
+  /** @param {string} parent @param {string} child */
+  link(parent,child) { links.push({parent_id:parent,child_id:child}); },
+  /** @param {string} task @param {string} author @param {string} body */
+  comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
+  // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
+  // a Card that is not archived, the Engine answers that Card again. `ready` unless asked for triage or a parent is not
+  // done, an assignee or none (hermes_cli/kanban_db_graph.py initial_task_state).
+  /** @param {Record<string,any>} body */
+  create(body) {
+   const key=typeof body.idempotency_key==='string'&&body.idempotency_key?body.idempotency_key:null;
+   const again=key&&tasks.find(task=>task.idempotency_key===key&&task.status!=='archived');
+   if(again) return again;
+   const parents=Array.isArray(body.parents)?body.parents:[];
+   const open=parents.some(parent=>tasks.find(task=>task.id===parent)?.status!=='done');
+   const made=this.task({title:String(body.title).trim(),body:body.body??null,assignee:body.assignee||null,tenant:body.tenant??null,idempotency_key:key,
+    status:body.triage?'triage':open?'todo':'ready'});
+   for(const parent of parents) links.push({parent_id:parent,child_id:made.id});
+   return made;
+  },
+  // One dispatcher tick (dispatch_once): every `ready` Card with an Agent is claimed and its worker spawned, so it is
+  // `running`; a Card with no Agent is never claimed. `ticks` counts the ticks asked for. The Engine's own tick runs
+  // every 60 s; the fake runs one only when it is asked, through POST /dispatch or a test calling this. Each claim is a
+  // `claimed` event, so a live board sees the Card start.
+  ticks:0,
+  dispatch() {
+   this.ticks++;
+   const spawned=tasks.filter(task=>task.status==='ready'&&task.assignee);
+   for(const task of spawned) { Object.assign(task,{status:'running',started_at:++clock,claim_lock:`fake:${task.id}`,current_run_id:clock}); event(task.id,'claimed',{assignee:task.assignee}); }
+   return {reclaimed:0,crashed:[],timed_out:[],auto_blocked:[],promoted:0,spawned:spawned.map(task=>[task.id,task.assignee,`/opt/data/kanban/workspaces/${task.id}`]),skipped_unassigned:[],skipped_nonspawnable:[]};
+  },
+  // GET /board (get_board): every task not archived, in its status's column, each with its link, comment and child counts
+  // and its latest Run's summary; the queue columns by priority then age, Done newest finished first.
+  board({archived=false}={}) {
+   const counts=id=>({parents:links.filter(link=>link.child_id===id).length,children:links.filter(link=>link.parent_id===id).length});
+   const progress=id=>{ const children=links.filter(link=>link.parent_id===id).map(link=>tasks.find(task=>task.id===link.child_id)).filter(Boolean);
+    return children.length?{done:children.filter(child=>child.status==='done').length,total:children.length}:null; };
+   const now=Math.floor(Date.now()/1000);
+   const columns=[...kanbanStatuses,...archived?['archived']:[]].map(name=>{
+    const listed=tasks.filter(task=>task.status===name).map(task=>({...task,age:{created_age_seconds:now-task.created_at,started_age_seconds:task.started_at==null?null:now-task.started_at,
+     time_to_complete_seconds:task.completed_at==null?null:task.completed_at-(task.started_at??task.created_at)},latest_summary:summaryOf(task.id)?.slice(0,200)??null,current_run_started_at:null,
+     link_counts:counts(task.id),comment_count:comments.filter(comment=>comment.task_id===task.id).length,progress:progress(task.id),warnings:null}));
+    if(name==='done') listed.sort((a,b)=>(b.completed_at??0)-(a.completed_at??0)||(b.id<a.id?-1:1));
+    else listed.sort((a,b)=>b.priority-a.priority||a.created_at-b.created_at);
+    return {name,tasks:listed};
+   });
+   return {columns,tenants:[...new Set(tasks.flatMap(task=>task.tenant?[task.tenant]:[]))].sort(),assignees:[...new Set(tasks.flatMap(task=>task.assignee?[task.assignee]:[]))].sort(),
+    latest_event_id:events.length,now};
+  },
+ };
+}
+
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -176,6 +288,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // chat Run's input asks for: the Run makes it with the Engine's own cronjob tool, so only on a profile whose Runs are
   // offered that toolset, in that Run's own profile (tools/cronjob_tools.py).
   cron:/** @type {Map<string,any[]>} */(new Map()),cronOutcome:/** @type {'ok'|'error'} */('ok'),loseCronCreates:0,
+  // The Engine's default Kanban board (spec #831): its tasks, links and comments, served on the management listener's
+  // /api/plugins/kanban routes as the pinned release serves them (plugins/kanban/dashboard/plugin_api.py).
+  kanban:kanbanBoard(),
+  // The board's event socket (#840; plugin_api.py stream_events): the one-use tickets POST /api/auth/ws-ticket minted, the
+  // address of each socket opened (`kanbanSockets`, its query included) and how many are open now (`kanbanStreams`).
+  // `kanbanStreamDown` cuts the stream, as an Engine whose dashboard went away: every open socket ends and none opens.
+  socketTickets:/** @type {Map<string,number>} */(new Map()),kanbanSockets:/** @type {string[]} */([]),kanbanStreams:0,kanbanStreamDown:false,
   // What a Routine's run now answers (#182): each run is a cron session of the job's profile, `cron_<id>_<time>`, holding
   // the prompt and this reply, listed newest first by the job's runs route.
   // A function of the job answers each job its own way (#183: the night's results beside the morning's greeting).
@@ -1078,6 +1197,38 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      return send(response,200,annotated(job,owner));
     }
    }
+   // The Kanban board's routes (plugins/kanban/dashboard/plugin_api.py, mounted at /api/plugins/kanban), the default
+   // board when no ?board= is named.
+   if(url.pathname==='/api/plugins/kanban/board'&&request.method==='GET') return send(response,200,settings.kanban.board({archived:url.searchParams.get('include_archived')==='true'}));
+   // A one-use ticket for a socket upgrade, 30 seconds (dashboard_auth/routes.py api_auth_ws_ticket), which the board's
+   // event socket takes as `?ticket=` (#840).
+   if(url.pathname==='/api/auth/ws-ticket'&&request.method==='POST') {
+    const ticket=randomUUID().replaceAll('-','');
+    settings.socketTickets.set(ticket,Date.now()+30000);
+    return send(response,200,{ticket,ttl_seconds:30});
+   }
+   // A Card made (create_task: an empty title is a 400) and its Agent changed (update_task's assign_task: "" clears it,
+   // and a Card running under a claim is refused 409), and one dispatcher tick asked for now (#836).
+   if(url.pathname==='/api/plugins/kanban/tasks'&&request.method==='POST') {
+    if(typeof body?.title!=='string'||!body.title.trim()) return send(response,400,{detail:'title is required'});
+    return send(response,200,{task:settings.kanban.create(body)});
+   }
+   const kanbanTask=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)$/);
+   // One Card whole (get_task, #835): the task, its comments, events, links and Runs.
+   if(kanbanTask&&request.method==='GET') { const detail=settings.kanban.detail(decodeURIComponent(kanbanTask[1]));
+    return detail?send(response,200,detail):send(response,404,{detail:`task ${decodeURIComponent(kanbanTask[1])} not found`}); }
+   if(kanbanTask&&request.method==='PATCH') {
+    const task=settings.kanban.tasks.find(found=>found.id===decodeURIComponent(kanbanTask[1]));
+    if(!task) return send(response,404,{detail:`task ${kanbanTask[1]} not found`});
+    if(typeof body?.assignee==='string') {
+     if(task.claim_lock&&task.status==='running') return send(response,409,{detail:`cannot reassign ${task.id}: currently running (claimed). Wait for completion or reclaim the stale lock first.`});
+     if(task.assignee!==(body.assignee||null)) task.consecutive_failures=0;
+     task.assignee=body.assignee||null;
+     settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
+    }
+    return send(response,200,{task});
+   }
+   if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
    send(response,404,{detail:'Not Found'});
   });
  };
@@ -1108,6 +1259,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  management.on('upgrade',(request,socket,head)=>{
   const url=new URL(request.url||'/','http://management');
   if(url.pathname==='/api/display/ws') { sockets.handleUpgrade(request,socket,head,ws=>displayStream(ws,url.searchParams.get('display_ticket')??'')); return; }
+  if(url.pathname==='/api/plugins/kanban/events') { boardEvents(request,socket,head,url); return; }
   if(url.pathname!=='/api/ws'||url.searchParams.get('token')!==settings.key) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
   sockets.handleUpgrade(request,socket,head,ws=>{
    // The viewer ids display.observe minted on this connection: acquire and release take only those (methods_display.py
@@ -1170,6 +1322,26 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    });
   });
  });
+ // The board's event stream (plugins/kanban/dashboard/plugin_api.py stream_events): opened with a one-use ticket of
+ // POST /api/auth/ws-ticket, refused otherwise (the gate closes before accepting, which the client reads as a refused
+ // upgrade). It starts at `since`, or at the board's tail when none is sent, and every 300 ms sends the rows after its
+ // cursor, at most 200, as {events, cursor}; messages from the client are ignored.
+ function boardEvents(request,socket,head,url) {
+  const ticket=url.searchParams.get('ticket')??''; const expires=settings.socketTickets.get(ticket); settings.socketTickets.delete(ticket);
+  if(settings.kanbanStreamDown) { socket.destroy(); return; }
+  if(!expires||expires<Date.now()) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+  sockets.handleUpgrade(request,socket,head,ws=>{
+   settings.kanbanSockets.push(url.pathname+url.search); settings.kanbanStreams++;
+   const since=url.searchParams.get('since');
+   let cursor=since!==null&&/^\d+$/.test(since)?Number(since):settings.kanban.events.length;
+   const tail=setInterval(()=>{
+    if(settings.kanbanStreamDown) { ws.terminate(); return; }
+    const rows=settings.kanban.events.filter(row=>row.id>cursor).slice(0,200);
+    if(rows.length) { cursor=rows[rows.length-1].id; ws.send(JSON.stringify({events:rows,cursor})); }
+   },300);
+   ws.on('close',()=>{ clearInterval(tail); settings.kanbanStreams--; });
+  });
+ }
  // The live stream of a Screen (hermes_cli/web_routers/display.py): accepted, then closed with 4401 unless it brings a
  // ticket display.observe minted, unused and under 30 seconds old; with one, raw RFB 3.8 as binary frames from a Screen
  // of 64 by 40 with no password, which answers each full request with one plain picture. Keyboard and pointer messages

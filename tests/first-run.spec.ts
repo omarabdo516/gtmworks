@@ -255,9 +255,11 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
  }).toPass({timeout:30000});
  await page.goto(conversation);
  await expect(page.locator('[data-lead-line]')).toHaveText(leadLine[other]);
- // The board is empty, and the question is not asked again.
+ // The board is empty, and the question is not asked again. The board is the Company's Engine's own Kanban board
+ // (spec #831); this file runs no Engine, so its frame stands with its five columns and no Card (the empty board's
+ // note on a running Engine: fresh-install-journey.spec.ts).
  await page.goto(`/c/${slug}/work/board`);
- await expect(page.locator('.board-bare')).toBeVisible();
+ await expect(page.locator('#board-cols > .col')).toHaveCount(5);
  await expect(page.locator('.kcard')).toHaveCount(0);
  await page.goto(`/c/${slug}/home`);
  await expect(page.locator('.home-dashboard')).toBeVisible();

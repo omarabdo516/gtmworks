@@ -109,7 +109,8 @@ export const placements: Record<string, Placement> = {
   button: { path: '/c/rs-learning/settings/members', selector: 'main button[name="op"][value="update"]' },
   'button-hover': { path: '/c/rs-learning/settings/members', selector: 'main button[name="op"][value="update"]', hover: true },
   'button-primary': { path: '/c/rs-learning/projects', selector: 'main button.primary' },
-  'button-toolbar-primary': { path: board, selector: 'main [data-toolbar-primary]' },
+  // The work list's toolbar keeps New card until the board makes Cards on the Engine (#836).
+  'button-toolbar-primary': { path: '/c/rs-learning/work/list', selector: 'main [data-toolbar-primary]' },
   input: { path: '/c/rs-learning/projects', selector: 'main input:not([type=hidden]):not([type=checkbox])' },
   panel: { path: '/c/rs-learning/usage', selector: 'main section.panel' },
   'board-card': { path: board, selector: 'main .kcard' },
