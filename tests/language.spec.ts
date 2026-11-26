@@ -7,7 +7,7 @@ import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 import { appOrigin } from './lane.mjs';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 
 async function chooseLanguage(page:Page,language:Language) {
  await chooseLanguageInSettings(page,language);
@@ -81,13 +81,10 @@ test('English default, account language across sessions/devices, automatic conte
  const calendarTitles=[`ع 1440 ${suffix.toString(36)}`,`A 1440 ${suffix.toString(36)}`];
  const goLive=`${new Date().toISOString().slice(0,10)}T12:00`;
  const paths:string[]=[];
- ensureRequestAgent();
  for(const title of [...titles,...calendarTitles]) {
-  await page.goto('/c/rs-learning/work/new');
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button',{name:'Create card',exact:true}).click();
+  // An old Card on its own page, for the old calendar (#845): New card makes its Cards on the Engine since #836.
+  paths.push((await oldCard(page,title)).path);
   await expect(page.locator('.modal h2').first()).toHaveText(title);
-  paths.push(new URL(page.url()).pathname);
   await page.locator('input[name=go_live]').fill(goLive);
   await Promise.all([
    page.waitForResponse(response=>response.request().method()==='POST' && new URL(response.url()).pathname===paths.at(-1)),

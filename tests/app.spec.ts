@@ -2,7 +2,7 @@ import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the next
 // case reads the English faces (#257); Arabic at 390 is held to the design system (#805).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
@@ -167,13 +167,9 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await settings.getByLabel("New approver").selectOption('role:owner');
  await settings.getByRole('button',{name:"Add step"}).click();
  await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
- ensureRequestAgent();
- // New card opens at its own address over the old board until the board makes Cards on the Engine (#836).
- await page.goto('/c/rs-learning/work/new');
+ // An old Card on its own page: New card makes its Cards on the Engine since #836.
  const title=`بطاقة موافقة ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+ await oldCard(page,title);
  const cardUrl=page.url();
  await page.getByLabel("Caption",{exact:true}).fill('نص مخصص للمراجعة');
  await page.getByLabel("Offering",{exact:true}).fill('عرض مخصص للمراجعة');
@@ -205,12 +201,8 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);
  await page.goto(cardUrl);
  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
- ensureRequestAgent();
- await page.goto('/c/rs-learning/work/new');
  const rejected=`بطاقة رفض ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(rejected);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+ await oldCard(page,rejected);
  const rejectedUrl=page.url();
  await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');

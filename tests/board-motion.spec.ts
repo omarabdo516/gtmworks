@@ -1,7 +1,7 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 
 // The board's motion as built (#131; design-reference: dragStart, dragMove, dragScroll, dragEnd, land, boardEnter,
 // syncWaitMarks): a carried Card leans with the pointer and scrolls the columns at an edge, flies back when it moves
@@ -242,12 +242,8 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
  const tab=await context.newPage();
- ensureRequestAgent();
- await tab.goto('/c/rs-learning/work/new');
- await tab.getByLabel('Message',{exact:true}).fill(`Nudge ${Date.now()}`);
- await tab.getByRole('button',{name:'Create card'}).click();
- await expect(tab).toHaveURL(/\/work\/board\/\d+$/);
- const id=Number(new URL(tab.url()).pathname.split('/').pop());
+ // An old Card on its own page: New card makes its Cards on the Engine since #836.
+ const {id}=await oldCard(tab,`Nudge ${Date.now()}`);
  await tab.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
  await tab.getByRole('button',{name:'Add design'}).click();
  await expect(tab.getByText(/Version 1:/)).toBeVisible();

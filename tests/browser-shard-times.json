@@ -30,7 +30,6 @@
   "board.spec.ts": 267,
   "card-archive-busy.spec.ts": 94,
   "card-archive.spec.ts": 73,
-  "card-request.spec.ts": 29,
   "card-sheet.spec.ts": 33,
   "channel-archive.spec.ts": 36,
   "channel-files.spec.ts": 46,

@@ -62,6 +62,7 @@ const paths = {
  ask: <><path d="M4 5.5h16v10.5H9l-5 4z"/><path d="M10.2 9.1a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.3"/><path d="M12 14.1v.01"/></>,
  needsReview: <><path d="M11 21H6V3h7l5 5v3"/><path d="M13 3v5h5"/><circle cx="15" cy="16" r="3"/><path d="M17.2 18.2L20 21"/></>,
  alert: <><path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.5v.01"/></>,
+ bolt: <path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>,
  hourglass: <><path d="M7 3.5h10M7 20.5h10"/><path d="M8 3.5c0 4.5 8 4.5 8 8.5s-8 4-8 8.5"/><path d="M16 3.5c0 4.5-8 4.5-8 8.5s8 4 8 8.5"/></>,
  open: <><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></>,
 };

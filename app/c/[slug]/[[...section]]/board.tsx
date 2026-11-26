@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { BoardIcon } from '@/components/board-icon';
@@ -8,6 +8,10 @@ import { AgentFace } from '@/components/agent-face';
 import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { cardColumns, columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-columns.mjs';
 import '@/app/board.css';
+import type { MadeBoard } from './new-card';
+
+// New card (#836), loaded only when it is opened, so the board's first load stays small.
+const NewCard=lazy(()=>import('./new-card'));
 
 // The board (spec #831, #834): the Company's Engine's own Kanban board in gtmworks's look (design-reference-card:
 // renderBoard, kcardHTML), five columns and no Live (ADR 0033). The frame and the column heads are drawn at once, from
@@ -16,7 +20,7 @@ import '@/app/board.css';
 // The last good read stays: it is shown while the board reads again and kept when the Engine does not answer, which the
 // board says in one line. It lives in this browser's memory only, never in storage, and never in a table.
 
-export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,comments:number};
+export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,comments:number};
 type Agent={id:string,name:string};
 type Board={cards:BoardCard[],main:Agent|null};
 type Read={board:Board|null,state:'reading'|'read'|'failed'};
@@ -27,8 +31,10 @@ const kept=new Map<string,Board>();
 const againAfter=[3000,10000,30000];
 const slowRead=30000;
 
-function useBoard(company:string):Read {
+// `accept` takes the board a write answered with (#836): it is a read like any other.
+function useBoard(company:string):Read&{accept:(board:Board)=>void} {
  const [read,setRead]=useState<Read>(()=>({board:kept.get(company)??null,state:'reading'}));
+ const accept=useCallback((board:Board)=>{ kept.set(company,board); setRead({board,state:'read'}); },[company]);
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined; let tries=0; let asking=false;
   const controller=new AbortController();
@@ -52,7 +58,7 @@ function useBoard(company:string):Read {
   window.addEventListener('focus',ask); document.addEventListener('visibilitychange',back);
   return ()=>{ stopped=true; clearTimeout(timer); controller.abort(); window.removeEventListener('focus',ask); document.removeEventListener('visibilitychange',back); };
  },[company]);
- return read;
+ return {...read,accept};
 }
 
 // One shape, one colour and one name for each state (design-reference-card: SYMS); the name is the tooltip and what
@@ -63,24 +69,26 @@ const symbols:{[kind in CardSymbol['kind']]:{icon?:ShellIconName,tone:'ok'|'wait
 const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',waits:'symWaits'} as const;
 const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],done:['boardEmptyDone','']};
 
-export default function Board({company,slug,writer}:{company:string,slug:string,writer:boolean}) {
+export default function Board({company,slug,writer,creating=false}:{company:string,slug:string,writer:boolean,creating?:boolean}) {
  const {t}=useI18n();
  const read=useBoard(company);
+ // New card is open (#836): at /work/new it opens with the page, and closing it leaves the board at its own address.
+ const [making,setMaking]=useState(creating&&writer); const opener=useRef<HTMLButtonElement>(null); const [made,setMade]=useState<string|null>(null);
  const cards=read.board?.cards??null; const main=read.board?.main??null;
  const base=`/c/${slug}/work`;
  const columnName=(column:string)=>t(columnLabel(column,writer));
  const symbolName=(symbol:CardSymbol)=>symbol.kind==='waits'&&symbol.count>1?t('symWaitsN',symbol.count):t(symbolKey[symbol.kind]);
  const cardView=(card:BoardCard)=>{
-  const who=card.agent?.name||t('boardCardNoOne');
+  const who=card.agent?.name||card.person?.name||t('boardCardNoOne');
   const comments=card.comments===1?t('boardCardComment'):t('boardCardComments',card.comments);
   const label=[card.title,columnName(card.column),card.symbol?symbolName(card.symbol):'',t('boardCardAssignee',who),card.comments?comments:''].filter(Boolean).join(' · ');
   const symbol=card.symbol&&symbols[card.symbol.kind];
-  return <article key={card.id} className="kcard card" data-card={card.id} aria-label={label}>
+  return <article key={card.id} className={`kcard card${made===card.id?' is-flash':''}`} data-card={card.id} aria-label={label}>
    <span className="kt-head"><strong className="kcard__title authored-title" dir="auto">{card.title}</strong>
     {card.symbol&&symbol&&<span className="kt-syms"><span className={`sym sym--${symbol.tone}`} data-sym={card.symbol.kind} role="img" aria-label={symbolName(card.symbol)} title={symbolName(card.symbol)}>
      {symbol.icon?<ShellIcon name={symbol.icon}/>:<span className="sym__dot"/>}{card.symbol.kind==='waits'&&card.symbol.count>1&&<span className="sym__n num" aria-hidden="true">{card.symbol.count}</span>}</span></span>}</span>
    <span className="kcard__foot">
-    <span className="kt-face" title={who}>{card.agent?<AgentFace agent={card.agent.id} size={20}/>:<span className="cw-noone" style={{'--av':'20px'} as CSSProperties} aria-hidden="true"/>}</span>
+    <span className="kt-face" title={who}>{card.agent?<AgentFace agent={card.agent.id} size={20}/>:card.person?<span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(card.person.name.trim())[0]||'?'}</span>:<span className="cw-noone" style={{'--av':'20px'} as CSSProperties} aria-hidden="true"/>}</span>
     {card.comments>0&&<span className="kt-metas"><span className="kt-m" title={comments}><ShellIcon name="chat"/><span className="num">{card.comments}</span></span></span>}
    </span>
   </article>;
@@ -92,6 +100,7 @@ export default function Board({company,slug,writer}:{company:string,slug:string,
   <div className="board-tools">
    {!writer&&<span className="board-tools__summary" role="note"><BoardIcon name="eye"/>{t('boardReadOnly')}</span>}
    <BoardPager/>
+   {writer&&<button ref={opener} type="button" className="btn btn--primary btn--sm bt-new" aria-haspopup="dialog" onClick={()=>setMaking(true)}><ShellIcon name="plus"/><span className="bt-new__t">{t('newCard')}</span></button>}
   </div>
   {read.state==='reading'&&!cards&&<p role="status" className="board-status">{t('boardReading')}</p>}
   {read.state==='failed'&&(cards?<p role="status" className="board-status">{t('boardRefreshFailed')}</p>:<p role="alert" className="work-error">{t('boardReadFailed')}</p>)}
@@ -106,5 +115,7 @@ export default function Board({company,slug,writer}:{company:string,slug:string,
     </section>;
    })}
   </div>
+ {making&&<Suspense fallback={null}><NewCard company={company} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}
+  onClose={()=>{ setMaking(false); if(creating&&window.location.pathname.endsWith('/work/new')) window.history.replaceState(window.history.state,'',`${base}/board`); opener.current?.focus(); }}/></Suspense>}
  </div></div>;
 }

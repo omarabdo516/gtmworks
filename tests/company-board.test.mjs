@@ -13,10 +13,14 @@ const profileOf=id=>`ag-${id.replaceAll('-','')}`;
 const agents=[{agent:lead,name:'Lead',profile:companyProfile,main:true},{agent:ads,name:'Ads',profile:profileOf(ads),main:false}];
 // The reader's own session: the Company's profiles (company_engine_target) and the Agents they see (company_app_agents),
 // Seo among the Company's profiles but hidden from this reader.
-const reader=(seen=agents)=>({rpc:async name=>{
+// Its rows beside the Cards (kanban_cards, #836): the Member each Card is given to, with their name.
+const reader=(seen=agents,rows=[])=>({rpc:async name=>{
  if(name==='company_engine_target') return {data:[{profile:companyProfile,profiles:[companyProfile,profileOf(ads),profileOf(seo)]}],error:null};
  if(name==='company_app_agents') return {data:seen,error:null};
  return {data:null,error:{message:`unexpected ${name}`}};
+},from:table=>{
+ const read={select:()=>read,eq:()=>read,not:()=>read,then:(done,failed)=>Promise.resolve(table==='kanban_cards'?{data:rows,error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
+ return read;
 }});
 
 test('every Card on the Engine is in its column with its title, its Agent and its symbol', async () => {
@@ -75,6 +79,21 @@ test('a Card of an Agent hidden from the reader is not on their board; a Card fo
   assert.deepEqual(read.cards.map(card=>card.id).sort(),[root,seen].sort());
   assert.equal(read.cards.find(card=>card.id===root).agent,null);
   assert.ok(!read.cards.some(card=>card.id===hidden));
+ } finally { await fake.close(); }
+});
+
+test('a Card given to a Member shows that Member, and a Card with an Agent on the Engine is the Agent\'s alone', async () => {
+ const fake=await engineServing(company);
+ try {
+  const mona='20000000-0000-0000-0000-000000000003';
+  const theirs=fake.settings.kanban.task({title:'Shoot the reel',status:'ready'}).id;
+  const taken=fake.settings.kanban.task({title:'Ad copy',status:'ready',assignee:profileOf(ads)}).id;
+  const nobody=fake.settings.kanban.task({title:'Someday',status:'ready'}).id;
+  const read=await readCompanyBoard(reader(agents,[{task_id:theirs,assignee:mona,people:{name:'Mona'}},{task_id:taken,assignee:mona,people:{name:'Mona'}}]),{company});
+  const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
+  assert.deepEqual([shown[theirs].person,shown[theirs].agent],[{id:mona,name:'Mona'},null]);
+  assert.deepEqual([shown[taken].person,shown[taken].agent],[null,{id:ads,name:'Ads'}]);
+  assert.deepEqual([shown[nobody].person,shown[nobody].agent],[null,null]);
  } finally { await fake.close(); }
 });
 
