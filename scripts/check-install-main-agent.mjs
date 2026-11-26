@@ -81,11 +81,12 @@ const offered=async()=>{
 
 // The fake model: a message naming the tool has the model call it through the Engine's tool search bridge (the plugin's
 // tool is deferred, docs/engine-probes/plugin-tool.md section 3), and the model says what the tool answered.
-const results=[];
+const results=[], requests=[];
 const fakeModel=async()=>{
  const server=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    if(request.method!=='POST'||!request.url.endsWith('/chat/completions')) { response.writeHead(404); return response.end(); }
+   requests.push(raw);
    const body=JSON.parse(raw||'{}');
    const last=body.messages?.at(-1);
    if(last?.role==='tool') results.push(String(last.content));
@@ -119,7 +120,11 @@ const run=async(name,input,session)=>{
 const asked=async(session,args)=>{
  const before=results.length;
  const ended=await run(profile,`Make an Agent for us.\nMAKE ${JSON.stringify(args)}`,session);
- assert.equal(ended.status,'completed',JSON.stringify(ended).slice(0,400));
+ if(ended.status!=='completed') {
+  // What the Engine kept of the failed Run, and what the fake model was asked, for the reason.
+  const kept=await (await manage(`/api/sessions/${encodeURIComponent(session)}/messages?profile=${profile}&order=latest&limit=10`)).text();
+  assert.fail(`the Run in ${session} ${ended.status}: ${JSON.stringify(ended).slice(0,300)}; session ${kept.slice(0,1200)}; model saw ${requests.slice(-2).map(raw=>raw.slice(-800)).join(' | ')}`);
+ }
  const answer=results.slice(before).map(text=>{ try { return JSON.parse(text); } catch { return null; } }).find(one=>one&&'success' in one);
  assert.ok(answer,`the tool answered in ${session}: ${JSON.stringify(results.slice(before)).slice(0,400)}`);
  return answer;

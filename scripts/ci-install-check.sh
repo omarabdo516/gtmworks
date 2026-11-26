@@ -805,11 +805,13 @@ engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps come 
 # answers at once in a session marked as an Owner's, refuses an unmarked one with its reason, and its route refuses a call
 # without the Engine's key. The Engine's network stays closed to the install throughout. The same after `gtmworks update`.
 plugin_marker="plugin-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-engine_node "$engine_key" - make "$plugin_marker" < scripts/check-install-main-agent.mjs || fail "the main Agent's tool is offered after the install, makes an Agent for an Owner and refuses anyone else"
+# A failed Run's reason is in the Engine's own logs, which the check cannot read from the web container.
+engine_errors() { docker exec "$(first_engine_id)" sh -c 'tail -n 40 /opt/data/logs/errors.log /opt/data/profiles/co-*/logs/errors.log 2> /dev/null; grep -hiE "gtmworks|tool_call|error" /opt/data/profiles/co-*/logs/agent.log 2> /dev/null | tail -n 40' >&2 || true; }
+engine_node "$engine_key" - make "$plugin_marker" < scripts/check-install-main-agent.mjs || { engine_errors; fail "the main Agent's tool is offered after the install, makes an Agent for an Owner and refuses anyone else"; }
 sh scripts/install.sh update "$INSTALL_REF" > plugin-update.log 2>&1 || { tail -n 40 plugin-update.log >&2; fail 'gtmworks update of the agents install'; }
 main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 engine_healthy "$(first_engine_id)" 120 || fail 'the Engine is healthy after the update'
-engine_node "$engine_key" - make "$plugin_marker-update" < scripts/check-install-main-agent.mjs || fail "the main Agent's tool is offered after gtmworks update, makes an Agent for an Owner and refuses anyone else"
+engine_node "$engine_key" - make "$plugin_marker-update" < scripts/check-install-main-agent.mjs || { engine_errors; fail "the main Agent's tool is offered after gtmworks update, makes an Agent for an Owner and refuses anyone else"; }
 scan_engines
 }
 
