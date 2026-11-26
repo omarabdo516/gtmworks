@@ -12,7 +12,7 @@ Omar's decision of 2026-11-26 (vault decision 0074, a grill of thirteen question
 - ADR 0017 where it keeps a Conversation's record in gtmworks, and [ADR 0029](0029-a-message-is-stored-before-its-run-starts.md), which stores a person's message there first;
 - [ADR 0031](0031-one-way-to-the-engine-and-one-run-lifecycle.md) where it covers Conversations, Channels, Handovers and Good morning.
 
-Not built yet. The code, `GLOSSARY.md` and the tests describe today's product until each spec lands; a spec changes the glossary terms it touches in its own pull request.
+Item 4 is built (spec #866, 2026-11-26): the Owner opens the Engine's own dashboard behind gtmworks's gate. The rest is not built yet. The code, `GLOSSARY.md` and the tests describe today's product until each spec lands; a spec changes the glossary terms it touches in its own pull request.
 
 ## Context
 
@@ -46,6 +46,7 @@ Not built yet. The code, `GLOSSARY.md` and the tests describe today's product un
      - importing a backup over the Engine's data;
      - making, renaming or deleting a profile, so that gtmworks's list of Agents and the Engine's never disagree.
    - The dashboard's sockets are carried by gtmworks's own web server (spec #866): within five seconds of a person's Role changing, their membership ending or their session ending, every dashboard socket they hold is closed and none reopens.
+   - No answer to the browser holds the Engine's own key, a socket's frames included: an answer or a frame that would carry it is not sent (#892). What keeps an Agent's work in the Company's Work sandbox is pinned in the Engine's managed settings, which no dashboard write changes: the terminal backend, the tools no Agent gets and the file tools' write root (#893).
 5. **Owner, Manager, Contributor and Viewer keep fixed meanings.** Changing a Role's permissions for a Company and the separate Grants go.
    - Which Agents a Member talks to stays, in its simplest form (Omar, 2026-11-26, vault decision 0074, round 5, changing the answer that first removed it): the Agents are picked for each Member as they are today, as for a content writer who sees the content Agents and not the main Agent. An Agent not picked is not shown to that Member, and a Conversation with it is refused.
    - It is a convenience, not a wall. The board is shared: every Member sees every Agent's Cards.
