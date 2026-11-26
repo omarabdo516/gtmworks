@@ -75,7 +75,7 @@ requests allowed and 17 refused, 6 WebSocket upgrades allowed and 1 refused.
 
 `window.__HERMES_SESSION_TOKEN__` is absent (the dashboard runs gated and withholds it), the dashboard set no cookie,
 and the Engine's key appeared nowhere in cookies, storage, addresses or frames. The dashboard shows every Owner as one
-identity, "Deployment session token": the Engine cannot tell two Owners apart.
+identity, the deployment's own (`user_id: deployment-token`): the Engine cannot tell two Owners apart.
 
 # 5. The look, Arabic and the live parts (#827)
 
@@ -132,7 +132,7 @@ Tried through the gateway as the Owner where marked; the others are read from th
   kept but has no effect there. Anything else an Owner can change.
 - **Ship the theme with the install** (`dashboard-themes/gtmworks.yaml` and `dashboard.theme`), and set the dashboard's
   language from the person's gtmworks language; its Arabic is partial.
-- **Expect one identity.** Every Owner is "Deployment session token" to the Engine, so what an Owner does there is in
+- **Expect one identity.** Every Owner is the deployment's one identity to the Engine, so what an Owner does there is in
   no log with their name unless gtmworks's gateway writes it.
 - **Do not use the OIDC way** unless gtmworks becomes an OpenID provider over https that the Engine can reach, which
   ADR 0018 rules out.
