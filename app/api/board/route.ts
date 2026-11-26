@@ -20,7 +20,7 @@ export async function GET(request:NextRequest) {
   if(allowed==='failed') return reply({error:'boardUnreachable'},503);
   if(allowed!=='allowed') return reply({error:'boardNotFound'},404);
   const read=await readCompanyBoard(db,{company});
-  if(read.state==='found') return reply({cards:read.cards});
+  if(read.state==='found') return reply({cards:read.cards,main:read.main});
   return reply({error:read.state==='noEngine'?'boardNoEngine':'boardUnreachable'},503);
  } catch { return reply({error:'boardFailed'},500); }
 }

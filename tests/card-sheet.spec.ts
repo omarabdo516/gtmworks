@@ -4,39 +4,14 @@ import { signIn } from './sign-in';
 // A Card on the Marketing board opens as the approved sheet over the board (#116; design-reference: openSheet,
 // renderSheetHead, cardLogHTML). The seed's RS Learning: card 1 is in Ideas with its Agent, card 5 waits for Omar's (the
 // Owner's) approval. Nothing ties a Card to a Conversation yet, so every sheet opens on Log and Chat is not open.
+// Spec #831 made /work/board the Engine's own Kanban board (#834): a sheet at ?card= still opens over the old board until
+// the Engine's Card window replaces it (#835).
 const board = '/c/rs-learning/work/board';
 const sheetOf = (page: Page) => page.getByRole('dialog');
-const cardLink = (page: Page, id: number) => page.locator(`#board-cols .kcard[data-card-id="${id}"] a`);
 // What the board's Card says it is for: its Agent's job, else its channel. The seed's Cards have no Agent of the Company
 // (spec #695 made the old role agents people), so the sheet's head names the same channel.
 const jobOn = async (page: Page, id: number) => (await page.locator(`#board-cols .kcard[data-card-id="${id}"] .kcard__foot bdi`).first().textContent())!.trim();
 const at = (path: string) => new RegExp(`${path.replace('?', '\\?')}$`);
-
-test('a click or Enter opens a Card over the board at an address that reloads; Escape and Close give the Card the keyboard back', async ({ page }) => {
- await signIn(page, 'omar@example.com', board);
- const title = (await cardLink(page, 1).textContent())!.trim();
- const sheet = sheetOf(page);
- await cardLink(page, 1).click();
- await expect(sheet).toBeVisible();
- await expect(page).toHaveURL(at(`${board}?card=1`));
- await expect(sheet.getByRole('heading', { level: 2 })).toHaveText(title);
- await expect(page.locator('#board-cols .kcard[data-card-id="1"]')).toBeVisible();
- await page.keyboard.press('Escape');
- await expect(sheet).toHaveCount(0);
- await expect(page).toHaveURL(at(board));
- await expect(cardLink(page, 1)).toBeFocused();
-
- await page.keyboard.press('Enter');
- await expect(sheet).toBeVisible();
- await expect(page).toHaveURL(at(`${board}?card=1`));
- await page.reload();
- await expect(sheet.getByRole('heading', { level: 2 })).toHaveText(title);
- await expect(page.locator('#board-cols .kcard[data-card-id="1"]')).toBeVisible();
- await sheet.getByRole('button', { name: 'Close', exact: true }).click();
- await expect(sheet).toHaveCount(0);
- await expect(page).toHaveURL(at(board));
- await expect(cardLink(page, 1)).toBeFocused();
-});
 
 test('for the Owner the head names the Agent, else the channel, and where the Card stands; Chat is not open and Log is', async ({ page }) => {
  // A shared address opens the sheet once its reader has signed in.

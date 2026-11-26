@@ -17,16 +17,18 @@ import '@/app/board.css';
 // board says in one line. It lives in this browser's memory only, never in storage, and never in a table.
 
 export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,comments:number};
-type Read={cards:BoardCard[]|null,state:'reading'|'read'|'failed'};
+type Agent={id:string,name:string};
+type Board={cards:BoardCard[],main:Agent|null};
+type Read={board:Board|null,state:'reading'|'read'|'failed'};
 
-const kept=new Map<string,BoardCard[]>();
+const kept=new Map<string,Board>();
 // A read that failed is asked again after a pause, longer each time; a good one is read again on a slow timer and when
 // the window comes back to the board, until the live stream of #840 carries every change.
 const againAfter=[3000,10000,30000];
 const slowRead=30000;
 
 function useBoard(company:string):Read {
- const [read,setRead]=useState<Read>(()=>({cards:kept.get(company)??null,state:'reading'}));
+ const [read,setRead]=useState<Read>(()=>({board:kept.get(company)??null,state:'reading'}));
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined; let tries=0; let asking=false;
   const controller=new AbortController();
@@ -35,12 +37,13 @@ function useBoard(company:string):Read {
    if(asking||stopped) return;
    asking=true;
    void fetch(`/api/board?company=${encodeURIComponent(company)}`,{cache:'no-store',signal:controller.signal})
-    .then(async response=>response.ok?await response.json() as {cards?:unknown}:null,()=>null)
+    // The answer is read whole either way, so a refused read leaves no response open behind it.
+    .then(async response=>{ const body=await response.json().catch(()=>null) as {cards?:unknown,main?:Agent|null}|null; return response.ok?body:null; },()=>null)
     .then(body=>{
      asking=false;
      if(stopped) return;
-     if(body&&Array.isArray(body.cards)) { const cards=body.cards as BoardCard[]; kept.set(company,cards); tries=0; setRead({cards,state:'read'}); next(slowRead); return; }
-     setRead({cards:kept.get(company)??null,state:'failed'});
+     if(body&&Array.isArray(body.cards)) { const board={cards:body.cards as BoardCard[],main:body.main??null}; kept.set(company,board); tries=0; setRead({board,state:'read'}); next(slowRead); return; }
+     setRead({board:kept.get(company)??null,state:'failed'});
      next(againAfter[Math.min(tries++,againAfter.length-1)]);
     });
   }
@@ -63,6 +66,7 @@ const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting',
 export default function Board({company,slug,writer}:{company:string,slug:string,writer:boolean}) {
  const {t}=useI18n();
  const read=useBoard(company);
+ const cards=read.board?.cards??null; const main=read.board?.main??null;
  const base=`/c/${slug}/work`;
  const columnName=(column:string)=>t(columnLabel(column,writer));
  const symbolName=(symbol:CardSymbol)=>symbol.kind==='waits'&&symbol.count>1?t('symWaitsN',symbol.count):t(symbolKey[symbol.kind]);
@@ -89,15 +93,16 @@ export default function Board({company,slug,writer}:{company:string,slug:string,
    {!writer&&<span className="board-tools__summary" role="note"><BoardIcon name="eye"/>{t('boardReadOnly')}</span>}
    <BoardPager/>
   </div>
-  {read.state==='reading'&&!read.cards&&<p role="status" className="board-status">{t('boardReading')}</p>}
-  {read.state==='failed'&&(read.cards?<p role="status" className="board-status">{t('boardRefreshFailed')}</p>:<p role="alert" className="work-error">{t('boardReadFailed')}</p>)}
+  {read.state==='reading'&&!cards&&<p role="status" className="board-status">{t('boardReading')}</p>}
+  {read.state==='failed'&&(cards?<p role="status" className="board-status">{t('boardRefreshFailed')}</p>:<p role="alert" className="work-error">{t('boardReadFailed')}</p>)}
+  {cards&&!cards.length&&main&&<div className="board-bare" role="note"><span aria-hidden="true"><AgentFace agent={main.id} size={32}/></span><p>{t('boardEmpty',main.name)}</p>{writer&&<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',main.name)}</span></Link>}</div>}
   <div className="board board-cols" id="board-cols" aria-label={t('workBoard')} aria-busy={read.state==='reading'}>
    {cardColumns.map(column=>{
-    const list=read.cards?.filter(card=>card.column===column)??[];
+    const list=cards?.filter(card=>card.column===column)??[];
     const waiting=column==='waiting';
     return <section key={column} className={`col${waiting?' col--waiting':''}`} data-column={column} aria-labelledby={`col-${column}`}>
-     <div className="col__head">{waiting&&<span className="dot dot--waiting" aria-hidden="true"/>}<h2 className="col__name" id={`col-${column}`}>{columnName(column)}</h2><span className="col__count num">{read.cards?list.length:''}</span></div>
-     <div className="col__body">{list.map(cardView)}{read.cards&&!list.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}</div>
+     <div className="col__head">{waiting&&<span className="dot dot--waiting" aria-hidden="true"/>}<h2 className="col__name" id={`col-${column}`}>{columnName(column)}</h2><span className="col__count num">{cards?list.length:''}</span></div>
+     <div className="col__body">{list.map(cardView)}{cards&&!list.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}</div>
     </section>;
    })}
   </div>

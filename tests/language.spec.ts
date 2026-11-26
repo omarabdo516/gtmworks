@@ -121,7 +121,7 @@ test('English default, account language across sessions/devices, automatic conte
    await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:new RegExp(`^${t('settings')}`)})).toHaveAttribute('href','/c/rs-learning/settings');
    await page.keyboard.press('Escape');
    await expect(page.getByRole('menu')).toHaveCount(0);
-   await page.goto('/c/rs-learning/work/board');
+   await page.goto('/c/rs-learning/approvals'); // The old board's Cards, until the Engine's board opens Cards (#835).
    for(const [index,title] of titles.entries()) {
     const link=page.locator('.card').getByRole('link',{name:title,exact:true});
     const titleNode=link.locator('strong');
@@ -132,7 +132,7 @@ test('English default, account language across sessions/devices, automatic conte
     await expect(page.locator('.modal h2').first()).toHaveCSS('direction',index===0?'rtl':'ltr');
     await expectNumberOrder(page.locator('.modal h2').first(),index===0);
     await expect(page.locator('.recent-cards').getByRole('link',{name:title,exact:true}).locator('.recent-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
-    await page.goto('/c/rs-learning/work/board');
+    await page.goto('/c/rs-learning/approvals');
    }
    await page.goto('/c/rs-learning/work/calendar');
    for(const [index,title] of [...calendarTitles,...titles].entries()) {
@@ -174,7 +174,7 @@ test('English default, account language across sessions/devices, automatic conte
      expect(language==='en'?sidebar.x:sidebar.x+sidebar.width).toBe(language==='en'?0:width);
      await closeNavigation(page);
      if(section==='work/board') {
-      const columns=page.locator('.column');
+      const columns=page.locator('#board-cols > .col');
       const first=(await columns.nth(0).boundingBox())!,second=(await columns.nth(1).boundingBox())!;
       expect(language==='ar'?first.x>second.x:first.x<second.x).toBe(true);
      }

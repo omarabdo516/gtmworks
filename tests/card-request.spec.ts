@@ -7,6 +7,8 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // Spec #695: a new Card's request goes to one of the Company's own Agents; the seed gives RS Learning none, so this file
 // makes its main Agent and removes it after each test.
+// The old board's Cards stay on the board opened on Waiting on you (/approvals) until the Engine's board makes Cards
+// (#836) and the old board is switched off (#846).
 const lead='a6950000-0000-0000-0000-000000000001';
 test.beforeEach(()=>{ query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${lead}','10000000-0000-0000-0000-000000000001','Lead','General','request-lead-${process.pid}',true) on conflict (id) do nothing`); });
 test.afterEach(()=>{ query(`delete from public.hermes_agents where id='${lead}'`); });
@@ -33,7 +35,7 @@ test('a message to an agent makes one card in Ideas with its message, assignment
   const cardPath=new URL(page.url()).pathname;
   await expect(page.locator('.modal .comment-body').filter({hasText:'Mention the early price'})).toBeVisible();
   await expect(page.locator('.card-stage-line .mode-chip')).toHaveText('Do it now');
-  await page.goto('/c/rs-learning/work/board');
+  await page.goto('/c/rs-learning/approvals');
   const onBoard=page.locator('.column[data-stage-name="أفكار"] .card').filter({hasText:title});
   await expect(onBoard).toHaveCount(1);
   await expect(page.locator('.card').filter({hasText:title})).toHaveCount(1);
@@ -57,7 +59,7 @@ test('a message to an agent makes one card in Ideas with its message, assignment
 });
 
 test('the composer loads when it is opened and shows the page-opening bar while it arrives',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  await expect(page.locator('.column').first()).toBeVisible();
  await page.waitForLoadState('networkidle');
  // Scripts that are still missing now are fetched on demand; hold them back to see the wait.

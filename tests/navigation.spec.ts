@@ -23,9 +23,9 @@ test.beforeAll(async ({ browser }, testInfo) => {
   try {
     const page = await context.newPage();
     ensureRequestAgent();
-    await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
+    // New card opens at its own address over the old board until the board makes Cards on the Engine (#836).
+    await signIn(page, 'omar@example.com', '/c/rs-learning/work/new');
     const title = `بطاقة قياس الوارد ${randomUUID()}`;
-    await page.getByRole('button', { name: "+ New card" }).click();
     await page.getByLabel('Message', { exact: true }).fill(title);
     await page.getByRole('button', { name: "Create card" }).click();
     await expect(page.locator('.modal h2').first()).toHaveText(title);
@@ -155,8 +155,9 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
 });
 
 // #771, #739: a link loads its page only on intent. Loading the board renders no other page in the background; pointing
-// at a link prefetches its whole page, which the press then opens; closing the sheet reuses the visited board.
-test('links prefetch only on intent: nothing in the background, a pointed link\'s whole page, and closing reuses the visited board', async ({ page: sessionPage }) => {
+// at a link prefetches its whole page, which the press then opens. Closing a Card's sheet over the visited board returns
+// with the Engine's Card window (#835).
+test('links prefetch only on intent: nothing in the background, and a pointed link\'s whole page', async ({ page: sessionPage }) => {
   await signIn(sessionPage, 'manager@example.com', '/c/rs-learning/work/board');
   const page = await sessionPage.context().newPage();
   const prepared = new Map<string, string>();
@@ -181,23 +182,12 @@ test('links prefetch only on intent: nothing in the background, a pointed link\'
   expect(prepared.get('/c/rs-learning/numbers'), 'page data, not a partial layout/loading shell').toContain('"content"');
   expect([...prepared.keys()], 'and only that one').toEqual(['/c/rs-learning/numbers']);
   await closeNavigation(page);
-  await page.locator('.card a[href$="/board?card=1"]').click();
-  await expect(page.locator('.sheet[open]')).toBeVisible();
-  await idle(page);
-  const requests: string[] = [];
-  page.on('request', request => {
-    if (new URL(request.url()).pathname.startsWith('/c/')) requests.push(request.url());
-  });
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.locator('.sheet')).toHaveCount(0);
-  await idle(page);
-  expect(requests, 'return to the board must make no company server request').toEqual([]);
 });
 
 test('reduced motion disables hover, veil and card animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
-  for (const step of clickPath.slice(0, 7)) {
+  for (const step of clickPath.slice(0, 5)) {
     const timing = await measureClick(page, step);
     expect(timing.longest).toBe(0);
   }
@@ -205,9 +195,9 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
 
 test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
   ensureRequestAgent();
-  await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
-  await idle(page); // Home, board and the inbox are prepared before any write.
-  await page.getByRole('button', { name: "+ New card" }).click();
+  // New card opens at its own address over the old board until the board makes Cards on the Engine (#836).
+  await signIn(page, 'omar@example.com', '/c/rs-learning/work/new');
+  await idle(page); // Home, the board and the inbox are prepared before any write.
   const title = `بطاقة تحديث فوري ${Date.now()}`;
   await page.getByLabel('Message',{exact:true}).fill(title);
   await page.getByRole('button', { name: "Create card" }).click();
@@ -218,6 +208,9 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.getByRole('button', { name: "Send", exact: true }).click();
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
   await page.locator('.close-card').click();
+  // Closing the Card's page lands on the board, the Engine's own Kanban board since spec #831.
+  await expect(page).toHaveURL(/\/work\/board$/);
+  await expect(page.locator('#board-cols > .col')).toHaveCount(5);
   // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
   await openMoreSection(page, 'home');
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
@@ -225,6 +218,8 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
   await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
   await page.locator('.close-card').click();
+  // The old board's columns stay on the board opened on Waiting on you until spec #831 takes it off (#846).
+  await page.goto('/c/rs-learning/approvals');
   await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
@@ -238,8 +233,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   await expect(queued).toHaveCount(0);
-  await openNavigation(page);
-  await page.locator('.nav a[href$="/work/board"]').click();
+  await page.goto('/c/rs-learning/approvals');
   await expect(page.locator('.column[data-stage-name="معتمد"] .card').filter({ hasText: title })).toBeVisible();
 });
 

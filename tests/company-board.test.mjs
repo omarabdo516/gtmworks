@@ -51,6 +51,8 @@ test('every Card on the Engine is in its column with its title, its Agent and it
   assert.deepEqual(shown[waits].symbol,{kind:'waits',count:1});
   assert.equal(shown[ready].symbol,null);
   assert.equal(shown[done].comments,1);
+  // The main Agent, whom an empty board names.
+  assert.deepEqual(read.main,{id:lead,name:'Lead'});
   // An archived Card is on no column.
   assert.equal(read.cards.length,9);
   // The answer names no profile and no key: the browser never learns how the Engine is reached.

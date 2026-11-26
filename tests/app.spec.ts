@@ -168,8 +168,8 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await settings.getByRole('button',{name:"Add step"}).click();
  await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
  ensureRequestAgent();
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
+ // New card opens at its own address over the old board until the board makes Cards on the Engine (#836).
+ await page.goto('/c/rs-learning/work/new');
  const title=`بطاقة موافقة ${Date.now()}`;
  await page.getByLabel('Message',{exact:true}).fill(title);
  await page.getByRole('button',{name:"Create card"}).click();
@@ -206,8 +206,7 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await page.goto(cardUrl);
  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
  ensureRequestAgent();
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
+ await page.goto('/c/rs-learning/work/new');
  const rejected=`بطاقة رفض ${Date.now()}`;
  await page.getByLabel('Message',{exact:true}).fill(rejected);
  await page.getByRole('button',{name:"Create card"}).click();

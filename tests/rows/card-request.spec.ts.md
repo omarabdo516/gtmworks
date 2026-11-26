@@ -1,4 +1,4 @@
-| `card-request.spec.ts` | A message to an agent makes one card in Ideas with its message, assignment and mode; the composer loads on open. | 8.6 s | — | keep (#218, case by case above) |
+| `card-request.spec.ts` | The old board, on the board opened on Waiting on you (/approvals) since #834 made /work/board the Engine's own Kanban board, until #846 switches it off: A message to an agent makes one card in Ideas with its message, assignment and mode; the composer loads on open. | 8.6 s | — | keep (#218, case by case above) |
 
 ## Cases
 

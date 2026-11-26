@@ -275,15 +275,16 @@ test('the company switcher lists only the person\'s companies, and the old all-c
 
 test('mobile recent cards record opens while the drawer stays closed',async({page})=>{
  await page.setViewportSize({width:390,height:900});
- await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
- await idle(page);
+ await signIn(page,'reviewer@example.com','/c/rs-learning/approvals');
  for(const id of [3,4]) {
-  // A Card opens as its sheet over the board (#116), and that open is recorded as one.
-  await page.locator(`.card a[href$="/board?card=${id}"]`).click();
-  await expect(page.locator('.sheet[open]')).toBeVisible();
+  // A Card opened from the old board, which stays on the board opened on Waiting on you until the Engine's Card window
+  // replaces it (#835, #846), is recorded as one open.
+  await page.goto('/c/rs-learning/approvals');
   await idle(page);
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
-  await expect(page.locator('.sheet')).toHaveCount(0);
+  await page.locator(`.card a[href$="/board/${id}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${id}$`));
+  await expect(page.locator('.modal')).toBeVisible();
+  await idle(page);
  }
  await openMoreSection(page,'home');
  await openNavigation(page);
