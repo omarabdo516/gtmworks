@@ -46,26 +46,37 @@ function reasonKey(code:string) {
 // The Company's speech-to-text provider (#430): the Owner picks one and pastes its key once, and every Agent transcribes
 // with it in its own speaking language. Deepgram comes first, for Arabic. As with model keys, the value is never drawn
 // back: the field starts empty and is cleared after it is sent. Provider names are their own brands, in either language.
-export type SpeechData={provider:string|null,missing:Named[]|null};
-const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram'],['elevenlabs','ElevenLabs',''],['openai','OpenAI',''],['groq','Groq','settingsSpeechGroq']] as const;
+// Every provider whose key the Engine holds says so, and the Owner switches back to it with no new key (#862); removing
+// one takes only its key, except Groq's, which its models share.
+export type SpeechData={provider:string|null,keys:string[]|null,missing:Named[]|null};
+// A shared key is also the provider's model key (Groq's), which only Model provider keys removes.
+const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram',false],['elevenlabs','ElevenLabs','',false],['openai','OpenAI','',false],['groq','Groq','settingsSpeechGroq',true]] as const;
+const sharedKey=(id:string)=>speechRows.some(([row,,,shared])=>row===id&&shared);
 export function SpeechToText({company,owner,data,readAt}:{company:string,owner:boolean,data:SpeechData|null,readAt:number}) {
  const {t}=useI18n();
  // The provider in use and the Agents still waiting for it, as the save's answer read them back (#663).
- const saved=useSave<SpeechData>(`speech:${company}`,{provider:data?.provider??null,missing:data?.missing??null},readAt);
+ const saved=useSave<SpeechData>(`speech:${company}`,{provider:data?.provider??null,keys:data?.keys??null,missing:data?.missing??null},readAt);
  const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [invalid,setInvalid]=useState(false);
  // The provider whose row says "Saving": the one being set, or the one being removed.
  const [sending,setSending]=useState('');
  const [missed,setMissed]=useState<string[]>([]);
- const act=async(provider:string,intent:'set'|'remove')=>{
-  if(intent==='set'&&value.trim().length<8) { setInvalid(true); return; }
+ // A set sends the key in the form, or with `useHeld` the key the Engine already holds.
+ const act=async(provider:string,intent:'set'|'remove',{useHeld=false}={})=>{
+  const withKey=!useHeld;
+  if(intent==='set'&&withKey&&value.trim().length<8) { setInvalid(true); return; }
   // The key leaves the page as it is sent: the form closes and the row says "Saving" while the Engine takes it.
   const key=value.trim();
-  setInvalid(false); setOpen(''); setValue(''); setSending(provider);
-  const answer=await saved.save({provider:intent==='set'?provider:null,missing:saved.value.missing??[]},
-   ()=>send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:key}:{})}),
-   found=>({provider:typeof found.data?.provider==='string'?found.data.provider:null,missing:Array.isArray(found.data?.missing)?found.data.missing as Named[]:null}));
+  setInvalid(false); setSending(provider);
+  if(withKey) { setOpen(''); setValue(''); }
+  const keys=saved.value.keys??[];
+  const held=intent==='set'?[...new Set([...keys,provider])]:sharedKey(provider)?keys:keys.filter(id=>id!==provider);
+  const using=intent==='set'?provider:saved.value.provider===provider?null:saved.value.provider;
+  const answer=await saved.save({provider:using,keys:held,missing:saved.value.missing??[]},
+   ()=>send('/api/speech-provider',{company,provider,intent,...(intent==='set'&&withKey?{value:key}:{})}),
+   found=>({provider:typeof found.data?.provider==='string'?found.data.provider:null,keys:Array.isArray(found.data?.keys)?found.data.keys as string[]:null,
+    missing:Array.isArray(found.data?.missing)?found.data.missing as Named[]:null}));
   // A failed key opens its form again, unless the Owner already opened another one, whose key stays with it.
-  if(!answer.ok) { if(answer.newest&&intent==='set') setOpen(current=>current||provider); return; }
+  if(!answer.ok) { if(answer.newest&&intent==='set'&&withKey) setOpen(current=>current||provider); return; }
   // Agents a write did not reach are named, with no success toast, so the Owner tries again.
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as Named[]).map(item=>item.name||t('settingsModelsAnAgent')):[];
   setMissed(failed);
@@ -75,12 +86,13 @@ export function SpeechToText({company,owner,data,readAt}:{company:string,owner:b
  const error=invalid?'speechInvalid':saved.error;
  const missing=!saved.saving&&current.provider&&current.missing?.length?current.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
  return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><Label id="md-h-stt" info={t('settingsSpeechHint')}>{t('settingsSpeech')}</Label>
-  {data&&current.missing?<div className="panel-card md-keys" aria-busy={saved.saving||undefined}>{speechRows.map(([id,label,note])=>{ const on=current.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
+  {data&&current.missing?<div className="panel-card md-keys" aria-busy={saved.saving||undefined}>{speechRows.map(([id,label,note,shared])=>{ const on=current.provider===id; const held=!!current.keys?.includes(id); return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
    <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
     {saved.saving&&sending===id?<span className="panel-row__d is-saving" id={`mdl-stt-${id}-state`} role="status">{t('settingsSaving')}</span>
-     :<span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span>}</span>
-    {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
-    {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setInvalid(false); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
+     :<span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):held?t('settingsSpeechKeySaved'):note?t(note):''}</span>}</span>
+    {owner&&held&&!on&&<button type="button" className="btn btn--primary btn--sm" aria-label={t('settingsSpeechUseLabel',label)} onClick={()=>act(id,'set',{useHeld:true})}>{t('settingsSpeechUse')}</button>}
+    {owner&&(on||held&&!shared)&&<button type="button" className="btn btn--secondary btn--sm" aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
+    {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setInvalid(false); }}>{t(on||held?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
    </div>
    {owner&&open===id&&<div className="sub-step" id={`mdl-stt-${id}-form`}>
     <label className="set-label" htmlFor={`mdl-stt-${id}-value`}>{t('settingsModelsKeyValue')}</label>

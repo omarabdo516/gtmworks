@@ -4,7 +4,7 @@ import { withNoEngine } from './engine-records.mjs';
 import { withDriver, engineServing } from './engine-records.mjs';
 import { readConfig, readSavedConfig, writeConfig } from '../lib/engine/config.mjs';
 import { readVoices, speakText } from '../lib/engine/speech.mjs';
-import { readAgentVoice, changeAgentVoice, speakAgentSample, voiceSpeeds, voiceLanguages, voiceSample } from '../lib/agent-voice.mjs';
+import { readAgentVoice, changeAgentVoice, speakAgentSample, voiceSpeeds, voiceSample } from '../lib/agent-voice.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 // The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
 const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
@@ -46,17 +46,17 @@ const profileOn=(fake,name,config={},meta={})=>fake.settings.profiles.set(name,{
 const writesTo=(fake,path)=>fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path.startsWith(path));
 const saved=fake=>fake.settings.profiles.get(companyProfile(company))?.config||{};
 
-test('the voice is read from the Agent\'s own profile: its speaking language, speed, provider and voice', async () => {
+test('the voice is read from the Agent\'s own profile: its speed, provider and voice, never a listening language (#863)', async () => {
  const fake=await engine();
  try {
   profileOn(fake,companyProfile(company),{stt:{language:'ar'},tts:{provider:'edge',edge:{voice:'ar-EG-SalmaNeural'},speed:1.25}});
   const {db}=sessions(fake);
   assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>readAgentVoice(db,{company,agent:lead})),{state:'found',own:true,
-   language:'ar',speech:null,languages:['ar','en',''],speed:1.25,provider:'edge',voice:'ar-EG-SalmaNeural',voiceName:'ar-EG-SalmaNeural',list:null});
+   speed:1.25,provider:'edge',voice:'ar-EG-SalmaNeural',voiceName:'ar-EG-SalmaNeural',list:null});
   // A profile that saved nothing reads the Engine's own defaults, and a speed it never set reads as 1.
   profileOn(fake,companyProfile(company),{});
   assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>readAgentVoice(db,{company,agent:lead})),{state:'found',own:true,
-   language:'en',speech:null,languages:['ar','en',''],speed:1,provider:'edge',voice:'en-US-AriaNeural',voiceName:'en-US-AriaNeural',list:null},'the Engine\'s defaults, and no list for a provider that has none');
+   speed:1,provider:'edge',voice:'en-US-AriaNeural',voiceName:'en-US-AriaNeural',list:null},'the Engine\'s defaults, and no list for a provider that has none');
   // An Agent sharing the Company profile is read with the same values and says the profile is not its own.
   profileOn(fake,companyProfile(company),{tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   assert.equal((await withDriver(DRIVER,driverAt(fake),()=>readAgentVoice(db,{company,agent:helper}))).own,false);
@@ -78,20 +78,19 @@ test('ElevenLabs is the one provider with a list of voices, and the profile\'s o
  } finally { await fake.close(); }
 });
 
-test('the Owner changes the language and the speed, the Engine holds both, and the log gets one row', async () => {
+test('the Owner changes the speed, the Engine holds it, and the log gets one row; a language is not the Agent\'s to change (#863)', async () => {
  const fake=await engine();
  try {
   profileOn(fake,companyProfile(company),{stt:{language:'en'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   const {db,logged}=sessions(fake);
   assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar',speed:'0.85'}})),
-   {state:'written',voice:{language:'ar',speed:0.85,voice:'en-US-AriaNeural'}});
-  assert.deepEqual([saved(fake).stt?.language,saved(fake).tts?.speed],[ 'ar',0.85]);
+   {state:'written',voice:{speed:0.85,voice:'en-US-AriaNeural'}});
+  assert.deepEqual([saved(fake).stt?.language,saved(fake).tts?.speed],[ 'en',0.85],'the Company\'s language stays');
   assert.deepEqual(logged,[{c:company,agent:lead,field:'voice',old_value:null,new_value:null}],'one row names the section, never a value');
-  assert.equal(writesTo(fake,'/api/config').length,2,'only the changed keys are sent, one write each');
-  assert.deepEqual(writesTo(fake,'/api/config').map(request=>Object.keys(request.body.config)),[['stt'],['tts']]);
+  assert.deepEqual(writesTo(fake,'/api/config').map(request=>Object.keys(request.body.config)),[['tts']],'only the speed is sent');
   // Saving the same values again is written and logs nothing new: the Engine already holds them.
-  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar',speed:'0.85'}})),
-   {state:'written',voice:{language:'ar',speed:0.85,voice:'en-US-AriaNeural'}});
+  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{speed:'0.85'}})),
+   {state:'written',voice:{speed:0.85,voice:'en-US-AriaNeural'}});
   assert.equal(logged.length,1);
  } finally { await fake.close(); }
 });
@@ -102,7 +101,7 @@ test('a voice is written only from the ElevenLabs list the profile offers; any o
   profileOn(fake,companyProfile(company),{tts:{provider:'elevenlabs',elevenlabs:{voice_id:'21m00Tcm4TlvDq8ikWAM'}}},{env:{ELEVENLABS_API_KEY:'test-only-elevenlabs'}});
   const {db,logged}=sessions(fake);
   assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{voice:'pNInz6obpgDQGcFmaJgB'}})),
-   {state:'written',voice:{language:'en',speed:1,voice:'pNInz6obpgDQGcFmaJgB'}});
+   {state:'written',voice:{speed:1,voice:'pNInz6obpgDQGcFmaJgB'}});
   assert.equal(saved(fake).tts.elevenlabs.voice_id,'pNInz6obpgDQGcFmaJgB');
   assert.equal(logged.length,1);
   assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{voice:'not-a-voice'}})),{state:'invalid',voice:null});
@@ -117,34 +116,16 @@ test('a voice is written only from the ElevenLabs list the profile offers; any o
  } finally { await fake.close(); }
 });
 
-test('a language or speed the Engine does not have is refused before any write', async () => {
+test('a speed the Engine does not have, or a language alone, is refused before any write', async () => {
  const fake=await engine();
  try {
   profileOn(fake,companyProfile(company),{tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   const {db,logged}=sessions(fake);
-  for(const voice of [{language:'de'},{language:'ar-EG'},{speed:'2'},{speed:'1.1'},{speed:'fast'},{language:7}])
+  for(const voice of [{language:'ar'},{speed:'2'},{speed:'1.1'},{speed:'fast'},{speed:0.85}])
    assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice})),{state:'invalid',voice:null},JSON.stringify(voice));
-  assert.deepEqual(voiceLanguages,['ar','en','']);
   assert.deepEqual(voiceSpeeds,[0.7,0.85,1,1.25,1.5]);
   assert.equal(writesTo(fake,'/api/config').length,0);
   assert.equal(logged.length,0);
- } finally { await fake.close(); }
-});
-
-// #430: on Deepgram, Arabic is Egyptian and the other Arabic variants Deepgram has are choices; another provider has none.
-test('an Agent whose profile transcribes with Deepgram may listen in another Arabic variant, and one on another provider may not', async () => {
- const fake=await engine();
- try {
-  profileOn(fake,companyProfile(company),{stt:{provider:'deepgram',language:'ar'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
-  const {db}=sessions(fake);
-  const read=await withDriver(DRIVER,driverAt(fake),()=>readAgentVoice(db,{company,agent:lead}));
-  assert.equal(read?.speech,'deepgram');
-  assert.deepEqual(read?.languages,['ar','ar-AE','ar-SA','ar-QA','ar-KW','ar-SY','ar-LB','ar-PS','ar-JO','ar-SD','ar-TD','ar-MA','ar-DZ','ar-TN','ar-IQ','ar-IR','en'],'no detect: the Engine sends Deepgram English for it');
-  assert.equal((await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-SA'}}))).state,'written');
-  assert.equal(saved(fake).stt.language,'ar-SA');
-  assert.equal((await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-EG'}}))).state,'invalid','Egyptian is plain Arabic on Deepgram');
-  profileOn(fake,companyProfile(company),{stt:{provider:'openai',language:'ar'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
-  assert.equal((await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-SA'}}))).state,'invalid');
  } finally { await fake.close(); }
 });
 
@@ -153,14 +134,14 @@ test('an Agent on the Company profile, a person the database refuses and a bad r
  try {
   profileOn(fake,companyProfile(company),{tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   const shared=sessions(fake);
-  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(shared.db,{company,agent:helper,voice:{language:'ar'}})),{state:'notOwn',voice:null});
+  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(shared.db,{company,agent:helper,voice:{speed:'0.85'}})),{state:'notOwn',voice:null});
   assert.deepEqual(shared.logged,[],'nothing is logged for a change that did not happen');
   const refused=sessions(fake,{refuse:'agentSettingNotAllowed'});
-  assert.deepEqual(await withDriver(DRIVER,{config:async()=>assert.fail('the Engine is not read'),write:async()=>assert.fail('the Engine is not written')},()=>changeAgentVoice(refused.db,{company,agent:lead,voice:{language:'ar'}})),
+  assert.deepEqual(await withDriver(DRIVER,{config:async()=>assert.fail('the Engine is not read'),write:async()=>assert.fail('the Engine is not written')},()=>changeAgentVoice(refused.db,{company,agent:lead,voice:{speed:'0.85'}})),
    {state:'notAllowed',voice:null});
   const noEngine=sessions(fake,{target:false});
-  assert.deepEqual(await withNoEngine(company,()=>withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(noEngine.db,{company,agent:lead,voice:{language:'ar'}}))),{state:'noEngine',voice:null});
-  for(const bad of [{company:'',agent:lead,voice:{language:'ar'}},{company,agent:'Lead',voice:{language:'ar'}},{company,agent:lead,voice:null},{company,agent:lead,voice:'ar'},{company,agent:lead,voice:{}}])
+  assert.deepEqual(await withNoEngine(company,()=>withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(noEngine.db,{company,agent:lead,voice:{speed:'0.85'}}))),{state:'noEngine',voice:null});
+  for(const bad of [{company:'',agent:lead,voice:{speed:'0.85'}},{company,agent:'Lead',voice:{speed:'0.85'}},{company,agent:lead,voice:null},{company,agent:lead,voice:'0.85'},{company,agent:lead,voice:{}}])
    assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(refused.db,{...bad})),{state:'invalid',voice:null},JSON.stringify(bad));
   assert.equal(fake.settings.managementRequests.filter(request=>request.method==='PUT').length,0,'a refused change writes nothing');
  } finally { await fake.close(); }
@@ -172,10 +153,10 @@ test('an Engine that fails the write is that state, and nothing is logged', asyn
   profileOn(fake,companyProfile(company),{tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   const {db,logged}=sessions(fake);
   fake.settings.failStep='config';
-  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar'}})),{state:'unreachable',voice:null});
+  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{speed:'0.85'}})),{state:'unreachable',voice:null});
   fake.settings.failStep='';
   fake.settings.managementStatus=401;
-  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{language:'ar'}})),{state:'refused',voice:null});
+  assert.deepEqual(await withDriver(DRIVER,driverAt(fake),()=>changeAgentVoice(db,{company,agent:lead,voice:{speed:'0.85'}})),{state:'refused',voice:null});
   assert.deepEqual(logged,[]);
  } finally { await fake.close(); }
 });

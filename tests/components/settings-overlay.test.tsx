@@ -47,8 +47,8 @@ test('on a phone the sections become a row and every control has a 44px tap area
  const open = document.getElementById('sov-main')!;
  expect(open.scrollWidth).toBe(open.clientWidth);
  const controls = [...sections.getByRole('link').elements(), screen.getByRole('button', { name: 'Close settings and go back' }).element(), ...screen.getByRole('radio').elements()];
- // Thirteen rows (#612, the Hermes row of #869), the close button and the five account choices (#616).
- expect(controls).toHaveLength(19);
+ // Fourteen rows (#612, Voice #863, the Hermes row of #869), the close button and the five account choices (#616).
+ expect(controls).toHaveLength(20);
  expect(controls.map(control => [control.textContent, ...tapArea(control)]).filter(([, width, height]) => Number(width) < 44 || Number(height) < 44)).toEqual([]);
 });
 
@@ -75,7 +75,7 @@ test('the sections sit in their groups, and the breadcrumb names the group and t
  const screen = await account('en');
  const sections = screen.getByRole('navigation', { name: 'Settings sections' });
  expect(sections.getByRole('group').elements().map(group => group.getAttribute('aria-labelledby') && document.getElementById(group.getAttribute('aria-labelledby')!)?.textContent)).toEqual(['Company', 'Agents', 'Engine']);
- expect(sections.getByRole('group', { name: 'Engine' }).getByRole('link').elements().map(link => link.textContent)).toEqual(['Providers', 'Usage', 'gtmworks']);
+ expect(sections.getByRole('group', { name: 'Engine' }).getByRole('link').elements().map(link => link.textContent)).toEqual(['Providers', 'Voice', 'Usage', 'gtmworks']);
  expect(sections.getByRole('link').elements().slice(-3).map(link => link.textContent)).toEqual(['Backups', 'Your account', 'About']);
  const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('listitem');
  expect(crumbs.elements().map(crumb => crumb.textContent)).toEqual(['Settings', 'Your account']);

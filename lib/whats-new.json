@@ -6,6 +6,18 @@
   "ar": { "title": "كل إعدادات محرك الوكلاء، للمالك", "body": "المالك بيفتح gtmworks من الإعدادات ويوصل للوحة التحكم الخاصة بمحرك الوكلاء، بألوان gtmworks وبلغتك، فيها كل صفحاته وإعداداته (منصات الرسايل والإضافات والويب هوكس والـ MCP والإعدادات والسجلات وغيرهم)، أما إظهار المفاتيح وتحديث المحرك واسترجاع نسخة احتياطية وعمل وكيل أو شيله فبيفضلوا في gtmworks، ومحدش غير المالك يقدر يفتحها." }
  },
  {
+  "issue": 863,
+  "date": "2026-11-26",
+  "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },
+  "ar": { "title": "إعدادات الصوت مرة واحدة للشركة كلها", "body": "الإعدادات ← الصوت بتظبط إزاي كل وكيل بيكتب اللي بتمليه: المزوّد والموديل بتاعه، واللغة (تلقائي بيعرف العربي من الإنجليزي)، والأسامي اللي لازم يكتبها صح، وقص السكوت؛ وصفحة كل وكيل مبقاش فيها لغة لوحدها." }
+ },
+ {
+  "issue": 862,
+  "date": "2026-11-26",
+  "en": { "title": "Switching speech-to-text keeps your other keys", "body": "Choosing another speech-to-text provider no longer deletes the key you gave the last one: every provider with a saved key says so, and you switch back to it without pasting the key again." },
+  "ar": { "title": "تغيير مزوّد تحويل الكلام لنص بيسيب مفاتيحك التانية", "body": "لما تختار مزوّد تاني لتحويل الكلام لنص، مفتاح المزوّد اللي قبله مبقاش بيتمسح: كل مزوّد ليه مفتاح محفوظ بيقول كده، وترجعله من غير ما تحط المفتاح تاني." }
+ },
+ {
   "issue": 791,
   "date": "2026-11-26",
   "en": { "title": "Providers settings open at once", "body": "Settings → Providers shows straight away and fills in each part as the agent engine answers it; a part the engine is slow on says it is reading, and one it cannot read keeps what it last showed." },
