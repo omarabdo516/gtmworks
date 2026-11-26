@@ -31,6 +31,13 @@ trap done_with EXIT
 say() { echo "$@"; }
 
 PLUGIN=gtmworks-people
+# As ./ci.sh install does: the app and work sandbox images are built on this machine through scripts/docker-build.sh,
+# from this checkout, and the installer is told they are there.
+for pair in "$(web_image_tag) ." "$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1) sandbox"; do
+  set -- $pair
+  bash scripts/docker-build.sh -q -t "$1" "$2" > /dev/null || fail "build $1"
+done
+export GTMWORKS_IMAGE_PREBUILT=true
 reset_install
 install_source "$work/install.log" > /dev/null || { tail -40 "$work/install.log" >&2; fail 'the source install'; }
 complete_setup > "$work/setup.log" 2>&1 || { cat "$work/setup.log" >&2; fail 'first run'; }
