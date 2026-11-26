@@ -6,6 +6,12 @@
   "ar": { "title": "إعدادات المزوّدين بتفتح على طول", "body": "الإعدادات ← المزوّدين بقت بتظهر على طول وكل جزء بيتملي لما محرك الوكلاء يرد عليه؛ والجزء اللي المحرك بطيء فيه بيقول إنه بيتقري، واللي مقدرش يتقري بيفضل باللي كان ظاهر آخر مرة." }
  },
  {
+  "issue": 771,
+  "date": "2026-11-26",
+  "en": { "title": "A press opens its page at once", "body": "Pressing a link now shows the page's frame straight away, with the sidebar staying as it is, and the page fills in when it arrives; moving between pages no longer redraws the sidebar." },
+  "ar": { "title": "الضغطة بتفتح صفحتها على طول", "body": "لما تدوس على لينك، إطار الصفحة بيظهر على طول والشريط الجانبي فاضل زي ما هو، والصفحة بتكمل لما توصل؛ والتنقل بين الصفحات مبقاش بيرسم الشريط الجانبي من الأول." }
+ },
+ {
   "issue": 695,
   "date": "2026-11-26",
   "en": { "title": "The four old role agents are gone", "body": "The Account manager, Writer, Designer and Critic are no longer in menus, pickers or the Members page: New card goes to one of your Company's Agents, anyone who held a role by mistake is an ordinary Contributor again, and what those agents wrote keeps their names." },

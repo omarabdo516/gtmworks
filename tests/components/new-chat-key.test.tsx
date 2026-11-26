@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
-import { Frame } from '@/app/frame';
+import { Frame, PageFrame } from '@/app/frame';
 import NewChatKey from '@/app/new-chat-key';
 import { MessageBox } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -55,7 +55,7 @@ test('on a phone, "N" pressed in the open drawer on the new chat closes the draw
  history.replaceState(history.state, '', chat);
  address.pathname = chat;
  await page.viewport(390, 900);
- const screen = await render(<LanguageProvider language="en"><Frame title="Chats" sidebar={<nav aria-label="Navigation"><NewChatKey href={chat}/><a href="#board">Marketing board</a></nav>}>{composer()}</Frame></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><Frame sidebar={<nav aria-label="Navigation"><NewChatKey href={chat}/><a href="#board">Marketing board</a></nav>}><PageFrame title="Chats">{composer()}</PageFrame></Frame></LanguageProvider>);
  const menu = screen.getByRole('button', { name: 'Open menu' });
  await menu.click();
  await expect.element(screen.getByRole('link', { name: 'Marketing board' })).toHaveFocus();

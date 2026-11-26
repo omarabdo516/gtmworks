@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 import type { AppItem } from './settings-apps-client';
 
 // The Company's apps as the browser last read them from /api/company-apps (#201), so no page waits on the Engine. Kept
-// per signed-in person, Company and reader's language, outside any page, because every page draws its own Shell. A
+// per signed-in person, Company and reader's language, outside any page, because a refresh draws the Shell again. A
 // failed read never replaces a good one; a first read that fails is null, which the sheet shows as "can't be read".
 // Absent until the first read lands.
 // The copy is the signed-in person's alone (#552): an Owner's carries a command server's command, a Member's does not.

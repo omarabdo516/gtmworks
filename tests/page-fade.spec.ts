@@ -83,6 +83,9 @@ test('each page opened from the sidebar fades in once, polling fades nothing, an
   const open = async (link: string, content: string) => {
    const href = await page.locator(link).getAttribute('href');
    await page.locator(link).click();
+   // The pointer leaves the row it pressed: the sidebar stays as the page lands (#789), so the row's own fill shows only
+   // once it is no longer under the pointer, whose hover fill wins while it is.
+   await page.mouse.move(720, 450);
    await expect(page).toHaveURL(url => url.pathname === href);
    await expect(page.locator(content).first()).toBeVisible();
    expect(await region(page), link).toEqual(['gw-fade-in', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);

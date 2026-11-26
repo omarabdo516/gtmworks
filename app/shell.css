@@ -312,6 +312,10 @@
 .gw .sk-msg { display: grid; gap: 8px; }
 .gw .sk-hold { animation: gw-sk-hold 0s 400ms both; }
 /* Text for assistive technology only. */
+/* A page's loading frame (app/frame.tsx PageFrame, #771): while it shows, the page it replaces stays mounted out of sight. */
+.gw .app-content[aria-busy="true"] > :not(.page-loading) { display: none; }
+/* The loading frame itself never fades: the page that takes its place does (lib/page-fade). */
+.gw .app-content.view-enter > .page-loading { animation: none; }
 .gw .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @keyframes gw-sk-hold { from { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .gw .sk::after { animation: none; } }

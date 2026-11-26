@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { AppsSheetProvider, AppsButton } from '@/app/apps-sheet';
 import AccountMenuView from '@/app/account-menu-view';
-import { Frame } from '@/app/frame';
+import { Frame, PageFrame } from '@/app/frame';
 import type { AppItem } from '@/app/settings-apps-client';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -320,7 +320,7 @@ test('a Member who is not the Owner opens the sheet and reads the states with no
 test('on a phone the sheet opened from the drawer holds Tab, and Escape closes the sheet alone', async () => {
  await page.viewport(390, 900);
  engine(items);
- const screen = await render(<LanguageProvider language="en"><Frame title="Home" sidebar={shell()}><a href="#card">A card on the page</a></Frame></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="en"><Frame sidebar={shell()}><PageFrame title="Home"><a href="#card">A card on the page</a></PageFrame></Frame></LanguageProvider>);
  await screen.getByRole('button', { name: 'Open menu' }).click();
  await screen.getByRole('button', { name: /^Connect apps/ }).click();
  await expect.element(screen.getByRole('searchbox', { name: 'Search apps' })).toHaveFocus();
