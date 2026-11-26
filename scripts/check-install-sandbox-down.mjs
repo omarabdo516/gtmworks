@@ -14,7 +14,8 @@ import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const {companyProfile}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
-const {readSession,readWorkSandbox}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {readSession}=await import(`${process.cwd()}/lib/engine/sessions.mjs`);
+const {readWorkSandbox}=await import(`${process.cwd()}/lib/engine/files.mjs`);
 const {writeProof}=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
 const [step,marker]=process.argv.slice(2);

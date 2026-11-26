@@ -286,7 +286,7 @@ test('a chat open writes one line of each step\'s whole milliseconds, with ids o
 
 test('an Engine\'s change of state is one line with its cause, and a failed call names why (#772)',async()=>{
  const {engineStateLine}=await import('../lib/diagnostics.mjs');
- const {failureCause}=await import('../lib/hermes.mjs');
+ const {failureCause}=await import('../lib/engine/transport.mjs');
  assert.deepEqual(JSON.parse(engineStateLine({engine:'hermes-rs:8642',state:'down',cause:'timedOut'},{now:new Date('2026-11-25T10:00:00Z')})),{event:'engine_state',at:'2026-11-25T10:00:00.000Z',engine:'hermes-rs:8642',state:'down',cause:'timedOut'});
  assert.equal(JSON.parse(engineStateLine({engine:'h',state:'up',cause:'timedOut'})).cause,null);
  assert.equal(JSON.parse(engineStateLine({engine:'h',state:'down',cause:'anything'})).cause,'failed');

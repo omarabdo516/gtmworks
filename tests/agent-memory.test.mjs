@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { editMemoryNote, forgetMemoryNote, readMemoryNotes, resetMemory } from '../lib/hermes.mjs';
+import { editMemoryNote, forgetMemoryNote, readMemoryNotes, resetMemory } from '../lib/engine/memory.mjs';
 import { editAgentMemory, forgetAgentMemory, readAgentMemory, resetAgentMemory } from '../lib/agent-memory.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { heldChanges } from './held-changes.mjs';
@@ -22,7 +23,7 @@ const at=(fake,profile)=>({...install(fake),profile});
 const profileOn=(fake,name)=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
 // Two Agents of one Company with their own notes, and a skill beside the notes of the first.
 async function twoAgents() {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  profileOn(fake,adsProfile); profileOn(fake,seoProfile);
  fake.settings.memory.set(adsProfile,{memory:['Prefers short subject lines.','Never mention prices before the offer.'],profile:['Omar works in Cairo.']});
  fake.settings.memory.set(seoProfile,{memory:['Writes for people who already know the product.'],profile:[]});
@@ -70,7 +71,7 @@ test('the notes of one Agent\'s profile are listed with their id and text, and a
 
 // #769: an Agent's notes are read several at once, never one after another, and never more than six at a time.
 test('forty notes are read a few at once, in their order', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile);
   fake.settings.memory.set(adsProfile,{memory:Array.from({length:40},(_,at)=>`Note ${at+1}`),profile:[]});
@@ -118,13 +119,13 @@ test('a Member reads the notes of the Agent they see, with whether it is the mai
  const fake=await twoAgents();
  try {
   const {db}=session({agents:rows});
-  const read=await readAgentMemory(db,{company,agent:ads,hermes:install(fake)});
+  const read=await readAgentMemory(db,{company,agent:ads});
   assert.equal(read.state,'found');
   assert.equal(read.main,false);
   assert.deepEqual(read.notes.map(note=>note.text),[
    'Prefers short subject lines.','Never mention prices before the offer.','Omar works in Cairo.',
   ]);
-  const main=await readAgentMemory(session({agents:rows.map(row=>row.agent===ads?{...row,main:true}:row)}).db,{company,agent:ads,hermes:install(fake)});
+  const main=await readAgentMemory(session({agents:rows.map(row=>row.agent===ads?{...row,main:true}:row)}).db,{company,agent:ads});
   assert.equal(main.main,true,'the main Agent is named as the main one (#121)');
  } finally { await fake.close(); }
 });
@@ -134,8 +135,8 @@ test('an Agent hidden from the reader is not found, and their memory is never as
  try {
   const {db}=session({agents:[rows[1]]});
   fake.settings.managementRequests.length=0;
-  assert.deepEqual(await readAgentMemory(db,{company,agent:ads,hermes:install(fake)}),{state:'missing',main:false,notes:null});
-  assert.deepEqual(await resetAgentMemory(db,{company,agent:ads,hermes:install(fake)}),{state:'missing'});
+  assert.deepEqual(await readAgentMemory(db,{company,agent:ads}),{state:'missing',main:false,notes:null});
+  assert.deepEqual(await resetAgentMemory(db,{company,agent:ads}),{state:'missing'});
   assert.equal(fake.settings.managementRequests.length,0,'nothing reaches the Engine for an Agent the reader does not see');
  } finally { await fake.close(); }
 });
@@ -144,11 +145,11 @@ test('only the Owner resets: a refused Role changes nothing and logs nothing, an
  const fake=await twoAgents();
  try {
   const refused=session({agents:rows,refuse:'memoryNotAllowed'});
-  assert.deepEqual(await resetAgentMemory(refused.db,{company,agent:ads,hermes:install(fake)}),{state:'notAllowed'});
+  assert.deepEqual(await resetAgentMemory(refused.db,{company,agent:ads}),{state:'notAllowed'});
   assert.equal(fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/memory/reset')).length,0);
   assert.deepEqual(refused.logged,[]);
   const owner=session({agents:rows});
-  assert.deepEqual(await resetAgentMemory(owner.db,{company,agent:ads,hermes:install(fake)}),{state:'reset'});
+  assert.deepEqual(await resetAgentMemory(owner.db,{company,agent:ads}),{state:'reset'});
   assert.deepEqual(owner.logged,[{c:company,agent:ads}],'one row, naming the Agent and nothing of its notes');
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes,[]);
  } finally { await fake.close(); }
@@ -233,11 +234,11 @@ test('the Owner and a Manager edit a note of an Agent they see, and each change 
  try {
   const notes=(await readMemoryNotes(at(fake,adsProfile))).notes;
   const refused=session({agents:rows,refuseEdit:'memoryNotAllowed'});
-  assert.deepEqual(await editAgentMemory(refused.db,{company,agent:ads,note:notes[0].id,text:'A new line.',hermes:install(fake)}),{state:'notAllowed'});
+  assert.deepEqual(await editAgentMemory(refused.db,{company,agent:ads,note:notes[0].id,text:'A new line.'}),{state:'notAllowed'});
   assert.deepEqual(refused.edited,[]);
   assert.equal(fake.settings.managementRequests.filter(request=>request.method==='PUT').length,0,'a refused Role changes nothing in the Engine');
   const manager=session({agents:rows});
-  assert.deepEqual(await editAgentMemory(manager.db,{company,agent:ads,note:notes[0].id,text:'A new line.',hermes:install(fake)}),{state:'edited'});
+  assert.deepEqual(await editAgentMemory(manager.db,{company,agent:ads,note:notes[0].id,text:'A new line.'}),{state:'edited'});
   assert.deepEqual(manager.edited,[{c:company,agent:ads}],'one row, naming the Agent and nothing of the note');
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),[
    'A new line.','Never mention prices before the offer.','Omar works in Cairo.',
@@ -250,10 +251,10 @@ test('only the Owner forgets a note, and a forget is one log row with no note te
  try {
   const notes=(await readMemoryNotes(at(fake,adsProfile))).notes;
   const refused=session({agents:rows,refuseForget:'memoryNotAllowed'});
-  assert.deepEqual(await forgetAgentMemory(refused.db,{company,agent:ads,note:notes[0].id,hermes:install(fake)}),{state:'notAllowed'});
+  assert.deepEqual(await forgetAgentMemory(refused.db,{company,agent:ads,note:notes[0].id}),{state:'notAllowed'});
   assert.deepEqual(refused.forgotten,[]);
   const owner=session({agents:rows});
-  assert.deepEqual(await forgetAgentMemory(owner.db,{company,agent:ads,note:notes[0].id,hermes:install(fake)}),{state:'forgotten'});
+  assert.deepEqual(await forgetAgentMemory(owner.db,{company,agent:ads,note:notes[0].id}),{state:'forgotten'});
   assert.deepEqual(owner.forgotten,[{c:company,agent:ads}]);
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),[
    'Never mention prices before the offer.','Omar works in Cairo.',
@@ -267,13 +268,13 @@ test('a note a refused Engine call left alone is not logged, and a hidden Agent 
   const notes=(await readMemoryNotes(at(fake,adsProfile))).notes;
   const {db}=session({agents:[rows[1]]});
   fake.settings.managementRequests.length=0;
-  assert.deepEqual(await editAgentMemory(db,{company,agent:ads,note:notes[0].id,text:'New.',hermes:install(fake)}),{state:'missing'});
-  assert.deepEqual(await forgetAgentMemory(db,{company,agent:ads,note:notes[0].id,hermes:install(fake)}),{state:'missing'});
+  assert.deepEqual(await editAgentMemory(db,{company,agent:ads,note:notes[0].id,text:'New.'}),{state:'missing'});
+  assert.deepEqual(await forgetAgentMemory(db,{company,agent:ads,note:notes[0].id}),{state:'missing'});
   assert.equal(fake.settings.managementRequests.length,0);
 
   const owner=session({agents:rows});
   fake.settings.memory.set(adsProfile,{memory:['Changed under the reader.'],profile:[]});
-  assert.deepEqual(await editAgentMemory(owner.db,{company,agent:ads,note:notes[0].id,text:'New.',hermes:install(fake)}),{state:'stale'});
+  assert.deepEqual(await editAgentMemory(owner.db,{company,agent:ads,note:notes[0].id,text:'New.'}),{state:'stale'});
   assert.deepEqual(owner.edited,[],'a stale note is not logged as edited');
   assert.equal(owner.changes.held.size,0,'and its held record is dropped, so no later pass logs it');
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),['Changed under the reader.']);
@@ -288,18 +289,18 @@ test('a reset, an edit and a forget whose log fails are still made, and each end
  try {
   const notes=(await readMemoryNotes(at(fake,adsProfile))).notes;
   const retried=session({agents:rows,failLogs:1});
-  assert.deepEqual(await resetAgentMemory(retried.db,{company,agent:seo,hermes:install(fake)}),{state:'reset'},'a log taken on its retry');
+  assert.deepEqual(await resetAgentMemory(retried.db,{company,agent:seo}),{state:'reset'},'a log taken on its retry');
   assert.deepEqual(retried.logged,[{c:company,agent:seo}]);
   assert.deepEqual((await readMemoryNotes(at(fake,seoProfile))).notes,[]);
 
   const late=session({agents:rows,failLogs:3});
-  assert.deepEqual(await editAgentMemory(late.db,{company,agent:ads,note:notes[0].id,text:'Only short subject lines.',hermes:install(fake)}),
+  assert.deepEqual(await editAgentMemory(late.db,{company,agent:ads,note:notes[0].id,text:'Only short subject lines.'}),
    {state:'edited',logPending:true},'the Engine holds the edit, so it is never told as failed');
   assert.deepEqual(late.edited,[],'its log is not written yet');
   assert.equal(late.changes.held.size,1,'it is held for the pass');
   late.changes.fail(3);
   const second=(await readMemoryNotes(at(fake,adsProfile))).notes[1];
-  assert.deepEqual(await forgetAgentMemory(late.db,{company,agent:ads,note:second.id,hermes:install(fake)}),{state:'forgotten',logPending:true});
+  assert.deepEqual(await forgetAgentMemory(late.db,{company,agent:ads,note:second.id}),{state:'forgotten',logPending:true});
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),['Only short subject lines.','Omar works in Cairo.']);
   // The worker's pass logs both, once; a log retried after it finds nothing left to write.
   assert.deepEqual(await logHeldAgentChanges(late.db),{logged:2});

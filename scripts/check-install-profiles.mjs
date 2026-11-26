@@ -58,7 +58,7 @@ import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSettingsDiffer}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
-const {provideProfile}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {provideProfile}=await import(`${process.cwd()}/lib/engine/agents.mjs`);
 const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
 
@@ -356,7 +356,7 @@ try {
  // That Run's one tool call, read from the Conversation's Hermes session on the Agent's own profile (#346), as the chat
  // reads it when it opens: skill_manage, failed (drawn Skipped), with the turn's length. gtmworks keeps no copy.
  const [{hermes_session_id:refusedSession}]=await checked(person.from('conversations').select('hermes_session_id').eq('id',refused.conversation));
- const {readSession}=await import(`${process.cwd()}/lib/hermes.mjs`);
+ const {readSession}=await import(`${process.cwd()}/lib/engine/sessions.mjs`);
  const read=await readSession({...firstEngine,profile:first.secondProfile},refusedSession);
  assert.equal(read.state,'found',JSON.stringify(read));
  const turn=read.turns.at(-1);
@@ -365,7 +365,7 @@ try {
  writeProof({step:'steps',state:'found',count:turn.steps.length,seconds:turn.seconds});
 
  // The model the key brings is not checked: the Engine's model catalogue may be offline.
- const {readProviderKeys,setProviderKey,removeProviderKey}=await import(`${process.cwd()}/lib/hermes.mjs`);
+ const {readProviderKeys,setProviderKey,removeProviderKey}=await import(`${process.cwd()}/lib/engine/providers.mjs`);
  const keyed={space:spaceOf(first),profiles:[first.profile,first.secondProfile]};
  const offered=await readProviderKeys({...firstEngine,profile:first.profile},{...keyed,profiles:[]});
  assert.equal(offered.state,'found');
@@ -549,7 +549,7 @@ try {
  assert.equal(afterHost,host,'a profile write and a settings write cannot move a command off the sandbox');
  assert.equal(afterPwd,`/work/${first.profile}`,'the command still starts in the Agent\'s own folder');
  // The profile is put back to the fixed configuration for any later step.
- const restored=await (await import(`${process.cwd()}/lib/hermes.mjs`)).configureProfile(firstEngine,{name:first.profile,config:toolConfig({profile:first.profile}),forbidden:toolConfig({profile:first.profile}).agent.disabled_toolsets});
+ const restored=await (await import(`${process.cwd()}/lib/engine/agents.mjs`)).configureProfile(firstEngine,{name:first.profile,config:toolConfig({profile:first.profile}),forbidden:toolConfig({profile:first.profile}).agent.disabled_toolsets});
  assert.equal(restored.state,'configured');
  writeProof({step:'sandbox',marker,sandbox_host:host,user:userName,profile:first.profile,cwd,pwd:secondPwd,file:written?.resolved_path,code:code?.status});
 } finally { model.close(); model.closeAllConnections(); }
@@ -566,7 +566,7 @@ assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const pair=JSON.parse(readFileSync(state,'utf8'));
 const first=pair[0];
 const firstEngine=await engineFor(first.company);
-const {prepareCommandServer,testServer,readApps,disconnectApp}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {prepareCommandServer,testServer,readApps,disconnectApp}=await import(`${process.cwd()}/lib/engine/apps.mjs`);
 const target={...firstEngine,profile:first.profile};
 const key='sandbox-proof';
 const command={command:'node',args:['/work/tools/sandbox-proof-mcp.mjs']};
@@ -641,7 +641,7 @@ assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const pair=JSON.parse(readFileSync(state,'utf8'));
 const first=pair[0];
 const firstEngine=await engineFor(first.company);
-const {prepareApp,testServer,readApps,disconnectApp}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {prepareApp,testServer,readApps,disconnectApp}=await import(`${process.cwd()}/lib/engine/apps.mjs`);
 const {designProfileOf,openDesignKeyOf}=await import(`${process.cwd()}/lib/open-design.mjs`);
 const target={...firstEngine,profile:first.profile};
 const design=designProfileOf(first.profile);

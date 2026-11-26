@@ -73,7 +73,7 @@ const key=process.env.ENGINE_KEY;
 assert.ok(key,'the install key is in the web container');
 const [{profile}]=JSON.parse(readFileSync('/tmp/check-install-profiles.json','utf8'));
 const target={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',managementAddress:process.env.HERMES_MANAGEMENT_ADDRESS||'http://gtmworks-engine-first:9119',profile,key};
-const {prepareApp,prepareServer,startAppSignIn,finishAppSignIn,testServer,disconnectApp,readApps}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const {prepareApp,prepareServer,startAppSignIn,finishAppSignIn,testServer,disconnectApp,readApps}=await import(`${process.cwd()}/lib/engine/apps.mjs`);
 const {appUrl}=await import(`${process.cwd()}/lib/app-origin.mjs`);
 async function manageAt(path,init={}) {
  const response=await fetch(`${target.managementAddress}${path}${path.includes('?')?'&':'?'}profile=${encodeURIComponent(profile)}`,{...init,headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json',...(init.headers||{})}});

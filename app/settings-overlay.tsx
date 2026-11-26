@@ -23,8 +23,7 @@ import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readProviderNames } from '@/lib/provider-names.mjs';
 import { readProviderOrder } from '@/lib/provider-order.mjs';
-import { engineOf } from '@/lib/company-engine.mjs';
-import { readWorkSandbox } from '@/lib/hermes.mjs';
+import { companyEngine } from '@/lib/engine/handle.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
 import { readFallbackModel } from '@/lib/fallback-model.mjs';
 import { readProviderModels } from '@/lib/provider-models.mjs';
@@ -96,7 +95,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,profiles:null,signIns:null}; } })():null;
  // Whether the Company's work sandbox answers (#398), read once from its own Engine's ssh backend for the section that
  // says what every Agent can use. The Engine itself not answering leaves this unread; the models section names that.
- const workSandbox=section==='company'?await (async()=>{ try { return await readWorkSandbox(await engineOf(company.id)); } catch { return {state:'unreachable' as const}; } })():null;
+ const workSandbox=section==='company'?await (async()=>{ try { return await (await companyEngine(company.id))?.on('default')?.files.sandbox()??{state:'unreachable' as const}; } catch { return {state:'unreachable' as const}; } })():null;
  // The Company's default model, each Agent's own and the Owner's model choices (#29), and the providers the Engine takes a
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;

@@ -1,12 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { companyEngine } from '../lib/engine/handle.mjs';
+import { withNoEngine } from './engine-records.mjs';
+import { withDriver, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
-import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig, readProfileModels, readModels } from '../lib/hermes.mjs';
+import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
+import { readProfileModels, readModels } from '../lib/engine/models.mjs';
 import { engineSettings, readSettings, writeSetting, readCompanyModels } from '../lib/engine-settings.mjs';
 import { changeAgentEffort } from '../lib/agent-effort.mjs';
 import { effortDefault, effortHintKey, effortLabelKey, effortLevels, knownEffort } from '../lib/engine-effort.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+// A profile's handle on the Company's Engine, as the settings reader and writer take it.
+const profileOf=async(/** @type {string} */ profile)=>/** @type {any} */(await companyEngine(company))?.on(profile);
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
 
 // #179: an Agent's thinking level is the key `agent.reasoning_effort` of its own Engine profile, written through #125's
 // writeSetting (one key, read back) and never through a route of its own. The Engine's own source decides the eight
@@ -81,15 +89,15 @@ test('the eight levels are the Engine\'s own, with the reference\'s words and li
 });
 
 test('a profile reads its own level, an absent one reads as medium, and a write leaves every other key as it was', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,co,{agent:{reasoning_effort:'high',reasoning_overrides:{'openai/gpt-5.5':'max'},reasoning_echo:false},
    memory:{memory_char_limit:2600}});
-  const read=await readSettings(connection(fake,co));
+  const read=await readSettings(await profileOf(co));
   assert.equal(read.state,'found');
   assert.equal(read.settings.find(setting=>setting.key==='agent.reasoning_effort').value,'high');
   const before=requestsTo(fake,'PUT').length;
-  assert.deepEqual(await writeSetting(connection(fake,co),{setting:'agent.reasoning_effort',value:'low'}),
+  assert.deepEqual(await writeSetting(await profileOf(co),{setting:'agent.reasoning_effort',value:'low'}),
    {state:'saved',old:'high',new:'low'});
   const put=requestsTo(fake,'PUT').at(-1);
   assert.deepEqual(put.body,{config:{agent:{reasoning_effort:'low'}}},'only its own key is sent');
@@ -98,32 +106,32 @@ test('a profile reads its own level, an absent one reads as medium, and a write 
   assert.equal(requestsTo(fake,'PUT').length,before+1);
   // A profile that saved nothing reads the reference's medium, and so does one whose saved level is not the Engine's.
   profileOn(fake,co,{});
-  assert.equal((await readSettings(connection(fake,co))).settings.find(setting=>setting.key==='agent.reasoning_effort').value,'medium');
+  assert.equal((await readSettings(await profileOf(co))).settings.find(setting=>setting.key==='agent.reasoning_effort').value,'medium');
   profileOn(fake,co,{agent:{reasoning_effort:'loud'}});
-  assert.equal((await readSettings(connection(fake,co))).settings.find(setting=>setting.key==='agent.reasoning_effort').value,'loud',
+  assert.equal((await readSettings(await profileOf(co))).settings.find(setting=>setting.key==='agent.reasoning_effort').value,'loud',
    'the reader returns what the profile saved; the page reads an unknown level as medium');
  } finally { await fake.close(); }
 });
 
 test('the Owner saves a level: the Engine holds it and one log row has the old and the new', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,co,{agent:{reasoning_effort:'medium'},memory:{memory_char_limit:2600}});
   const {db,logged}=database();
-  assert.deepEqual(await changeAgentEffort(db,{company,agent:lead,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(db,{company,agent:lead,effort:'high'})),
    {state:'written',effort:'high'});
   assert.equal(fake.settings.profiles.get(co).config.agent.reasoning_effort,'high');
   assert.equal(fake.settings.profiles.get(co).config.memory.memory_char_limit,2600,'the rest of the profile is untouched');
   assert.deepEqual(logged(),[{c:company,agent:lead,setting:'agent.reasoning_effort',old_value:'medium',new_value:'high'}]);
   // The same level again is written without a second row: the Engine already holds it.
-  assert.deepEqual(await changeAgentEffort(db,{company,agent:lead,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(db,{company,agent:lead,effort:'high'})),
    {state:'written',effort:'high'});
   assert.equal(logged().length,1);
  } finally { await fake.close(); }
 });
 
 test('the models section reads each Agent\'s own level, an absent one as medium', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   for(const name of [space,co,own(writer)]) profileOn(fake,name);
   Object.assign(fake.settings.profiles.get(co),{provider:'openrouter',model:'openai/gpt-5.5'});
@@ -131,54 +139,53 @@ test('the models section reads each Agent\'s own level, an absent one as medium'
   fake.settings.profiles.get(co).config={agent:{reasoning_effort:'high'}};
   fake.settings.profiles.get(own(writer)).config={agent:{reasoning_effort:'loud'}};
   const {db}=database();
-  const read=await readCompanyModels(db,{company,owner:false,hermes:install(fake),driver:driver(fake)});
+  const read=await withDriver(DRIVER,driver(fake),()=>readCompanyModels(db,{company,owner:false}));
   // Lead saved none and the Writer saved a level the Engine does not have: both read as the reference's Medium.
   assert.deepEqual(read.models.agents.map(agent=>[agent.name,agent.effort]),[['Lead','high'],['Writer','medium'],['Helper','high']]);
  } finally { await fake.close(); }
 });
 
 test('only the Owner changes the level: a shared profile, a refused Role and a bad value change nothing and log nothing', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,co,{agent:{reasoning_effort:'medium'}});
   const shared=database();
-  assert.deepEqual(await changeAgentEffort(shared.db,{company,agent:helper,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(shared.db,{company,agent:helper,effort:'high'})),
    {state:'notOwn',effort:null},'an Agent still on the shared Company profile is refused');
   assert.deepEqual(shared.logged(),[]);
   const refused=database({refuse:'agentSettingNotAllowed'});
-  assert.deepEqual(await changeAgentEffort(refused.db,{company,agent:lead,effort:'high',hermes:install(fake),
-   driver:{config:async()=>assert.fail('the Engine is not read'),write:async()=>assert.fail('the Engine is not written')}}),
+  assert.deepEqual(await withDriver(DRIVER,{config:async()=>assert.fail('the Engine is not read'),write:async()=>assert.fail('the Engine is not written')},()=>changeAgentEffort(refused.db,{company,agent:lead,effort:'high'})),
    {state:'notAllowed',effort:null},'a Manager, a Contributor and a Viewer are refused before the Engine is asked');
   assert.deepEqual(refused.logged(),[]);
   const noEngine=database({target:false});
-  assert.deepEqual(await changeAgentEffort(noEngine.db,{company,agent:lead,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withNoEngine(company,()=>withDriver(DRIVER,driver(fake),()=>changeAgentEffort(noEngine.db,{company,agent:lead,effort:'high'}))),
    {state:'noEngine',effort:null});
   const before=requestsTo(fake,'PUT').length;
   for(const effort of ['loud','','Medium',7,null,'none '])
-   assert.deepEqual(await changeAgentEffort(database().db,{company,agent:lead,effort,hermes:install(fake),driver:driver(fake)}),
+   assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(database().db,{company,agent:lead,effort})),
     {state:'invalid',effort:null},JSON.stringify(effort));
   for(const bad of [{company:'',agent:lead,effort:'high'},{company,agent:'Lead',effort:'high'}])
-   assert.deepEqual(await changeAgentEffort(database().db,{...bad,hermes:install(fake),driver:driver(fake)}),{state:'invalid',effort:null});
+   assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(database().db,{...bad})),{state:'invalid',effort:null});
   assert.equal(requestsTo(fake,'PUT').length,before,'a refused change writes nothing');
   assert.equal(fake.settings.profiles.get(co).config.agent.reasoning_effort,'medium');
  } finally { await fake.close(); }
 });
 
 test('an Engine that fails the write or the read-back is that state, and nothing is logged', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,co,{agent:{reasoning_effort:'medium'}});
   const {db,logged}=database();
   fake.settings.failStep='config';
-  assert.deepEqual(await changeAgentEffort(db,{company,agent:lead,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(db,{company,agent:lead,effort:'high'})),
    {state:'unreachable',effort:null});
   fake.settings.failStep='';
   fake.settings.managementStatus=401;
-  assert.deepEqual(await changeAgentEffort(db,{company,agent:lead,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(db,{company,agent:lead,effort:'high'})),
    {state:'refused',effort:null});
   fake.settings.managementStatus=200;
   fake.settings.staleConfig=true;
-  assert.deepEqual(await changeAgentEffort(db,{company,agent:lead,effort:'high',hermes:install(fake),driver:driver(fake)}),
+  assert.deepEqual(await withDriver(DRIVER,driver(fake),()=>changeAgentEffort(db,{company,agent:lead,effort:'high'})),
    {state:'mismatch',effort:null});
   assert.deepEqual(logged(),[],'a level the Engine did not keep is never logged as saved');
  } finally { await fake.close(); }

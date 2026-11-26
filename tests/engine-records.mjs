@@ -4,6 +4,7 @@ import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { forgetEngineRecords } from '../lib/company-engine.mjs';
 import { forgetListeners } from '../lib/engine/transport.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { withEngineCapabilities } from '../lib/engine/handle.mjs';
 
 // The Engine record as the server reads it (#782): the handle finds a Company's Engine only in the database, through the
 // service-role client (lib/company-engine.mjs), so a node test gives it one the same way: a small PostgREST of its own
@@ -57,4 +58,30 @@ export async function engineServing(company,options={}) {
  const fake=await companyHermes(options);
  engineRecord(company,fake);
  return fake;
+}
+
+// A test that made one driver call answer its own way (a race, a refusal at one step) gives that stub here, as it gave it
+// before #782, by the names `calls` maps to the profile handle's methods (`{delete:'routines.remove'}`): each stub is
+// called with the profile's connection first, as a driver function is, and may call the real driver with it, which
+// reaches the wire fake. Only the named stubs change; every other call goes to the Engine as ever.
+/** @template T @param {Record<string,string>} calls @param {Record<string,Function>|null|undefined} stub @param {()=>T} work @returns {T} */
+export function withDriver(calls,stub,work) {
+ if(!stub) return work();
+ return withEngineCapabilities(connection=>{
+  /** @type {Record<string,Record<string,Function>>} */
+  const over={};
+  for(const [name,path] of Object.entries(calls)) {
+   if(typeof stub[name]!=='function') continue;
+   const [capability,method]=path.split('.');
+   (over[capability]??={})[method]=(/** @type {any[]} */ ...args)=>stub[name](connection,...args);
+  }
+  return over;
+ },work);
+}
+/** Runs `work` while the Company has no Engine record, then gives it back the one it had (a test's "no Engine").
+ * @template T @param {string} company @param {()=>Promise<T>} work @returns {Promise<T>} */
+export async function withNoEngine(company,work) {
+ const had=records.get(company)??null;
+ engineRecord(company,null);
+ try { return await work(); } finally { engineRecord(company,had); }
 }

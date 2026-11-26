@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withNoEngine, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { readAgentFile } from '../lib/hermes.mjs';
+import { readAgentFile } from '../lib/engine/files.mjs';
 import { agentFilePreview } from '../lib/agent-files.mjs';
 import { csvRows, filePreviewKind } from '../lib/file-preview.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -42,7 +43,7 @@ function load(file,imports,globals={}) {
 }
 
 async function engine() {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  for(const name of [profile,otherProfile]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.files.set(work,[]);
  return {fake,at:{address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'}};
@@ -152,41 +153,41 @@ test('the preview service reads one Agent\'s file for the Company that sees it, 
  try {
   const text='# Brief\n\nSell more.\n';
   await withFile(fake,'brief.md',text,'text/markdown');
-  assert.deepEqual(await agentFilePreview(database().db,{company,agent,hermes:at,name:'brief.md'}),{state:'found',preview:{name:'brief.md',kind:'text',type:'text/markdown',byteSize:Buffer.byteLength(text),truncated:false,text}});
+  assert.deepEqual(await agentFilePreview(database().db,{company,agent,name:'brief.md'}),{state:'found',preview:{name:'brief.md',kind:'text',type:'text/markdown',byteSize:Buffer.byteLength(text),truncated:false,text}});
   // A CSV is a table; a picture is drawn from the download route and carries no text here.
   await withFile(fake,'q3.csv','name,spend\nA,10\n','text/csv');
-  assert.equal((await agentFilePreview(database().db,{company,agent,hermes:at,name:'q3.csv'})).preview?.kind,'table');
+  assert.equal((await agentFilePreview(database().db,{company,agent,name:'q3.csv'})).preview?.kind,'table');
   await withFile(fake,'shot.png',new Uint8Array([137,80,78,71,0,1]),'image/png');
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'shot.png'})).preview,{name:'shot.png',kind:'image',type:'image/png',byteSize:6,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,name:'shot.png'})).preview,{name:'shot.png',kind:'image',type:'image/png',byteSize:6,truncated:false,text:null});
   // A raster over the Engine's read ceiling is still drawn: its listed size answers, and no read-text is asked for it.
   fake.settings.files.set(work,[{name:'big.png',size:700*1024,mtime}]);
   const before=texts(fake).length;
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'big.png'})).preview,{name:'big.png',kind:'image',type:'image/png',byteSize:700*1024,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,name:'big.png'})).preview,{name:'big.png',kind:'image',type:'image/png',byteSize:700*1024,truncated:false,text:null});
   assert.equal(texts(fake).length,before,'a picture is answered from the listing, with no read-text');
   // A vector image and a page are never handed content; their answer is the listing's too, so no read-text is asked.
   await withFile(fake,'logo.svg','<svg onload="alert(1)"></svg>','image/svg+xml');
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'logo.svg'})).preview,{name:'logo.svg',kind:'none',type:'application/octet-stream',byteSize:29,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,name:'logo.svg'})).preview,{name:'logo.svg',kind:'none',type:'application/octet-stream',byteSize:29,truncated:false,text:null});
   await withFile(fake,'page.html','<script>alert(1)</script>','text/html');
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'page.html'})).preview,{name:'page.html',kind:'none',type:'application/octet-stream',byteSize:25,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,name:'page.html'})).preview,{name:'page.html',kind:'none',type:'application/octet-stream',byteSize:25,truncated:false,text:null});
   assert.equal(texts(fake).length,before,'none of the three asks the Engine for text');
   // A hidden Agent, another Company's Agent and no Engine each find nothing.
-  assert.deepEqual(await agentFilePreview(database({agents:[]}).db,{company,agent,hermes:at,name:'brief.md'}),{state:'missing',preview:null});
-  assert.deepEqual(await agentFilePreview(database().db,{company:otherCompany,agent,hermes:at,name:'brief.md'}),{state:'missing',preview:null});
-  assert.deepEqual(await agentFilePreview(database().db,{company,agent,hermes:null,name:'brief.md'}),{state:'missing',preview:null});
+  assert.deepEqual(await agentFilePreview(database({agents:[]}).db,{company,agent,name:'brief.md'}),{state:'missing',preview:null});
+  assert.deepEqual(await agentFilePreview(database().db,{company:otherCompany,agent,name:'brief.md'}),{state:'missing',preview:null});
+  assert.deepEqual(await withNoEngine(company,()=>agentFilePreview(database().db,{company,agent,name:'brief.md'})),{state:'missing',preview:null});
   // A generated image (#353) previews from its own root as any other raster does, with no read of its bytes.
   fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime}]);
   const reads=texts(fake).length;
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',hermes:at,name:'promo.png'})).preview,{name:'promo.png',kind:'image',type:'image/png',byteSize:8,truncated:false,text:null});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',name:'promo.png'})).preview,{name:'promo.png',kind:'image',type:'image/png',byteSize:8,truncated:false,text:null});
   assert.equal(texts(fake).length,reads,'a picture is answered from the listing');
   // Text in the generated images folder is read on the Engine's own disk, where only the Engine writes, cut to the same
   // first part, and never asked of the sandbox.
   fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime},{name:'prompt.txt',size:5,mtime}]);
   fake.settings.fileBytes.set(`${images}/prompt.txt`,{body:'A cat',type:'text/plain'});
-  assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',hermes:at,name:'prompt.txt'})).preview,{name:'prompt.txt',kind:'text',type:'text/plain',byteSize:5,truncated:false,text:'A cat'});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',name:'prompt.txt'})).preview,{name:'prompt.txt',kind:'text',type:'text/plain',byteSize:5,truncated:false,text:'A cat'});
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files/download?path=${encodeURIComponent(`${images}/prompt.txt`)}`));
   assert.equal(texts(fake).length,reads,'the sandbox is never asked for a generated file');
   // A root that is neither work nor images is refused before the Engine is asked.
-  assert.deepEqual(await agentFilePreview(database().db,{company,agent,root:'elsewhere',hermes:at,name:'promo.png'}),{state:'invalid',preview:null});
+  assert.deepEqual(await agentFilePreview(database().db,{company,agent,root:'elsewhere',name:'promo.png'}),{state:'invalid',preview:null});
  } finally { await fake.close(); }
 });
 
@@ -197,7 +198,7 @@ test('the read route answers an Owner and a Manager, and a Contributor, a Viewer
   await withFile(fake,'brief.md',text,'text/markdown');
   process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
   const {NextRequest}=require('next/server');
-  const drivers={agentFilePreview:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentFilePreview(db,{...request,hermes:{...hermes(),managementAddress:fake.managementAddress}})};
+  const drivers={agentFilePreview:(/** @type {any} */ db,/** @type {any} */ request)=>service.agentFilePreview(db,{...request})};
   const route=(/** @type {any} */ db)=>load('app/api/agent-files/preview/route.ts',{
    '@/lib/supabase':{supabase:async()=>db},
    '@/lib/route-permissions.mjs':permissions,

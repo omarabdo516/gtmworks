@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readProfileModels, writeProfileModel, readModels, readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig,
- readAgentInstructions as readInstructions, writeAgentInstructions as writeInstructions } from '../lib/hermes.mjs';
+import { readProfileModels, writeProfileModel, readModels } from '../lib/engine/models.mjs';
+import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
+import { readAgentInstructions as readInstructions, writeAgentInstructions as writeInstructions } from '../lib/engine/souls.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { answerChange, readChangeContext } from '../lib/agent-changes.mjs';
 import { engineSettings, changeCompanySetting } from '../lib/engine-settings.mjs';

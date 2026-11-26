@@ -108,7 +108,7 @@ test('no link to a private place', () => {
 
 test('no build-host detail', () => {
  // The Hermes address tests document private-range and tailnet literals on purpose: they prove such addresses are refused or allowed.
- const fixtures = new Set(['lib/hermes.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs']);
+ const fixtures = new Set(['lib/engine/transport.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs']);
  const keep = path => !fixtures.has(path);
  for (const pattern of [
   new RegExp(piece('/home/', 'omar')),

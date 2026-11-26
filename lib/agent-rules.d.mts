@@ -1,3 +1,2 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { writeSoulRules } from './hermes.mjs';
-export function keepAgentRules(db:SupabaseClient,options:{hermes:{address:string,profile:string,key:string,managementAddress?:string}|null,write?:typeof writeSoulRules}):Promise<{written:number}>;
+export function keepAgentRules(db:SupabaseClient,options?:{memory?:{marks:Map<string,string>,drift:number},health?:ReturnType<typeof import('./engine-health.mjs').engineHealth>,now?:()=>number}):Promise<{written:number}>;

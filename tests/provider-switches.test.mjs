@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { withDriver } from './engine-records.mjs';
 import { accountName, accountOrders, applyAccountOrder, keepProviderAccounts } from '../lib/provider-switches.mjs';
 import { placedName } from '../lib/provider-names.mjs';
+import { engineRecord, withNoEngine } from './engine-records.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'accounts':'providers.accounts','order':'providers.writeAccountOrder','switches':'providers.switches'};
 
 // #621: the Company's Engine moves a request to the next subscription account itself; this module gives it the Owner's
 // order and switches and copies each move it recorded into the Company's log once. The Engine and the database are
@@ -10,6 +14,8 @@ import { placedName } from '../lib/provider-names.mjs';
 const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const hermes={address:'http://127.0.0.1:8642',key:'test-only-key'};
+// Each Company's Engine record; each test answers the Engine's account reads and writes itself.
+engineRecord(company,hermes); engineRecord(other,hermes);
 const accounts=[{provider:'openai-codex',account:'c0dex1',exhausted:true},{provider:'openai-codex',account:'c0dex2',exhausted:false},
  {provider:'openai-codex',account:'c0dex3',exhausted:false},{provider:'anthropic',account:'c1aude',exhausted:false}];
 const move=(id,from,to,provider='openai-codex')=>({id:id.repeat(32).slice(0,32),provider,from,to,at:1795000000.5});
@@ -45,18 +51,18 @@ test('an account reads under the Owner\'s name, or its kind\'s with its place, a
 test('a pass gives each Company\'s Engine its order once, and again only when it changed or a while later', async () => {
  const work=[{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',ordered:true,place:0,enabled:true,name:null},{provider:'openai-codex',account:'c0dex1',ordered:true,place:1,enabled:false,name:null}]}];
  const {calls,driver}=engine(); const memory=new Map(); let now=1000;
- await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now});
+ await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker(work),{memory,now:()=>now}));
  assert.deepEqual(calls.filter(call=>call[0]==='order'),[
   ['order','default','openai-codex',[{account:'c0dex2',off:false},{account:'c0dex1',off:true},{account:'c0dex3',off:false}]],
   ['order','default','anthropic',[{account:'c1aude',off:false}]]]);
  calls.length=0; now+=60000;
- await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now});
+ await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker(work),{memory,now:()=>now}));
  assert.equal(calls.filter(call=>call[0]==='order').length,0,'an order the Engine took is not sent again a minute later');
  work[0].accounts[1].enabled=true;
- await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now});
+ await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker(work),{memory,now:()=>now}));
  assert.deepEqual(calls.filter(call=>call[0]==='order').map(call=>call[2]),['openai-codex'],'a switch turned on is sent at once');
  calls.length=0; now+=5*60000;
- await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now});
+ await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker(work),{memory,now:()=>now}));
  assert.equal(calls.filter(call=>call[0]==='order').length,2,'and every order again after five minutes');
  // Every call went to the root profile, which holds the Company's accounts.
  assert.ok(calls.every(call=>call[1]==='default'));
@@ -66,8 +72,8 @@ test('an order the Engine did not take, or an Engine without the patch, is sent 
  const work=[{company_id:company,accounts:[{provider:'anthropic',account:'c1aude',ordered:true,place:0,enabled:true,name:null}]}];
  for(const [orderState,sentTwice] of [['unreachable',true],['unsupported',true]]) {
   const {calls,driver}=engine({orderState}); const memory=new Map();
-  await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes});
-  await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes});
+  await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker(work),{memory}));
+  await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker(work),{memory}));
   assert.equal(calls.filter(call=>call[0]==='order').length===4,sentTwice,orderState);
  }
 });
@@ -76,12 +82,12 @@ test('each move the Engine recorded is copied once, with the names the accounts 
  const work=[{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',place:null,enabled:true,name:'ChatGPT · Omar'}]}];
  const {driver}=engine({switches:[move('a','c0dex1','c0dex2'),move('b','c0dex2','c0dex3')]});
  const memory=new Map(); const db=worker(work);
- assert.equal(await keepProviderAccounts(db,{memory,driver,engineFor:async()=>hermes}),2);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepProviderAccounts(db,{memory})),2);
  assert.deepEqual(db.asked.filter(call=>call.name==='record_provider_switches'),[{name:'record_provider_switches',args:{c:company,switches:[
   {id:'a'.repeat(32),provider:'openai-codex',from:'c0dex1',to:'c0dex2',at:1795000000.5,from_name:'ChatGPT',to_name:'ChatGPT · Omar'},
   {id:'b'.repeat(32),provider:'openai-codex',from:'c0dex2',to:'c0dex3',at:1795000000.5,from_name:'ChatGPT · Omar',to_name:'ChatGPT 3'}]}}]);
  // Read again, the same moves are not sent again.
- assert.equal(await keepProviderAccounts(db,{memory,driver,engineFor:async()=>hermes}),0);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepProviderAccounts(db,{memory})),0);
  assert.equal(db.asked.filter(call=>call.name==='record_provider_switches').length,1);
 });
 
@@ -90,54 +96,56 @@ test('a move the database refused is sent again on the next pass', async () => {
  const {driver}=engine({switches:[move('c','c0dex1','c0dex2')]});
  const memory=new Map();
  const refused=worker(work,{error:{code:'22023'}});
- assert.equal(await keepProviderAccounts(refused,{memory,driver,engineFor:async()=>hermes}),0);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepProviderAccounts(refused,{memory})),0);
  const kept=worker(work);
- assert.equal(await keepProviderAccounts(kept,{memory,driver,engineFor:async()=>hermes}),1);
+ assert.equal(await withDriver(DRIVER,driver,()=>keepProviderAccounts(kept,{memory})),1);
 });
 
 test('a Company whose Owner never placed or switched a Provider keeps the Engine\'s own order; one switched on again is sent', async () => {
  const {calls,driver}=engine();
- await keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',ordered:false,place:null,enabled:true,name:'ChatGPT · Omar'}]}]),{driver,engineFor:async()=>hermes});
+ await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',ordered:false,place:null,enabled:true,name:'ChatGPT · Omar'}]}]),{}));
  assert.deepEqual(calls.map(call=>call[0]),['accounts','switches']);
  // Switched off, then on again while the Engine could not be reached: on, with no place, it is still given to the Engine.
  calls.length=0;
- await keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex1',ordered:true,place:null,enabled:true,name:null}]}]),{driver,engineFor:async()=>hermes});
+ await withDriver(DRIVER,driver,()=>keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex1',ordered:true,place:null,enabled:true,name:null}]}]),{}));
  assert.deepEqual(calls.filter(call=>call[0]==='order').map(call=>call[3]),[[{account:'c0dex1',off:false},{account:'c0dex2',off:false},{account:'c0dex3',off:false}],[{account:'c1aude',off:false}]]);
 });
 
 test('a Company whose Engine is not made, does not list its accounts or keeps no record is skipped, and the others are kept', async () => {
  const work=[{company_id:other,accounts:[]},{company_id:company,accounts:[]}];
  const unread=engine({listed:null});
- assert.equal(await keepProviderAccounts(worker(work),{driver:unread.driver,engineFor:async id=>id===company?hermes:null}),0);
+ assert.equal(await withNoEngine(other,()=>withDriver(DRIVER,unread.driver,()=>keepProviderAccounts(worker(work),{}))),0);
  assert.deepEqual(unread.calls,[['accounts','default']]);
  const none=engine({switchState:'unsupported'}); const db=worker(work);
- assert.equal(await keepProviderAccounts(db,{driver:none.driver,engineFor:async()=>hermes}),0);
+ assert.equal(await withDriver(DRIVER,none.driver,()=>keepProviderAccounts(db,{})),0);
  assert.equal(db.asked.filter(call=>call.name==='record_provider_switches').length,0);
  // One Company's failure does not stop the pass.
  const {driver}=engine({switches:[move('d','c0dex1','c0dex2')]});
  const failing={...driver,accounts:async connection=>{ if(connection.address.includes('8643')) throw new Error('boom'); return driver.accounts(connection); }};
  const both=worker(work);
- await keepProviderAccounts(both,{driver:failing,engineFor:async id=>id===other?{...hermes,address:'http://127.0.0.1:8643'}:hermes});
+ engineRecord(other,{...hermes,address:'http://127.0.0.1:8643'});
+  await withDriver(DRIVER,failing,()=>keepProviderAccounts(both,{}));
+  engineRecord(other,hermes);
  assert.deepEqual(both.asked.filter(call=>call.name==='record_provider_switches').map(call=>call.args.c),[company]);
 });
 
 test('the Owner\'s change goes to the Engine at once, read from their own session', async () => {
  const {calls,driver}=engine();
  const person={from:()=>({select:()=>({eq:async()=>({data:[{provider:'openai-codex',account:'c0dex1',place:0,enabled:false}],error:null})})})};
- await applyAccountOrder(person,{company,hermes,driver});
+ await withDriver(DRIVER,driver,()=>applyAccountOrder(person,{company}));
  assert.deepEqual(calls.filter(call=>call[0]==='order').map(call=>[call[2],call[3]]),[
   ['openai-codex',[{account:'c0dex1',off:true},{account:'c0dex2',off:false},{account:'c0dex3',off:false}]],['anthropic',[{account:'c1aude',off:false}]]]);
  // An order the database did not answer is never guessed: nothing is sent.
  const unread={from:()=>({select:()=>({eq:async()=>({data:null,error:{code:'500'}})})})};
  const quiet=engine();
- await applyAccountOrder(unread,{company,hermes,driver:quiet.driver});
+ await withDriver(DRIVER,quiet.driver,()=>applyAccountOrder(unread,{company}));
  assert.equal(quiet.calls.filter(call=>call[0]==='order').length,0);
 });
 
 // The two calls on the Engine's root, against the fake Engine as the patched pinned release answers them.
 test('the order reaches the root\'s pool by entry id and switch, and the moves read back without anything else', async () => {
  const { fakeHermes } = await import('./fake-hermes.mjs');
- const { writeAccountOrder, readAccountSwitches } = await import('../lib/hermes.mjs');
+ const { writeAccountOrder, readAccountSwitches } = await import('../lib/engine/providers.mjs');
  const fake=await fakeHermes();
  try {
   const root={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:fake.settings.key};

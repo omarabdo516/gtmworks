@@ -5,7 +5,7 @@ import { withEngineContract } from '../lib/engine/handle.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
-import { startUnknown } from '../lib/hermes.mjs';
+import { startUnknown } from '../lib/engine/runs.mjs';
 
 // #143: the main Agent's Runs carry the brief its own person's Role calls for — its team, and the one question to ask
 // for work no Agent of theirs does. The brief is pinned by the database on the first start (supabase/tests/lead_offer.sql

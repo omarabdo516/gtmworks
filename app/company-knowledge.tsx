@@ -5,7 +5,6 @@ import { AgentFace } from '@/components/agent-face';
 import { agentsMainFirst, memoryAgent, overlayHref } from '@/lib/settings-overlay.mjs';
 import { knowledgeBlocks, knowledgeParts, pickPart } from '@/lib/company-knowledge.mjs';
 import { readKnowledge } from '@/lib/company-knowledge-skill.mjs';
-import { signInTarget } from '@/lib/company-sign-in.mjs';
 import { SettingsIcon } from './settings-icons';
 import { KnowledgeEditedAt, KnowledgeEditor } from './settings-lazy';
 
@@ -19,7 +18,7 @@ export async function CompanyKnowledge({slug,company,canManage,part:requested}:{
  const part=pickPart(requested);
  const title=t(knowledgeParts.find(([key])=>key===part)![1]);
  const [read,{data:edit,error},{data:agentRows}]=await Promise.all([
-  signInTarget(db,company).catch(()=>null).then(hermes=>readKnowledge(hermes,company)),
+  readKnowledge(db,company),
   db.from('company_log').select('actor_name,created_at').eq('company_id',company).eq('action','company_knowledge_changed').eq('details->>part',part).order('id',{ascending:false}).limit(1).maybeSingle(),
   db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',company).order('name')]);
  // An unread part is never shown as empty: saving over it would replace text the editor never saw. When the Engine does

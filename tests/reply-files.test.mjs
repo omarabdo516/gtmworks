@@ -143,7 +143,7 @@ test('a file name with several dots is read whole, and a path with backslashes i
 });
 
 test('a start the previous release sent without the file note is retried with that body, which Hermes replays',async()=>{
- const { hermesEngine }=await import('../lib/hermes.mjs');
+ const { hermesEngine }=await import('../lib/engine/contract.mjs');
  const bodies=[]; const real=globalThis.fetch;
  // Hermes holds the key for the body the previous release sent: no instructions at all (api_server_runs.py, 409).
  globalThis.fetch=async(_url,request)=>{

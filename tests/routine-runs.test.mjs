@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { keepRunningRoutines } from '../lib/routine-runs.mjs';
-import { createRoutine, readRunningRoutines } from '../lib/hermes.mjs';
+import { createRoutine, readRunningRoutines } from '../lib/engine/routines.mjs';
 import { engineRecord, engineServing } from './engine-records.mjs';
 
 // A running Routine is its Agent's work (#699): the Engine runs it and gtmworks keeps no copy, so each pass of the

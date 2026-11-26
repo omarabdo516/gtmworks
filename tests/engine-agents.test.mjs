@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
 
 // One Agent is one Engine profile, made through the Engine's management listener (ADR 0011) with the install key.

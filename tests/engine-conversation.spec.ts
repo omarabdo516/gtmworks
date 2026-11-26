@@ -11,7 +11,7 @@ import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templat
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
-import { engineFor as driverFor } from '../lib/engine.mjs';
+import { hermesEngine as driverFor } from '../lib/engine/contract.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
 import { signIn } from './sign-in';
@@ -1248,7 +1248,7 @@ test('any Agent hands a job to another Agent of its Company, one hidden from the
  const handed=()=>JSON.parse(query(`select from_agent,to_agent,state,target_outcome from public.agent_handovers where conversation_id='${conversation}'`));
  try {
   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent:salma.agent,message:'Write the March ad copy'})).toEqual({conversation});
-  // The tool Salma's Run was sent, as the Engine reads it in the Run's instructions (lib/hermes.mjs), names the
+  // The tool Salma's Run was sent, as the Engine reads it in the Run's instructions (the Engine driver (lib/engine/)), names the
   // Company's other Agents, Tarek with its job among them, never Salma.
   const sent=fake.settings.runs.find(run=>JSON.stringify(run.input).includes('Write the March ad copy'));
   const offered=(sent?.instructions??'').split('\n- hand_to_agent: ')[1]??'';

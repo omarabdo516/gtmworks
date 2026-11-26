@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { engineRecord, engineServing } from './engine-records.mjs';
 import { readModelAccess, readProviderModels, changeProviderModel, offeredModels, modelEnabled } from '../lib/provider-models.mjs';
 import { readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
-import { setProviderKey } from '../lib/hermes.mjs';
+import { setProviderKey } from '../lib/engine/providers.mjs';
 import { changeFallbackModel } from '../lib/fallback-model.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -51,17 +52,17 @@ function database({owner=true,rows=[],order=[]}={}) {
 }
 const pairs=options=>options.map(option=>`${option.provider}/${option.model}`);
 const ownerPicks=async(db,fake)=>{
- const read=await readCompanyModels(db,{company,owner:true,hermes:install(fake)});
+ const read=await readCompanyModels(db,{company,owner:true});
  return {company:pairs(read.models.default.options),agent:pairs(read.models.agents[0].options)};
 };
-const access=async(db,fake)=>readModelAccess(db,{company,hermes:install(fake)});
+const access=async(db,fake)=>readModelAccess(db,{company});
 
 test('a model is offered once while either Provider of its provider has it on, and gone once both turned it off', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   const {db}=database();
-  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  const switches=await readProviderModels(db,{company});
   assert.deepEqual(switches,{
    'sub-anthropic':[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:true}],
    'key-anthropic':[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:true}],
@@ -74,7 +75,7 @@ test('a model is offered once while either Provider of its provider has it on, a
   let picks=await ownerPicks(db,fake);
   assert.deepEqual(picks.company.filter(pair=>pair.startsWith('anthropic/')),all,'the key still has it on, so it is still offered');
   assert.deepEqual(picks.agent.filter(pair=>pair.startsWith('anthropic/')),all,'on the Agent too');
-  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:false}],'the switch is kept');
+  assert.deepEqual((await readProviderModels(db,{company}))['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:false}],'the switch is kept');
 
   await changeProviderModel(db,{company,entry:'key-anthropic',model:'claude-sonnet-4-6',enabled:false});
   picks=await ownerPicks(db,fake);
@@ -87,7 +88,7 @@ test('a model is offered once while either Provider of its provider has it on, a
 });
 
 test('a switch of a Provider the Company no longer has offers nothing, and an unread Engine offers no choice', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   // The subscription has the model off; the key is gone, so its default "on" is not a Provider's any more.
@@ -100,18 +101,18 @@ test('a switch of a Provider the Company no longer has offers nothing, and an un
   assert.equal(modelEnabled(found,{provider:'deepseek',model:'deepseek-chat'}),false,'a provider no Provider serves is never offered');
   assert.deepEqual(offeredModels([{provider:'anthropic',model:'claude-opus-4-6'}],null),[],'unread, nothing is offered');
   fake.settings.modelOptionsFail=true;
-  assert.equal(await readProviderModels(db,{company,hermes:install(fake)}),null);
+  assert.equal(await readProviderModels(db,{company}),null);
  } finally { await fake.close(); }
 });
 
 test('only the Owner changes a switch; a Manager reads them and is refused', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   const manager=database({owner:false,rows:[{entry:'key-openrouter',model:'openai/gpt-5.5',enabled:false}]});
   assert.deepEqual(await changeProviderModel(manager.db,{company,entry:'key-openrouter',model:'openai/gpt-5.5',enabled:true}),{status:403,body:{error:'providerModelNotAllowed'}});
   assert.deepEqual(manager.kept,[{entry:'key-openrouter',model:'openai/gpt-5.5',enabled:false}],'nothing changed');
-  assert.deepEqual((await readProviderModels(manager.db,{company,hermes:install(fake)}))['key-openrouter'],[{model:'anthropic/claude-opus-4.6',enabled:true},{model:'openai/gpt-5.5',enabled:false}],'the Manager reads every switch');
+  assert.deepEqual((await readProviderModels(manager.db,{company}))['key-openrouter'],[{model:'anthropic/claude-opus-4.6',enabled:true},{model:'openai/gpt-5.5',enabled:false}],'the Manager reads every switch');
   const owner=database();
   for(const change of [{entry:'anthropic',model:'claude-opus-4-6',enabled:false},{entry:'key-anthropic',model:'claude opus',enabled:false},{entry:'key-anthropic',model:'claude-opus-4-6',enabled:'no'}])
    assert.deepEqual(await changeProviderModel(owner.db,{company,...change}),{status:400,body:{error:'providerModelInvalid'}});
@@ -120,21 +121,21 @@ test('only the Owner changes a switch; a Manager reads them and is refused', asy
 });
 
 test('a model no Provider has on is never written, as the Company default or an Agent\'s own', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   const {db}=database({rows:[{entry:'sub-anthropic',model:'claude-sonnet-4-6',enabled:false},{entry:'key-anthropic',model:'claude-sonnet-4-6',enabled:false}]});
   for(const agent of [null,'a1'])
-   assert.deepEqual(await changeCompanySetting(db,{company,agent,setting:'model',value:'anthropic/claude-sonnet-4-6',hermes:install(fake)}),{state:'notEnabled'});
+   assert.deepEqual(await changeCompanySetting(db,{company,agent,setting:'model',value:'anthropic/claude-sonnet-4-6'}),{state:'notEnabled'});
   assert.equal(fake.settings.profiles.get(main).model,'claude-opus-4-6','the Engine holds the model it had');
   assert.ok(!fake.settings.managementRequests.some(request=>request.method==='PUT'&&request.path.endsWith('/model')),'nothing was asked of the Engine');
-  const written=await changeCompanySetting(db,{company,agent:'a1',setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake)});
+  const written=await changeCompanySetting(db,{company,agent:'a1',setting:'model',value:'openrouter/openai/gpt-5.5'});
   assert.equal(written.state,'written',JSON.stringify(written));
  } finally { await fake.close(); }
 });
 
 test('a subscription signed in only on an Agent\'s profile lists its models from that profile, so the Owner can switch each one', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   // An older version left the Claude sign-in on the Company's own profile only ("Partly connected"): the shared space
@@ -143,14 +144,14 @@ test('a subscription signed in only on an Agent\'s profile lists its models from
   delete fake.settings.profiles.get(space).env.ANTHROPIC_API_KEY;
   fake.settings.profiles.get(main).credentials.anthropic='test-only-claude-oauth';
   const {db}=database();
-  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  const switches=await readProviderModels(db,{company});
   assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:true}]);
   assert.equal(switches['key-anthropic'],undefined);
  } finally { await fake.close(); }
 });
 
 test('a partly connected subscription lists its own profile\'s models beside a shared-space key of its provider (#638)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   // The Claude sign-in an older version left on the Company's profile reaches Opus and Sonnet; the shared space's
@@ -158,14 +159,14 @@ test('a partly connected subscription lists its own profile\'s models beside a s
   delete fake.settings.defaultCredentials.anthropic;
   fake.settings.profiles.get(main).credentials.anthropic='test-only-claude-oauth';
   const {db}=database({rows:[{entry:'sub-anthropic',model:'claude-sonnet-4-6',enabled:false}]});
-  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  const switches=await readProviderModels(db,{company});
   assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:false}]);
   assert.deepEqual(switches['key-anthropic'],[{model:'claude-opus-4-6',enabled:true}]);
  } finally { await fake.close(); }
 });
 
 test('a model switched off on the only Provider that lists it is offered nowhere, though another Provider of its provider is on (#735)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   // As in #638: the Claude sign-in on the Company's profile reaches Opus and Sonnet, the shared space's Anthropic key Opus
@@ -182,8 +183,8 @@ test('a model switched off on the only Provider that lists it is offered nowhere
   assert.deepEqual(pairs(offeredModels([sonnet,{provider:'anthropic',model:'claude-opus-4-6'}],found)),['anthropic/claude-opus-4-6'],'not in the chat\'s "+" menu');
   const picks=await ownerPicks(db,fake);
   assert.ok(!picks.company.includes('anthropic/claude-sonnet-4-6')&&!picks.agent.includes('anthropic/claude-sonnet-4-6'),'nor on Agents');
-  assert.deepEqual(await changeCompanySetting(db,{company,agent:'a1',setting:'model',value:'anthropic/claude-sonnet-4-6',hermes:install(fake)}),{state:'notEnabled'});
-  assert.deepEqual(await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',hermes:install(fake)}),{status:400,body:{error:'settingModelNotEnabled'}},'nor as the Fallback model');
+  assert.deepEqual(await changeCompanySetting(db,{company,agent:'a1',setting:'model',value:'anthropic/claude-sonnet-4-6'}),{state:'notEnabled'});
+  assert.deepEqual(await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6'}),{status:400,body:{error:'settingModelNotEnabled'}},'nor as the Fallback model');
   // Opus off on the key alone: the subscription lists it and has it on, so it stays offered.
   await changeProviderModel(db,{company,entry:'key-anthropic',model:'claude-opus-4-6',enabled:false});
   assert.equal(modelEnabled(await access(db,fake),{provider:'anthropic',model:'claude-opus-4-6'}),true,'a model two Providers list stays while either has it on');
@@ -191,7 +192,7 @@ test('a model switched off on the only Provider that lists it is offered nowhere
 });
 
 test('a Provider the Owner switched off offers nothing, and a subscription goes only once every account of it is off (#619)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   fake.settings.defaultPool.anthropic=[{id:'c1aude',label:'',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:'test-only-claude-a'},
@@ -205,12 +206,12 @@ test('a Provider the Owner switched off offers nothing, and a subscription goes 
   assert.deepEqual(found.entries.map(entry=>entry.id),['key-openrouter'],'both accounts and the key off: no Claude choice is offered');
   assert.equal(modelEnabled(found,{provider:'anthropic',model:'claude-opus-4-6'}),false);
   // The details still list every Provider's models, switched off or not, so the Owner can switch it on again.
-  assert.deepEqual(Object.keys(await readProviderModels(database({order:[off('anthropic','key')]}).db,{company,hermes:install(fake)})).sort(),['key-anthropic','key-openrouter','sub-anthropic']);
+  assert.deepEqual(Object.keys(await readProviderModels(database({order:[off('anthropic','key')]}).db,{company})).sort(),['key-anthropic','key-openrouter','sub-anthropic']);
  } finally { await fake.close(); }
 });
 
 test('an order that could not be read offers nothing, and an unlisted subscription is offered only while none of its accounts is off (#619)', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seed(fake);
   const broken=database(); const from=broken.db.from;
@@ -249,11 +250,11 @@ const seedGo=(fake,base)=>{
 };
 
 test('an OpenCode Go key offers only the models OpenCode serves it, in Settings and in the pickers', async () => {
- const fake=await fakeHermes(); const go=await fakeOpenCode({served:['glm-5.3','gemini-4-argon','qwen-4']});
+ const fake=await engineServing(company); const go=await fakeOpenCode({served:['glm-5.3','gemini-4-argon','qwen-4']});
  try {
   seedGo(fake,go.base);
   const {db}=database();
-  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  const switches=await readProviderModels(db,{company});
   assert.deepEqual(switches['key-opencode-go'],[{model:'glm-5.3',enabled:true,served:true},{model:'gemini-4-argon',enabled:true,served:true}],'the Engine\'s ids OpenCode does not serve are gone');
   assert.deepEqual(switches['key-openrouter'],[{model:'anthropic/claude-opus-4.6',enabled:true},{model:'openai/gpt-5.5',enabled:true}],'another provider keeps the Engine\'s list');
   const picks=await ownerPicks(db,fake);
@@ -264,18 +265,18 @@ test('an OpenCode Go key offers only the models OpenCode serves it, in Settings 
 });
 
 test('an OpenCode Go list that cannot be read leaves the Engine\'s list', async () => {
- const fake=await fakeHermes(); const go=await fakeOpenCode({served:[],status:503});
+ const fake=await engineServing(company); const go=await fakeOpenCode({served:[],status:503});
  try {
   seedGo(fake,go.base);
   const {db}=database();
-  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  const switches=await readProviderModels(db,{company});
   assert.deepEqual(switches['key-opencode-go'],['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon'].map(model=>({model,enabled:true})),'none marked as OpenCode\'s own');
  } finally { await go.close(); await fake.close(); }
 });
 
 test('giving an OpenCode Go key sets the Company\'s model to one OpenCode serves, and to the Engine\'s first when OpenCode cannot say', async () => {
  for(const [status,expected] of [[200,'glm-5.3'],[503,'mimo-v2-omni']]) {
-  const fake=await fakeHermes(); const go=await fakeOpenCode({served:['gemini-4-argon','glm-5.3'],status});
+  const fake=await engineServing(company); const go=await fakeOpenCode({served:['gemini-4-argon','glm-5.3'],status});
   try {
    seedGo(fake,go.base);
    for(const name of [space,main]) { delete fake.settings.profiles.get(name).env.OPENCODE_GO_API_KEY; }
@@ -290,21 +291,21 @@ test('giving an OpenCode Go key sets the Company\'s model to one OpenCode serves
 });
 
 test('an OpenCode Go key is sent only over HTTPS or to this machine, and an address that is neither keeps the Engine\'s list', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   seedGo(fake,'http://opencode.example/zen/go/v1');
   const {db}=database();
-  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  const switches=await readProviderModels(db,{company});
   assert.deepEqual(switches['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
  } finally { await fake.close(); }
 });
 
 test('an OpenCode Go key served no model offers none, and an address the Engine could not read is not swapped for OpenCode\'s own', async () => {
- const fake=await fakeHermes(); const go=await fakeOpenCode({served:[]});
+ const fake=await engineServing(company); const go=await fakeOpenCode({served:[]});
  try {
   seedGo(fake,go.base);
   const {db}=database();
-  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'],[],'OpenCode answered that it serves none');
+  assert.deepEqual((await readProviderModels(db,{company}))['key-opencode-go'],[],'OpenCode answered that it serves none');
   for(const name of [space,main]) delete fake.settings.profiles.get(name).env.OPENCODE_GO_API_KEY;
   const set=await setProviderKey(install(fake),{space,profiles:[main],provider:'opencode-go',value:goKey});
   assert.deepEqual([set.model,set.profiles[main]],[null,'noModel'],'no model OpenCode refuses is set');
@@ -312,7 +313,7 @@ test('an OpenCode Go key served no model offers none, and an address the Engine 
 });
 
 test('an OpenCode Go address the Engine could not read keeps the Engine\'s list rather than asking OpenCode\'s own address', async () => {
- const fake=await fakeHermes(); const go=await fakeOpenCode({served:['glm-5.3']});
+ const fake=await engineServing(company); const go=await fakeOpenCode({served:['glm-5.3']});
  try {
   seedGo(fake,go.base);
   fake.settings.revealFail.add('OPENCODE_GO_BASE_URL');
@@ -321,17 +322,17 @@ test('an OpenCode Go address the Engine could not read keeps the Engine\'s list 
   const real=globalThis.fetch; const asked=[];
   globalThis.fetch=(url,init)=>{ asked.push(String(url)); return real(url,init); };
   try {
-   assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+   assert.deepEqual((await readProviderModels(db,{company}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
   } finally { globalThis.fetch=real; }
   assert.deepEqual(asked.filter(url=>url.includes('/models')&&!url.includes('/api/model/options')),[],'neither OpenCode\'s own address nor the unread one is asked');
  } finally { await go.close(); await fake.close(); }
 });
 
 test('an OpenCode Go list whose rows name no model is not read as serving none, so the Engine\'s list stays', async () => {
- const fake=await fakeHermes(); const go=await fakeOpenCode({served:[],rows:[{},{id:''},{object:'model'}]});
+ const fake=await engineServing(company); const go=await fakeOpenCode({served:[],rows:[{},{id:''},{object:'model'}]});
  try {
   seedGo(fake,go.base);
   const {db}=database();
-  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+  assert.deepEqual((await readProviderModels(db,{company}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
  } finally { await go.close(); await fake.close(); }
 });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { readAgent, writeAgentAbout } from '../lib/hermes.mjs';
+import { readAgent, writeAgentAbout } from '../lib/engine/agents.mjs';
 
 // #161: an Agent's Name (the profile's display name) and About (its description) are the Engine's own, read from the
 // profile list the driver already reads and written on the profile's description route (v0.23.0

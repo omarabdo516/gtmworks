@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 import { liveLines, liveView, mostLiveSteps, withStep } from '../lib/live-steps.mjs';
 
 // #646 on the fake Engine server, which streams a Run's events as the pinned release does (api_server_runs.py

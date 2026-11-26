@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { Duplex } from 'node:stream';
 import WebSocket from 'ws';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 import { screenStreams, screenStreamPath, screenUpgrades } from '../lib/screen-stream.mjs';
 
 // #713, ADR 0029: the live stream of an Agent's Screen on gtmworks's own web server, against the fake Engine. The person

@@ -12,6 +12,4 @@ export function readCompanySkillPage(db: SupabaseClient, request: {
   agent: string,
   name: string,
   person: string,
-  hermes?: { address: string, key: string } | null,
-  driver?: object,
 }): Promise<CompanySkillPage | null>;

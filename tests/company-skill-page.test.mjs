@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withDriver, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
-import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, readProfileModels, readOwnSkill } from '../lib/hermes.mjs';
+import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults } from '../lib/engine/config.mjs';
+import { readProfileModels } from '../lib/engine/models.mjs';
+import { readOwnSkill } from '../lib/engine/skills.mjs';
 import { readCompanySkillPage } from '../lib/company-skill-page.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'read':'skills.readOwn','config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','profileModels':'models.ofProfiles'};
 
 // #181: one learned Skill's page in Settings › Learning. Its text is read from GET /api/skills/content for that Agent's
 // own Engine profile, beside the Agent's name and that profile's learning mode (#28). A Viewer has no Learning section,
@@ -54,10 +59,10 @@ async function engine(fake, config = {}) {
 }
 
 test('a Contributor reads the Skill\'s text from its Agent\'s own profile, with that Agent and its learning mode', async () => {
- const fake = await fakeHermes();
+ const fake = await engineServing(company);
  try {
   await engine(fake, { memory: { write_approval: true }, skills: { write_approval: true } });
-  const page = await readCompanySkillPage(database(), { company, agent: lead, name: 'weekly-recap', person: omar, hermes: { address: fake.address, key: fake.settings.key }, driver: drivers(fake) });
+  const page = await withDriver(DRIVER,drivers(fake),()=>readCompanySkillPage(database(), {company,agent: lead,name: 'weekly-recap',person: omar}));
   assert.deepEqual(page, { state: 'found', agent: { id: lead, name: 'Lead', own: true }, skill: 'weekly-recap', mode: 'ask', content });
   const request = fake.settings.managementRequests.find(entry => entry.path.startsWith('/api/skills/content'));
   assert.equal(request.path, `/api/skills/content?profile=${profile}&name=weekly-recap`, 'the read names the Agent\'s own profile, never another');
@@ -65,7 +70,7 @@ test('a Contributor reads the Skill\'s text from its Agent\'s own profile, with 
 });
 
 test('a Viewer, a person who is not a member, and an Agent this person does not see have no page and reach no Engine', async () => {
- const fake = await fakeHermes();
+ const fake = await engineServing(company);
  try {
   await engine(fake);
   const before = fake.settings.managementRequests.length;
@@ -78,7 +83,7 @@ test('a Viewer, a person who is not a member, and an Agent this person does not 
 });
 
 test('a Skill the profile does not have is absent, and a name that is not a Skill name never reaches the Engine', async () => {
- const fake = await fakeHermes();
+ const fake = await engineServing(company);
  try {
   await engine(fake);
   const request = { company, agent: lead, name: 'gone-skill', person: omar, hermes: { address: fake.address, key: fake.settings.key }, driver: drivers(fake) };
@@ -92,11 +97,11 @@ test('a Skill the profile does not have is absent, and a name that is not a Skil
 });
 
 test('an Engine that cannot be read leaves the page unread, and never as an empty Skill', async () => {
- const fake = await fakeHermes();
+ const fake = await engineServing(company);
  try {
   await engine(fake);
   fake.settings.managementStatus = 401;
-  const page = await readCompanySkillPage(database(), { company, agent: lead, name: 'weekly-recap', person: omar, hermes: { address: fake.address, key: fake.settings.key }, driver: drivers(fake) });
+  const page = await withDriver(DRIVER,drivers(fake),()=>readCompanySkillPage(database(), {company,agent: lead,name: 'weekly-recap',person: omar}));
   assert.equal(page.state, 'refused');
   assert.equal(page.content, null);
   assert.equal(page.agent.name, 'Lead');

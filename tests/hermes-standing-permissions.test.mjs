@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readStandingPermissions, revokeStandingPermission } from '../lib/hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { readStandingPermissions, revokeStandingPermission } from '../lib/engine/config.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #166: an Agent's standing permissions are its own profile's command_allowlist, the list every "always" answer adds to

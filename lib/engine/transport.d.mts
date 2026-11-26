@@ -19,3 +19,4 @@ export function listenerHealth(connection:ListenerConnection,listener:EngineList
 export function forgetListeners():void;
 export function engineRequest(connection:ListenerConnection,call:{listener?:EngineListener,path:string,method?:string,headers?:Record<string,string>,body?:unknown,deadline?:number,signal?:AbortSignal,stream?:boolean,key?:string|null}):Promise<Response>;
 export function engineSocket(connection:ListenerConnection&{key:string},socket:{path:string,search?:Record<string,string>,binary?:boolean}):WebSocket;
+export type HermesConnection={address:string,profile:string,key:string};

@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readRoutines, createRoutine, changeRoutine, pauseRoutine, resumeRoutine, triggerRoutine, deleteRoutine, startRun, readToolsets } from '../lib/hermes.mjs';
+import { withNoEngine, engineServing } from './engine-records.mjs';
+import { readRoutines, createRoutine, changeRoutine, pauseRoutine, resumeRoutine, triggerRoutine, deleteRoutine } from '../lib/engine/routines.mjs';
+import { startRun } from '../lib/engine/runs.mjs';
+import { readToolsets } from '../lib/engine/agents.mjs';
 import { readCompanyRoutines, readAgentRoutines, changeAgentRoutine } from '../lib/agent-routines.mjs';
 import { cronOf, formOf, scheduleLabel, whenOf } from '../lib/routine-schedule.mjs';
 import { toolConfig, noAgentGets } from '../lib/agent-toolsets.mjs';
@@ -18,7 +21,7 @@ const install=fake=>({address:fake.address,managementAddress:fake.managementAddr
 const at=(fake,profile)=>({...install(fake),profile});
 const profileOn=(fake,name,config={})=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config,credentials:{}});
 async function twoAgents() {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  profileOn(fake,adsProfile); profileOn(fake,seoProfile);
  return fake;
 }
@@ -118,19 +121,19 @@ test('Settings reads every Agent the reader sees with its Routines, and each cha
  try {
   const hermes=install(fake);
   const {db,logged,checked}=session({agents:rows});
-  const made=await changeAgentRoutine(db,{company,agent:ads,action:'create',prompt:'Send me the cost per lead',schedule:'0 9 * * *',timezone:'Africa/Cairo',hermes});
+  const made=await changeAgentRoutine(db,{company,agent:ads,action:'create',prompt:'Send me the cost per lead',schedule:'0 9 * * *',timezone:'Africa/Cairo'});
   assert.equal(made.state,'done');
   assert.deepEqual(logged.map(plain),[{c:company,agent:ads,act:'routine_created',routine:'Send me the cost per lead',schedule:'0 9 * * *'}]);
   const id=made.routine.id;
   for(const [action,act,extra] of [['pause','routine_paused',{}],['resume','routine_resumed',{}],['change','routine_changed',{schedule:'15 7 * * 2'}],['run','routine_run',{}]]) {
-   assert.equal((await changeAgentRoutine(db,{company,agent:ads,action,routine:id,hermes,...extra})).state,'done',action);
+   assert.equal((await changeAgentRoutine(db,{company,agent:ads,action,routine:id,...extra})).state,'done',action);
    assert.deepEqual(plain(logged.at(-1)),{c:company,agent:ads,act,routine:'Send me the cost per lead',schedule:extra.schedule??null});
   }
-  const read=await readCompanyRoutines(db,{company,hermes});
+  const read=await readCompanyRoutines(db,{company});
   assert.equal(read.state,'found');
   assert.deepEqual(read.agents.map(agent=>[agent.name,agent.state,agent.routines.length]),[['Meta Ads','found',1],['SEO','found',0]]);
   assert.equal(read.agents[0].routines[0].schedule.expr,'15 7 * * 2');
-  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'delete',routine:id,hermes})).state,'done');
+  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'delete',routine:id})).state,'done');
   assert.equal(logged.at(-1).act,'routine_deleted');
   assert.equal(logged.length,6,'one row for each change');
   // The database checked the very row it then logged, once for each change.
@@ -144,20 +147,20 @@ test('a Contributor or a Viewer changes nothing: the database refuses before the
  try {
   const hermes=install(fake);
   const owner=session({agents:rows});
-  const {routine}=await changeAgentRoutine(owner.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *',hermes});
+  const {routine}=await changeAgentRoutine(owner.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *'});
   const before=cronCalls(fake).filter(request=>request.method!=='GET').length;
   const {db,logged}=session({agents:rows,refuse:'routineNotAllowed'});
-  for(const action of ['pause','resume','run','delete']) assert.equal((await changeAgentRoutine(db,{company,agent:ads,action,routine:routine.id,hermes})).state,'notAllowed');
-  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'change',routine:routine.id,schedule:'0 1 * * *',hermes})).state,'notAllowed');
-  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'create',prompt:'More',schedule:'0 1 * * *',hermes})).state,'notAllowed');
+  for(const action of ['pause','resume','run','delete']) assert.equal((await changeAgentRoutine(db,{company,agent:ads,action,routine:routine.id})).state,'notAllowed');
+  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'change',routine:routine.id,schedule:'0 1 * * *'})).state,'notAllowed');
+  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'create',prompt:'More',schedule:'0 1 * * *'})).state,'notAllowed');
   assert.equal(cronCalls(fake).filter(request=>request.method!=='GET').length,before,'the Engine was not changed');
   assert.deepEqual(logged,[]);
   // An Agent hidden from the reader is not found, and nothing is asked of the Engine about it.
   const hidden=session({agents:[rows[1]]});
-  assert.equal((await changeAgentRoutine(hidden.db,{company,agent:ads,action:'pause',routine:routine.id,hermes})).state,'missing');
-  assert.equal((await changeAgentRoutine(hidden.db,{company,agent:ads,action:'pause',routine:'not-an-id',hermes})).state,'invalid');
-  assert.equal((await changeAgentRoutine(hidden.db,{company,agent:ads,action:'reboot',routine:routine.id,hermes})).state,'invalid');
-  assert.equal((await readCompanyRoutines(session({agents:rows}).db,{company,hermes:null})).state,'noEngine');
+  assert.equal((await changeAgentRoutine(hidden.db,{company,agent:ads,action:'pause',routine:routine.id})).state,'missing');
+  assert.equal((await changeAgentRoutine(hidden.db,{company,agent:ads,action:'pause',routine:'not-an-id'})).state,'invalid');
+  assert.equal((await changeAgentRoutine(hidden.db,{company,agent:ads,action:'reboot',routine:routine.id})).state,'invalid');
+  assert.equal((await withNoEngine(company,()=>readCompanyRoutines(session({agents:rows}).db,{company}))).state,'noEngine');
  } finally { await fake.close(); }
 });
 
@@ -165,7 +168,7 @@ test('a Contributor or a Viewer changes nothing: the database refuses before the
 // Every Agent is offered that toolset (ADR 0018, spec #389, which replaced the levels the ticket was written against);
 // a profile whose Runs are not offered it makes nothing.
 test('a Routine asked for in chat is made in the Agent\'s own profile with the scheduling tool every Agent is offered, and the section lists it', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   profileOn(fake,adsProfile,toolConfig({profile:adsProfile})); profileOn(fake,seoProfile,toolConfig({profile:seoProfile}));
   fake.settings.routineAsks=input=>input.includes('every day at 9')?{name:'Lead summary',prompt:'Send me the lead summary',schedule:'0 9 * * *'}:null;
@@ -173,7 +176,7 @@ test('a Routine asked for in chat is made in the Agent\'s own profile with the s
   assert.ok(offered.toolsets.includes('cronjob'),'the fixed set offers the scheduling tool');
   assert.deepEqual(offered.toolsets.filter(name=>noAgentGets.includes(name)),[]);
   assert.ok(await startRun({address:fake.address,profile:adsProfile,key:fake.settings.key,input:'Send me the lead summary every day at 9',sessionKey:'c1',idempotencyKey:'k1'}));
-  const listed=await readCompanyRoutines(session({agents:rows}).db,{company,hermes:install(fake)});
+  const listed=await readCompanyRoutines(session({agents:rows}).db,{company});
   assert.deepEqual(listed.agents.map(agent=>[agent.name,agent.routines.map(routine=>routine.name)]),[['Meta Ads',['Lead summary']],['SEO',[]]]);
   // A profile whose Runs are not offered the tool (its config disables it) makes nothing.
   profileOn(fake,seoProfile,{agent:{disabled_toolsets:['cronjob']}});
@@ -211,9 +214,9 @@ test('an Agent still on the Company\'s shared profile reaches no Routine: the ma
   const {routine}=await createRoutine(at(fake,shared),{name:'Morning brief',prompt:'Brief',schedule:'0 8 * * *'});
   const waiting={agent:seo,name:'SEO',connection:'f0000000-0000-0000-0000-000000000021',profile:shared,main:false,own:false};
   const {db,logged}=session({agents:[waiting]});
-  const read=await readCompanyRoutines(db,{company,hermes:install(fake)});
+  const read=await readCompanyRoutines(db,{company});
   assert.deepEqual(read.agents.map(agent=>[agent.name,agent.state,agent.routines]),[['SEO','failed',null]]);
-  assert.equal((await changeAgentRoutine(db,{company,agent:seo,action:'pause',routine:routine.id,hermes:install(fake)})).state,'missing');
+  assert.equal((await changeAgentRoutine(db,{company,agent:seo,action:'pause',routine:routine.id})).state,'missing');
   assert.equal(fake.settings.cron.get(shared)[0].state,'scheduled','the main Agent\'s Routine is untouched');
   assert.deepEqual(logged,[]);
  } finally { await fake.close(); }
@@ -224,22 +227,22 @@ test('the database checks the whole log row before the Engine changes, and a log
  try {
   const hermes=install(fake);
   const refused=session({agents:rows,refuse:'routineInvalid'});
-  assert.equal((await changeAgentRoutine(refused.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *',hermes})).state,'invalid');
+  assert.equal((await changeAgentRoutine(refused.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *'})).state,'invalid');
   assert.deepEqual(refused.checked,[{c:company,agent:ads,act:'routine_created',routine:'Summary',schedule:'0 9 * * *'}]);
   assert.equal(fake.settings.cron.get(adsProfile)?.length??0,0,'nothing was made');
   // One failed write is tried again and goes through: done, logged once.
   const blip=session({agents:rows,logFails:1});
-  const again=await changeAgentRoutine(blip.db,{company,agent:ads,action:'create',prompt:'Again',schedule:'0 10 * * *',hermes});
+  const again=await changeAgentRoutine(blip.db,{company,agent:ads,action:'create',prompt:'Again',schedule:'0 10 * * *'});
   assert.deepEqual([again.state,again.logged,blip.tries.length,blip.logged.length],['done',true,2,1]);
   // A write the database kept but whose answer was lost is tried again with the same key: still one row.
   const lost=session({agents:rows,lostAnswers:1});
-  const kept=await changeAgentRoutine(lost.db,{company,agent:ads,action:'create',prompt:'Kept',schedule:'0 11 * * *',hermes});
+  const kept=await changeAgentRoutine(lost.db,{company,agent:ads,action:'create',prompt:'Kept',schedule:'0 11 * * *'});
   assert.deepEqual([kept.state,kept.logged,lost.tries.length,lost.logged.length],['done',true,2,1]);
   assert.equal(lost.tries[0].change,lost.tries[1].change,'the retry carries the same key');
   const outage=session({agents:rows,logFails:9});
   const errors=[]; const said=console.error; console.error=(...args)=>errors.push(args.join(' '));
   try {
-   const made=await changeAgentRoutine(outage.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *',hermes});
+   const made=await changeAgentRoutine(outage.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *'});
    assert.equal(made.state,'done','the Engine holds it, so a retry would make a second one');
    assert.equal(made.logged,false);
    assert.equal(outage.tries.length,3,'tried three times');
@@ -274,13 +277,13 @@ test('an Agent\'s details read its own Routines alone, and an Agent hidden from 
   await createRoutine(at(fake,adsProfile),{name:'Ads summary',prompt:'Summary',schedule:'0 9 * * *'});
   await createRoutine(at(fake,seoProfile),{name:'Rankings',prompt:'Rankings',schedule:'0 11 * * 1'});
   const {db}=session({agents:rows});
-  const read=await readAgentRoutines(db,{company,agent:seo,hermes});
+  const read=await readAgentRoutines(db,{company,agent:seo});
   assert.equal(read.state,'found');
   assert.deepEqual(read.routines.map(routine=>routine.name),['Rankings']);
   assert.ok(cronCalls(fake).filter(request=>request.method==='GET').every(request=>profileOfCall(request)!==null));
-  assert.equal((await readAgentRoutines(session({agents:[rows[0]]}).db,{company,agent:seo,hermes})).state,'missing','an Agent hidden from the reader');
-  assert.equal((await readAgentRoutines(session({agents:[{...rows[1],own:false}]}).db,{company,agent:seo,hermes})).state,'missing','an Agent still on the shared profile');
-  assert.equal((await readAgentRoutines(db,{company,agent:'not-an-id',hermes})).state,'invalid');
-  assert.equal((await readAgentRoutines(db,{company,agent:seo,hermes:null})).state,'noEngine');
+  assert.equal((await readAgentRoutines(session({agents:[rows[0]]}).db,{company,agent:seo})).state,'missing','an Agent hidden from the reader');
+  assert.equal((await readAgentRoutines(session({agents:[{...rows[1],own:false}]}).db,{company,agent:seo})).state,'missing','an Agent still on the shared profile');
+  assert.equal((await readAgentRoutines(db,{company,agent:'not-an-id'})).state,'invalid');
+  assert.equal((await withNoEngine(company,()=>readAgentRoutines(db,{company,agent:seo}))).state,'noEngine');
  } finally { await fake.close(); }
 });

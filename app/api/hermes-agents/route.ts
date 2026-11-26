@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { moveAgentMorning, withMorningLease } from '@/lib/agent-morning.mjs';
+import { seenAgents } from '@/lib/engine/handle.mjs';
 
 const columns='id,company_id,connection_id,name,speciality,is_default';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,8 +26,8 @@ async function respond(request:NextRequest) {
    // runs between the other's steps. The Agents are read first, with their Engine profiles, so a removed Agent's profile
    // is still known; without that list nothing is changed.
    const changed=await withMorningLease(db,body.company,async fence=>{
-    const {data:listing,error:listingError}=await db.rpc('company_app_agents',{c:body.company});
-    if(listingError||!Array.isArray(listing)) return reply({error:'hermesAgentFailed'},503);
+    const listing=await seenAgents(db,body.company);
+    if(!listing) return reply({error:'hermesAgentFailed'},503);
     const listed=listing as {agent:string,main:boolean,profile?:string}[];
     // The change is a write as the Engine's are: it runs only while the lease is still this request's (a request whose
     // lease ran out changes nothing), and only once the Agents' profiles are kept with the lease, so a removed Agent's copy

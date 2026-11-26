@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isHermesAddressAllowed, testHermes } from '../lib/hermes.mjs';
+import { isHermesAddressAllowed } from '../lib/engine/transport.mjs';
+import { testHermes } from '../lib/engine/version.mjs';
 
 for(const address of ['http://localhost:9119','http://127.0.0.1:9119','http://192.168.1.10','http://100.89.96.47:9119','http://hermes.tail1234.ts.net']) {
  test(`allows ${address}`,()=>assert.equal(isHermesAddressAllowed(address),true));

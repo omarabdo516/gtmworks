@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer, writeProfileModel, setProviderKey, removeProviderKey, readUsage } from '../lib/hermes.mjs';
+import { provideProfile } from '../lib/engine/agents.mjs';
+import { readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer } from '../lib/engine/apps.mjs';
+import { writeProfileModel } from '../lib/engine/models.mjs';
+import { setProviderKey, removeProviderKey } from '../lib/engine/providers.mjs';
+import { readUsage } from '../lib/engine/sessions.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { apps } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';

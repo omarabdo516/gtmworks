@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readOwnSkill } from '../lib/hermes.mjs';
+import { readOwnSkill } from '../lib/engine/skills.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #181: a Skill's current text comes from GET /api/skills/content for the Agent's own profile, as the pinned Engine

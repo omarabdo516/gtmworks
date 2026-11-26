@@ -5,7 +5,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fakeHermes } from './fake-hermes.mjs';
 import { callLimit, engineRequest, EngineFailure, forgetListeners, listenerHealth } from '../lib/engine/transport.mjs';
-import { hermesEngine } from '../lib/hermes.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
 import { engineOf, enginePass } from '../lib/company-engine.mjs';
 
 // The one transport to an Engine (ADR 0031, #781), driven against the Hermes wire fake as the driver drives it.
@@ -101,7 +101,7 @@ test('an outcome that got no answer keeps its cause beside its state, without ch
  try {
   const read=await hermesEngine({address,key:'k',profile:'default'}).read('run_1');
   assert.equal(read.state,'unreachable');
-  const raw=await import('../lib/hermes.mjs').then(driver=>driver.readRun({address,key:'k',profile:'default',run:'run_1'}));
+  const raw=await import('../lib/engine/runs.mjs').then(driver=>driver.readRun({address,key:'k',profile:'default',run:'run_1'}));
   assert.deepEqual(raw,{status:'unreachable',output:null,session:null,usage:null});
   assert.equal(/** @type {any} */(raw).cause,'refused');
  } finally { quiet.mock.restore(); }

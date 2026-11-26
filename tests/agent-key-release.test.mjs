@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hermesEngine } from '../lib/hermes.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
 import { releaseKeyWaits } from '../lib/company-profiles.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 

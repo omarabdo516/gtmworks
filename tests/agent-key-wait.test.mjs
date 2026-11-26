@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readProviderKeys, setProviderKey, removeProviderKey, readHeldKeys, hermesEngine } from '../lib/hermes.mjs';
+import { readProviderKeys, setProviderKey, removeProviderKey, readHeldKeys } from '../lib/engine/providers.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
 import { changeCompanyKey, readCompanyKeys } from '../lib/provider-keys.mjs';
 import { runToolCall } from '../lib/agent-tools.mjs';
 import { fakeHermes } from './fake-hermes.mjs';

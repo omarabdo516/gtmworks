@@ -1,11 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withNoEngine, engineServing } from './engine-records.mjs';
+import { withDriver } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
-import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig, readSkills, readLearningGraph } from '../lib/hermes.mjs';
+import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/engine/config.mjs';
+import { readSkills, readLearningGraph } from '../lib/engine/skills.mjs';
 import { readAgentSettings, changeLearningMode, learningModeOf } from '../lib/engine-settings.mjs';
 import { readCompanyLearning } from '../lib/company-learning.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+// The driver calls a test answers its own way, by their names before #782, as the Engine handle names them.
+const DRIVER={'config':'config.read','saved':'config.readSaved','schema':'config.schema','defaults':'config.defaults','write':'config.write','profileModels':'models.ofProfiles','options':'models.read','writeModel':'models.write','voices':'speech.voices','speak':'speech.speak','read':'skills.read','learned':'skills.learned'};
 
 // The Learning section (#28): the Company's mode is the Engine's memory.write_approval and skills.write_approval written
 // to every Agent profile (and the shared space) through #125, an Agent's override is its own profile only, and each
@@ -74,13 +79,13 @@ test('the mode is both write approvals: by itself is two offs, ask first is two 
 });
 
 test('the Company\'s mode reaches every Agent profile and the shared space, and each Agent\'s two values read back', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   for(const row of rows) profileOn(fake,row.profile);
   profileOn(fake,space);
   const {db,logged}=database();
-  const changed=await changeLearningMode(db,{company,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const changed=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,mode:'ask'}));
   assert.equal(changed.state,'written',JSON.stringify(changed));
   assert.deepEqual(changed.agents.map(agent=>[agent.agent,agent.written]),[[lead,true],[writer,true],[helper,true]]);
   assert.equal(changed.space,true,'the shared space takes the same value');
@@ -90,7 +95,7 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
   }
   // Read back from each Agent's own profile through the settings reader.
   for(const agent of [lead,writer,helper]) {
-   const read=await readAgentSettings(db,{company,agent,hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+   const read=await withDriver(DRIVER,settingsDriver(fake),()=>readAgentSettings(db,{company,agent}));
    const listed=read.agents[0].settings;
    assert.deepEqual([listed.find(setting=>setting.key==='memory.write_approval').value,listed.find(setting=>setting.key==='skills.write_approval').value],[true,true],`${agent} reads ask first`);
    assert.equal(learningModeOf(listed),'ask');
@@ -101,32 +106,32 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
   ],'each Agent is one log row per setting it changed');
   // The Agent's override writes that Agent's own profile only, and is read back beside the Company's mode.
   const beforeOverride=requestsOf(fake,'PUT').length;
-  const override=await changeLearningMode(db,{company,agent:writer,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const override=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,agent:writer,mode:'auto'}));
   assert.equal(override.state,'written',JSON.stringify(override));
   assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[false,false]);
   for(const name of [companyProfile(company),space]) assert.deepEqual([at(fake.settings.profiles.get(name).config,'memory.write_approval'),at(fake.settings.profiles.get(name).config,'skills.write_approval')],[true,true],`${name} keeps the Company's ask first`);
-  const reread=await readAgentSettings(db,{company,hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const reread=await withDriver(DRIVER,settingsDriver(fake),()=>readAgentSettings(db,{company}));
   assert.deepEqual(reread.agents.map(agent=>[agent.name,learningModeOf(agent.settings)]),[['Lead','ask'],['Writer','auto'],['Helper','ask']]);
   const overridePaths=requestsOf(fake,'PUT').slice(beforeOverride).map(request=>request.path);
   assert.deepEqual(overridePaths,[`/api/config?profile=${agentProfile(writer)}`,`/api/config?profile=${agentProfile(writer)}`],'the override writes that Agent\'s own profile alone, once per setting');
   // A Company-wide change leaves an Agent that chose its own mode alone: the Writer asks first while the Company turns
   // by itself, and its own profile keeps the choice.
-  await changeLearningMode(db,{company,agent:writer,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
-  const companyAuto=await changeLearningMode(db,{company,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,agent:writer,mode:'ask'}));
+  const companyAuto=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,mode:'auto'}));
   assert.equal(companyAuto.state,'written',JSON.stringify(companyAuto));
   assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[true,true],'the Writer keeps its own ask first');
   for(const name of [companyProfile(company),space]) assert.deepEqual([at(fake.settings.profiles.get(name).config,'memory.write_approval'),at(fake.settings.profiles.get(name).config,'skills.write_approval')],[false,false],`${name} follows the Company by itself`);
   // Following the Company again writes the Company's own mode to that Agent and forgets its choice.
-  const follow=await changeLearningMode(db,{company,agent:writer,mode:'follow',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const follow=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,agent:writer,mode:'follow'}));
   assert.equal(follow.state,'written',JSON.stringify(follow));
   assert.deepEqual([at(fake.settings.profiles.get(agentProfile(writer)).config,'memory.write_approval'),at(fake.settings.profiles.get(agentProfile(writer)).config,'skills.write_approval')],[false,false],'the Writer takes the Company\'s by itself');
-  const afterFollow=await readCompanyLearning(db,{company,hermes:{address:fake.address,key:fake.settings.key},driver:driverAt(fake)});
+  const afterFollow=await withDriver(DRIVER,driverAt(fake),()=>readCompanyLearning(db,{company}));
   assert.deepEqual(afterFollow.agents.map(agent=>[agent.name,agent.mode,agent.follow]),[['Lead','auto',true],['Writer','auto',true],['Helper','auto',true]],'the Writer follows the Company again');
  } finally { await fake.close(); }
 });
 
 test('a Company-wide mode leaves the main Agent\'s own choice on its `co-` profile, though an Agent being moved still shares it', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   for(const row of rows) profileOn(fake,row.profile);
@@ -134,7 +139,7 @@ test('a Company-wide mode leaves the main Agent\'s own choice on its `co-` profi
   // #425: Lead chose "ask first" for itself; Helper still runs on Lead's profile while the worker moves it.
   profileOn(fake,companyProfile(company),{memory:{write_approval:true},skills:{write_approval:true}});
   const {db}=database({modes:new Map([[lead,'ask']])});
-  const changed=await changeLearningMode(db,{company,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const changed=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,mode:'auto'}));
   assert.equal(changed.state,'written',JSON.stringify(changed));
   assert.deepEqual(changed.agents.map(agent=>agent.agent),[writer],'only the Agents whose profile follows the Company are written');
   const config=fake.settings.profiles.get(companyProfile(company)).config;
@@ -144,7 +149,7 @@ test('a Company-wide mode leaves the main Agent\'s own choice on its `co-` profi
 });
 
 test('the main Agent chooses its own mode on its `co-` profile and the database keeps it, as any Agent does', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   const alone=rows.filter(row=>row.agent!==helper);
@@ -153,7 +158,7 @@ test('the main Agent chooses its own mode on its `co-` profile and the database 
   const modes=new Map();
   const {db}=database({agents:alone,modes});
   // #425: before, the Engine took the write and the database then refused the main Agent as shared.
-  const changed=await changeLearningMode(db,{company,agent:lead,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const changed=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,agent:lead,mode:'ask'}));
   assert.equal(changed.state,'written',JSON.stringify(changed));
   const config=fake.settings.profiles.get(companyProfile(company)).config;
   assert.deepEqual([at(config,'memory.write_approval'),at(config,'skills.write_approval')],[true,true]);
@@ -163,22 +168,22 @@ test('the main Agent chooses its own mode on its `co-` profile and the database 
 });
 
 test('the mode changes for the Owner only, before the Engine is asked, and a mode this version does not know writes nothing', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   for(const row of rows) profileOn(fake,row.profile);
   profileOn(fake,space);
   const before=requestsOf(fake,'PUT').length;
-  const denied=await changeLearningMode(database({owner:false}).db,{company,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const denied=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(database({owner:false}).db,{company,mode:'ask'}));
   assert.deepEqual(denied.state,'notAllowed');
-  const invalid=await changeLearningMode(database().db,{company,mode:'sometimes',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  const invalid=await withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(database().db,{company,mode:'sometimes'}));
   assert.deepEqual(invalid.state,'invalid');
   assert.equal(requestsOf(fake,'PUT').length,before,'no value reached the Engine');
  } finally { await fake.close(); }
 });
 
 test('what an Agent learned is read beside its mode: its rules including a removed one, its learned Skills, and the Company\'s lessons once', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   profileOn(fake,companyProfile(company),{memory:{write_approval:true},skills:{write_approval:true}});
@@ -188,7 +193,7 @@ test('what an Agent learned is read beside its mode: its rules including a remov
   fake.settings.skillProvenance.set(`${agentProfile(writer)}:hub-skill`,'hub');
   fake.settings.learnedSkills.set(agentProfile(writer),new Set(['weekly-recap']));
   const {db}=database();
-  const read=await readCompanyLearning(db,{company,hermes:{address:fake.address,key:fake.settings.key},driver:driverAt(fake)});
+  const read=await withDriver(DRIVER,driverAt(fake),()=>readCompanyLearning(db,{company}));
   assert.equal(read.state,'found',JSON.stringify(read));
   assert.deepEqual(read.agents.map(agent=>[agent.name,agent.own,agent.shared,agent.mode]),[['Lead',true,true,'ask'],['Writer',true,false,'mixed'],['Helper',false,true,'ask']],'the main Agent profile is shared with Helper; Writer has one approval on and one off');
   assert.deepEqual(read.agents.find(agent=>agent.id===writer).learned,[{name:'weekly-recap',description:'Writes the Friday recap.'}],'only the Skill the learning graph marks is learned');
@@ -199,7 +204,7 @@ test('what an Agent learned is read beside its mode: its rules including a remov
   ],'a removed rule is still listed for bringing back, and an approved rule is the team\'s');
   assert.deepEqual(read.lessons.map(lesson=>lesson.id),['c0000000-0000-0000-0000-000000000003'],'the Company\'s lessons are its approved rules that are not removed, once');
   // An Engine that cannot be read leaves the modes and the learned Skills unknown, never empty; the rules stay readable.
-  const unread=await readCompanyLearning(db,{company,hermes:null,driver:{...driverAt(fake),read:async()=>({state:'unreachable',skills:null})}});
+  const unread=await withDriver(DRIVER,{...driverAt(fake),read:async()=>({state:'unreachable',skills:null})},()=>withNoEngine(company,()=>readCompanyLearning(db,{company})));
   assert.deepEqual(unread.agents.map(agent=>[agent.name,agent.mode,agent.learned]),[['Lead',null,null],['Writer',null,null],['Helper',null,null]]);
   assert.equal(unread.rules.length,3,'the rules are the database\'s, readable without the Engine');
  } finally { await fake.close(); }
@@ -209,7 +214,7 @@ test('what an Agent learned is read beside its mode: its rules including a remov
 // while that write waits on the Engine used to be overwritten there while the database kept it; the two writes now run one
 // after the other for the Company, so after both the Engine holds what the record says.
 test('an Agent\'s own mode made during a Company-wide mode ends with the Engine holding that Agent\'s choice', async () => {
- const fake=await fakeHermes();
+ const fake=await engineServing(company);
  try {
   setup(fake);
   const alone=rows.filter(row=>row.agent!==helper);
@@ -229,10 +234,10 @@ test('an Agent\'s own mode made during a Company-wide mode ends with the Engine 
    await released;
    return settingsDriver(fake).write(target,config);
   }};
-  const companyWide=changeLearningMode(db,{company,mode:'ask',hermes,driver:held});
+  const companyWide=withDriver(DRIVER,held,()=>changeLearningMode(db,{company,mode:'ask'}));
   // The Agent's choice starts once the Company-wide write has read which Agents chose their own.
   while(!released) await new Promise(resolve=>setTimeout(resolve,5));
-  const agentDone=changeLearningMode(db,{company,agent:writer,mode:'auto',hermes,driver:settingsDriver(fake)}).finally(agentFinished);
+  const agentDone=withDriver(DRIVER,settingsDriver(fake),()=>changeLearningMode(db,{company,agent:writer,mode:'auto'})).finally(agentFinished);
   const [wide,own]=await Promise.all([companyWide,agentDone]);
   assert.equal(wide.state,'written',JSON.stringify(wide));
   assert.equal(own.state,'written',JSON.stringify(own));

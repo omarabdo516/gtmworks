@@ -4,7 +4,7 @@ import { engineRecord } from './engine-records.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';

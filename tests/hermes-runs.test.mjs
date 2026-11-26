@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { forgetListeners } from '../lib/engine/transport.mjs';
 import { fakeHermes, noProviderError, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError, failedRunText, usageLimitFirstError, usageLimitError } from './fake-hermes.mjs';
-import { startRun, readRun, startNotReached, startUnknown } from '../lib/hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { startRun, readRun, startNotReached, startUnknown } from '../lib/engine/runs.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
 

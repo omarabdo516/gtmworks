@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { startRun, readRun, readUsage } from '../lib/hermes.mjs';
+import { startRun, readRun } from '../lib/engine/runs.mjs';
+import { readUsage } from '../lib/engine/sessions.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
 const started=async fake=>({...connection(fake),run:await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'})});

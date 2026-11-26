@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { engineFor } from '../lib/engine.mjs';
+import { hermesEngine as engineFor } from '../lib/engine/contract.mjs';
 
 // #160: voice dictation. One recording becomes text on the Engine's management listener, for the Agent's own profile
 // (v0.23.0 hermes_cli/web_routers/audio.py 89-149). The recording goes in the request body only; the driver returns its

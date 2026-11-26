@@ -4,7 +4,7 @@ import { engineRecord } from './engine-records.mjs';
 import { withEngineContract } from '../lib/engine/handle.mjs';
 import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
-import { startUnknown } from '../lib/hermes.mjs';
+import { startUnknown } from '../lib/engine/runs.mjs';
 import { conversationHandOverSpec, conversationToolSpecTexts, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
