@@ -53,8 +53,35 @@ export async function idle(page: Page) {
 
 // Measure in the browser from the actual click event, excluding Playwright's actionability waits.
 // The same probe also runs against origin/main for the before/after evidence.
+// A link prepares its page when it is pointed at (lib/link, #771), so a prepared click points first and presses once
+// that page has wholly arrived: the request the pointing started has finished (lib/link's progress waits for the same
+// whole response). A link whose page is already prepared asks for nothing, and the press follows at once.
+// The count is kept in the page, as lib/link keeps its own: a page request (RSC) is on its way from its fetch until its
+// whole body has arrived. Playwright's `networkidle` cannot say this: it is a load state a document reaches once, so
+// idle() answers at once for a request the pointer starts later (#810).
 export async function measureClick(page: Page, step: Step): Promise<Timing> {
+  await page.evaluate(() => {
+    const state = window as typeof window & { pageRequestsOnTheirWay?: number };
+    if (state.pageRequestsOnTheirWay !== undefined) return;
+    state.pageRequestsOnTheirWay = 0;
+    const fetch = window.fetch;
+    window.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      if (headers.get('RSC') !== '1') return fetch.call(window, input, init);
+      state.pageRequestsOnTheirWay!++;
+      const arrived = () => { state.pageRequestsOnTheirWay!--; };
+      try {
+        const response = await fetch.call(window, input, init);
+        void response.clone().text().then(arrived, arrived);
+        return response;
+      } catch (error) { arrived(); throw error; }
+    };
+  });
   await page.locator(step.link).hover();
+  // The pointer's prefetch is asked for from its own handler; a frame and a task later it is counted.
+  await expect.poll(() => page.evaluate(() => new Promise<number>(resolve => requestAnimationFrame(() => setTimeout(() =>
+    resolve((window as typeof window & { pageRequestsOnTheirWay: number }).pageRequestsOnTheirWay))))),
+  { message: `${step.name}: the page the pointer asked for arrives`, intervals: [16] }).toBe(0);
   await idle(page);
   await page.evaluate(({ step, names, parts, life }) => {
     const face = (animation: Animation) => { const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
