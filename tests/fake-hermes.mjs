@@ -109,7 +109,7 @@ function dashboardAnswer(settings,request,response) {
  if(page) answer(200,'text/html; charset=utf-8',dashboardPage(prefix));
  else if(path==='/assets/index.js') answer(200,'text/javascript',dashboardCode);
  else if(path==='/assets/sessions.js') answer(200,'text/javascript',dashboardSessions);
- else if(path==='/api/status') answer(200,'application/json',JSON.stringify({version:settings.version}));
+ else if(path==='/api/status') answer(200,'application/json',JSON.stringify({version:settings.version,gateway_running:true,gateway_busy:settings.gatewayBusy,active_agents:settings.gatewayBusy?1:0}));
  else if(path==='/api/dashboard/themes') answer(200,'application/json',JSON.stringify({themes:dashboardThemes,active:settings.dashboardTheme}));
  else if(path==='/api/dashboard/theme'&&request.method==='PUT') {
   const chunks=[]; request.on('data',chunk=>chunks.push(chunk)); request.on('end',()=>{
@@ -192,6 +192,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   managementRequests:/** @type {{method?:string,path?:string,authorization?:string,range?:string,body:any}[]} */([]),
   // gtmworks's plugin of the main Agent's profile (#884): a file `/api/files/upload` writes lands in `files` and
   // `fileBytes` as the Engine's managed files routes write it (web_routers/files.py upload_managed_file); `/api/status`
+  // (the dashboard's one status route, below in dashboardAnswer)
   // says whether the gateway works a turn now (`gatewayBusy`); `/api/gateway/restart` counts in `restarts` and loads the
   // plugin of every profile that holds its plugin.yaml and names it in `plugins.enabled` (`pluginsLoaded`), whose Run
   // API then offers the toolset `gtmworks` with that plugin.yaml's description; the plugin's own route keeps each profile's Owner sessions in `ownerSessions`
@@ -668,7 +669,6 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     settings.fileBytes.set(path,{body:bytes});
     return send(response,200,{ok:true,entry:{name,path,is_directory:false,size:bytes.length},path});
    }
-   if(url.pathname==='/api/status'&&request.method==='GET') return send(response,200,{version:settings.version,gateway_running:true,gateway_busy:settings.gatewayBusy,active_agents:settings.gatewayBusy?1:0});
    if(url.pathname==='/api/gateway/restart'&&request.method==='POST') {
     settings.restarts++;
     // Each loaded plugin's toolset carries the description its plugin.yaml held at the restart, as the Engine reports it.
