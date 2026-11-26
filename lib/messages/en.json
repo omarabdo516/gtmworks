@@ -1832,5 +1832,11 @@
   "symReview": "Needs review",
   "symFailed": "Stopped after 2 tries",
   "symWaits": "Waiting for another card",
-  "symWaitsN": "Waiting for {0} cards"
+  "symWaitsN": "Waiting for {0} cards",
+  "viewStatus": "Status",
+  "viewDateOf": "Publishing date of {0}",
+  "viewThisMonth": "This month",
+  "viewUndated": "No publishing date",
+  "viewUndatedNone": "Every card has a date.",
+  "viewDateFailed": "The date wasn’t saved. Try again."
 }

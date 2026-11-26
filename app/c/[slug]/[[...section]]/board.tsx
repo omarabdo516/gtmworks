@@ -24,9 +24,9 @@ const NewCard=lazy(()=>import('./new-card'));
 // The board follows the Engine live (#840): a change the Engine reports, through gtmworks's own web server
 // (app/board-live.ts), reads the board again at once. While the stream is down the board reads again on a slow timer.
 
-export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,comments:number};
+export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,comments:number,project?:string|null,publishOn?:string|null};
 type Agent={id:string,name:string};
-type Board={cards:BoardCard[],main:Agent|null};
+export type Board={cards:BoardCard[],main:Agent|null};
 type Read={board:Board|null,state:'reading'|'read'|'failed'};
 
 const kept=new Map<string,Board>();
@@ -36,8 +36,9 @@ const kept=new Map<string,Board>();
 const againAfter=[3000,10000,30000];
 const slowRead=30000;
 
-// `accept` takes the board a write answered with (#836): it is a read like any other.
-function useBoard(company:string):Read&{accept:(board:Board)=>void} {
+// `accept` takes the board a write answered with (#836): it is a read like any other. The list and the calendar read
+// the same board through it (#845), and share its last good read.
+export function useBoard(company:string):Read&{accept:(board:Board)=>void} {
  const [read,setRead]=useState<Read>(()=>({board:kept.get(company)??null,state:'reading'}));
  const accept=useCallback((board:Board)=>{ kept.set(company,board); setRead({board,state:'read'}); },[company]);
  useEffect(()=>{

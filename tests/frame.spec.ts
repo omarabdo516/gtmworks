@@ -8,6 +8,7 @@ import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
 import { appOrigin } from './lane.mjs';
 import { motionTable } from './motion-table.mjs';
+import { laneHermes } from './lane-hermes';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
@@ -135,12 +136,8 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await expect(page.locator('.content')).not.toContainText(/Spend|Run count/);
  await chooseCompany(page,'rs-learning');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
- // The seed gives RS Learning no real Agents, so Home has none; the Writer's Card still shows in the work list's
- // Next actor column.
+ // The seed gives RS Learning no real Agents, so Home has none.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
- await page.goto('/c/rs-learning/work/list');
- const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
- await expect(assigned).toHaveCount(1);
  // The Inbox count sits on the Marketing board entry and opens the Inbox.
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
@@ -159,13 +156,11 @@ test('Home has four parts in order and missing sources show unavailable, never z
 });
 
 // Spec #695: the Members page gives nobody an agent role; a Member's rename follows in the work list, and an old role key
-// in the members' change log reads as the plain text it was stored with.
+// in the members' change log reads as the plain text it was stored with. The work list reads the Company's Engine's
+// board (#845): its Card, on the fake Engine, is given to the Member in gtmworks's row beside it.
 test('the Members page offers no agent role, the work list follows a rename, and an old role key reads as stored',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/list');
- const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
- await expect(writerRow).toHaveCount(1);
- const cardPath=await writerRow.getByRole('link').getAttribute('href');
- const card=Number(cardPath!.split('/').pop());
+ const fake=await laneHermes();
+ const card=fake.settings.kanban.task({title:'Weekly report for the team',status:'ready'}).id;
  const person=randomUUID();
  const initialName=`عضو اختبار مستقل ${person}`;
  const renamed='عضو بعد تغيير الاسم';
@@ -173,12 +168,13 @@ test('the Members page offers no agent role, the work list follows a rename, and
  const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
  const [writer]=JSON.parse(query("select m.company_id,m.person_id from public.members m join public.companies c on c.id=m.company_id join public.people p on p.id=m.person_id where c.slug='rs-learning' and p.name='وكيل المحتوى'"));
  try {
+  await signIn(page,'omar@example.com','/c/rs-learning/work/list');
   query(`do $$ begin
    insert into auth.users(id) values (${quote(person)});
    insert into public.people(id,name) values (${quote(person)},${quote(initialName)});
    insert into public.members(company_id,person_id,role) values (${quote(writer.company_id)},${quote(person)},'contributor');
    insert into public.member_audit(company_id,actor_id,actor_name,person_id,person_name,action,before_data,after_data) values (${quote(writer.company_id)},'20000000-0000-0000-0000-000000000001','Omar',${quote(person)},${quote(initialName)},'UPDATE','{"role":"contributor","agent_role":null}','{"role":"contributor","agent_role":"writer"}');
-   update public.work_cards set next_actor=${quote(person)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
+   insert into public.kanban_cards(company_id,task_id,assignee) values (${quote(writer.company_id)},${quote(card)},${quote(person)});
    end $$;`);
   await page.goto('/c/rs-learning/settings/members');
   const member=page.locator('.member-row').filter({has:page.locator('strong',{hasText:initialName})});
@@ -186,14 +182,15 @@ test('the Members page offers no agent role, the work list follows a rename, and
   await expect(page.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
   await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: — to writer'})).toHaveCount(1);
   await page.goto('/c/rs-learning/work/list');
-  const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
-  // The next actor's name, beside its first letter as a person's.
-  const nextActor=assigned.locator('td').last().locator('span:not(.avatar)');
-  await expect(assigned.locator('td').last().locator('.avatar')).toHaveText(Array.from(initialName)[0]);
-  await expect(nextActor).toHaveText(initialName);
+  const assigned=page.locator('.table tbody tr').filter({has:page.getByRole('link',{name:'Weekly report for the team',exact:true})});
+  // The Assignee's name, beside its first letter as a person's.
+  const assignee=assigned.locator('td').nth(2);
+  const assigneeName=assignee.locator('bdi');
+  await expect(assignee.locator('.avatar')).toHaveText(Array.from(initialName)[0]);
+  await expect(assigneeName).toHaveText(initialName);
   expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
   await page.reload();
-  await expect(nextActor).toHaveText(renamed);
+  await expect(assigneeName).toHaveText(renamed);
   await page.goto('/c/rs-learning/settings/members');
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});
   await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');
@@ -202,9 +199,10 @@ test('the Members page offers no agent role, the work list follows a rename, and
   expect(JSON.parse(query(`select role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0]).toEqual({role:'viewer'});
  } finally {
   query(`do $$ begin
-   update public.work_cards set next_actor=${quote(writer.person_id)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
+   delete from public.kanban_cards where company_id=${quote(writer.company_id)} and task_id=${quote(card)};
    update public.members set removed_at=now() where company_id=${quote(writer.company_id)} and person_id=${quote(person)};
    end $$;`);
+  await fake.close();
  }
 });
 

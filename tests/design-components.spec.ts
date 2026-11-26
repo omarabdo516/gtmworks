@@ -12,11 +12,13 @@ const omar = '20000000-0000-0000-0000-000000000001';
 const languages: Language[] = ['en', 'ar'];
 const themes: Theme[] = ['light', 'dark'];
 
-// The board is the Company's Engine's own Kanban board (spec #831): its tile is drawn from a Card on the fake Engine.
+// The board is the Company's Engine's own Kanban board (spec #831): its tile is drawn from a Card on the fake Engine. The
+// work list reads the same board (#845), and the Card is given to a Member there, whose first letter is the avatar.
 let fake: Awaited<ReturnType<typeof laneHermes>>;
 test.beforeAll(async () => {
   fake = await laneHermes();
-  fake.settings.kanban.task({ title: 'Weekly report for the team', status: 'ready' });
+  const card = fake.settings.kanban.task({ title: 'Weekly report for the team', status: 'ready' });
+  asAdmin(`insert into public.kanban_cards(company_id,task_id,assignee) values ('10000000-0000-0000-0000-000000000001','${card.id}','20000000-0000-0000-0000-000000000002')`);
 });
 test.afterAll(async () => {
   asAdmin(`update public.people set language='en' where id='${omar}'`);

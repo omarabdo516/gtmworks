@@ -97,6 +97,18 @@ test('a Card given to a Member shows that Member, and a Card with an Agent on th
  } finally { await fake.close(); }
 });
 
+test('a Card carries its Project, the Engine\'s tenant, and the publishing date gtmworks keeps beside it, or none (#845)', async () => {
+ const fake=await engineServing(company);
+ try {
+  const dated=fake.settings.kanban.task({title:'Launch reel',status:'ready',tenant:'Spring course'}).id;
+  const undated=fake.settings.kanban.task({title:'Someday',status:'todo'}).id;
+  const read=await readCompanyBoard(reader(agents,[{task_id:dated,assignee:null,publish_on:'2026-12-03',people:null}]),{company});
+  const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
+  assert.deepEqual([shown[dated].project,shown[dated].publishOn,shown[dated].person],['Spring course','2026-12-03',null]);
+  assert.deepEqual([shown[undated].project,shown[undated].publishOn],[null,null]);
+ } finally { await fake.close(); }
+});
+
 test('Waiting on you lists the newest Card first, and Done the newest finished first, as the Engine orders it', async () => {
  const fake=await engineServing(company);
  try {
