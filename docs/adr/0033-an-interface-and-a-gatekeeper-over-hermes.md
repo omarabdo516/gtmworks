@@ -38,7 +38,11 @@ Not built yet. The code, `GLOSSARY.md` and the tests describe today's product un
    - A board worker's dangerous command runs (`approvals.single_query_mode: approve`), as [ADR 0020](0020-full-power-first-limits-only-after-a-real-problem.md) asks. It runs in the Company's Work sandbox, which holds no key.
 3. **Channels get no new work.** What is built stays. Their fate is decided when a team uses them.
 4. **The Owner opens the Engine's own dashboard** behind gtmworks's sign-in, in gtmworks's colours, for every Hermes page gtmworks does not show: messaging platforms, plugins, webhooks, logs, system. gtmworks draws its own screen only for what a team uses daily.
-5. **Owner, Manager, Contributor and Viewer keep fixed meanings.** Changing a Role's permissions for a Company, the separate Grants, and hiding an Agent from a Member go.
+   - Settings are Hermes's own pages (Omar, 2026-11-26): gtmworks's settings screens that show what a Hermes page shows (Providers and models, keys, Routines, Skills, apps, an Agent's settings, usage) are retired in the removals spec, after the dashboard is in use and Omar has tried it. The screens a team uses daily (the Conversation, the board, the Agents) stay gtmworks's own.
+   - Accepted with it: those settings look as Hermes draws them in gtmworks's colours, they are the Owner's only, and what Hermes has not translated stays in English.
+5. **Owner, Manager, Contributor and Viewer keep fixed meanings.** Changing a Role's permissions for a Company and the separate Grants go.
+   - Which Agents a Member talks to stays, in its simplest form (Omar, 2026-11-26, changing his first answer): an Owner picks the Agents for each Member, as for a content writer who sees the content Agents and not the main Agent. An Agent not picked is not shown to that Member, and a Conversation with it is refused.
+   - It is a convenience, not a wall: the board is shared, so every Member sees every Agent's Cards. It is made stricter only after a real problem.
 6. **These go, each with the Engine's own way in its place:**
    - a Handover: an Agent makes a Card for another Agent;
    - Good morning: an ordinary Routine;
@@ -67,7 +71,7 @@ Technical calls of the grill, put to Omar in its closing summary and confirmed w
 - gtmworks is tied closer to the pinned Engine: its screens read the Engine's own routes. A pin bump is proven against every screen before it is released.
 - Deleting an Agent deletes its Conversations, and an Agent moved to another profile does not take its history.
 - Work can be published with no person having seen it, when a Member asked for it and the reviewing Agent passed it.
-- Any Contributor may talk to any Agent of the Company, one that can spend included. A limit comes back after a real problem (ADR 0020).
+- A Member talks only to the Agents an Owner picked for them, yet sees every Agent's Cards on the shared board. As the board spec stands, a Member may also give a Card to an Agent they do not talk to. A limit comes after a real problem (ADR 0020).
 - A Card's files are on the Engine's disk, not in the Company's storage.
 - Paused on 2026-11-26, nothing closed: specs #668 (with draft pull request #748) and #669 with their tickets; tickets #785 to #788 and #790 of spec #761; pull request #814 with its ticket #470, which extends the Handover; ticket #649, which is Channel work. The rest of #761 carries on.
 - Order: the three probes of spec #822 first (the speed of item 1, the dashboard behind the sign-in, a plugin tool that knows its person), then the board, the Conversation, the Owner's dashboard, and the removals one by one. Each removal is staged ([ADR 0023](0023-a-change-the-previous-release-cannot-run-against-is-staged.md)).
