@@ -61,6 +61,13 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.equal(engine.environment.HERMES_DASHBOARD_PUBLIC_URL,'http://${ENGINE_NAME:?Run scripts/install.sh}:9119');
  // The file tools write only under the work folder, which is the sandbox's (#390).
  assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
+ // And it holds (#871, #893): a profile's .env, which the Owner's Engine dashboard writes, is loaded over the Engine's own
+ // environment, so the write root is pinned in the managed .env too, which the Engine loads last and never lets a write
+ // save (hermes_cli/env_loader.py _apply_managed_env, hermes_cli/config.py env_write_refusal).
+ assert.ok(engine.volumes.includes('./engine-managed.env:/etc/hermes/.env:ro'),'the managed .env is where the Engine reads it');
+ assert.deepEqual(Object.fromEntries(readFileSync('scripts/engine-managed.env','utf8').split('\n').filter(line=>line&&!line.startsWith('#')).map(line=>line.split('='))),{HERMES_WRITE_SAFE_ROOT:'/work'});
+ assert.ok(readFileSync('scripts/release-assets.mjs','utf8').includes("'scripts/engine-managed.env'"),'a release carries it');
+ assert.equal((readFileSync('Dockerfile','utf8').match(/\/app\/scripts\/engine-managed\.env /g)??[]).length,2,'the image carries it for the install and the release');
  // A start hook that fails stops the Engine (s6-overlay's own switch): the file-sync patch and the listener address
  // either hold or the Engine does not serve, never an Engine that started without them.
  assert.equal(engine.environment.S6_BEHAVIOUR_IF_STAGE2_FAILS,2);

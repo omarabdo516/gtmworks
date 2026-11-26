@@ -45,6 +45,9 @@ services:
       # The backend the Engine's terminal, file and code tools use, pinned so no profile and no Settings write can move
       # them back onto the Engine's own disk (ADR 0018).
       - ./engine-managed.yml:/etc/hermes/config.yaml:ro
+      # And the file tools' write root, which a profile's .env could otherwise move: the managed .env is loaded last and
+      # never saved over (#893).
+      - ./engine-managed.env:/etc/hermes/.env:ro
       # The ssh backend's file sync, off (#393): a hook before s6 starts any service patches the Engine's own copy to take
       # the terminal.ssh_sync_files key the managed configuration sets, and fails the start if the pinned text moved.
       - ./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro

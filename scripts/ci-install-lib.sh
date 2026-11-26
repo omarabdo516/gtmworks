@@ -294,10 +294,16 @@ publishes_host_port() {
 }
 # Whether an Engine holds the release's managed configuration (ADR 0018, #871): the release's own file, mounted read-only,
 # from which Hermes reads the work sandbox's terminal backend and the tools no Agent gets, whatever a profile or the
-# Owner's Hermes dashboard wrote. The file is the one beside the template in scripts/ (or the one named second).
+# Owner's Hermes dashboard wrote. The file is the one beside the template in scripts/ (or the one named second). And its
+# managed environment (#893), which holds the file tools' write root: the Engine refuses to save it into any profile.
 engine_pinned() {
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/hermes/config.yaml"}}{{.RW}}{{end}}{{end}}' "$1") == false ]] || return 1
   docker exec "$1" cat /etc/hermes/config.yaml | cmp -s - "${2:-scripts/engine-managed.yml}" || return 1
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/hermes/.env"}}{{.RW}}{{end}}{{end}}' "$1") == false ]] || return 1
+  docker exec "$1" cat /etc/hermes/.env | cmp -s - scripts/engine-managed.env || return 1
+  docker exec -u hermes -e HERMES_HOME=/opt/data "$1" /opt/hermes/.venv/bin/python -c 'import sys
+from hermes_cli.config import env_write_refusal
+sys.exit(0 if env_write_refusal("HERMES_WRITE_SAFE_ROOT", "set") else 1)' || return 1
   docker exec -u hermes -e HERMES_HOME=/opt/data "$1" /opt/hermes/.venv/bin/python -c 'import sys
 from hermes_cli.config import load_config
 config = load_config()
