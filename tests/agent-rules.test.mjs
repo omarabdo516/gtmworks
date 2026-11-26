@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { withEngineContract } from '../lib/engine/handle.mjs';
@@ -208,35 +208,40 @@ test('with nothing changed the worker asks the Engine for no soul until the drif
  } finally { await hermes.close(); }
 });
 
-test('an Engine that times out is logged once with its cause, asked again after a longer wait each time, and once more when it answers',async()=>{
- const { engineHealth } = await import('../lib/engine-health.mjs');
- let clock=1e6; const lines=/** @type {any[]} */([]); let answers=false; const calls=/** @type {number[]} */([]);
- const health=engineHealth({now:()=>clock,write:line=>lines.push(JSON.parse(line))});
+test('an Engine whose write times out is asked again after a longer wait each time, and every pass once it answers',async()=>{
+ // The upkeep only schedules: the log line for the Engine's change of state is the transport's (tests/engine-transport.test.mjs).
+ const { upkeepSchedule } = await import('../lib/upkeep-schedule.mjs');
+ let clock=1e6; let answers=false; const calls=/** @type {number[]} */([]);
+ const health=upkeepSchedule({now:()=>clock});
  const memory={marks:new Map(),drift:clock};
  const write=async()=>{ calls.push(clock); return answers?{state:'written'}:{state:'unreachable',cause:'timedOut'}; };
- const db=rulesDatabase({'ag-a0000000000000000000000000000773':[rules[0]]});
+ let given=[rules[0]];
+ const db=()=>rulesDatabase({'ag-a0000000000000000000000000000773':given});
  engineRecord(rulesCompany,{address:'http://hermes-one:8642',key:'k'});
- const pass=()=>withDriver(rulesCalls,{write},()=>keepAgentRules(db,{memory,health,now:()=>clock}));
- await pass();
- assert.deepEqual(lines.map(({state,cause,engine})=>[state,cause,engine]),[['down','timedOut','hermes-one:8642']],'one line, naming a timeout');
- for(let second=1;second<=10;second++) { clock+=1000; await pass(); }
- // Asked at 0 s, then after 2 s, then 4 s more: never every pass.
- assert.deepEqual(calls.map(at=>(at-1e6)/1000),[0,2,6]);
- assert.equal(lines.length,1,'the state did not change, so nothing more is logged');
- answers=true; clock+=10000; await pass();
- assert.deepEqual(lines.map(({state,cause})=>[state,cause]),[['down','timedOut'],['up',null]]);
- clock+=1000; await pass();
- assert.equal(lines.length,2);
+ const logged=mock.method(console,'log',()=>{});
+ try {
+  const pass=()=>withDriver(rulesCalls,{write},()=>keepAgentRules(db(),{memory,health,now:()=>clock}));
+  await pass();
+  for(let second=1;second<=10;second++) { clock+=1000; await pass(); }
+  // Asked at 0 s, then after 2 s, then 4 s more: never every pass.
+  assert.deepEqual(calls.map(at=>(at-1e6)/1000),[0,2,6]);
+  answers=true; clock+=10000; await pass();
+  assert.equal(calls.length,4,'asked once its wait was over, and it answered');
+  // Answering, a rule changed is written on the very next pass, with no wait held over.
+  given=[rules[0],rules[1]]; clock+=1000; await pass();
+  assert.equal(calls.length,5);
+  assert.equal(logged.mock.callCount(),0,'the upkeep logs nothing of the Engine\'s state');
+ } finally { logged.mock.restore(); }
 });
 
 test('one profile that holds holds no other, and every profile is served however many there are',async()=>{
- const { engineHealth } = await import('../lib/engine-health.mjs');
+ const { upkeepSchedule } = await import('../lib/upkeep-schedule.mjs');
  const profiles=Array.from({length:150},(_,at)=>`ag-a${String(at).padStart(31,'0')}`);
  const served=new Set(); let release=()=>{};
  const held=new Promise(resolve=>{ release=()=>resolve({state:'written'}); });
  const write=async(/** @type {any} */ _,/** @type {{profile:string}} */ {profile})=>{ if(profile===profiles[0]) return held; served.add(profile); return {state:'written'}; };
  engineRecord(rulesCompany,{address:'http://hermes-two:8642',key:'k'});
- const pass=withDriver(rulesCalls,{write},()=>keepAgentRules(rulesDatabase(Object.fromEntries(profiles.map(profile=>[profile,[]]))),{memory:{marks:new Map(),drift:0},health:engineHealth({write:()=>{}})}));
+ const pass=withDriver(rulesCalls,{write},()=>keepAgentRules(rulesDatabase(Object.fromEntries(profiles.map(profile=>[profile,[]]))),{memory:{marks:new Map(),drift:0},health:upkeepSchedule({write:()=>{}})}));
  await new Promise(resolve=>setTimeout(resolve,50));
  assert.equal(served.size,149,'every other profile was served while the first one held');
  release(); assert.deepEqual(await pass,{written:150});

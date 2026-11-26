@@ -15,12 +15,15 @@ password, anything shaped like a token, and short digit runs such as authenticat
   session is no step of an open since #766: the steps under the replies are their own request after the page is drawn. A step that did not run is left out. Never a body or a key. `render` (#762) says
   what the render was: `open` (a person opened the page), `prefetch` (a link drew it ahead of a press) or `refresh` (the
   page the browser already showed, drawn again); only `open` lines measure what a person waited for.
-- `"event":"engine_state"`: a Company's Engine stopped answering the worker's upkeep, or answers again (#772): one line
-  per change of state, never one per call. Fields: `engine` (its host and port), `state` (`down` or `up`) and `cause`
-  (`timedOut`, `refused`, `nameNotFound`, `noNetwork`, `errorAnswer` or `failed`; null when `up`). While it is down the
-  worker asks it again after 2 s, then 4 s, and so on up to five minutes. A slow Engine reads `timedOut`, never
-  unreachable. The worker writes an Agent's rules and its Company's shared Skills only when they changed since its own
-  last write, and reads every profile once every five minutes for drift.
+- `"event":"engine_state"`: a listener of a Company's Engine changed its health (#772, #781), written by the one
+  transport (`lib/engine/transport.mjs`) for every caller, the web and the worker: one line per change of state, never
+  one per call. Fields: `engine` (its host and port), `listener` (`api` or `management`), `state` (`slow`: a call timed
+  out; `down`: nothing could connect; `up`: it answers again) and `cause` (`timedOut`, `refused`, `nameNotFound`,
+  `noNetwork` or `failed`; null when `up`). A slow listener is asked one call at a time, after a wait of 250 ms that
+  doubles with each timeout in a row up to 8 s (the Run lifecycle's calls, a Run's start, record, events, answer, permission and stop, go at their turn without it); a down one is asked one call at a time with no wait. A slow Engine reads
+  `timedOut`, never unreachable. The worker leaves an Engine whose write failed out of its upkeep after 2 s, then 4 s,
+  and so on up to five minutes. It writes an Agent's rules and its Company's shared Skills only when they changed since
+  its own last write, and reads every profile once every five minutes for drift.
 - `"event":"apps_unread"`: an Agent's apps that could not be listed for its Connected tools (#770), one line per failed
   read. Fields: `company`, `agent`, `cause` (`unreachable`, `timedOut`, `refused`, `noNetwork`, `errorAnswer`, `failed`,
   `noProfile`, `database`, `missing`). The page keeps the last good list it read in the last minute and reads again.
