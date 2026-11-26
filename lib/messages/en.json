@@ -1808,5 +1808,12 @@
   "logActConversationRestored": "restored the conversation",
   "cardLinkCopyFailed": "The link was not copied: this browser did not allow it. Copy it from the address bar.",
   "archiveCheckFailed": "Nothing was archived: what archiving would stop could not be checked. Try again.",
-  "cardArchiveFailedRetry": "That did not go through. The board was read again: check it, then try again."
+  "cardArchiveFailedRetry": "That did not go through. The board was read again: check it, then try again.",
+  "engineRefusedTitle": "gtmworks manages this",
+  "engineRefusedKey": "A key's value is not shown here. The Engine's own key stays on the server and is never shown, and this page cannot tell it from a model key, so no key is shown. Setting or replacing a key stays open here; your model keys are also in {0}.",
+  "engineRefusedUpdate": "The Engine updates with gtmworks, to the version gtmworks was proven on: when {0} says an update is ready, run gtmworks update on the server.",
+  "engineRefusedImport": "Backups are gtmworks's: a backup holds this Engine with the rest of the Company, and it is restored with gtmworks restore on the server. See {0}.",
+  "engineRefusedAgent": "Agents are made, renamed and removed in gtmworks, so its list of Agents and the Engine's never disagree. See {0}.",
+  "engineRefusedBack": "Back to the dashboard",
+  "engineRefusedBackup": "A backup of the Engine holds the Engine's own key, and that key stays on the server and is never shown. gtmworks backs up every Company with its Engine: run gtmworks backup on the server. See {0}."
 }

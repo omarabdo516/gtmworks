@@ -210,5 +210,58 @@ assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,second.cookie),404,
 for(const live of firstLive.all) live.socket.destroy();
 console.log(`The chat, the terminal and the board stream of an Owner made a Manager closed within ${Math.max(...secondLive.all.map(live=>live.closedAt-changed))} ms and got nothing after; the other Owner's stayed open`);
 
+// The four refusals on the pinned Engine (#871): each is refused for the Owner on its route with gtmworks's answer, which
+// names where gtmworks does it; the update route leaves the Engine's version as it was; writing a key stays open, and the
+// Engine's key, written into the root profile's .env as gtmworks writes it into every Agent's, is shown by no route: not
+// by a reveal, and not inside a backup archive the Engine made, downloaded by either route that serves one; and a write
+// of the terminal backend is answered and has no effect. Where the next command runs is the job's to read from the host.
+/** @param {string} method @param {string} path @param {unknown} [body] */
+async function call(method,path,body) {
+ const answer=await fetch(`${origin}${prefix}${path}`,{method,redirect:'manual',headers:{cookie:owner,origin,...(body===undefined?{}:{'content-type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
+ const text=await answer.text();
+ seen.push(`${method} ${path} ${JSON.stringify([...answer.headers])} ${text}`);
+ let json=null; try { json=JSON.parse(text); } catch { /* a page or a file */ }
+ return {status:answer.status,text,json};
+}
+const versionOf=async()=>(await call('GET','/api/status')).json?.version;
+const version=await versionOf();
+assert.ok(version,'the dashboard reports the Engine\'s version');
+/** @param {string} kind @param {string} method @param {string} path @param {unknown} [body] */
+async function refusedAs(kind,method,path,body) {
+ const answer=await call(method,path,body);
+ assert.equal(answer.status,403,`${method} ${path} is refused: HTTP ${answer.status} ${answer.text.slice(0,200)}`);
+ assert.equal(answer.json?.refused,kind,`${method} ${path} is refused as ${kind}`);
+ assert.match(answer.json?.where??'',new RegExp(`^/c/${slug}/settings\\?section=`),`${method} ${path} names where gtmworks does it`);
+}
+await refusedAs('hermesUpdate','POST','/api/hermes/update',{});
+await refusedAs('backupImport','POST','/api/ops/import',{archive:'/opt/data/backups/none.zip',force:true});
+await refusedAs('agentProfile','POST','/api/profiles',{name:'made-on-the-dashboard'});
+await refusedAs('agentProfile','DELETE','/api/profiles/default');
+assert.equal(await versionOf(),version,'the Engine\'s version is unchanged after the update route');
+const wrote=await call('PUT','/api/env',{key:'API_SERVER_KEY',value:engineKey});
+assert.equal(wrote.status,200,`writing a key stays open: HTTP ${wrote.status} ${wrote.text.slice(0,200)}`);
+await refusedAs('engineKey','POST','/api/env/reveal',{key:'API_SERVER_KEY'});
+await refusedAs('engineKey','POST','/api/env/reveal',{key:'OPENROUTER_API_KEY'});
+const backup=await call('POST','/api/ops/backup',{});
+assert.equal(backup.status,200,`a backup: HTTP ${backup.status} ${backup.text.slice(0,200)}`);
+const archive=backup.json?.archive;
+assert.ok(archive,`the backup names its archive: ${backup.text.slice(0,200)}`);
+// The backup runs on its own; the archive is whole once its size stops changing.
+const folder=archive.slice(0,archive.lastIndexOf('/')), name=archive.slice(archive.lastIndexOf('/')+1);
+let size=-1;
+for(let left=90;left>0;left--) {
+ const entry=(await call('GET',`/api/files?path=${encodeURIComponent(folder)}`)).json?.entries?.find(item=>item.name===name);
+ if(entry?.size>0&&entry.size===size) break;
+ size=entry?.size??-1;
+ await new Promise(resolve=>setTimeout(resolve,1000));
+}
+assert.ok(size>0,`the backup archive ${archive} was written`);
+await refusedAs('engineKey','GET',`/api/ops/backup/download?archive=${encodeURIComponent(archive)}`);
+await refusedAs('engineKey','GET',`/api/files/download?path=${encodeURIComponent(archive)}`);
+const terminal=await call('PUT','/api/config',{config:{terminal:{backend:'local'}}});
+assert.equal(terminal.status,200,`a write of the terminal backend is answered: HTTP ${terminal.status} ${terminal.text.slice(0,200)}`);
+assert.equal((await call('GET','/api/config')).json?.terminal?.backend,'ssh','the terminal backend stays the work sandbox\'s');
+console.log(`On Hermes ${version}, the update, an import, a profile made and one deleted, a key shown and a backup downloaded were each refused, and the version stayed; a key was written; the terminal backend stayed ssh`);
+
 for(const answer of seen) assert.ok(!answer.includes(engineKey),`no answer holds the Engine's key: ${answer.slice(0,120)}`);
 console.log(`None of ${seen.length} answers held the Engine's key`);

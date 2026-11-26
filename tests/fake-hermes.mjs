@@ -234,6 +234,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // and the prefix it was served under, and every socket it opened. See dashboardAnswer.
   dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string}[]} */([]),
   dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardTheme:'gtmworks',dashboardSockets:/** @type {Set<import('ws').WebSocket&{path:string}>} */(new Set()),
+  // What an Owner changed on the dashboard's other pages (#871): each messaging platform's switch and keys, the plugins
+  // installed, whether webhooks are on and each webhook, and the main model.
+  platforms:/** @type {Map<string,{enabled:boolean,env:Record<string,string>}>} */(new Map()),plugins:/** @type {Set<string>} */(new Set()),
+  webhooksOn:false,webhooks:/** @type {Map<string,{name:string,prompt:string,deliver:string}>} */(new Map()),
+  mainModel:/** @type {{provider:string,model:string}} */({provider:'auto',model:'default-model'}),
   screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human',viewer?:string|null}>} */(new Map()),
   screenCalls:/** @type {{method:string,params:any,token:string|null}[]} */([]),screenStartDelay:0,screenPictureUrl:/** @type {string|null} */(null),screenGrabs:0,
   // #713: the live stream (/api/display/ws, hermes_cli/web_routers/display.py): every ticket display.observe minted, and
@@ -805,9 +810,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(settings.envDropped.has(named)) { request.socket.destroy(); return; }
     if(request.method==='PUT') {
      if(settings.envHang.has(named)) return;
-     if(settings.failStep==='env'||settings.envFail.has(named)||!target) return send(response,500,{detail:'Internal Server Error'});
+     if(settings.failStep==='env'||settings.envFail.has(named)||(named!=='default'&&!target)) return send(response,500,{detail:'Internal Server Error'});
      if(typeof body?.value==='string'&&(body.value.includes('...')||body.value.includes('***'))) return send(response,400,{detail:'Refusing to save a redacted credential preview'});
-     if(body?.key==='API_SERVER_KEY') target.key=body.value;
+     if(body?.key==='API_SERVER_KEY'&&target) target.key=body.value;
      else envOf()[body?.key]=body?.value;
      return send(response,200,{ok:true,key:body?.key,config_updates:[]});
     }
@@ -1036,6 +1041,55 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      settings.appFlows.set(id,{server:name,profile:scoped,status:'authorization_required',state,redirect});
      return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`${settings.appAuthScheme}://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
     }
+   }
+   // The dashboard's other pages an Owner changes things on (#871, spec #866), small: Channels (messaging.py 974-1033: a
+   // platform's switch and its keys), MCP's list (mcp.py 94), Plugins (dashboard_ui.py 111, 202: an install from Hermes's
+   // catalogue), Webhooks (ops.py 158-194: the platform switched on, then a route), the Models page's main model
+   // (models.py 90, 376), a file read whole as a data URL (files.py 673), and a diagnostics dump (status.py 857), which
+   // here prints the profile's env as it is: the stand-in for any answer of the Engine's that would hold its key.
+   if(url.pathname==='/api/messaging/platforms'&&request.method==='GET') return send(response,200,{platforms:['telegram','whatsapp','slack'].map(id=>({id,enabled:settings.platforms.get(id)?.enabled===true,configured:Object.keys(settings.platforms.get(id)?.env??{}).length>0}))});
+   const platform=url.pathname.match(/^\/api\/messaging\/platforms\/([^/]+)$/);
+   if(platform&&request.method==='PUT') {
+    const id=decodeURIComponent(platform[1]);
+    if(!['telegram','whatsapp','slack'].includes(id)) return send(response,404,{detail:`Unknown platform '${id}'`});
+    settings.platforms.set(id,{enabled:body?.enabled===true,env:{...settings.platforms.get(id)?.env,...body?.env}});
+    return send(response,200,{ok:true,platform:id,enabled:body?.enabled===true});
+   }
+   if(url.pathname==='/api/mcp/servers'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    return send(response,200,{servers:Object.entries(servers).map(([name,cfg])=>({name,transport:cfg.command?'stdio':'http',url:cfg.url??null,enabled:cfg.enabled!==false}))});
+   }
+   if(url.pathname==='/api/dashboard/plugins'&&request.method==='GET') return send(response,200,[...settings.plugins].map(name=>({name,enabled:true})));
+   if(url.pathname==='/api/dashboard/agent-plugins/install'&&request.method==='POST') {
+    if(!body?.identifier) return send(response,400,{detail:'Provide an identifier or a catalog_name.'});
+    settings.plugins.add(body.identifier);
+    return send(response,200,{ok:true,name:body.identifier});
+   }
+   if(url.pathname==='/api/webhooks/enable'&&request.method==='POST') { settings.webhooksOn=true; return send(response,200,{ok:true}); }
+   if(url.pathname==='/api/webhooks'&&request.method==='GET') return send(response,200,{enabled:settings.webhooksOn,webhooks:[...settings.webhooks.values()]});
+   if(url.pathname==='/api/webhooks'&&request.method==='POST') {
+    if(!settings.webhooksOn) return send(response,400,{detail:'Webhook platform is not enabled. Enable it from the Webhooks page first.'});
+    const name=String(body?.name??'').trim().toLowerCase();
+    if(!/^[a-z0-9][a-z0-9_-]*$/.test(name)) return send(response,400,{detail:'Invalid name. Use lowercase alphanumeric with hyphens/underscores.'});
+    settings.webhooks.set(name,{name,prompt:body.prompt??'',deliver:body.deliver??'log'});
+    return send(response,200,{ok:true,name});
+   }
+   if(url.pathname==='/api/model/set'&&request.method==='POST') {
+    if(body?.scope!=='main') return send(response,400,{detail:"scope must be 'main' or 'auxiliary'"});
+    settings.mainModel={provider:body.provider,model:body.model};
+    return send(response,200,{ok:true,...settings.mainModel});
+   }
+   if(url.pathname==='/api/model/info'&&request.method==='GET') return send(response,200,settings.mainModel);
+   if(url.pathname==='/api/files/read'&&request.method==='GET') {
+    const path=url.searchParams.get('path')||'';
+    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    const found=fileAt(path,path); if(!found) return;
+    const type=found.file.type??mimeOf(found.entry.name); const bytes=Buffer.from(found.file.body);
+    return send(response,200,{name:found.entry.name,path,size:bytes.length,mime_type:type,data_url:`data:${type};base64,${bytes.toString('base64')}`});
+   }
+   if(url.pathname==='/api/ops/dump'&&request.method==='POST') {
+    const env={...settings.defaultEnv,API_SERVER_KEY:settings.key};
+    return send(response,200,{ok:true,output:Object.entries(env).map(([name,value])=>`${name}=${value}`).join('\n')});
    }
    // Model sign-in (hermes_cli/web_routers/oauth.py): ChatGPT through a device code, Claude from the command line only.
    const cancel=url.pathname.match(/^\/api\/providers\/oauth\/sessions\/([^/]+)$/);
