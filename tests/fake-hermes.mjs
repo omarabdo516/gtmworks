@@ -52,7 +52,7 @@ export function screenFrame(grab) {
 // route, /api/status; and its live parts (#870), each a socket opened with a single-use ticket from
 // POST /api/auth/ws-ticket: the chat, /api/ws, which says gateway.ready; its terminal, /api/pty, which writes a prompt;
 // and the Kanban board's event stream, /api/plugins/kanban/events, which reports each Card made with
-// POST /api/plugins/kanban/tasks. Every request needs the Engine's key, as the gated dashboard does. Answers whether the
+// POST /api/plugins/kanban/tasks by the Card's id, as Hermes does. Every request needs the Engine's key, as the gated dashboard does. Answers whether the
 // request was the dashboard's.
 // #872: its themes, as Hermes keeps them (hermes_cli/web_routers/dashboard_ui.py): a built-in one and gtmworks's own file
 // (scripts/engine-dashboard-theme.yaml, which every Engine reads), the active one in `settings.dashboardTheme` (gtmworks's,
@@ -123,8 +123,10 @@ function dashboardAnswer(settings,request,response) {
   const chunks=[]; request.on('data',chunk=>chunks.push(chunk));
   request.on('end',()=>{
    let title=''; try { title=String(JSON.parse(Buffer.concat(chunks).toString('utf8')).title??''); } catch { /* no body */ }
-   const task={id:randomUUID(),title};
-   for(const socket of settings.dashboardSockets) if(socket.path==='/api/plugins/kanban/events') socket.send(JSON.stringify({events:[{kind:'created',task}],cursor:Date.now()}));
+   // As Hermes reports it (plugins/kanban/dashboard/plugin_api.py stream_events, hermes_cli/kanban_db.py create_task): a
+   // `task_events` row naming the Card by its id, whose payload holds no title.
+   const task={id:`t_${randomUUID().slice(0,8)}`,title,status:'ready'}, event={id:++settings.dashboardEvents,task_id:task.id,run_id:null,kind:'created',payload:{assignee:null,status:task.status,parents:[]},created_at:Math.floor(Date.now()/1000)};
+   for(const socket of settings.dashboardSockets) if(socket.path==='/api/plugins/kanban/events') socket.send(JSON.stringify({events:[event],cursor:event.id}));
    answer(200,'application/json',JSON.stringify({task}));
   });
  }
@@ -233,7 +235,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The Engine's own dashboard (#869): every request to its pages, code and API, with the key and the cookies it came with
   // and the prefix it was served under, and every socket it opened. See dashboardAnswer.
   dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string}[]} */([]),
-  dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardTheme:'gtmworks',dashboardSockets:/** @type {Set<import('ws').WebSocket&{path:string}>} */(new Set()),
+  dashboardTickets:/** @type {Set<string>} */(new Set()),dashboardTheme:'gtmworks',dashboardEvents:0,dashboardSockets:/** @type {Set<import('ws').WebSocket&{path:string}>} */(new Set()),
   // What an Owner changed on the dashboard's other pages (#871): each messaging platform's switch and keys, the plugins
   // installed, whether webhooks are on and each webhook, and the main model.
   platforms:/** @type {Map<string,{enabled:boolean,env:Record<string,string>}>} */(new Map()),plugins:/** @type {Set<string>} */(new Set()),
