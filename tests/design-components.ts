@@ -119,7 +119,6 @@ export const placements: Record<string, Placement> = {
   'nav-group-label': { path: '/c/rs-learning/home', selector: '.sb-label' },
   'column-title': { path: board, selector: 'main .col:not(:has(.dot--waiting)) .col__name' },
   'table-header': { path: '/c/rs-learning/work/list', selector: 'main .table th' },
-  'label-chip': { path: `${board}/1`, selector: 'main .label-chip' },
   // A Member's first letter, beside the Assignee in the work list (#845; spec #695 took the role agents' avatars off Agents).
   avatar: { path: '/c/rs-learning/work/list', selector: 'main .table .avatar' },
   stat: { path: '/c/rs-learning/home', selector: 'main .stat', text: 'main .stat strong:not(.unavailable)' },

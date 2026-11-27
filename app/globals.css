@@ -94,7 +94,6 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .checklist label { display:flex; gap:8px; align-items:center; padding:8px 0; }
 .member-chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
 .member-chips>span { display:inline-flex; align-items:center; gap:6px; }
-.label-chip { border:1px solid; border-radius:var(--radius-sm); padding:2px 8px; font-size:var(--gw-fs-xs); }
 .mode-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid; border-radius:var(--radius-sm); padding:1px 8px; font-size:var(--gw-fs-xs); }
 .mode-chip i { width:8px; height:8px; border-radius:999px; background:currentColor; }
 .detail-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-top:1px solid var(--border); }
