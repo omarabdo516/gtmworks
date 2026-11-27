@@ -108,6 +108,41 @@ function kanbanBoard() {
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
   /** @param {string} task @param {string} author @param {string} body */
   comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
+  // The Engine's own stop for an open Run (reclaim_task, #838): the worker and its Run end `reclaimed`, the claim is
+  // released, the failure counter starts again and the Card goes back to `ready`; false for a Card with no open Run.
+  /** @param {string} id @param {string|null} [reason] */
+  reclaim(id,reason=null) {
+   const task=tasks.find(found=>found.id===id);
+   if(!task||task.status!=='running'&&!task.claim_lock) return false;
+   const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+   if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',ended_at:++clock,error:reason?`manual_reclaim: ${reason}`:null});
+   Object.assign(task,{status:'ready',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null,consecutive_failures:0,last_failure_error:null});
+   event(id,'reclaimed',{manual:true,reason},open?.id??null);
+   return true;
+  },
+  // A person's move (update_task's status, #838): `ready` from `blocked` or `scheduled` lets the Card go on
+  // (unblock_task, the failure counter starting again), `scheduled` parks it from todo, ready, running or blocked where
+  // the dispatcher does not start it (schedule_task, an open Run ending `scheduled`), and `running` is the dispatcher's
+  // alone. Answers the status code: 400 for `running` or an unknown status, 409 for a move from where the Card is not.
+  /** @param {string} id @param {string} status */
+  setStatus(id,status) {
+   const task=tasks.find(found=>found.id===id);
+   if(!task) return 404;
+   if(status==='running'||![...kanbanStatuses,'archived'].includes(status)) return 400;
+   if(status==='ready'&&['blocked','scheduled'].includes(task.status)) {
+    Object.assign(task,{status:'ready',current_run_id:null,consecutive_failures:0,last_failure_error:null});
+    event(id,'unblocked',null);
+    return 200;
+   }
+   if(status==='scheduled'&&['todo','ready','running','blocked'].includes(task.status)) {
+    const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+    if(open) Object.assign(open,{status:'scheduled',outcome:'scheduled',ended_at:++clock});
+    Object.assign(task,{status:'scheduled',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'scheduled',{reason:null},open?.id??null);
+    return 200;
+   }
+   return 409;
+  },
   // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
   // a Card that is not archived, the Engine answers that Card again. `ready` unless asked for triage or a parent is not
   // done, an assignee or none (hermes_cli/kanban_db_graph.py initial_task_state).
@@ -127,11 +162,20 @@ function kanbanBoard() {
   // `running`; a Card with no Agent is never claimed. `ticks` counts the ticks asked for. The Engine's own tick runs
   // every 60 s; the fake runs one only when it is asked, through POST /dispatch or a test calling this. Each claim is a
   // `claimed` event, so a live board sees the Card start.
+  // Each claim opens a Run on the Card's Agent (#838), and the worker's first prompt is kept in `prompts`, as the
+  // Engine builds it (hermes_cli/kanban_db_context.py): its header line, its body and every comment under its author.
   ticks:0,
+  prompts:/** @type {{task:string,run:number,profile:string,prompt:string}[]} */([]),
   dispatch() {
    this.ticks++;
    const spawned=tasks.filter(task=>task.status==='ready'&&task.assignee);
-   for(const task of spawned) { Object.assign(task,{status:'running',started_at:++clock,claim_lock:`fake:${task.id}`,current_run_id:clock}); event(task.id,'claimed',{assignee:task.assignee}); }
+   for(const task of spawned) {
+    const opened=this.run(task.id,{profile:task.assignee,claim_lock:`fake:${task.id}`});
+    Object.assign(task,{status:'running',started_at:task.started_at??clock,claim_lock:`fake:${task.id}`,current_run_id:opened.id});
+    event(task.id,'claimed',{assignee:task.assignee,run_id:opened.id},opened.id);
+    const thread=comments.filter(comment=>comment.task_id===task.id).flatMap(comment=>[`comment from worker \`${comment.author}\`:`,comment.body,'']);
+    this.prompts.push({task:task.id,run:opened.id,profile:task.assignee,prompt:[`# Kanban task ${task.id}: ${task.title}`,'','## Body',task.body??'','',...thread.length?['## Comment thread',...thread]:[]].join('\n')});
+   }
    return {reclaimed:0,crashed:[],timed_out:[],auto_blocked:[],promoted:0,spawned:spawned.map(task=>[task.id,task.assignee,`/opt/data/kanban/workspaces/${task.id}`]),skipped_unassigned:[],skipped_nonspawnable:[]};
   },
   // GET /board (get_board): every task not archived, in its status's column, each with its link, comment and child counts
@@ -1226,7 +1270,27 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      task.assignee=body.assignee||null;
      settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
     }
+    if(typeof body?.status==='string') {
+     const moved=settings.kanban.setStatus(task.id,body.status);
+     if(moved!==200) return send(response,moved,{detail:`status transition to '${body.status}' not valid from current state`});
+    }
     return send(response,200,{task});
+   }
+   // A comment under the author the caller names (add_comment: an empty body is a 400, the author `dashboard` when none)
+   // and the Engine's stop for a Card's open Run (reclaim_task_endpoint: 409 when it has none), #838.
+   const kanbanComment=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)\/comments$/);
+   if(kanbanComment&&request.method==='POST') {
+    const id=decodeURIComponent(kanbanComment[1]);
+    if(typeof body?.body!=='string'||!body.body.trim()) return send(response,400,{detail:'body is required'});
+    if(!settings.kanban.tasks.some(found=>found.id===id)) return send(response,404,{detail:`task ${id} not found`});
+    settings.kanban.comment(id,typeof body.author==='string'&&body.author?body.author:'dashboard',body.body);
+    return send(response,200,{ok:true});
+   }
+   const kanbanReclaim=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)\/reclaim$/);
+   if(kanbanReclaim&&request.method==='POST') {
+    const id=decodeURIComponent(kanbanReclaim[1]);
+    return settings.kanban.reclaim(id,typeof body?.reason==='string'?body.reason:null)?send(response,200,{ok:true,task_id:id})
+     :send(response,409,{detail:`cannot reclaim ${id}: not in a claimable state (not running, or unknown id)`});
    }
    if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
    send(response,404,{detail:'Not Found'});

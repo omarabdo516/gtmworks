@@ -1852,6 +1852,7 @@
   "symQuestion": "عنده سؤال",
   "symReview": "محتاجة مراجعة",
   "symFailed": "وقف بعد محاولتين",
+  "symStopped": "اتوقف",
   "symWaits": "مستنية بطاقة تانية",
   "symWaitsN": "مستنية {0} بطاقات"
 }

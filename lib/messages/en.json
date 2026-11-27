@@ -1852,6 +1852,7 @@
   "symQuestion": "Has a question",
   "symReview": "Needs review",
   "symFailed": "Stopped after 2 tries",
+  "symStopped": "Stopped",
   "symWaits": "Waiting for another card",
   "symWaitsN": "Waiting for {0} cards"
 }
