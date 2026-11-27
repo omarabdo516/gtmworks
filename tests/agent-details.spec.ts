@@ -34,12 +34,12 @@ test.beforeAll(async({},testInfo)=>{
  // Copy, Lead and SEO are made today, so none of them is asleep (#699: an Agent made over 7 days ago with no work for 7
  // days sleeps): the states below are waiting, working and idle.
  query(`do $$ begin
-    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
+    insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}'),('${copy}','${company}');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
    ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,now(),null,'${profileOf(copy)}'),
    ('${lead}','${company}','${leadConnection}','Lead','General',true,now(),null,'details-lead'),
    ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}','${profileOf(ads)}'),
    ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,now(),null,'details-seo');
-  insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}'),('${copy}','${company}');
   insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','${rsProfile}',true)
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');

@@ -122,7 +122,8 @@ test('English default, account language across sessions/devices, automatic conte
     await expectTitleAligned(titleNode,link.locator('..'),index===0?'right':'left');
     await expectNumberOrder(titleNode,index===0);
     await page.goto(`/c/rs-learning/work/board?card=${ids[index]}`);
-    const heading=page.locator('#cw-title');
+    // The Manager may rename it, so its title is the rename button inside the heading.
+    const heading=page.locator('#cw-title .cw-title-btn');
     await expect(heading).toHaveText(title);
     await expect(heading).toHaveCSS('direction',index===0?'rtl':'ltr');
     await expectNumberOrder(heading,index===0);

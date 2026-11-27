@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import type { supabase } from '@/lib/supabase';
 import { feedSince } from '@/lib/numbers.mjs';

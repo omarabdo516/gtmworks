@@ -10,7 +10,7 @@ import { chatPlace } from '@/lib/board-columns.mjs';
 import { withMention } from '@/lib/channels';
 import type { WaitingItem } from '@/lib/approval-queue';
 import type { BoardCard } from '@/app/board-read';
-import { BoardCardTile } from '@/app/board-card';
+import { BoardCardTile, cardAddress } from '@/app/board-card';
 import { answerAgentAccess, decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
 import { ChangeBoardCard } from './agent-change-card';
@@ -29,10 +29,9 @@ export function WaitingRows({items,cards,columnName,people}:{items:WaitingItem[]
  const row=useRowView(people);
  const mentions=items.filter(item=>item.kind==='mention'||item.kind==='channel_mention');
  const replies=items.filter(item=>!mentions.includes(item));
- const board=`/c/${people.slug}/work/board`;
  return <>
   {mentions.length>0&&<div className="mn-group" role="group" aria-labelledby="mn-h-own"><h3 className="mn-h" id="mn-h-own"><BoardIcon name="at"/><span>{t('waitingMentions')}</span> <span className="num">{mentions.length}</span></h3>{mentions.map(row)}{replies.length+cards.length>0&&<div className="mn-sep" role="separator"/>}</div>}
-  {cards.map(card=><BoardCardTile key={`card:${card.id}`} card={card} href={`${board}?card=${encodeURIComponent(card.id)}`} columnName={columnName}/>)}
+  {cards.map(card=><BoardCardTile key={`card:${card.id}`} card={card} href={cardAddress(people.slug,card.id)} columnName={columnName}/>)}
   {replies.map(row)}
  </>;
 }

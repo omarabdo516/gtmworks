@@ -30,9 +30,7 @@ const oldBoard=new Set(['approval','mention']);
 export const approvalQueue=(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role?:string)=>{ void role; return queue(db,company,person); };
 const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string)=>{
  void person; // the database reads it from the session
- const [listResult]=await Promise.all([
-  db.rpc('waiting_list',{c:company}),
- ]);
+ const listResult=await db.rpc('waiting_list',{c:company});
  const listed=((listResult.data || []) as WaitingItem[]).filter(item=>!oldBoard.has(item.kind));
  const ruleIds=listed.filter(item=>item.kind==='rule_suggestion').map(item=>item.id);
  const requestIds=listed.filter(item=>item.kind==='agent_request').map(item=>item.id);

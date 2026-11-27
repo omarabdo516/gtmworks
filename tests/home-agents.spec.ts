@@ -21,13 +21,13 @@ test.beforeAll(async({},testInfo)=>{
  fake=await laneHermes();
  query(`do $$ begin
   update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000005','${reviewer}');
+  insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}');
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('${aleemLead}','${aleem}','${id(11)}','Lead','General',true,'home-aleem-lead'),
    ('${lead}','${company}','${id(12)}','Lead','General',true,'home-lead'),
    ('${ads}','${company}','${id(13)}','Meta Ads','Runs the Meta ads.',false,'${profileOf(ads)}'),
    ('${seo}','${company}','${id(14)}','SEO','Writes the blog.',false,'home-seo');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${reviewer}','${ads}');
-  insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}');
   insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','co-${company.replaceAll('-','')}',true)
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
  end $$;`);

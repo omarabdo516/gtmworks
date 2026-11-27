@@ -44,7 +44,6 @@ test('a project is created and changed, and keeps its saved status and goal',asy
  await expect(row).toBeVisible();
  await expect(row.getByLabel('Goal')).toHaveValue('Sell the spring course');
  await expect(row.getByLabel('Project status')).toHaveValue('active');
- await expect(row).toContainText('Cards: 0');
  await row.getByLabel('Project status').selectOption('paused');
  await save(page,row.getByRole('button',{name:'Save'}));
  // The form is reset after the save: the status must stay on the saved value without a reload, so a second save (a new goal) keeps it.

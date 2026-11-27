@@ -71,7 +71,7 @@ In flight now: Open Design installed by the Owner and connected as a command app
 ## 3. Conversations and channels
 
 - ✅ **Conversations with an Agent.** One person's private exchange with one Agent; any Member except a Viewer may start one. [#6, #8, #25, #39]
-- ✅ **Cards inside replies.** Draft card, review card, question card, "Handed to you" card, and "Used N tools" under a reply. [#136, #137, #138, #139, #140, #141]
+- ✅ **Cards inside replies.** Draft card, review card, question card, handed step card, and "Used N tools" under a reply. [#136, #137, #138, #139, #140, #141]
 - ✅ **Each step live while an Agent works.** The line under the transcript names the Agent and the tool it runs now, and the turn's steps list fills in before the reply, in a Conversation and a channel alike, read from the Run's own event stream in the Engine. [#646]
 - ✅ **Permission requests in the chat.** "Allow once / Always allow / Don't allow", also waiting in "Waiting on you" and in channels. [#163, #165, #321]
 - ✅ **Composer.** "+" menu, `@` and `/` suggestions, image attach, commands such as /campaign, /report, /review, /article. [#153, #154, #155, #156, #158, #159]
@@ -148,7 +148,7 @@ In flight now: Open Design installed by the Owner and connected as a command app
 
 ## 7. Content, design and publishing
 
-- ✅ **Hand a step to a person.** What no Agent may do (publish where there is no API) is prepared by the Agent and marked "Done it" by a person. [#139, #140, GLOSSARY.md "Handed to you"]
+- ✅ **Hand a step to a person.** What no Agent may do (publish where there is no API) is prepared by the Agent and marked "Done it" by a person. [#139, #140]
 - 🟡 **The Library.** Files each Agent made in the work sandbox, with a read-only preview and download. Merged; waiting for the release (#572). [#194, #195, #395]
 - ✅ **Ready-made roles for content.** An article writer (leaves drafts in WordPress), an ad reviewer, a numbers reader. [#14, `ready-made.en.json`]
 - ✅ **A Card carries its publishing date.** Kept beside the Engine's Card, set in New card, the Card window and the calendar; the old board's caption fields and design Versions left with it (#846). [#116, #836, #845]

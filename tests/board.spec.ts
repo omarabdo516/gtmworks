@@ -19,9 +19,9 @@ test('Waiting on you shows exactly the reader\'s own list, items newest first, n
  // Omar has an item from before and one from after; the Manager has one of their own. The old board is switched off
  // (#846): none of its Cards or approvals is part of the list.
  const omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', stamp=Date.now();
- query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Older ${stamp}','',null)`);
- query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Newer ${stamp}','',null)`);
- query(`select public.add_waiting_item('${rs}','${manager}','test_kind','For the Manager ${stamp}','',null)`);
+ query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Older ${stamp}','',1)`);
+ query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Newer ${stamp}','',1)`);
+ query(`select public.add_waiting_item('${rs}','${manager}','test_kind','For the Manager ${stamp}','',1)`);
  query(`update public.waiting_items set created_at=now()-case when title like 'Older%' then interval '2 minutes' else interval '1 minute' end where title in ('Older ${stamp}','Newer ${stamp}')`);
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/approvals');
@@ -76,8 +76,8 @@ test('Waiting on you lists an Agent question and an item of a new kind, each lea
   const mailBefore=await mailCount();
   query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${rs}','${manager}','${attachedAgent.id}','Lead')`);
   query(`select public.add_waiting_item('${rs}','${manager}','question','Which offer goes first ${stamp}?','',null,'${conversation}','Lead')`);
-  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',null)`);
-  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',null)`);
+  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','A new kind ${stamp}','Seeded by the test',1)`);
+  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','For Omar only ${stamp}','',1)`);
   // Nothing leaves gtmworks: no mail (there are no webhooks since #341).
   expect(await mailCount()).toBe(mailBefore);
   await page.goto('/c/rs-learning/approvals');
@@ -92,7 +92,7 @@ test('Waiting on you lists an Agent question and an item of a new kind, each lea
   expect(await waiting.locator('.mcard').evaluateAll(cards=>cards.map(card=>card.textContent))).toEqual([expect.stringContaining(`A new kind ${stamp}`),expect.stringContaining(`Which offer goes first ${stamp}?`)]);
   await counted(page);
   const count=Number(await waiting.locator('.col__count').textContent());
-  // The item of the new kind names no chat, so it opens nothing (the old board's Card it named is switched off, #846);
+  // The item of the new kind names no chat, so it opens nothing (the old board's Card it names is switched off, #846);
   // it leaves once what it waited for is done.
   await expect(other).not.toHaveAttribute('href',/./);
   query(`update public.waiting_items set resolved_at=now() where title='A new kind ${stamp}'`);

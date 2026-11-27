@@ -22,7 +22,7 @@ import Projects from './projects';
 import Usage from './usage';
 import { managedUsage } from '@/lib/company-app-items';
 
-export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,decided?:string,item?:string}>}) { const {t,language}=await getI18n();
+export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,decided?:string,item?:string}>}) { const {t}=await getI18n();
  const {slug,section:parts}=await params; const oldCard=parts?.[0]==='work'&&parts?.[1]==='board'&&parts.length>2; const section=oldCard?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const reader=await companyReader(slug);
  // Signing in returns to the page asked for, with the settings overlay's own state (section, agent, period), the Card
  // open over the board (card) kept, so a link to Settings, Subscription and models or to a Card opens there; other query

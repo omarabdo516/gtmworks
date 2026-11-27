@@ -49,7 +49,7 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // updatePop, mentionMenu): the Agents this Member sees, and in a channel its other Members before them; "/" offers the
 // Commands. Its keys are the reference's: Arrow keys move and wrap, Enter or Tab picks in place of the token with one
 // space after it, Escape closes and keeps the text, and Enter sends only when the list is closed. Opening the list
-// closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
+// closes the "+" menu and the other way round.
 // `drawn`: the place draws a message the moment it is sent (#756), so the box lets it go then, and a refused send puts it
 // back, with its files and its send key, beside the line that says why.
 // `insert` adds a sentence after what is typed; `fill` puts it in the field in place of what is typed (#205's "Try
