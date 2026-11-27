@@ -24,7 +24,7 @@ test.beforeAll(async({},testInfo)=>{
   insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}');
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('${aleemLead}','${aleem}','${id(11)}','Lead','General',true,'home-aleem-lead'),
-   ('${lead}','${company}','${id(12)}','Lead','General',true,'home-lead'),
+   ('${lead}','${company}','${id(12)}','Lead','General',true,'co-${company.replaceAll('-','')}'),
    ('${ads}','${company}','${id(13)}','Meta Ads','Runs the Meta ads.',false,'${profileOf(ads)}'),
    ('${seo}','${company}','${id(14)}','SEO','Writes the blog.',false,'home-seo');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${reviewer}','${ads}');
@@ -48,13 +48,22 @@ test('a Member sees the main Agent first, then the made Agent shown to them, and
  await expect(page.locator('.home-agents')).not.toContainText('SEO');
 });
 
-test('the Card an Agent is working on now is a link under its own tile, and the others are not working',async({page})=>{
+test('the Card an Agent is working on now is its newest In progress, a link under its own tile, and the others are not working',async({page})=>{
  const title=`حملة الميتا ${Date.now()}`;
+ // Meta Ads has an older Card in progress, the newest one (the one it works on), then a newer one stopped on a question
+ // and one in Planned, which are not In progress.
+ fake.settings.kanban.task({title:`Older ${title}`,status:'running',assignee:profileOf(ads)});
  const card=fake.settings.kanban.task({title,status:'running',assignee:profileOf(ads)});
+ fake.settings.kanban.task({title:`Asks ${title}`,status:'blocked',assignee:profileOf(ads)});
  fake.settings.kanban.task({title:`Planned ${title}`,status:'ready',assignee:profileOf(ads)});
  await signIn(page,'reviewer@example.com','/c/rs-learning/home');
  const tile=(name:string)=>page.locator('.home-agents article').filter({has:page.getByRole('heading',{name,exact:true})});
  await expect(tile('Meta Ads').getByRole('link')).toHaveAttribute('href',`/c/rs-learning/work/board?card=${card.id}`);
  await expect(tile('Meta Ads').getByRole('link')).toHaveText(title);
  await expect(tile('Lead').locator('p')).toHaveText('Not working now');
+ // Another Agent's Card, newer than all of them, is under that Agent's tile only.
+ const leads=fake.settings.kanban.task({title:`Lead ${title}`,status:'running',assignee:`co-${company.replaceAll('-','')}`});
+ await page.reload();
+ await expect(tile('Lead').getByRole('link')).toHaveAttribute('href',`/c/rs-learning/work/board?card=${leads.id}`);
+ await expect(tile('Meta Ads').getByRole('link')).toHaveText(title);
 });

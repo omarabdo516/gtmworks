@@ -65,7 +65,9 @@ export default function Board({company,slug,writer,reviewer=false,me='',creating
  const [making,setMaking]=useState(creating&&writer); const opener=useRef<HTMLButtonElement>(null); const [made,setMade]=useState<string|null>(null);
  const cards=read.board?.cards??null; const main=read.board?.main??null;
  const filtered=filter.who!=='all'||filter.project!=='all';
- const drawn=(cards??[]).filter(card=>shown(card,filter,me));
+ // Opened on Waiting on you (`own`), the first column holds the reader's own list, not the board's waiting Cards: those
+ // are not drawn, so neither select mode nor "Select all shown" can take one (#846).
+ const drawn=(cards??[]).filter(card=>shown(card,filter,me)&&!(own&&card.column==='waiting'));
  const accept=(answer:{cards?:unknown,main?:Agent|null})=>{ if(Array.isArray(answer.cards)) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); };
  // Archive (#842): select mode's chosen Cards, the archived list in place of the columns with its search, and how many
  // Cards are archived once the list has said. `version` reads the list again after a change.
