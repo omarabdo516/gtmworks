@@ -1,7 +1,7 @@
 import { checkSettings } from '../lib/settings.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
-import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
+import { driveChannelRuns } from '../lib/channel-runs.mjs';
 import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveGoodMornings } from '../lib/good-morning-runs.mjs';
@@ -41,7 +41,6 @@ const selfHosted=isSelfHosted();
 const waiting=new Map(); const moving=new Map(); const keyWaits=new Map(); const providerAccounts=new Map(); const fallbackModels=new Map(); const mainAgentPlugins=new Map();
 await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
  loop('Channel runs',()=>driveChannelRuns(db,{})),
- loop('Note runs',()=>driveNoteRuns(db,{})),
  loop('Handovers',()=>driveHandovers(db,{})),
  // Each archived or restored Conversation's session takes the same mark in its Engine once the Engine answers (#674).
  loop('Conversation archive marks',()=>markConversationSessions(db),5000),

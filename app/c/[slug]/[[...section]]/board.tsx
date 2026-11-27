@@ -123,7 +123,7 @@ export default function Board({company,slug,writer,reviewer=false,me='',creating
  </KanbanCard>;
  const views=<nav className="tabs segmented" aria-label={t('boardViews')}>{[['board',t('board')],['calendar',t('calendar')],['list',t('list')]].map(([path,name])=>
   <Link key={path} data-slot="button" data-active={path==='board'} aria-current={path==='board'?'page':undefined} className={`button ${path==='board'?'active':''}`} href={`${base}/${path}`}>{name}</Link>)}</nav>;
- return <div className="work-root"><div className="board-view">
+ return <div className="work-root"><div className={`board-view${own?' approvals':''}`} data-focus={own?'waiting':undefined}>
   <header className="page-head"><div className="od-field"><h1 className="page-title">{t('marketingBoard')}</h1><p className="page-sub">{t('boardSubtitle')}</p></div><div className="work-toolbar" data-canonical-toolbar="work">{views}</div></header>
   <div className="board-tools">
    {!showArchived&&<BoardFilters cards={cards??[]} filter={filter} onFilter={setFilter}/>}

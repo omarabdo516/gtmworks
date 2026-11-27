@@ -5,7 +5,7 @@ import { withEngineContract } from '../lib/engine/handle.mjs';
 import { readFileSync } from 'node:fs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { closeOpenRuns, decidePermission } from '../lib/conversation-runs.mjs';
-import { decideChannelPermission, driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // #163 on the fake engine: the closer keeps the request a Run waits on, delivers each claimed choice before the Run may
@@ -212,23 +212,6 @@ test('a request whose words carry a NUL or half of a surrogate pair is kept with
  assert.deepEqual(await decide(person,service,fake,'once'),{state:'decided',choice:'once',at:'2026-06-10T10:20:00.000Z',first:true});
  assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'once'}]);
  assert.equal(cards[0].state,'decided');
-});
-
-// Nobody can answer a note's Run: its request is not allowed, at once, as its question is answered with nothing. A
-// channel's Run asks the Member who called its Agent (#165), below.
-for(const [label,drive,due,close] of /** @type {const} */([['note',driveNoteRuns,'note_runs_due','close_note_run']])) test(`a ${label}'s Run asking to allow an action is not allowed at once, and goes on to its reply`,async()=>{
- const fake=asking();
- const run=/** @type {string} */(await fake.engineFor({}).start({conversation:'s',input:'Clean up',idempotencyKey:`${label}:1`}));
- const key=encryptSecret('test-only-key',encryptionKey); const closes=/** @type {any[]} */([]);
- const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name===due) return {data:closes.length?[]:[{message:1,run,company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected',key_encrypted:key}],error:null};
-  if(name===close) { closes.push(args); return {data:true,error:null}; }
-  return {data:null,error:{message:'unexpected'}};
- }};
- assert.deepEqual(await withEngineContract(fake.engineFor,()=>drive(service,{})),{started:0,closed:0},'the read that finds the request does not close the Run');
- assert.deepEqual(fake.permits,[{run,permission:`${run}_p1`,choice:'deny'}]);
- assert.deepEqual(await withEngineContract(fake.engineFor,()=>drive(service,{})),{started:0,closed:1});
- assert.equal(closes[0].reply,'Reply to: Clean up (deny)');
 });
 
 // #165: a channel's Run asks the Member who called its Agent. The closer keeps the request and the Run stays open while it

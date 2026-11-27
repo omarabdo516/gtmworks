@@ -122,21 +122,6 @@ test('while the record is on its way the chat keeps its title and composer aroun
  expect([document.activeElement === loaded, loaded.selectionStart, loaded.selectionEnd]).toEqual([true, 4, 7]);
 });
 
-test('a chat on the board shows its corner pill while its record is on its way, then the column its record reads', async () => {
- const { record, arrive } = held();
- const screen = await render(<LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
-  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer board={{ card: 7, column: 'progress' }}><Arrived record={record} team={false}/></ConversationView>
- </div></LanguageProvider>);
- await expect.element(screen.getByText('Loading the chat', { exact: true })).toBeInTheDocument();
- const pill = screen.getByRole('link', { name: 'On the board: In progress' });
- await expect.element(pill).toBeVisible();
- await expect.element(pill).toHaveAttribute('href', '/c/rs-learning/work/board?show=7');
- arrive(talk([asked, reply], { board: { card: 7, column: 'waiting' } }));
- await expect.element(screen.getByText('On it.')).toBeVisible();
- await expect.element(screen.getByRole('link', { name: 'On the board: Waiting on you' })).toBeVisible();
- await expect.element(pill).not.toBeInTheDocument();
-});
-
 test('text typed while the chat loads stays in the box without taking the focus from where the person moved it', async () => {
  const { record, arrive } = held();
  const screen = await render(<LanguageProvider language="en"><button type="button">Elsewhere</button><div className="gw" style={{ height: 900 }}>

@@ -2,7 +2,6 @@ import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-import { oldCard } from './old-card';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the next
 // case reads the English faces (#257); Arabic at 390 is held to the design system (#805).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
@@ -22,7 +21,7 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
  for(const language of ['en','ar']) {
   await chooseLanguageInSettings(page,language);
   await expect(page.locator('html')).toHaveAttribute('lang',language);
-  for(const [path,width] of [...['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings'].map(path=>[path,1440] as const),['work/list',390] as const,['agents',390] as const]) {
+  for(const [path,width] of [...['home','work/board','work/calendar','work/list','approvals','agents','settings'].map(path=>[path,1440] as const),['work/list',390] as const,['agents',390] as const]) {
    await page.setViewportSize({width,height:900});
    await page.goto(`/c/rs-learning/${path}`);
    await page.evaluate(()=>document.fonts.ready);
@@ -70,7 +69,7 @@ test('every page in English at 390 draws in faces that loaded, Inter for its own
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  await chooseLanguageInSettings(page,'en');
  await expect(page.locator('html')).toHaveAttribute('lang','en');
- for(const path of ['home','work/board','work/board/1','work/calendar','work/list','approvals','agents','settings']) {
+ for(const path of ['home','work/board','work/calendar','work/list','approvals','agents','settings']) {
   await page.goto(`/c/rs-learning/${path}`);
   await page.evaluate(()=>document.fonts.ready);
   expect(await page.locator('body').evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,'')),path).toBe('InterVariable');
@@ -149,130 +148,12 @@ test('the Owner of every company lands on a Company home from the sign-in page a
  for(const slug of ['rs-consultations','aleem']) { await chooseCompany(page,slug); await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`)); await expect(page.locator('.home-dashboard')).toBeVisible(); }
 });
 
-test('a design file over 1MB with an Arabic name is added to a Card and uploaded again as its next version',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- const file={name:'تصميم.png',mimeType:'image/png',buffer:Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64'), Buffer.alloc(1024*1024)])};
- await page.getByLabel('New design file').setInputFiles(file);
- await page.getByRole('button',{name:"Add design"}).click();
- await expect(page.getByText(/Version 1:/)).toBeVisible();
- await page.locator('input[type=file]').first().setInputFiles(file);
- await page.getByRole('button',{name:"Upload version"}).first().click();
- await expect(page.getByText(/Version 2:/)).toBeVisible();
-});
-
-test('approval queue, rejection and ordered steps',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings/work');
- const settings=page.locator('.approval-settings');
- await settings.getByLabel("New step name").fill('مراجعة إضافية للاختبار');
- await settings.getByLabel("New approver").selectOption('role:owner');
- await settings.getByRole('button',{name:"Add step"}).click();
- await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
- // The old board's approvals wait in its own Waiting on you column, opened where a chat shows a Card (?show=) since #841
- // took them out of the list and the sidebar's count, which counts the Engine board's Cards instead.
- const queue='/c/rs-learning/work/board?show=1';
- const sidebarCount=page.locator('.sidebar .sb-count[href$="/approvals"]');
- await page.goto('/c/rs-learning/approvals');
- await expect(sidebarCount).toHaveText(/^\d+$/);
- const counted=await sidebarCount.textContent();
- // An old Card on its own page: New card makes its Cards on the Engine since #836.
- const title=`بطاقة موافقة ${Date.now()}`;
- await oldCard(page,title);
- const cardUrl=page.url();
- await page.getByLabel("Caption",{exact:true}).fill('نص مخصص للمراجعة');
- await page.getByLabel("Offering",{exact:true}).fill('عرض مخصص للمراجعة');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:"Save changes"}).click()]);
- await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- // The old board's "Waiting on you" column (ADR 0013) holds the card; the sidebar's count does not name it.
- await page.goto(queue);
- const waiting=page.locator('.col[data-column="waiting"]');
- const queued=waiting.locator('.approval-card').filter({hasText:title});
- await expect(queued).toBeVisible();
- await expect(sidebarCount).toHaveText(String(counted));
- await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',`/c/rs-learning/work/board?card=${new URL(cardUrl).pathname.split('/').pop()}`);
- // The decision is made inside the card's own page, beside the caption and the brief it is about.
- await page.goto(cardUrl);
- // By role: a filled textarea's text is part of its wrapping label's text, so getByLabel stops matching it once it has a caption.
- await expect(page.getByRole('textbox',{name:"Caption",exact:true})).toHaveValue('نص مخصص للمراجعة');
- await expect(page.getByLabel("Offering",{exact:true})).toHaveValue('عرض مخصص للمراجعة');
- const review=page.locator('[data-card-section="review"]');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), review.getByRole('button',{name:"Approve"}).click()]);
- // The second step is also Omar's: the card is still waiting on him.
- await page.goto(queue);
- await expect(waiting.locator('.approval-card').filter({hasText:title})).toBeVisible();
- await page.goto(cardUrl);
- await page.locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
- await expect(page.locator('.card-stage-line')).toContainText('معتمد');
- await page.goto(queue);
- await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);
- await page.goto(cardUrl);
- await expect(page.locator('.card-stage-line')).toContainText('معتمد');
- const rejected=`بطاقة رفض ${Date.now()}`;
- await oldCard(page,rejected);
- const rejectedUrl=page.url();
- await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- await page.goto(queue);
- const row=waiting.locator('.approval-card').filter({hasText:rejected});
- await expect(row).toBeVisible();
- await page.goto(rejectedUrl);
- const decision=page.locator('[data-card-section="review"]');
- await decision.getByText("Reject with a reason").click();
- await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم');
- await decision.getByLabel("Design needs work",{exact:true}).check();
- await decision.getByRole('button',{name:"Confirm rejection"}).click();
- await expect(page.locator('.rejection-notice')).toContainText('يرجى تعديل التصميم');
- await page.goto(queue);
- await expect(row).toHaveCount(0);
- await page.goto(rejectedUrl);
- await expect(page.locator('.card-stage-line')).toContainText('تصميم ومونتاج');
- await expect(page.locator('.rejection-notice')).toContainText('يرجى تعديل التصميم');
- await page.goto('/c/rs-learning/settings/work');
- const step=page.locator('.approval-settings form').filter({has:page.locator('input[value="مراجعة إضافية للاختبار"]')});
- await step.getByRole('button',{name:"Delete"}).click();
- await expect(step).toHaveCount(0);
-});
-
-// The external-agent API is gone (#341): its routes answer not found, with or without a key.
 test('the old agent API routes answer not found', async ({request}) => {
  const key={Authorization:'Bearer agt_local_fixture_for_tests_only'};
  const root='/api/v1/companies/rs-learning';
  for(const [method,path] of [['GET',`${root}/cards?next_actor=me`],['POST',`${root}/cards`],['PATCH',`${root}/cards/1`],['POST',`${root}/cards/1/comment`],
   ['POST',`${root}/cards/1/run-keys`],['DELETE',`${root}/cards/1/run-keys`],['GET',`${root}/skills`],['GET',`${root}/cards/1/files/1`]] as const)
   for(const headers of [key,{}]) expect((await request.fetch(path,{method,headers,data:method==='GET'||method==='DELETE'?undefined:{}})).status(),`${method} ${path}`).toBe(404);
-});
-
-// The caption's lines survive the real save and a reload, in English and in Arabic; its height and direction are
-// checked in components/card-detail.test.tsx.
-test('a caption of several lines in English and Arabic survives saving and a reload',async({page})=>{
- await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
- const caption=page.locator('textarea[name=caption]'); // Found by name: a label's accessible name grows with the text once the field has a value.
- const save=()=>Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:'Save changes'}).click()]);
- for(const text of ['First line\nSecond line\nThird line','السطر الأول\nالسطر الثاني\nالسطر الثالث']) {
-  await caption.fill(text);
-  await save();
-  await page.reload();
-  await expect(caption).toHaveValue(text);
- }
- await caption.fill('');
- await save(); // Leave the seeded card as the other tests expect it.
-});
-
-// The publishing date's form round trip: an unrelated save leaves the date as it was, and a changed date is read back
-// as its activity on the Card and on Home. The phone layout of these controls is in components/card-detail.test.tsx.
-test('an unrelated save keeps a Card\'s publishing date, and a changed date reads back on the Card and Home',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board/2');
- const dates=page.locator('.detail-row').filter({hasText:'Updated publishing date'});
- const before=await dates.count();
- await page.getByLabel("Offering",{exact:true}).fill('عرض محدث دون تعديل الموعد');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated Offering: عرض محدث دون تعديل الموعد')).toBeVisible();
- await expect(dates).toHaveCount(before);
- await page.getByLabel("Publishing date",{exact:true}).fill('2032-11-12T12:00');
- await page.getByRole('button',{name:"Save changes"}).click();
- await expect(page.getByText('Updated publishing date: November 12')).toBeVisible();
- await page.goto('/c/rs-learning/home');
- await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText('Updated publishing date: November 12')).toBeVisible();
 });
 
 test('an error thrown in the page is reported to the server log endpoint',async({page})=>{

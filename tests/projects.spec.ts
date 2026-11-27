@@ -3,7 +3,6 @@ import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
 import { execFileSync } from 'node:child_process';
-import { oldCard } from './old-card';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -30,7 +29,7 @@ async function shoot(page:Page,name:string) {
  await page.setViewportSize({width:1280,height:720});
 }
 
-test('a project is created, a card is filed into it, and the project page counts it',async({page})=>{
+test('a project is created and changed, and keeps its saved status and goal',async({page})=>{
  await mkdir('test-results/screenshots',{recursive:true});
  await signIn(page,'omar@example.com','/c/rs-consultations/projects');
  // A company without projects shows the empty state.
@@ -58,34 +57,13 @@ test('a project is created, a card is filed into it, and the project page counts
  await expect(page.getByRole('form',{name,exact:true}).getByLabel('Project status')).toHaveValue('paused');
  await expect(page.getByRole('form',{name,exact:true}).getByLabel('Goal')).toHaveValue('Sell the spring course to returning students');
 
- // File one old card into it from its own page. The board, the list and the calendar read the Engine's own Kanban
- // board since spec #831, whose Cards take a Project name (the Engine's tenant) and filter by it (#837, #845).
- const {path}=await oldCard(page,`Filed card ${Date.now()}`);
- const section=page.locator('[data-card-section=project]');
- await section.getByLabel('Project',{exact:true}).selectOption({label:name});
- await save(page,section.getByRole('button',{name:'Save'}));
- await expect(page.locator('.card-stage-line')).toContainText(name);
- // The picker keeps the saved project after the form resets, so another Save does not take the card out.
- await expect(section.getByLabel('Project',{exact:true})).toHaveValue(/^\d+$/);
- await save(page,section.getByRole('button',{name:'Save'}));
- await expect(section.getByLabel('Project',{exact:true})).toHaveValue(/^\d+$/);
- await expect(page.locator('.card-stage-line')).toContainText(name);
- await expect(page.locator('.detail-row').filter({hasText:`Filed the card in ${name}`})).toHaveCount(1);
-
- // The project page counts it.
- await page.goto('/c/rs-learning/projects');
- await expect(page.getByRole('form',{name,exact:true})).toContainText('Cards: 1');
- await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
- // The same two pages in both languages, phone and desktop.
+ // The page in both languages, phone and desktop.
  try {
   for(const language of ['en','ar'] as const) {
    await chooseLanguage(page,language);
    await page.goto('/c/rs-learning/projects');
    await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
    await shoot(page,`projects-page-${language}`);
-   await page.goto(path);
-   await expect(page.locator('[data-card-section=project] select')).toBeVisible();
-   await shoot(page,`projects-card-${language}`);
   }
  } finally { await chooseLanguage(page,'en'); }
 });

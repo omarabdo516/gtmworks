@@ -521,7 +521,7 @@
   "logEntry": "{0} entry",
   "logShowing": "Showing the newest {0}",
   "logEmpty": "Nothing in the log yet. As soon as Lead makes an agent, or someone changes something, it’s written here on its own.",
-  "logNoMatch": "No entries match these filters. Try “Everyone”, or another card.",
+  "logNoMatch": "No entries match this filter. Try “Everyone”, or someone else.",
   "logForever": "Nothing in the log is ever deleted, not even by an Administrator.",
   "sheetLogForever": "Nothing in the log is ever deleted, not even by an Administrator. Only the writer can edit a note, in its first 5 minutes.",
   "logYou": "(you)",

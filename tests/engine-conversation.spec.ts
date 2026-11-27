@@ -662,95 +662,6 @@ test('Done it pressed while the Agent is busy waits as its person\'s next turn a
  } finally { speaks('en'); detach(); await fake.close(); }
 });
 
-// #146: the step is handed over in a chat whose first Run put its Card In progress. While it waits, the step is a row of
-// its person's Waiting on you, and the Card keeps its stage; the chat's pill shows the wait; Done it sends the Card back.
-// The chat's draft and Done it are rows of the Card's Log. The old board stays on the board opened on Waiting on you
-// (/approvals) until spec #831 takes it off (#846); since #841 its Cards are no part of that list, which draws the step on
-// its own row, and what waits on whom on the Engine's board is kanban-waiting.spec.ts.
-test('a Card whose chat hands its person a step waits as a row of their Waiting on you and keeps its stage; Done it sends it back, and the chat\'s rows are on the Card\'s Log',async({page,browser})=>{
- test.setTimeout(240000);
- const fake=await laneHermes(); const {conversation,show,detach}=await handedStep(fake);
- const others=['20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004'];
- const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id in ('${omar}','${others.join("','")}')`);
- const [{id:card,stage_id:stage}]=JSON.parse(query(`select id,stage_id from public.work_cards where conversation_id='${conversation}'`));
- const stageNow=()=>JSON.parse(query(`select stage_id from public.work_cards where id=${card}`))[0].stage_id;
- const [{run_id:run}]=JSON.parse(query(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id limit 1`));
- const opened:{close:()=>Promise<void>}[]=[];
- const member=async(email:string)=>{ const context=await browser.newContext(); opened.push(context); const other=await context.newPage(); await signIn(other,email,'/c/rs-learning/work/board'); return other; };
- const kcard=(on:typeof page)=>on.locator(`#board-cols .kcard[data-card-id="${card}"]`);
- const columnOf=(on:typeof page)=>kcard(on).evaluate(node=>node.closest('.col')?.getAttribute('data-column'));
- const waitingCount=(on:typeof page)=>on.locator('.col[data-column="waiting"] .col__count');
- try {
-  language('en');
-  await page.setViewportSize({width:1440,height:900});
-  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
-  const sidebar=page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
-  expect(await columnOf(page)).toBe('progress');
-  // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
-  await expect(sidebar).not.toBeEmpty();
-  const before={sidebar:Number(await sidebar.textContent()),column:Number(await waitingCount(page).textContent())};
-  // A draft shown in the chat once it has its Card, and the step handed over.
-  query(`select public.agent_show_card('${conversation}','${run}','call-1','draft','خطة المقال','{"line":"مسودة","rows":[]}'::jsonb)`);
-  show();
-  const reviewer=await member('reviewer@example.com'), viewer=await member('viewer@example.com');
-  const tags={en:'Handed to you',ar:'اتسلّمتلك'};
-  const item=page.locator('.col[data-column="waiting"] a.mcard[data-kind="hand"]');
-  for(const value of ['en','ar'] as const) {
-   language(value);
-   await page.reload();
-   await expect(item,`omar in ${value}`).toHaveCount(1);
-   await expect(item.locator('.wtag--hand')).toHaveText(tags[value]);
-   await expect(item.locator('.mcard__q')).toHaveText(handTitle);
-   await expect(item).toHaveAttribute('href',new RegExp(`/conversations/${conversation}#hand-`));
-   // The old Card is no row of the list.
-   await expect(kcard(page)).toHaveCount(0);
-   await expect(sidebar).toHaveText(String(before.sidebar+1));
-   await expect(waitingCount(page)).toHaveText(String(before.column+1));
-  }
-  expect(stageNow()).toBe(stage);
-
-  // The chat's pill shows the wait, as the Card does.
-  language('en');
-  await page.goto(`/c/rs-learning/conversations/${conversation}`);
-  const pill=page.locator('.chat__corner .corner-pill');
-  await expect(pill).toHaveAccessibleName('On the board: Waiting on you');
-  await expect(pill).toHaveClass(/\bis-waiting\b/);
-
-  // The draft is on the Card's Log for another Contributor, and on the Activity log for the Viewer.
-  await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
-  await reviewer.locator('.sheet #sh-tab-log').click();
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('delivered the draft');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('خطة المقال');
-  await viewer.goto(`/c/rs-learning/log?card=${card}`);
-  await expect(viewer.locator('main')).toContainText('delivered the draft');
-
-  // Done it: the Card is drawn In progress again, its stage as it was, and the pill names its column.
-  await page.locator('[id^="hand-"]').getByRole('button',{name:'Done it'}).click();
-  await expect(pill).toHaveAccessibleName('On the board: In progress');
-  await expect(pill).not.toHaveClass(/\bis-waiting\b/);
-  for(const on of [page]) {
-   await on.goto('/c/rs-learning/approvals');
-   await expect.poll(()=>columnOf(on)).toBe('progress');
-   await expect(kcard(on).locator('.badge')).toHaveCount(0);
-  }
-  await expect(sidebar).toHaveText(String(before.sidebar));
-  expect(stageNow()).toBe(stage);
-  await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
-  await reviewer.locator('.sheet #sh-tab-log').click();
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('did it');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText(handTitle);
-  await viewer.goto(`/c/rs-learning/log?card=${card}`);
-  await expect(viewer.locator('main')).toContainText('did it');
- } finally {
-  language('en'); for(const context of opened) await context.close();
-  // Done it's turn may still hold its reservation, which keeps the Connection detach() removes; the turn goes first, so
-  // the worker cannot claim and reserve it again.
-  query(`delete from public.conversation_queued_turns where conversation_id='${conversation}'`);
-  query(`delete from public.conversation_run_reservations where conversation_id='${conversation}'`);
-  try { detach(); } finally { await fake.close(); }
- }
-});
-
 // #138: an Agent asks its person with the Engine's own clarify tool; the fake engine scripts the question (the reference's
 // th-meta m3) and gives its reply the answer.
 test('integration: an Agent\'s question is answered once by its person, by a pick or typed words, the same Run goes on to its reply, the record reads the answer as the person\'s, and the log row is the person\'s',async()=>{
@@ -766,8 +677,7 @@ test('integration: an Agent\'s question is answered once by its person, by a pic
   const read=async()=>{
    const {data:found}=await person.from('conversations').select(conversationColumns).eq('id',conversation).single();
    const record=await conversationRecord(person as unknown as Parameters<typeof conversationRecord>[0],omar,company,found!);
-   // The Card the first Run put on the board (#144) has its own case.
-   return {pending:record.pending,asking:record.asking??false,turns:record.messages.filter(message=>message.kind!=='boarded').map(message=>({author:message.author,kind:message.kind??null,body:message.body,
+   return {pending:record.pending,asking:record.asking??false,turns:record.messages.map(message=>({author:message.author,kind:message.kind??null,body:message.body,
     cards:message.cards?.map(card=>card.kind==='reply'&&card.card.kind==='question'?{state:card.card.state,answer:card.card.state==='answered'?card.card.answer:null}:card.kind)??null}))};
   };
   const waiting=async()=>((await person.rpc('waiting_list',{c:company})).data as {kind:string,title:string,asked_by:string,conversation_id:string}[]).filter(item=>item.kind==='question');
@@ -1077,74 +987,4 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
   expect(await withEngineContract(onEngine,()=>closeOpenRuns(service,{conversation:theirs}))).toBe(1);
   expect(record()).toEqual([...before,{author:'person',body:'One more, shorter'},{author:'agent',body:'Reply to: One more, shorter'}]);
  } finally { await hermes.close(); }
-});
-
-// #144: the first Run of a new chat with an Agent other than the main one puts its Card on the board, with its log row;
-// the chat says so once, also after a reload and a second Run, and its corner pill names the Card's column, follows it
-// when it moves, shows the column alone on a phone, in Arabic too, and opens the board on the Card.
-test('a new chat with an Agent puts its Card on the board, and the chat\'s line and pill follow it there',async({page})=>{
- test.setTimeout(180000);
- const fake=fakeEngine(); const {service,person}=await clients(); const {agent,detach}=attachAgent();
- const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id='${omar}'`);
- try {
-  const conversation=randomUUID();
-  const send=async(message:string)=>{
-   expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message}))).toEqual({conversation});
-   expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
-  };
-  const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
-  await send('Plan the launch week\nThree posts and one reel');
-  const [card]=cards();
-  expect(cards()).toEqual([{id:card.id,title:'Plan the launch week',agent_id:agent,board_column:'progress'}]);
-  expect(JSON.parse(query(`select action,actor_kind from public.company_log where card_id=${card.id}`))).toEqual([{action:'card_created',actor_kind:'system'}]);
-
-  language('en');
-  await page.setViewportSize({width:1440,height:900});
-  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
-  const kinds=()=>page.locator('.turns > li').evaluateAll(rows=>rows.map(row=>row.getAttribute('data-author')||row.getAttribute('data-kind')));
-  const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
-  // #297: the chat shows one boarded line, in the transcript the reader sees. A page that has just reloaded can hold a
-  // second, hidden copy of the transcript in the block it streamed in until React reveals it (#172); the case asks for
-  // the drawn page, and there is no hidden copy left once it is there.
-  const boardedOnce=()=>expect.poll(()=>page.evaluate(()=>[...document.querySelectorAll('li[data-kind="boarded"]')].map(node=>({
-    streamed:node.closest('div[id^="S:"]')?.id??null,hidden:!!node.closest('[hidden]'),shown:node.getBoundingClientRect().height>0,
-  })))).toEqual([{streamed:null,hidden:false,shown:true}]);
-  await boardedOnce();
-  await expect(line).toHaveText('This card was added to the board under “In progress”');
-  expect(await kinds()).toEqual(['person','agent','boarded']);
-  await expect(pill).toHaveAccessibleName('On the board: In progress');
-  await expect(pill.locator('.corner-pill__lbl')).toHaveText('On the board:');
-  await send('Add a teaser');
-  expect(cards()).toHaveLength(1);
-  await page.reload();
-  await boardedOnce();
-  await expect(page.locator('.msg[data-author=agent]')).toHaveCount(2);
-  expect(await kinds()).toEqual(['person','agent','boarded','person','agent']);
-
-  query(`select public.move_work_card_to_column('${company}',${card.id},'planned')`);
-  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-  await expect(pill).toHaveAccessibleName('On the board: Planned');
-  await page.setViewportSize({width:390,height:900});
-  await expect(pill.locator('.corner-pill__lbl')).toBeHidden();
-  await expect(pill.locator('.corner-pill__col')).toHaveText('Planned');
-  language('ar');
-  for(const width of [390,1440]) {
-   await page.setViewportSize({width,height:900});
-   await page.reload();
-   await boardedOnce();
-   await expect(pill).toHaveAccessibleName('على اللوحة: متخطط');
-   await expect(pill.locator('.corner-pill__lbl')).toBeVisible({visible:width===1440});
-   await expect(line).toHaveText('البطاقة دي اتضافت للوحة في «شغالين عليه»');
-  }
-
-  language('en');
-  await page.reload();
-  await boardedOnce();
-  await pill.click();
-  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
-  const shown=page.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
-  await expect(shown.locator('a')).toBeFocused();
-  await expect(page.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect(shown.locator('.kcard__foot')).toHaveText('Faye· Marketing');
- } finally { language('en'); detach(); }
 });

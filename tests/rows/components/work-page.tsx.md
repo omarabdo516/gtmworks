@@ -1,1 +1,0 @@
-| `components/work-page.tsx` | component helper: the Work pages as the app draws them in the shell's frame, with their stylesheets, a Card fixture and the board's action as a spy | — | — | helper, new |

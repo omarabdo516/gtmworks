@@ -125,14 +125,13 @@ test('a channel Run\'s hand_to_agent call is carried out once, for its message, 
  assert.equal(kept.size,1,'the same message, run and call keep one handover');
 });
 
-test('hand_to_agent in a channel asks channel_hand_to_agent for the message, and the conversation\'s tool still asks for the Conversation',async()=>{
+test('hand_to_agent in a channel asks channel_hand_to_agent for the message, and a Conversation\'s call is ignored and puts no Card on the old board (#846)',async()=>{
  const fake=fakeEngine(); const calls=/** @type {[string,any][]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]); return {data:{state:'created',agent:'Ads'},error:null}; }};
  const call=(/** @type {any} */ context,/** @type {unknown} */ args)=>runToolCall({db,engine:fake.engineFor({}),profile:leadProfile,run:'run-1',...context},{id:'call-1',name:'hand_to_agent',arguments:args});
  assert.deepEqual(await call({channel:{message}},{agent:'Ads',goal:'Plan the Meta ads'}),{state:'created',agent:'Ads'});
- assert.deepEqual(await call({conversation:'c-1'},{agent:'Ads',goal:'Plan the Meta ads'}),{state:'created',agent:'Ads'});
+ assert.deepEqual(await call({conversation:'c-1'},{agent:'Ads',goal:'Plan the Meta ads'}),{state:'ignored'});
  assert.deepEqual(calls,[
   ['channel_hand_to_agent',{message,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
-  ['lead_hand_to_agent',{conversation:'c-1',run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
  ]);
 });

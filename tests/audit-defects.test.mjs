@@ -61,7 +61,7 @@ test('the alert shows only the product\'s own messages, in the reader\'s languag
 
 test('every action that comes back to a Company page names its alert by a key the page shows', () => {
  const base = 'app/c/[slug]/[[...section]]/';
- for (const file of ['actions.ts', 'project-actions.ts', 'work-actions.ts']) {
+ for (const file of ['actions.ts', 'project-actions.ts']) {
   const source = readFileSync(base + file, 'utf8');
   assert.doesNotMatch(source, /message=\$\{encodeURIComponent/, file);
   for (const [, key] of source.matchAll(/[?&]message=([A-Za-z]+)/g)) assert.ok(pageAlerts.includes(key), `${file}: ${key}`);
@@ -76,22 +76,6 @@ test('the threat model names every service-role client in the code, and none tha
  for (const file of clients) assert.ok(bullet.includes(`\`${file}\``), `${file} makes a service-role client and is not in the threat model`);
  for (const [, named] of bullet.matchAll(/`((?:app|lib|worker)\/[^`]+)`/g)) assert.ok(existsSync(named), `${named} is named but gone`);
  for (const [, named] of bullet.matchAll(/`((?:app|lib|worker)\/[^`]+)`/g)) assert.ok(clients.includes(named) || /\b(setupAdmin|serviceDb)\(/.test(readFileSync(named, 'utf8')), `${named} is named but holds no service-role client`);
-});
-
-// #779: the home charts count a day by the Company's day (Cairo where none is set).
-test('work recorded at 00:30 Cairo is on that Cairo day in the home charts', async () => {
- const { homeCharts } = await import('../lib/home-data.mjs');
- const stages = [{ id: 1, name: 'Writing' }, { id: 2, name: 'Approved', stage_key: 'approved' }];
- const delivered = (id, created_at) => ({ id, card_id: id, created_at, action: 'card_changed', details: { field: 'stage_id', new: 2 } });
- // 2030-01-14 22:30 UTC is 00:30 on the 15th in Cairo (UTC+2); now is 10:00 on the 15th in Cairo.
- const now = Date.parse('2030-01-15T08:00:00Z');
- const charts = homeCharts([{ id: 9, stage_id: 1, created_at: '2030-01-01T22:30:00Z' }], stages, [delivered(1, '2030-01-14T22:30:00Z'), delivered(2, '2030-01-14T21:30:00Z')], now);
- assert.equal(charts.delivered.at(-1).label, '2030-01-15');
- assert.deepEqual(charts.delivered.slice(-2).map(day => day.value), [1, 1], 'one on the 14th at 23:30 and one on the 15th at 00:30');
- assert.equal(charts.delivered[0].label, '2030-01-02');
- assert.deepEqual(charts.stages, [{ label: 'Writing', value: 1 }, { label: 'Approved', value: 0 }], 'a Card made at 00:30 Cairo on the 2nd is inside the fourteen days');
- const riyadh = homeCharts([], stages, [delivered(1, '2030-01-14T21:30:00Z')], now, 'Asia/Riyadh');
- assert.equal(riyadh.delivered.at(-1).value, 1, 'a Company in another zone counts by its own day');
 });
 
 // #779: a Routine's time zone is checked when it is saved, and none saved can throw when its next time is worked out.

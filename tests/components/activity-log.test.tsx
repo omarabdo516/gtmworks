@@ -18,17 +18,16 @@ afterEach(() => { push.mockClear(); });
 const gone = 'a:ffffffff-ffff-ffff-ffff-ffffffffffff';
 const people = [{ value: 'p:20000000-0000-0000-0000-000000000002', label: 'مدير' }];
 const agents = [{ value: 'a:30000000-0000-0000-0000-000000000001', label: 'وكيل المحتوى' }];
-const cards = [{ value: '1', label: 'Launch post' }];
-const log = (who: string, card: string, total: number) => <LanguageProvider language="en">
- <LogFilters slug="rs-learning" who={who} card={card} people={people} agents={agents} cards={cards} count={0}/>
+const log = (who: string, total: number) => <LanguageProvider language="en">
+ <LogFilters slug="rs-learning" who={who} people={people} agents={agents} count={0}/>
  <div className="lgp-body"><LogEmpty t={i18n('en').t} slug="rs-learning" note={logEmptyNote({ companyRows: total })}/></div>
 </LanguageProvider>;
 // A frame for the filters' first effect to run, as a page that has finished loading has.
 const loaded = () => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
 
 test('a filter that matches nothing says so, still holds once the page has loaded, and offers everything back', async () => {
- const screen = await render(log(gone, 'all', 12));
- await expect.element(screen.getByText('No entries match these filters. Try “Everyone”, or another card.')).toBeVisible();
+ const screen = await render(log(gone, 12));
+ await expect.element(screen.getByText('No entries match this filter. Try “Everyone”, or someone else.')).toBeVisible();
  // The filters draw their own Show everything link; the note's is the one inside the note.
  await expect.element(page.elementLocator(document.querySelector('.lgp-empty')!).getByRole('link', { name: 'Show everything' })).toHaveAttribute('href', '/c/rs-learning/log');
  await loaded();
@@ -37,21 +36,22 @@ test('a filter that matches nothing says so, still holds once the page has loade
  await screen.unmount();
 
  // A log with no rows at all says it is empty, and has nothing to offer back.
- const empty = await render(log('all', 'all', 0));
+ const empty = await render(log('all', 0));
  await expect.element(empty.getByText(/^Nothing in the log yet\./)).toBeVisible();
  expect(document.querySelector('.lgp-empty a')).toBeNull();
 });
 
-test('a filter whose person or Agent is no longer listed shows as such, and Everyone clears only it', async () => {
- const screen = await render(log(gone, '1', 12));
+test('a filter whose person or Agent is no longer listed shows as such, and Everyone clears it', async () => {
+ const screen = await render(log(gone, 12));
  const who = screen.getByLabelText('Who');
  await expect.element(who).toHaveValue(gone);
  expect((who.element() as HTMLSelectElement).selectedOptions[0].textContent).toBe('No longer listed');
  await loaded();
  expect(push).not.toHaveBeenCalled();
  await who.selectOptions('all');
- expect(push.mock.calls).toEqual([['/c/rs-learning/log?card=1']]);
- await screen.rerender(log('all', '1', 12));
+ expect(push.mock.calls).toEqual([['/c/rs-learning/log']]);
+ await screen.rerender(log('all', 12));
  await expect.element(screen.getByLabelText('Who')).toHaveValue('all');
- await expect.element(screen.getByLabelText('Card')).toHaveValue('1');
+ // The old board's Card filter left with it (#846).
+ expect(screen.getByLabelText('Card').elements()).toHaveLength(0);
 });
