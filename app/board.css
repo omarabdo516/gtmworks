@@ -120,20 +120,6 @@
 .gw .board-view .col-empty b { font-size: var(--gw-fs-sm); font-weight: var(--gw-fw-semibold); }
 .gw .board-view .col-empty span { font-size: var(--gw-fs-xs); color: var(--gw-text-3); line-height: 1.6; }
 
-/* The Ideas column's own form (#188; design-reference: .add-idea): it sits above the Cards, in the column. */
-.gw .board-view .add-idea { display: grid; gap: var(--s2); padding: var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); box-shadow: var(--gw-border-1) 0 0 0 1px inset; }
-.gw .board-view .add-idea label { font-size: var(--gw-fs-xs); color: var(--gw-text-2); }
-.gw .board-view .add-idea input, .gw .board-view .add-idea select {
-  width: 100%; height: 34px; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
-  background: var(--gw-bg-pane); color: var(--gw-text-1); font-family: inherit; font-size: var(--gw-fs-sm);
-}
-.gw .board-view .add-idea input:focus, .gw .board-view .add-idea select:focus { outline: none; border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
-/* The Agent keeps the select's own arrow, as the reference's plain select does. */
-.gw .board-view .add-idea select { appearance: auto; }
-.gw .board-view .add-idea__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
-.gw .board-view .add-idea__row { display: flex; gap: var(--s2); }
-.gw .board-view .add-idea__row .btn { flex: 1 1 0; }
-
 /* ---------- cards ---------- */
 .gw .board-view .kcard, .gw .kcard--ghost {
   position: relative; display: flex; flex-direction: column; gap: var(--s2); width: 100%; margin: 0; padding: 14px var(--s4); border: 0; border-radius: var(--gw-r-md);

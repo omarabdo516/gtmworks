@@ -2,10 +2,8 @@
 import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { columnLabel } from '@/lib/board-columns.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
 import { AgentFace } from '@/components/agent-face';
 import { named } from '@/lib/bidi';
@@ -68,7 +66,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const cb:StepsBidiText=(key,...values)=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
  const {list:sendingList,start:sending,reading}=useSending();
- const {channel,members,agents,writer,open,handover,may,board}=record;
+ const {channel,members,agents,writer,open,handover,may}=record;
  const me=members.find(member=>member.person===person)?.name??'';
  const messages=sendingList.length?[...record.messages,...sendingList.map(sent=>sentMessage(sent,agents,me))]:record.messages;
  // A message that arrives while the channel is open rises in once (design-reference: msg-in); what it held when opened,
@@ -206,12 +204,8 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  const live=landing.view;
  const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
- const boardColumn=board?t(columnLabel(board.column,writer)):'';
  return <div className="convo"><OpenedHere company={record.channel.company} place={{channel:record.channel.id}}/><div className="chat">
-  <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}
-   corner={board&&<div className="chat__corner"><Link className={`corner-pill${board.waiting?' is-waiting':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('channelOnTheBoard')} ${boardColumn}`}>
-    <span className={`dot dot--${board.waiting?'waiting':'idle'}`} aria-hidden="true"/><span className="corner-pill__lbl">{c('channelOnTheBoard')}</span><span className="corner-pill__col">{boardColumn}</span>
-   </Link></div>}/>
+  <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}/>
   <div className="transcript" ref={transcript}><div className="transcript__col">
    <div className="ch-intro">
     <span className="ch-intro__h">#<bdi>{name}</bdi></span>
@@ -254,17 +248,16 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     return failure;
    }}/>:!record.archived&&<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
   </div>
- </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
+ </div><ChannelDetails panel={panel} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
 function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,done,retry,owner}:{message:ChannelMessage,rise:string,opened?:boolean,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,retry?:(message:number,ordinal:number)=>Promise<void>,owner:boolean}) {
  const {t}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
- // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined. The quiet
- // line a channel's Card adds (#151) says where the Card went, in the time it was added.
+ // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined.
  if(message.author==='note') return <li className={`note note--icon${rise}`} data-kind={message.kind}>
-  <ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
+  <ShellIcon name="team" className="note__icon"/><span>{c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
  </li>;
  // A job an Agent of the channel handed another Agent of the Company, in the channel or not (#150, #476; design-reference:
  // the handoff row, `.handoff`): both faces with the arrow between them, "{asking Agent} asked {asked Agent}", the job,
@@ -313,11 +306,12 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
 
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
 
-// design-reference: renderTeamDetails, with its "On the board" (#151) and "Handoffs" (#150) sections.
-function ChannelDetails({panel,slug,name,person,record,tip,c,refresh}:{panel:DetailsPanel,slug:string,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,refresh:()=>Promise<void>}) {
+// design-reference: renderTeamDetails, with its "Handoffs" (#150) section; its "On the board" (#151) named the old
+// board's Card, which is switched off (#846).
+function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsPanel,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,refresh:()=>Promise<void>}) {
  const {t,language}=useI18n();
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
- const {channel,members,agents,manage,managers,handoffs,writer}=record;
+ const {channel,members,agents,manage,managers,handoffs}=record;
  const team=channel.kind==='team';
  const [addingPerson,setAddingPerson]=useState(false); const [addingAgent,setAddingAgent]=useState(false);
  const [choices,setChoices]=useState<Choices|null>(null); const [failed,setFailed]=useState(false);
@@ -382,13 +376,6 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,refresh}:{panel:Det
     {failed&&<p className="set-err ch-who" role="alert">{c('channelChangeFailed')}</p>}
     {team&&!manage&&managedBy&&<p className="set-hint ch-who">{c('channelManagedBy',managedBy)}</p>}
    </section>
-   {record.board&&<section className="dp-sec" aria-labelledby="ch-h-b">
-    <h3 className="dp-label" id="ch-h-b"><span>{c('channelOnTheBoardSection')}</span></h3>
-    <div className="panel-card"><Link className="panel-row" href={`/c/${slug}/work/board?show=${record.board.card}`}>
-     <span className="panel-row__text"><span className="panel-row__t"><bdi>{record.board.title}</bdi></span><span className="panel-row__d">{record.board.line}</span></span>
-     <span className={`panel-row__meta${record.board.waiting?' panel-row__meta--wait':''}`}>{record.board.waiting&&<span className="dot dot--waiting" aria-hidden="true"/>}{t(columnLabel(record.board.column,writer))}</span>
-    </Link></div>
-   </section>}
    {handoffs.length>0&&<section className="dp-sec" aria-labelledby="ch-h-h">
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">

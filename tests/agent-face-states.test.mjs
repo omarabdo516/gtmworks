@@ -36,13 +36,13 @@ test('a read that fails says so, and every face is idle rather than a guess', as
  assert.deepEqual(faces.states, {});
 });
 
-test('a failure in a Conversation or on a Card names that place', async () => {
+test('a failure in a Conversation or a channel names that place', async () => {
  const faces = await agentFaceStates(/** @type {any} */ (database({ agent_face_states: { error: null, data: [
   row({ agent: 'a1', state: 'stuck', failed_at: '2026-11-24T10:00:00Z', failed_conversation: 'cv-1' }),
-  row({ agent: 'a2', state: 'stuck', failed_at: '2026-11-24T10:00:00Z', failed_card: 7 }),
+  row({ agent: 'a2', state: 'stuck', failed_at: '2026-11-24T10:00:00Z', failed_channel: 'ch-1' }),
  ] } })), 'co-1');
  assert.deepEqual(faces.of('a1').failedIn, { conversation: 'cv-1' });
- assert.deepEqual(faces.of('a2').failedIn, { card: 7 });
+ assert.deepEqual(faces.of('a2').failedIn, { channel: 'ch-1' });
 });
 
 test('opening a place marks what failed there seen, for the reader, and says how many it cleared', async () => {

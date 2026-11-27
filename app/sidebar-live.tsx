@@ -172,7 +172,7 @@ export function AgentTile({agent,href,current:drawn,named,title,children}:{agent
  </Link>;
 }
 
-// The reader opened a place where an Agent may have failed (a Conversation, a channel or a Card), or an Agent's chat
+// The reader opened a place where an Agent may have failed (a Conversation or a channel), or an Agent's chat
 // (`agent`): the failure there is seen by them and the Agent wakes for them (#699). It is told once the page has mounted,
 // never while the page is drawn on the server or prefetched, and the sidebar asks again at once so the face follows. It
 // is the sidebar's to tell: a part drawn outside the Shell has no faces of the sidebar to change, and tells nothing.

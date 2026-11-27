@@ -6,7 +6,7 @@ A self-hosted marketing operating system that the person who installs it runs fo
 
 The UI defaults to English and ships a complete Arabic translation in Egyptian Arabic, worded as in the approved reference. Each person chooses their account language. Direction follows that language; authored content keeps its own direction. Every new interface string is added to both catalogues.
 
-Sidebar labels: Search / بحث; Home / الرئيسية; Inbox / الوارد; Work / الشغل (Work / العمل, Projects / المشاريع, Routines / المهام المتكررة, Campaigns / الحملات, Library / المكتبة, Publishing / النشر); Results / النتائج; Team / الفريق (Agents / الوكلاء والأتمتة, Skills / المهارات, Connections / الربط, Activity log / سجل النشاط); Agents / الوكلاء (Company chat / محادثة الشركة, Account manager / مدير الحساب, Writer / الكاتب, Designer / المصمم, Critic / الناقد); Recent / آخر البطاقات.
+Sidebar labels: Search / بحث; Home / الرئيسية; Inbox / الوارد; Work / الشغل (Work / العمل, Projects / المشاريع, Routines / المهام المتكررة, Campaigns / الحملات, Library / المكتبة, Publishing / النشر); Results / النتائج; Team / الفريق (Agents / الوكلاء والأتمتة, Skills / المهارات, Connections / الربط, Activity log / سجل النشاط); Agents / الوكلاء (Company chat / محادثة الشركة, Account manager / مدير الحساب, Writer / الكاتب, Designer / المصمم, Critic / الناقد).
 
 Permission roles: Administrator / أدمن; Manager / مدير; Contributor / مساهم; Viewer / مشاهد.
 
@@ -25,7 +25,7 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). An Agent never approves or rejects a Version. It gets the Engine's full power: it may publish and spend, through its apps or on its Screen, when a Member asks, with no Approval first (ADR 0020).
+A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). It gets the Engine's full power: it may publish and spend, through its apps or on its Screen, when a Member asks, with no sign-off first (ADR 0020).
 
 **Main Agent / الوكيل الرئيسي**:
 The Company's default Agent, the one people talk to first, and the manager of the Company's team: it hands a job to the Agent that does it, offers to make an Agent for recurring or specialist work no Agent does, and does small one-off jobs itself. On a new Company it opens the first Conversation, with a few questions about the Company and the first Agents it proposes to make (Omar, 2026-11-20). The bundled Engine names it Lead; a Company has one at a time, and an Administrator may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
@@ -54,10 +54,6 @@ _Avoid_: access ticket, permission request
 **Change proposal / اقتراح تغيير**:
 An Agent's ask to change its own settings, or Lead's on another Agent's behalf: its model, its core instructions, its sub-agents or one of the Engine settings gtmworks lists, with the reason. It waits in every Administrator's "Waiting on you" and changes nothing until an Administrator approves it; approved, it is written to that Agent's own Engine profile and read back; declined, nothing changes. Anything off that list is refused at once and waits on nobody. An app is asked for with the connect card, not proposed; the Agent's own memory and Skills follow its learning mode (#19). The Administrator may edit the proposed value before approving it ("Edit, then approve"); the proposal keeps both the value proposed and the value approved (#484).
 _Avoid_: settings request, config change
-
-**Handover / تسليم**:
-An Agent's ask to another Agent of the same Company for a job it needs done, made while it works for a person. Any Agent may hand over to any other Agent of its Company, in a Conversation or a channel, including an Agent outside that channel or one the person cannot talk to; the Agent asked may hand over in turn, with no limit on the chain. The Agent asked works with all its own tools but never speaks to the person: what it needs from them goes back in its answer. The answer always returns to the Agent that asked, which goes on with the job and replies; the person keeps talking to the Agent they started with. Each Handover shows where it happened as a quiet row naming both Agents, with the answer under the asked Agent's own name (Omar, 2026-11-20).
-_Avoid_: delegation, subagent, A2A, Handed to you
 
 **Run / تشغيل**:
 One attempt by an agent to work on one card in one company, with a short-lived credential limited to that card and run. A retry keeps the same card; execution happens outside gtmworks.
@@ -95,13 +91,13 @@ The desktop and browser an Agent works on, inside its Company's Work sandbox. A 
 _Avoid_: bot screen, remote desktop, browser session
 
 **Waiting / في الانتظار**:
-The planned run status `waiting`: the run delivered a version or asked a question and is waiting for a person. An open interrupt blocks progress until answered or abandoned; no answer is never yes.
+The planned run status `waiting`: the run delivered its work or asked a question and is waiting for a person. An open interrupt blocks progress until answered or abandoned; no answer is never yes.
 
 **Cancelled / ملغي**:
 The planned run status `cancelled`: a person or gtmworks stopped the run.
 
 **Role / دور**:
-The named set of permissions a member holds in one company: Administrator, Manager, Contributor, or Viewer. Administrators and Managers approve; Contributors and Viewers never do. Each company may change what every role except Administrator may do.
+The named set of permissions a member holds in one company: Administrator, Manager, Contributor, or Viewer. Administrators and Managers pass a Review or send it back; Contributors and Viewers never do. Each company may change what every role except Administrator may do.
 _Avoid_: group, user type, access level
 
 **Grant / صلاحية منفصلة**:
@@ -148,35 +144,30 @@ _Avoid_: event, cohort, run, season event
 ### How content is organised
 
 **Card / بطاقة**:
-One item of work on the board, with a title, a description, an assignee or nobody yet, a status (the column it is in), a result and comments everyone who sees it reads. A person or an Agent makes it. Its files, Versions and log stay with it. The Arabic plural is «بطاقات».
+One item of work on the Company's board, which is its Engine's own Kanban board: a Hermes Kanban task with a title, a description, an Assignee or nobody yet, a status (the column it is in), comments everyone who sees it reads, and, once done, the summary its Agent finished with. A person or an Agent makes it. Its comments, files, Runs and log are the Engine's; gtmworks keeps beside it only its Member Assignee, its publishing date and the person who made it. A Card is archived, never deleted. The Arabic plural is «بطاقات».
 _Avoid_: كارت, كروت, task, ticket
 
 **Assignee / المسؤول**:
-The one Agent or Member whose job a Card is. A Card has at most one; an idea often has none.
+The one Agent or Member whose job a Card is. A Card has at most one: given to an Agent, the Engine's dispatcher starts the Agent on it at once; given to a Member, no Agent picks it up and it waits on them; with nobody, it stays where it is, worked by nobody. Giving it to one takes it from the other.
 _Avoid_: next actor, owner, assigned to several
 
 **Archived / مؤرشف**:
-Out of the board, the lists and the counts, with everything in it kept, until a person restores it. Said of a Card, a Conversation or a team channel; none of them is deleted.
+Out of the board, the lists and the counts, with everything in it kept, until a person restores it. Said of a Card (the Engine's own archived status, which stops its open Run first, after one confirmation), a Conversation or a team channel; none of them is deleted.
 _Avoid_: deleted, removed, hidden, closed
 
 **Attachment / مرفق**:
-A file on a card. A person's is a Kanban attachment on the company's Engine, which the Agent working the card opens from the company's work sandbox, where the Engine's attachments folder is mounted read-only; a file an Agent made is named by a MEDIA line in its summary or one of its comments and stays in its own work folder. gtmworks keeps no copy of either: every member who can see the card reads and downloads them through gtmworks, and nobody outside the company reaches them. A design version is not an attachment.
+A file on a card. A person's is a Kanban attachment on the company's Engine, which the Agent working the card opens from the company's work sandbox, where the Engine's attachments folder is mounted read-only; a file an Agent made is named by a MEDIA line in its summary or one of its comments and stays in its own work folder. gtmworks keeps no copy of either: every member who can see the card reads and downloads them through gtmworks, and nobody outside the company reaches them.
 _Avoid_: upload, evidence file
 
-**Version / نسخة**:
-One saved revision of a card's output. Editing creates a new version; approving an earlier version never authorizes a later one.
-
-**Approval / موافقة**:
-A permitted person's decision on one exact version, recorded with who approved it. An agent cannot approve its own or another agent's work. It is the team's record, not a gate an agent's tools wait on (ADR 0020).
+**Review / مراجعة**:
+An Agent's work on a Card handed in for someone to check: the Card waits under Waiting on you with the review symbol. A reviewing Agent the Engine starts, or an Administrator or a Manager, passes it, which makes the Card done with its Agent's summary, or sends it back with a reason, written as a comment, and the Card's Agent goes on with its next Run. The Card names who passed it or sent it back: an Agent, or the person by name. It is the team's record, not a gate an Agent's tools wait on (ADR 0020).
+_Avoid_: approval, sign-off, version
 
 **Permission request / طلب موافقة**:
-The engine's own stop inside a run before an action: the agent waits until the conversation's person answers "Allow once", "Always allow" or "Don't allow", or the engine stops waiting, which counts as not allowed. It is not an approval of a version. "Always allow" stays with Administrators and Managers, and only on an agent's own engine profile.
-
-**Handed to you / اتسلّمت لك**:
-A step no agent may do, such as publishing where there is no API or paying an invoice. The agent prepares it; a person does it and marks "I did it" against the approved version. The record shows who did it; approval alone does not record that the step was done.
+The engine's own stop inside a run before an action: the agent waits until the conversation's person answers "Allow once", "Always allow" or "Don't allow", or the engine stops waiting, which counts as not allowed. It is not a Review of a Card. "Always allow" stays with Administrators and Managers, and only on an agent's own engine profile.
 
 **Project / مشروع**:
-The cards of one company goal, with a name, goal, status (active, paused or done), linked Offering and Key date, Ad campaigns and Results. A card belongs to at most one project of its own company. A project is not an Ad campaign.
+The name a Card's work goes under: the Engine's `tenant` of the Card, given when the Card is made or changed, by which the board, the list and the calendar filter. A Card has at most one. Work › Projects keeps each Company's projects with a name, a goal and a status (active, paused or done); it is not yet tied to the board's names. A project is not an Ad campaign.
 
 **Routine / مهمة متكررة**:
 Recurring work specifying who, what and when; each occurrence creates an ordinary card. The team may pause or reschedule it; three untouched occurrences raise an alert.
@@ -197,7 +188,7 @@ A lasting rule a Contributor taught an agent, suggested for the whole team. It w
 _Avoid_: memory, note, feedback
 
 **Inbox / الوارد**:
-What waits for one person: approvals first, agents' questions, cards awaiting their turn, and stopped or failed work. Includes notifications and My work.
+What waits for one person: the Cards of the board that wait on them (a question, a Review they may decide, a Card given to them), agents' questions and requests, and what they were mentioned in. Includes notifications and My work.
 
 **Pillar / ركيزة محتوى**:
 A kind of content a company publishes, with a target share of its posts (RS: promotional, educational, interactive). Each company keeps its own list.

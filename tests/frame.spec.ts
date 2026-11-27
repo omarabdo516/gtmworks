@@ -6,7 +6,6 @@ import { signIn, openNavigation, chooseCompany, openMoreSection } from './sign-i
 import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
-import { appOrigin } from './lane.mjs';
 import { motionTable } from './motion-table.mjs';
 import { laneHermes } from './lane-hermes';
 
@@ -82,13 +81,12 @@ test('a section not built yet says so at its address, and a settings page\'s tra
   await page.goto(`/c/rs-learning/${path}`);
   await expect(page.locator('.content .empty'),path).toHaveText(text);
  }
+ // An old board's Card page leads to the board (#846), and its Work settings are gone with it.
  await page.goto('/c/rs-learning/work/board/1');
- const cardCrumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
- await expect(cardCrumbs).toHaveCount(2);
- await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
- await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
- await expect(cardCrumbs.last()).not.toHaveText('');
- for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings']]) {
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await page.goto('/c/rs-learning/settings/work');
+ await expect(page.getByRole('heading',{name:'Page not found'})).toBeVisible();
+ for(const [path,leaf] of [['settings/members','members']]) {
   await page.goto(`/c/rs-learning/${path}`);
   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
   await expect(crumbs,path).toHaveCount(3);
@@ -120,19 +118,21 @@ test('Viewer has the same navigation, New chat included, without new card on eve
  }
 });
 
-test('Home has four parts in order and missing sources show unavailable, never zero',async({page})=>{
+test('Home has three parts in order and missing sources show unavailable, never zero',async({page})=>{
  await signIn(page,'multi@example.com','/c/aleem/home');
- expect(await page.locator('.home-dashboard > section').evaluateAll(parts=>parts.map(part=>part.getAttribute('aria-label')))).toEqual(["Agents","Work figures","Last 14 days","Latest updates"]);
+ expect(await page.locator('.home-dashboard > section').evaluateAll(parts=>parts.map(part=>part.getAttribute('aria-label')))).toEqual(["Agents","Work figures","Latest updates"]);
  // Home lists the Company's real Agents: Aleem has none, so its Agents section stays and is simply empty.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
- await expect(page.locator('.stats .label')).toHaveText(["Awaiting your approval","Published this week","Bookings this week","Stopped cards"]);
- await expect(page.locator('.home-charts h2')).toHaveText(["Delivered work","Cards by stage","First-time acceptance"]);
- await expect(page.locator('.home-recent h2')).toHaveText(["Recent activity","Recent cards"]);
- const missing=page.locator('.stats .stat:nth-child(n+2) strong, .acceptance-chart p');
- await expect(missing).toHaveCount(4);
- await expect(missing).toHaveText(Array(4).fill("Unavailable"));
+ await expect(page.locator('.stats .label')).toHaveText(["Waiting on you","Published this week","Bookings this week","Stopped cards"]);
+ // The old board's charts and log left with it (#846); its Cards are the Engine board's.
+ await expect(page.locator('.home-charts')).toHaveCount(0);
+ await expect(page.locator('.home-recent h2')).toHaveText(["Recent cards"]);
+ const missing=page.locator('.stats .stat:nth-child(n+2) strong');
+ await expect(missing).toHaveCount(3);
+ await expect(missing).toHaveText(Array(3).fill("Unavailable"));
  for(const item of await missing.all()) await expect(item).not.toHaveText(/^0(?:%|\s*)$/);
- await expect(page.locator('.stats .stat').first().locator('strong')).toHaveText('0'); // A real empty approval queue.
+ // Nothing waits on the reader in Aleem: its rows are none, and its Engine's board, which does not answer here, adds none.
+ await expect(page.locator('.stats .stat').first().locator('strong')).toHaveText('0');
  await expect(page.locator('.content')).not.toContainText(/Spend|Run count/);
  await chooseCompany(page,'rs-learning');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
@@ -141,10 +141,10 @@ test('Home has four parts in order and missing sources show unavailable, never z
  // The Inbox count sits on the Marketing board entry and opens the Inbox.
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
- const count=await page.locator('.approval-card').count();
- // The entry stays at zero too, so the Inbox is always one click away.
+ // The entry shows its count, zero too, so the Inbox is always one click away; Home counts the same.
  const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
- await expect(badge).toHaveText(String(count));
+ await expect(badge).toHaveText(/^\d+$/);
+ const count=Number(await badge.textContent());
  await expect(badge).toHaveAccessibleName(count?`${count} things waiting on you`:'Nothing waiting on you');
  await page.goto('/c/rs-learning/work/board');
  await openNavigation(page);
@@ -206,50 +206,6 @@ test('the Members page offers no agent role, the work list follows a rename, and
  }
 });
 
-test('recent cards record actual opens only, newest three per person and company, with persistent reopen order',async({page,context,browser})=>{
- await signIn(page,'multi@example.com','/c/rs-learning/work/board');
- const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
- const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as {id:number}[]; };
- await idle(page);
- await expect(page.locator('.recent-cards')).toHaveCount(0); // Prefetched cards are not opened.
- for(const id of [1,2,3,4]) {
-  await page.goto(`/c/rs-learning/work/board/${id}`);
-  await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href',`/c/rs-learning/work/board/${id}`);
- }
- const hrefs=()=>page.locator('.recent-cards a').evaluateAll(links=>links.map(link=>link.getAttribute('href')));
- expect(await hrefs()).toEqual([4,3,2].map(id=>`/c/rs-learning/work/board/${id}`));
- await page.goto('/c/rs-learning/work/board/1');
- await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/1');
- expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
- await chooseCompany(page,'aleem');
- await expect(page).toHaveURL(/\/c\/aleem\/work\/board$/);
- await expect(page.locator('.recent-cards')).toHaveCount(0);
- // A Card of Aleem's, filed straight into the seed's Ideas stage (Aleem has no agent to add one from the board).
- const [aleemCard]=rows(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,${quote(`بطاقة عليم ${Date.now()}`)} from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`);
- await page.goto(`/c/aleem/work/board/${aleemCard.id}`);
- await expect(page).toHaveURL(new RegExp(`/c/aleem/work/board/${aleemCard.id}$`));
- const otherCard=new URL(page.url()).pathname;
- await expect(page.locator('.recent-cards a')).toHaveAttribute('href',otherCard);
- await page.goto('/c/aleem/home');
- await expect(page.locator('.recent-cards a')).toHaveAttribute('href',otherCard);
- await chooseCompany(page,'rs-learning');
- await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
- await expect(page.locator('.recent-cards a')).toHaveCount(3);
- expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
- await expect(page.locator('.recent-cards')).not.toContainText('بطاقة عليم');
- const another=await browser.newContext({baseURL:appOrigin});
- const otherPage=await another.newPage();
- await signIn(otherPage,'reviewer@example.com','/c/aleem/home'); // No access to Aleem.
- expect((await otherPage.goto('/c/aleem/home'))?.status()).toBe(404);
- await otherPage.goto('/c/rs-learning/home');
- await expect(otherPage.locator('.recent-cards')).toHaveCount(0);
- await another.close();
- await context.clearCookies();
- await signIn(page,'multi@example.com','/c/rs-learning/home');
- await expect(page.locator('.recent-cards a')).toHaveCount(3);
- expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
-});
-
 test('the company switcher lists only the person\'s companies, and the old all-companies list is not found',async({page})=>{
  // Omar is the Owner of all three seeded companies; there is no list of every company beyond them.
  await signIn(page,'omar@example.com','/c/rs-learning/home');
@@ -273,51 +229,19 @@ test('the company switcher lists only the person\'s companies, and the old all-c
  expect((await page.goto('/all-brands'))?.status()).toBe(404);
 });
 
-test('mobile recent cards record opens while the drawer stays closed',async({page})=>{
- await page.setViewportSize({width:390,height:900});
- await signIn(page,'reviewer@example.com','/c/rs-learning/approvals');
- for(const id of [3,4]) {
-  // A Card opened from the old board, which stays on the board opened on Waiting on you until the Engine's Card window
-  // replaces it (#835, #846), is recorded as one open.
-  await page.goto('/c/rs-learning/approvals');
-  await idle(page);
-  await page.locator(`.card a[href$="/board/${id}"]`).click();
-  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${id}$`));
-  await expect(page.locator('.modal')).toBeVisible();
-  await idle(page);
- }
- await openMoreSection(page,'home');
- await openNavigation(page);
- await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/4');
- expect(await page.locator('.recent-cards a').evaluateAll(links=>links.slice(0,2).map(link=>link.getAttribute('href')))).toEqual([4,3].map(id=>`/c/rs-learning/work/board/${id}`));
-});
-
-test('the recent cards endpoint refuses what it cannot trust and never reads for a stranger',async({request})=>{
- const url='/api/recent-cards',company=randomUUID();
- expect((await request.post(url,{data:'company=1',headers:{'content-type':'text/plain'}})).status()).toBe(415);
- expect((await request.post(url,{data:{company:'not-a-company'}})).status()).toBe(400);
- expect((await request.post(url,{data:{company,cardId:-1}})).status()).toBe(400);
- expect((await request.post(url,{data:{company}})).status()).toBe(401);
-});
-
 test('an account menu opened while the next page is still arriving stays open when that page lands',async({page})=>{
- // Closing a card lands the board under the menu. After a comment (which makes the prepared board stale) the board's
- // data is held back until the menu is open, so the board always lands under an open menu.
+ // Opening the board from Home lands it under the menu: the board's page is held back until the menu is open, so the
+ // board always lands under an open menu. A prefetch is let through; only the page's own answer waits.
  await page.setViewportSize({width:1440,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
  const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
- const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ const hold=async(route:import('@playwright/test').Route)=>{ const headers=route.request().headers(); if(headers['rsc']==='1'&&!headers['next-router-prefetch']) { arrived(); await held; } await route.continue(); };
  await page.route(board,hold);
  try {
-  const comment=`Menu stays ${Date.now()}`;
-  await page.getByLabel('Comment',{exact:true}).fill(comment);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
   const shell=await page.locator('.shell').elementHandle();
-  await page.locator('.close-card').click();
+  await page.locator('.sidebar a[href="/c/rs-learning/work/board"]').first().click();
   await asked;
   // The menu rises once, as it opens; drawn again on the page that lands, it has risen already (#129).
   await page.evaluate(()=>{ const counted=window as unknown as {rises:number}; counted.rises=0; document.addEventListener('animationstart',event=>{ if((event.target as Element).id==='me-menu') counted.rises++; },true); });
@@ -326,7 +250,6 @@ test('an account menu opened while the next page is still arriving stays open wh
   await expect(menu).toBeVisible();
   release();
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
-  await expect(page.locator('.modal')).toHaveCount(0);
   // The page landed in the same Shell, which the Company's layout keeps (#789), and the menu is still open on it.
   expect(await shell!.evaluate(node=>node.isConnected)).toBe(true);
   await expect(menu).toBeVisible();
@@ -397,29 +320,24 @@ test('an open account menu closes when the keyboard takes the person to another 
 });
 
 test('a menu open while its own page lands keeps the item that had focus',async({page})=>{
- // As above: the board's data is held until the menu is open and focus is on one of its items.
+ // As above: the board's page is held until the menu is open and focus is on one of its items.
  await page.setViewportSize({width:1440,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
  const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
- const hold=async(route:import('@playwright/test').Route)=>{ if(route.request().headers()['rsc']==='1') { arrived(); await held; } await route.continue(); };
+ const hold=async(route:import('@playwright/test').Route)=>{ const headers=route.request().headers(); if(headers['rsc']==='1'&&!headers['next-router-prefetch']) { arrived(); await held; } await route.continue(); };
  await page.route(board,hold);
  try {
-  const comment=`Focus stays ${Date.now()}`;
-  await page.getByLabel('Comment',{exact:true}).fill(comment);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
   const shell=await page.locator('.shell').elementHandle();
-  await page.locator('.close-card').click();
+  await page.locator('.sidebar a[href="/c/rs-learning/work/board"]').first().click();
   await asked;
   await page.locator('.sidebar #btn-me').click();
   const menu=page.getByRole('menu');
   await menu.getByRole('menuitemradio',{name:'Dark'}).focus();
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
   release();
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   // The Shell stays as the board lands (#789).
   expect(await shell!.evaluate(node=>node.isConnected)).toBe(true);
   await expect(menu).toBeVisible();

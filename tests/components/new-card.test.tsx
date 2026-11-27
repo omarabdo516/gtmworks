@@ -14,7 +14,6 @@ import '@/app/shell.css';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
 vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll, ...props }: ComponentProps<'a'> & { prefetch?: unknown, scroll?: unknown }) => <a {...props}/> }));
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ decideAgentRule: vi.fn(), answerAgentRequest: vi.fn() }));
-vi.mock('@/app/note-actions', () => ({ editNote: vi.fn() }));
 afterEach(async () => { vi.unstubAllGlobals(); await cdp().send('Emulation.setEmulatedMedia', { features: [] }); });
 
 // New card (spec #831, #836; design-reference-card: ncOpen): one small form over the board. Whom a Card may be given

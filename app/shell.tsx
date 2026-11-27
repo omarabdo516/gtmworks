@@ -16,7 +16,6 @@ import { agentFaceStates, type AgentFaceState } from '@/lib/agent-face-states';
 import { ShellIcon } from '@/components/shell-icon';
 import { CallableAgentsProvider, ComposerPlaceProvider } from '@/app/conversation-composer';
 import Switcher from '@/app/c/[slug]/[[...section]]/switcher';
-import RecentCards, { RecentCardsProvider } from './recent-cards';
 import RecentChats from './recent-chats';
 import ChannelList from './channel-list';
 import { AgentTile, SidebarLive } from './sidebar-live';
@@ -114,7 +113,6 @@ export default async function Shell({company,companies,personId,personName,role,
     <SidebarEntry className="sb-item sb-all" href={`/c/${slug}/conversations`} entry="all-conversations"><ShellIcon name="archive"/><span className="od-fill">{t('allConversations')}</span><ShellIcon name="chevron"/></SidebarEntry>
     {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} manage={manage}/>}
     <RecentChats slug={slug} company={company?.id||''} person={personId} chats={chats} lead={agents[0]?.name||'Lead'}/>
-    {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
   </>}</nav>
   {/* The apps are read by the browser (app/company-apps-read.ts): the page is drawn with no Engine read and the count lands after. */}
@@ -138,5 +136,5 @@ export default async function Shell({company,companies,personId,personName,role,
  const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:states[id]??'idle'}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <ShellPlace lead={lead} chatAgents={chatAgents}><LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} person={personId} slug={company.slug} channels={channels} states={states} handed={handed}><RecentCardsProvider key={company.id} company={company.id}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></LooksProvider></ShellPlace>;
+ return <ShellPlace lead={lead} chatAgents={chatAgents}><LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} person={personId} slug={company.slug} channels={channels} states={states} handed={handed}>{shown}</SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></LooksProvider></ShellPlace>;
 }

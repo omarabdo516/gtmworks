@@ -9,7 +9,7 @@ import { AgentFace } from '@/components/agent-face';
 import { BoardPager, KanbanBoard, KanbanCard, KanbanColumn } from '@/components/paperclip/KanbanBoard';
 import { cardColumns, columnLabel, moveTarget, statusOfColumn, type CardColumn } from '@/lib/board-columns.mjs';
 import { CardWindow } from '@/app/card-window';
-import { useBoard, type BoardCard } from '@/app/board-read';
+import { useBoard, useWaitingCards, type BoardCard } from '@/app/board-read';
 import { BoardCardBody, useCardLabel } from '@/app/board-card';
 import { ArchivedList, useArchive } from '@/app/board-archive';
 import { BoardFilters, everything, shown, type BoardFilter } from '@/app/board-filters';
@@ -17,6 +17,8 @@ import { moveCard } from '@/app/card-move';
 import { toast } from '@/app/toast';
 import '@/app/board.css';
 import type { MadeBoard } from './new-card';
+import type { WaitingItem } from '@/lib/approval-queue';
+import { WaitingRows, type WaitingPeople } from './waiting-rows';
 
 // New card (#836), loaded only when it is opened, so the board's first load stays small.
 const NewCard=lazy(()=>import('./new-card'));
@@ -41,21 +43,31 @@ const NewCard=lazy(()=>import('./new-card'));
 // carried over them shows the column refused and says why, and one dropped there stays where it was. The board filters
 // by Assignee and by Project (app/board-filters.tsx); a Card made while a Project is chosen is made in it, and select
 // mode and "Archive everything in Done" take the Cards the filters show.
+//
+// Opened on Waiting on you (/approvals, ADR 0013; `own`), the board's first column is the reader's own list instead
+// (./waiting-rows.tsx): the Cards that wait on them and their other rows, as the sidebar's count counts them (#841, #846).
 
 export type { BoardCard } from '@/app/board-read';
 type Agent={id:string,name:string};
 
 const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],done:['boardEmptyDone','']};
 
-export default function Board({company,slug,writer,reviewer=false,me='',creating=false}:{company:string,slug:string,writer:boolean,reviewer?:boolean,me?:string,creating?:boolean}) {
+type Own={items:WaitingItem[],people:WaitingPeople};
+export default function Board({company,slug,writer,reviewer=false,me='',creating=false,own}:{company:string,slug:string,writer:boolean,reviewer?:boolean,me?:string,creating?:boolean,own?:Own}) {
  const {t,language}=useI18n();
  const read=useBoard(company);
+ const ownCards=useWaitingCards(own?company:'');
+ const ownTotal=own?own.items.length+(ownCards?.length??0):0;
+ const opensOnWaiting=!!own;
+ useEffect(()=>{ if(opensOnWaiting) document.querySelector('#board-cols [data-column="waiting"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); },[opensOnWaiting]);
  const [filter,setFilter]=useState<BoardFilter>(everything);
  // New card is open (#836): at /work/new it opens with the page, and closing it leaves the board at its own address.
  const [making,setMaking]=useState(creating&&writer); const opener=useRef<HTMLButtonElement>(null); const [made,setMade]=useState<string|null>(null);
  const cards=read.board?.cards??null; const main=read.board?.main??null;
  const filtered=filter.who!=='all'||filter.project!=='all';
- const drawn=(cards??[]).filter(card=>shown(card,filter,me));
+ // Opened on Waiting on you (`own`), the first column holds the reader's own list, not the board's waiting Cards: those
+ // are not drawn, so neither select mode nor "Select all shown" can take one (#846).
+ const drawn=(cards??[]).filter(card=>shown(card,filter,me)&&!(own&&card.column==='waiting'));
  const accept=(answer:{cards?:unknown,main?:Agent|null})=>{ if(Array.isArray(answer.cards)) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); };
  // Archive (#842): select mode's chosen Cards, the archived list in place of the columns with its search, and how many
  // Cards are archived once the list has said. `version` reads the list again after a change.
@@ -113,7 +125,7 @@ export default function Board({company,slug,writer,reviewer=false,me='',creating
  </KanbanCard>;
  const views=<nav className="tabs segmented" aria-label={t('boardViews')}>{[['board',t('board')],['calendar',t('calendar')],['list',t('list')]].map(([path,name])=>
   <Link key={path} data-slot="button" data-active={path==='board'} aria-current={path==='board'?'page':undefined} className={`button ${path==='board'?'active':''}`} href={`${base}/${path}`}>{name}</Link>)}</nav>;
- return <div className="work-root"><div className="board-view">
+ return <div className="work-root"><div className={`board-view${own?' approvals':''}`} data-focus={own?'waiting':undefined}>
   <header className="page-head"><div className="od-field"><h1 className="page-title">{t('marketingBoard')}</h1><p className="page-sub">{t('boardSubtitle')}</p></div><div className="work-toolbar" data-canonical-toolbar="work">{views}</div></header>
   <div className="board-tools">
    {!showArchived&&<BoardFilters cards={cards??[]} filter={filter} onFilter={setFilter}/>}
@@ -147,10 +159,14 @@ export default function Board({company,slug,writer,reviewer=false,me='',creating
     const list=drawn.filter(card=>card.column===column);
     const waiting=column==='waiting';
     // A column that is the work's own says so where a Card carried over it would land (#837).
-    const own=writer&&!statusOfColumn(column,false);
+    const workOwn=writer&&!statusOfColumn(column,false);
+    if(waiting&&own) return <KanbanColumn key={column} column={column} name={columnName(column)} count={ownTotal} waiting>
+     <WaitingRows items={own.items} cards={ownCards??[]} columnName={columnName} people={own.people}/>
+     {!ownTotal&&ownCards!==undefined&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b><span>{t(emptyKey[column][1])}</span></div>}
+    </KanbanColumn>;
     return <KanbanColumn key={column} column={column} name={columnName(column)} count={cards?list.length:''} waiting={waiting}
      head={column==='done'&&writer&&!selected&&list.length>0&&<button type="button" className="ib ib--sm col__act" aria-label={t('boardArchiveDone',columnName(column))} title={t('boardArchiveAll')} onClick={()=>void archiving.archive(list.map(card=>card.id))}><ShellIcon name="archive"/></button>}>
-     {own&&<p className="col__note" role="note">{t(column==='progress'?'cardMoveProgress':'cardMoveWaiting')}</p>}
+     {workOwn&&<p className="col__note" role="note">{t(column==='progress'?'cardMoveProgress':'cardMoveWaiting')}</p>}
      {list.map(card=>cardView(card))}{cards&&!list.length&&<div className="col-empty"><b>{t(filtered?'boardNoMatch':emptyKey[column][0])}</b>{!filtered&&emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>;
    })}

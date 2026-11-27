@@ -15,22 +15,21 @@ async function faceMarkup(face:Locator,label:string|null) {
 }
 
 // An identity that was one of the old role agents is a removed membership now: what it wrote keeps its name and letter.
-test('a comment keeps its writer\'s name and letter after the writer\'s membership is removed',async({page})=>{
- const body=`Face history ${Date.now()}`;
+// Read on the Activity log (the old board, where its comments were drawn, is switched off, #846).
+test('a log row keeps its writer\'s name and letter after the writer\'s membership is removed',async({page})=>{
+ const stamp=Date.now();
  try {
-  // The note on card 1, written as that Member (seed.sql's way): the note's activity row takes its author from the
-  // signed-in id, auth.uid().
-  query(`do $$ begin perform set_config('request.jwt.claim.sub','${writer}',true);
-   insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',1,'${body}','${writer}'); end $$`);
-  await signIn(page,'manager@example.com','/c/rs-learning/work/board/1');
-  const message=page.locator('.message[data-author=person]').filter({hasText:body});
-  await expect(message.locator('strong')).toHaveText(name);
-  const before=await faceMarkup(message.locator('.avatar'),null);
-  expect(await message.locator('.avatar').textContent()).toBe('و');
+  query(`insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,body,source,source_id,created_at)
+   values ('10000000-0000-0000-0000-000000000001','${writer}','person','${name}','company','company_changed','{"field":"name","old":"RS","new":"RS Learning"}','Face history ${stamp}','company_audit',${stamp},now())`);
+  await signIn(page,'manager@example.com',`/c/rs-learning/log?who=p:${writer}`);
+  const row=page.locator('.lgp-body .lg-row').filter({hasText:`Face history ${stamp}`});
+  await expect(row.locator('.lg-name')).toHaveText(name);
+  const before=await faceMarkup(row.locator('.lg-av'),null);
+  expect(await row.locator('.lg-av').textContent()).toBe('و');
   query(`update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='${writer}'`);
   await page.reload();
-  await expect(message.locator('strong')).toHaveText(name);
-  expect(await faceMarkup(message.locator('.avatar'),null)).toBe(before);
+  await expect(row.locator('.lg-name')).toHaveText(name);
+  expect(await faceMarkup(row.locator('.lg-av'),null)).toBe(before);
  } finally {
   query(`update public.members set removed_at=null where company_id='10000000-0000-0000-0000-000000000001' and person_id='${writer}'`);
  }

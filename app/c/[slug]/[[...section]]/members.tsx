@@ -1,8 +1,9 @@
 import { getI18n } from '@/lib/i18n-server';
 import Link from '@/lib/link';
 import { changeMember } from './actions';
-import type { WorkMember } from '@/lib/work-activity';
 const roles:Record<string,string>={owner:'owner',manager:'manager',contributor:'contributor',viewer:'viewer'};
+// removed_at: a removed Member is kept for the names of what it did (spec #695: an old role agent's too).
+type WorkMember={person_id:string,role?:'owner'|'manager'|'contributor'|'viewer',removed_at?:string|null,people:{name:string}|null};
 type Member=WorkMember & {role:string,grant_publishing:boolean,grant_money_figures:boolean,grant_customer_data:boolean};
 function auditValue(key:string,field:unknown, t: import('@/lib/i18n.mjs').I18n['t']) {
  if(key==='role') return roles[String(field)] ? t(roles[String(field)]) : '—';

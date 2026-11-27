@@ -15,7 +15,6 @@ import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ConversationSteps } from '@/lib/conversation-steps';
 import type { Send } from '@/lib/sending';
 import { columnLabel } from '@/lib/board-columns.mjs';
-import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
@@ -46,10 +45,9 @@ function newLive():LiveStore {
 // the sidebar gives the chat. The title and the composer stay outside the part that loads, so the same box takes a
 // message from the start, keeping what was typed, its caret and its focus; a message sent before the record arrives
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
-// the record is read. `board` is the chat's Card on the board as the page read it, shown in the corner until the record
-// says where the Card is now. `archived` (#674): the Conversation is archived; its head's menu restores it, and a line
+// the record is read. `archived` (#674): the Conversation is archived; its head's menu restores it, and a line
 // over the composer says so, and that writing in it brings it back.
-export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,first,invites,archived=false,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],first?:'alone'|'team',invites?:number,archived?:boolean,children:ReactNode}) {
+export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,first,invites,archived=false,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,first?:'alone'|'team',invites?:number,archived?:boolean,children:ReactNode}) {
  const panel=useDetailsPanel();
  const [isArchived,setArchived]=useState(archived);
  // This chat's own archive and restore show at once; the server's answer, read again after one from elsewhere (the
@@ -62,24 +60,23 @@ export default function ConversationView({slug,agent,details,tab,company,convers
  const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),live}),[slug,agent,company,conversation,writer,live]);
  const fill=useCallback((text:string)=>composer.current?.fill(text),[]);
  return <ChatView value={view}>{first&&<FirstRunToast mode={first} agent={conversation.agent_name} invites={invites}/>}<div className="convo"><div className="chat">
-  <ChatHead panel={panel} slug={slug} agent={agent} conversation={conversation} title={title} writer={writer} board={board}/>
+  <ChatHead panel={panel} agent={agent} conversation={conversation} title={title}/>
   <ChatMore company={company} conversation={conversation} title={title} archived={isArchived} changed={setArchived}/>
   <Transcript>{children}</Transcript>
   <ChatComposer company={company} conversation={conversation} writer={writer} box={composer} archived={isArchived} restored={()=>setArchived(false)}/>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} tab={tab} slug={slug} suggest={writer?fill:undefined}/>}</div></ChatView>;
 }
 
-// The chat's floating title and its corner, as the loaded transcript keeps them (#297): they subscribe to the frame's
-// store, so the record arriving redraws these and never the page around the transcript.
-function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:DetailsPanel,slug:string,agent:DetailsAgent|null,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board']}) {
- const {c}=useConversationText(); const {live:store}=useView(); const {t,language}=useI18n();
+// The chat's floating title, as the loaded transcript keeps it (#297): it subscribes to the frame's store, so the record
+// arriving redraws it and never the page around the transcript. The reference's corner pill named the chat's Card on the
+// old board, which is switched off (#846); a Card an Agent makes from a chat is its own row in the transcript (#844).
+function ChatHead({panel,agent,conversation,title}:{panel:DetailsPanel,agent:DetailsAgent|null,conversation:ThreadConversation,title:string}) {
+ const {live:store}=useView(); const {t,language}=useI18n();
  const live=useSyncExternalStore(store.subscribe,store.get,()=>undefined);
- const record=live?.record; const corner=record?record.board:board;
- // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
- const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
+ const record=live?.record;
  // The head's face shows the Agent's state as the sidebar's tile does (app/sidebar-live), with what this chat knows.
  const state=useAgentState(conversation.agent_id??'');
- return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/></>;
+ return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto"/></>;
 }
 
 // The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or
@@ -163,11 +160,3 @@ export function ConversationLoaded({initial,steps,team}:{initial:ConversationRec
  </div></div>;
 }
 
-// The chat's Card on the board (#144; design-reference: renderChat's corner pill): its column now, and the way to it on
-// the board. A phone shows the column alone.
-function CornerPill({slug,board,writer,fresh,c}:{slug:string,board:NonNullable<ConversationRecord['board']>,writer:boolean,fresh:boolean,c:(key:string,...values:unknown[])=>string}) {
- const {t}=useI18n(); const waiting=board.column==='waiting'; const column=t(columnLabel(board.column,writer));
- return <div className="chat__corner"><Link className={`corner-pill${waiting?' is-waiting':''}${waiting&&fresh?' is-new':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('onTheBoard')} ${column}`}>
-  <span className={`dot dot--${waiting?'waiting':'idle'}`} aria-hidden="true"/><span className="corner-pill__lbl">{c('onTheBoard')}</span><span className="corner-pill__col">{column}</span>
- </Link></div>;
-}

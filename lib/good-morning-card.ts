@@ -8,15 +8,15 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // the Conversation is read, as its own reader: their "Waiting on you" now (an item settled since is gone), the steps
 // handed to them, and the Routine results of the night before that morning from the Agents they see (RLS). The foot is
 // the Good morning job's own time and state, read from the Engine; an Engine that cannot be read draws no foot line.
-export type MorningItem=Pick<WaitingItem,'kind'|'id'|'title'|'body'|'asked_by'|'card_id'|'conversation_id'|'channel_id'|'channel_message_id'|'note_id'|'agent'>;
+export type MorningItem=Pick<WaitingItem,'kind'|'id'|'title'|'body'|'asked_by'|'card_id'|'conversation_id'|'channel_id'|'channel_message_id'|'agent'>;
 type MorningNight={id:number,agent:{id:string,connection_id:string,name:string},routine:string,line:string,at:string};
 export type MorningCard={day:string,waiting:MorningItem[],handed:MorningItem[],overnight:MorningNight[],viewer:boolean,manage:boolean,
  main:string|null,foot:{on:boolean,time:string,custom:string|null,zone:string|null}|null};
 
 // A step an Agent handed to the reader (#139, #149) is its own part of the card, "Handed to you".
 const handed=(item:WaitingItem)=>item.kind==='hand'||item.kind==='channel_hand';
-const keep=({kind,id,title,body,asked_by,card_id,conversation_id,channel_id,channel_message_id,note_id,agent}:WaitingItem):MorningItem=>
- ({kind,id,title,body,asked_by,card_id,conversation_id,channel_id:channel_id??null,channel_message_id:channel_message_id??null,note_id:note_id??null,agent:agent??null});
+const keep=({kind,id,title,body,asked_by,card_id,conversation_id,channel_id,channel_message_id,agent}:WaitingItem):MorningItem=>
+ ({kind,id,title,body,asked_by,card_id,conversation_id,channel_id:channel_id??null,channel_message_id:channel_message_id??null,agent:agent??null});
 
 /** @param {Database} db @param {string} company @param {string} person @param {number} morning @param {string} day */
 export async function morningCard(db:Database,company:string,person:string,morning:number,day:string):Promise<MorningCard> {

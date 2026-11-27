@@ -121,29 +121,6 @@ test('a channel Run the Engine fails for no credit records why, and says so in t
   where m.channel_id='${general}' and m.body='@Lead plan the credit week'`))).toEqual([{outcome:'no_credit'}]);
 });
 
-test('a Card note whose Run the Engine fails for want of a model, or for a refused key, says why under the note',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board/4');
- for(const [failure,outcome,said] of [[noProvider,'no_model',line],[apiKeyRefusedError,'key_refused','Lead could not reply: the model provider refused the company’s key or sign-in.']] as const) {
-  fake.settings.failure=failure;
-  await page.goto('/c/rs-learning/work/board/4');
-  const body=`@Lead plan the ${outcome} teaser`;
-  await page.getByLabel('Comment',{exact:true}).fill(body);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect.poll(()=>JSON.parse(query(`select id from public.work_comments where body='${body}'`)).length,{timeout:20000}).toBe(1);
-  const note=Number(JSON.parse(query(`select id from public.work_comments where body='${body}'`))[0].id);
-  const under=page.locator(`#note-${note} + li`);
-  await expect(under).toHaveAttribute('data-outcome',outcome.replace('_','-'),{timeout:20000});
-  await expect(under).toContainText(said);
-  await expect(under.getByRole('link',{name:outcome==='no_model'?connect:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
-  expect(JSON.parse(query(`select outcome from public.note_runs where note_id=${note}`))).toEqual([{outcome}]);
-  // The sheet the board opens a Card in says the same under the note in its log.
-  await page.goto('/c/rs-learning/work/board?card=4');
-  const inSheet=page.locator(`[id="note-${note}"] [data-outcome="${outcome.replace('_','-')}"]`);
-  await expect(inSheet).toContainText(said);
-  await expect(inSheet.getByRole('link',{name:outcome==='no_model'?connect:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
- }
-});
-
 test('once the Company holds a key, the empty chat shows no notice',async({page})=>{
  fake.settings.profiles.get(space)!.env={OPENROUTER_API_KEY:'sk-or-v1-playwright-0123456789abcdef'};
  await signIn(page,'omar@example.com','/c/rs-learning/chat');

@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { signIn } from './sign-in';
+import { laneHermes } from './lane-hermes';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
@@ -11,26 +12,38 @@ const viewer='20000000-0000-0000-0000-000000000004';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const id=(n:number)=>`69000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [leadConnection,adsConnection,seoConnection,lead,ads,seo,conversation]=[1,2,3,4,5,6,7].map(id);
-// Copy (#184) has a Card with an item waiting on Omar, and the Contributor and the Viewer are shown it.
+// Copy (#184) has a question in its Conversation waiting on Omar, and the Contributor and the Viewer are shown it.
 const [copyConnection,copy]=[12,13].map(id);
-// The files (#21): one on a Meta Ads Card, one in Omar's own Conversation with it and one in the Contributor's.
-const paths={card:`${company}/agent-details/${randomUUID()}.pdf`,mine:`${company}/conversations/${conversation}/${randomUUID()}.csv`,theirs:`${company}/conversations/${id(11)}/${randomUUID()}.txt`};
+// The files (#21): one in Omar's own Conversation with Meta Ads and one in the Contributor's.
+const paths={mine:`${company}/conversations/${conversation}/${randomUUID()}.csv`,theirs:`${company}/conversations/${id(11)}/${randomUUID()}.txt`};
 const bytes=Buffer.from('June audiences\n');
-const stage=(column:string)=>`(select id from public.work_stages where company_id='${company}' and board_column='${column}' order by position limit 1)`;
+// Its Cards are on the Company's Engine board (spec #831, #846), on each Agent's own Engine profile.
+const profileOf=(agent:string)=>`ag-${agent.replaceAll('-','')}`;
+const rsProfile=`co-${company.replaceAll('-','')}`;
+let fake:Awaited<ReturnType<typeof laneHermes>>;
+const cardIds:Record<string,string>={};
 
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
-test.beforeAll(({},testInfo)=>{
+test.beforeAll(async({},testInfo)=>{
  // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
  freshSeed(testInfo);
+ fake=await laneHermes();
+ // The open Run seeded below is still running on the Engine, so the worker leaves it working.
+ fake.settings.heldElsewhere=run=>run==='details-run';
+ for(const [name,status,agent] of [['Retargeting ads','ready',ads],['June campaign','running',ads],['Spring copy','triage',copy]] as const)
+  cardIds[name]=fake.settings.kanban.task({title:name,status,assignee:profileOf(agent)}).id;
  // Copy, Lead and SEO are made today, so none of them is asleep (#699: an Agent made over 7 days ago with no work for 7
  // days sleeps): the states below are waiting, working and idle.
- query(`do $$ declare card bigint; begin
-    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
-   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,now(),null,'details-copy'),
+ query(`do $$ begin
+    insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}'),('${copy}','${company}');
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
+   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,now(),null,'${profileOf(copy)}'),
    ('${lead}','${company}','${leadConnection}','Lead','General',true,now(),null,'details-lead'),
-   ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}','details-ads'),
+   ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}','${profileOf(ads)}'),
    ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,now(),null,'details-seo');
+  insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','${rsProfile}',true)
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${id(9)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${id(10)}','details-made','2026-06-10T09:00:00Z'),
@@ -40,11 +53,8 @@ test.beforeAll(({},testInfo)=>{
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Meta Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${conversation}','person','${omar}','Omar',E'Plan the June campaign\\nwith three ads','${id(8)}','details-run',now()-interval '5 minutes');
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('progress')},'June campaign','${ads}') returning id into card;
-  insert into public.work_checklist(company_id,card_id,title,done) values ('${company}',card,'Pick the audience',true),('${company}',card,'Write the ad copy',false);
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('planned')},'Retargeting ads','${ads}');
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('ideas')},'Spring copy','${copy}') returning id into card;
-  insert into public.waiting_items(company_id,person_id,kind,title,card_id) values ('${company}','${omar}','question','Which tone for spring?',card);
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(18)}','${company}','${omar}','${copy}','Copy');
+  insert into public.waiting_items(company_id,person_id,kind,title,conversation_id) values ('${company}','${omar}','question','Which tone for spring?','${id(18)}');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
   -- Two earlier changes of Meta Ads in the company log, as log_agent_event writes them, dated in the past.
   insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
@@ -58,13 +68,11 @@ const serviceStorage=async()=>{
  const value=(name:string)=>status.match(new RegExp(`^${name}="(.*)"$`,'m'))![1];
  return createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false}}).storage.from('creatives');
 };
+test.afterAll(async()=>{ await fake?.close(); });
 test.beforeAll(async()=>{
  const storage=await serviceStorage();
  for(const path of Object.values(paths)) expect((await storage.upload(path,bytes,{contentType:'text/plain',upsert:true})).error).toBeNull();
- query(`do $$ declare card bigint; message bigint; begin
-  select id into card from public.work_cards where company_id='${company}' and title='June campaign';
-  insert into public.work_comments(company_id,card_id,body,author_id) values ('${company}',card,'The brief','${omar}') returning id into message;
-  insert into public.work_attachments(company_id,card_id,comment_id,name,content_type,size,path,created_by,created_at) values ('${company}',card,message,'june-brief.pdf','application/pdf',88064,'${paths.card}','${omar}','2026-06-10T09:00:00Z');
+ query(`do $$ begin
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${reviewer}','${ads}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(11)}','${company}','${reviewer}','${ads}','Meta Ads');
   insert into public.conversation_attachments(company_id,conversation_id,name,content_type,size,path,created_at) values
@@ -83,7 +91,7 @@ async function openDetails(page:Page,email:string,agent:string,name:string) {
 }
 const tab=(details:Locator,name:string)=>details.getByRole('tab',{name,exact:true});
 
-test('the Owner reads the Agent\'s state, what it is doing for them, its Cards and its log',async({page})=>{
+test('the Owner reads the Agent\'s state, what it is doing for them, its Cards on the Engine\'s board and its log',async({page})=>{
  const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
  await expect(details.locator('.dp-id__name')).toHaveText('Meta Ads');
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
@@ -114,7 +122,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  const cards=panel.locator('a.panel-row');
  await expect(cards.locator('.panel-row__t')).toHaveText(['Retargeting ads','June campaign']);
  await expect(cards.locator('.panel-row__meta')).toHaveText(['Planned','In progress']);
- await expect(cards.nth(1).locator('.panel-row__d')).toHaveText('Write the ad copy · 50%');
+ await expect(cards.filter({hasText:'Spring copy'}),'another Agent\'s Card is not this one\'s').toHaveCount(0);
 
  await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Files')).toBeFocused();
@@ -138,22 +146,22 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await page.goto(`/c/rs-learning/chat/${ads}`);
  await tab(details,'Tasks').click();
  await cards.filter({hasText:'June campaign'}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board\/\d+$/);
- await expect(page.locator('.modal')).toContainText('June campaign');
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board\\?card=${cardIds['June campaign']}$`));
+ await expect(page.getByRole('dialog')).toContainText('June campaign');
 });
 
-test('the Files tab lists the Agent\'s Card files and the reader\'s own Conversation file, newest first, and opens them',async({page})=>{
+test('the Files tab lists the reader\'s own Conversation file with the Agent, and opens it, and no old Card\'s file',async({page})=>{
  const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-files');
- await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 1');
  const rows=panel.locator('.panel-row');
- await expect(rows.locator('.panel-row__t')).toHaveText(['audiences.csv','june-brief.pdf']);
- await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign','86 KB · June campaign']);
+ await expect(rows.locator('.panel-row__t')).toHaveText(['audiences.csv']);
+ await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign']);
  await expect(panel).not.toContainText('reviewer-notes.txt');
  const links=await rows.getByRole('link').evaluateAll(anchors=>anchors.map(anchor=>anchor.getAttribute('href')));
- expect(links).toEqual([`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`,expect.stringMatching(/^\/c\/rs-learning\/files\/\d+$/)]);
+ expect(links).toEqual([`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`]);
  for(const link of links) {
   const opened=await page.request.get(link!);
   expect(opened.status()).toBe(200);
@@ -164,15 +172,15 @@ test('the Files tab lists the Agent\'s Card files and the reader\'s own Conversa
  // An address opens the panel on that tab, beside a Conversation too.
  await page.goto(`/c/rs-learning/conversations/${conversation}?tab=files`);
  await expect(tab(details,'Files')).toHaveAttribute('aria-selected','true');
- await expect(panel.locator('.panel-row__t')).toHaveText(['audiences.csv','june-brief.pdf']);
+ await expect(panel.locator('.panel-row__t')).toHaveText(['audiences.csv']);
 });
 
-test('a Contributor sees the Card file and their own Conversation file, never another Member\'s',async({page})=>{
+test('a Contributor sees their own Conversation file, never another Member\'s',async({page})=>{
  const details=await openDetails(page,'reviewer@example.com',ads,'Meta Ads');
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
- await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
- await expect(panel.locator('.panel-row__t')).toHaveText(['reviewer-notes.txt','june-brief.pdf']);
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 1');
+ await expect(panel.locator('.panel-row__t')).toHaveText(['reviewer-notes.txt']);
  await expect(panel).not.toContainText('audiences.csv');
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('reviewer-notes.txt')}`)).status()).toBe(200);
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`)).status()).toBe(404);
@@ -195,11 +203,10 @@ test('a Viewer\'s panel has only the gear and Close as actions, and no other per
 });
 
 test('every file of the Agent is listed, past fifty, and the heading counts what the list holds',async({page})=>{
- query(`do $$ declare card bigint; message bigint; begin
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('planned')},'Many files','${seo}') returning id into card;
-  insert into public.work_comments(company_id,card_id,body,author_id) values ('${company}',card,'The files','${omar}') returning id into message;
-  insert into public.work_attachments(company_id,card_id,comment_id,name,content_type,size,path,created_by,created_at)
-   select '${company}',card,message,'file-'||n||'.txt','text/plain',10,'${company}/agent-details-many/'||n||'.txt','${omar}',timestamptz '2026-06-01T09:00:00Z'+n*interval '1 minute' from generate_series(1,51) n;
+ query(`do $$ begin
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(19)}','${company}','${omar}','${seo}','SEO');
+  insert into public.conversation_attachments(company_id,conversation_id,name,content_type,size,path,created_at)
+   select '${company}','${id(19)}','file-'||n||'.txt','text/plain',10,'${company}/conversations/${id(19)}/'||n||'.txt',timestamptz '2026-06-01T09:00:00Z'+n*interval '1 minute' from generate_series(1,51) n;
  end $$;`);
  const details=await openDetails(page,'omar@example.com',seo,'SEO');
  await tab(details,'Files').click();

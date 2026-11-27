@@ -17,6 +17,9 @@ const symbols:{[kind in SymbolKind]:{icon?:ShellIconName,tone:'ok'|'wait'|'bad'|
 };
 const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits',sentBack:'symSentBack',passed:'symPassed',onYou:'symOnYou'} as const;
 
+/** A Card's own address: it opens over the board (#835). */
+export const cardAddress=(slug:string,id:string)=>`/c/${slug}/work/board?card=${encodeURIComponent(id)}`;
+
 type Selecting={chosen:boolean,flip:()=>void}|null;
 type LinkProps=Omit<AnchorHTMLAttributes<HTMLAnchorElement>,'className'|'dir'|'href'|'onClick'|'children'>;
 

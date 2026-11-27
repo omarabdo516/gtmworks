@@ -29,32 +29,27 @@ const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies Pe
 // its Run starts after it, through the one starter of turns (after(), and the worker's pass over waiting turns). This
 // route only checks the request's shape and turns refusals into answers. Who wrote it is the signed-in person: no field
 // of the request names an author, and any such field is ignored.
-// A first message from a Card's sheet names the Card (#145): the database starts the Card's chat with its Agent, or
-// answers the caller's own chat already on it, and the message goes there.
+// A message names no Card: the old board's sheet, whose first message started a Card's chat (#145), is switched off
+// (#846), and a send that names one is refused.
 // Images go with the message (#155): the check runs before anything is uploaded or stored, and they are kept with the
 // turn before it is stored, so its Run reads them from the Conversation's files (lib/conversation-files.ts). Nothing of
 // the request is logged.
 async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
- if(body.card!==undefined&&!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
+ if(body.card!==undefined) return refuse('conversationFailed',400);
  if(typeof body.message!=='string'||body.message.length>20000) return refuse('conversationFailed',400);
  // A file the Agent cannot read, more of them than a message carries, or a message whose text and images pass the
  // Engine's request limit: refused here, with one line saying why, and nothing is stored or sent.
  const problem=conversationFilesProblem(chosen,body.message);
  if(problem) return refuse(fileRefusal(problem),400);
  if(!chosen.length&&!body.message.trim()) return refuse('conversationFailed',400);
- let conversation=body.conversation as string;
- if(body.card!==undefined) {
-  const {data:started,error}=await db.rpc('start_card_conversation',{c:body.company,card:body.card,conversation});
-  if(error) return error.message==='cardChatTaken'?refuse('sheetChatTaken',409):refuseFor(error.code);
-  conversation=started as string;
- }
+ const conversation=body.conversation as string;
  const messageKey=body.sendKey as string; const company=body.company as string;
  // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
  // the key still holds (#727).
  const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
  const keepFiles=chosen.length?()=>keepConversationFiles(db,service(),{...files,files:chosen}):undefined;
- const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,keepFiles,later:after});
+ const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.agent as string|undefined,message:body.message,keepFiles,later:after});
  // Refused before the turn was stored: nothing was, so the images kept for it go too, and the words go back to the box.
  if('code' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuseFor(sent.code); }
  if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuse(sent.error,sent.status); }

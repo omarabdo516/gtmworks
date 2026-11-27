@@ -17,7 +17,7 @@ const { channelRecord } = await import('../lib/channels.ts');
 // The channel's reads as the page makes them. `runs` are the channel's closed Runs, newest first; `open` are the Runs
 // still open, and `states` is the one agent_face_states call, each Agent's state by id; its rows carry more than the
 // record may keep: the state is all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
-function database({ agents, runs = [], open = [], states = {}, messages = [], notes = [], cards = [], handovers = [], board = null, stoppable = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
+function database({ agents, runs = [], open = [], states = {}, messages = [], notes = [], cards = [], handovers = [], board = null, asked = [], stoppable = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
  const rows = select => select === 'message_id,ordinal,agent_id' ? open : String(select).includes('agent_name') ? runs : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
@@ -35,6 +35,7 @@ function database({ agents, runs = [], open = [], states = {}, messages = [], no
  };
  const selectOf = new Map();
  const rpc = async name => {
+  asked.push(name);
   if (name === 'channel_members') return { data: members, error: null };
   if (name === 'channel_agent_list') return { data: agents, error: null };
   if (name === 'conversation_can_write') return { data: false, error: null };
@@ -257,32 +258,19 @@ test('a channel with no handover draws none, and one whose handover belongs to a
  assert.deepEqual(elsewhere?.messages.map(message => message.author), ['person'], 'no row of a message that is not shown');
 });
 
-// #151: the Card a team channel put on the board is part of the channel's record, as the database reads it for this
-// reader: its title, its column now, the line under it and whether it waits. A channel with no Card carries none, and a
-// reader who does not see the Card's Agent carries none either (the database answers nothing).
-test('a channel with a Card carries its board row, and one without carries none', async () => {
- const filled = await channelRecord(database({
+// #151, #846: the Card a team channel put on the old board is no part of the channel's record since the old board is
+// switched off, nor the quiet line it added; an invitation's line still is.
+test('a channel names no Card of the old board, and draws no line for one', async () => {
+ const at = (hour) => `2026-06-10T${String(hour).padStart(2, '0')}:00:00Z`;
+ const asked = [];
+ const record = await channelRecord(database({
   agents: [agent('a-1', 'Ads')],
   board: { card: 41, title: 'Launch week', column: 'progress', line: 'Write the launch post · 40%', waiting: false },
- }), 'p-1', 'co-1', 'ch-1');
- assert.deepEqual(filled?.board, { card: 41, title: 'Launch week', column: 'progress', line: 'Write the launch post · 40%', waiting: false });
- const waiting = await channelRecord(database({
-  agents: [agent('a-1', 'Ads')],
-  board: { card: 41, title: 'Launch week', column: 'waiting', line: 'مراجعة', waiting: true },
- }), 'p-1', 'co-1', 'ch-1');
- assert.deepEqual(waiting?.board, { card: 41, title: 'Launch week', column: 'waiting', line: 'مراجعة', waiting: true });
- const bare = await channelRecord(database({ agents: [agent('a-1', 'Ads')] }), 'p-1', 'co-1', 'ch-1');
- assert.ok(!('board' in (bare ?? {})), 'a channel with no Card has no board row');
-});
-
-// #151: the quiet line a channel's Card adds is drawn like an invitation's, with no person and no Run.
-test('a Card\'s quiet line is drawn where it was written, with no person and no Run', async () => {
- const at = (hour) => `2026-06-10T${String(hour).padStart(2, '0')}:00:00Z`;
- const record = await channelRecord(database({
-  agents: [],
   messages: [{ id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: 'Morning all', created_at: at(8) }],
-  notes: [{ id: 9, kind: 'card', invitee_name: null, actor_name: '', created_at: at(9) }],
+  notes: [{ id: 9, kind: 'card', invitee_name: null, actor_name: '', created_at: at(9) }, { id: 10, kind: 'invite', invitee_name: 'Sara Adel', actor_name: 'Omar', created_at: at(10) }],
+  asked,
  }), 'p-1', 'co-1', 'ch-1');
- assert.deepEqual(record?.messages[1], { id: -9, author: 'note', kind: 'card', at: at(9) });
- assert.equal(record?.messages[0]?.author, 'person', 'and the message before it stays');
+ assert.ok(!('board' in (record ?? {})), 'no board row');
+ assert.deepEqual(record?.messages.map(message => message.author === 'note' ? message.kind : message.author), ['person', 'invite']);
+ assert.ok(!asked.includes('channel_board_card'), 'the old board\'s Card is not asked for');
 });

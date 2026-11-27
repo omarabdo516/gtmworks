@@ -49,7 +49,7 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // updatePop, mentionMenu): the Agents this Member sees, and in a channel its other Members before them; "/" offers the
 // Commands. Its keys are the reference's: Arrow keys move and wrap, Enter or Tab picks in place of the token with one
 // space after it, Escape closes and keeps the text, and Enter sends only when the list is closed. Opening the list
-// closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
+// closes the "+" menu and the other way round.
 // `drawn`: the place draws a message the moment it is sent (#756), so the box lets it go then, and a refused send puts it
 // back, with its files and its send key, beside the line that says why.
 // `insert` adds a sentence after what is typed; `fill` puts it in the field in place of what is typed (#205's "Try
@@ -75,7 +75,7 @@ function useSendFlights() {
  const drawn=shown.map(({id,host,left,top,width,height})=>createPortal(<span key={id} className="gw send-fly" aria-hidden="true" style={{left,top,width,height}}><ShellIcon name="send"/></span>,host,String(id)));
  return {fly,drawn};
 }
-export type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
+type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
 export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:AgentFaceState,role?:string|null};
 export type Callable={people:CallablePerson[],agents:CallableAgent[]};
 const CallableAgents=createContext<CallableAgent[]>([]);
@@ -95,7 +95,7 @@ type Command={command:string,label:string,agent?:string};
 export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command,named?:boolean};
 // design-reference: mentionMenu. A channel's "@" offers its other Members, then its Agents; a note's the same without
 // Commands; a Conversation's the Agents the Member sees. Each name and command is narrowed by what follows the token.
-export function mentionSuggestions(callable:Callable,token:{type:string,q:string},withCommands:boolean):Suggestion[] {
+function mentionSuggestions(callable:Callable,token:{type:string,q:string},withCommands:boolean):Suggestion[] {
  const people=token.type==='@'?callable.people.filter(person=>firstName(person.name).toLowerCase().includes(token.q)||person.name.toLowerCase().includes(token.q)):[];
  const agents=token.type==='@'?callable.agents.filter(agent=>agent.name.toLowerCase().includes(token.q)):[];
  const matches=token.type==='/'&&withCommands?commandList(callable.agents).filter(item=>item.command.slice(1).toLowerCase().startsWith(token.q)):[];
@@ -109,7 +109,7 @@ const sectionLabels={people:'mentionTeam',agents:'plusCallAgent',commands:'plusC
 const roleLabels={owner:'owner',manager:'manager',contributor:'contributor',viewer:'viewer'} as const;
 // design-reference: updatePop's listbox. A label starts each section; the marked entry carries aria-selected, since the
 // field keeps the keyboard and points at it with aria-activedescendant.
-export function MentionPop({listId,label,items,index,pick}:{listId:string,label:string,items:Suggestion[],index:number,pick:(at:number)=>void}) {
+function MentionPop({listId,label,items,index,pick}:{listId:string,label:string,items:Suggestion[],index:number,pick:(at:number)=>void}) {
  const {t}=useI18n();
  // Each Agent's state as the sidebar last read it (app/sidebar-live), else the one it was listed with.
  const stateOf=useAgentStates();

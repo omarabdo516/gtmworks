@@ -18,7 +18,7 @@ import { NoApp, NumbersFigures, NumbersHead, WaitingRow } from './parts';
 import { NumbersPlaceholder } from './numbers-client';
 
 // The Numbers page (#35, design-reference: renderDashboard). The four figures, the leads chart and the channel table
-// are read only from the Company's connected apps; "Waiting for your approval" and "What the agents did this week" are
+// are read only from the Company's connected apps; "Waiting on you" (its rows; the board's Cards are the Engine's, #846) and "What the agents did this week" are
 // gtmworks's own records. The app figures are read through readNumbers (lib/numbers.mjs); connecting apps arrives with
 // Settings: apps (#30), and until then no app is connected, so they show the empty state and no number.
 // The page, its title and its period switch are drawn first; the figures follow, with the reference's placeholder in
@@ -47,19 +47,16 @@ export default async function NumbersPage({params,searchParams}:{params:Promise<
 type Db=Awaited<ReturnType<typeof supabase>>;
 type I18n=Awaited<ReturnType<typeof getI18n>>;
 async function Figures({db,company,slug,period,writer,queue,t,language}:{db:Db,company:string,slug:string,period:'7'|'30',writer:boolean,queue:ReturnType<typeof approvalQueue>,t:I18n['t'],language:I18n['language']}) {
- const [{data:agentRows},{connected,tiles},{items,cards}]=await Promise.all([
+ const [{data:agentRows},{connected,tiles},{items}]=await Promise.all([
   db.from('company_log').select(logColumns).eq('company_id',company).eq('actor_kind','agent').gte('created_at',feedSince()).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(6),
   readNumbers({company,period}),
   queue,
  ]);
  const feed=(agentRows||[]) as LogRow[];
- const people=await logPeople(db,company,[...feed.flatMap(row=>row.card_id!=null?[row.card_id]:[]),...items.flatMap(item=>item.card_id!=null?[item.card_id]:[])]);
- const {data:submitters}=cards.length?await db.from('work_cards').select('id,review_submitter').eq('company_id',company).in('id',cards.map(card=>card.id)):{data:[]};
+ const people=await logPeople(db,company);
  const locale=localeFor(language);
  const noApp=<NoApp t={t} slug={slug}/>;
  const waitFace=(item:typeof items[number])=>{
-  const submitter=item.kind==='approval'?(submitters||[]).find(card=>card.id===item.id)?.review_submitter as string|null|undefined:undefined;
-  if(submitter) return <WhoFace who={whoOf({actor_kind:'person',actor_id:submitter} as LogRow,people,t)}/>;
   // A permission request (#165) is its Agent's, so it shows the Agent's face (design-reference: renderDashboard's face(w.agent)).
   if(item.agent) return <span className="lg-face" aria-hidden="true"><AgentFace agent={item.agent.id} size={28}/></span>;
   if(item.asked_by) return <span className="lg-av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]}</span>;

@@ -137,7 +137,7 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 export type MessageFile={id:number,name:string,image?:true};
 // A message its person just sent is drawn by the page before its record holds it (`sending`, #756, lib/sending.ts),
 // `posting` until the send is answered; no record the server reads has one.
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn'|'sending',to?:string,failed?:boolean,behind?:true,key?:string,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'asked'|'answer'|'handed'|'handedOn'|'sending',to?:string,failed?:boolean,behind?:true,key?:string,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
 export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
@@ -192,11 +192,6 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
-// A Conversation that put its Card on the board (#144) says so once, under the Agent's reply to its first Run, or under
-// the handover's answer when Lead's handover put it there (#147; design-reference: send's note and mainTurn's note after
-// the handover).
-export const withBoardNote=(record:ConversationMessage[],reply:number|undefined):ConversationMessage[]=>record.flatMap(message=>
- message.author==='agent'&&!message.kind&&message.id===reply?[message,{id:message.id,author:'agent',author_name:message.author_name,body:'',created_at:message.created_at,kind:'boarded'}]:[message]);
 // #475: the asked Agent's answer to a handover, drawn as that Agent's own message, with "to {asking Agent}" on its
 // sender line (`kind` handed, `to`), where it came in: after the reply that handed the job over and before the asking
 // Agent's own reply, which was written after it. It is gtmworks's record, never a message of the Conversation.

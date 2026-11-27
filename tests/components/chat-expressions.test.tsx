@@ -6,7 +6,6 @@ import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversatio
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { SidebarLive, AgentTile } from '@/app/sidebar-live';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
-import { CardSheetChat } from '@/app/card-sheet-chat';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { AgentFaceState } from '@/lib/agent-face-states';
 import type { ConversationRecord } from '@/lib/conversation-record';
@@ -185,27 +184,3 @@ test('an empty chat\'s big face shows the state the sidebar does, and listens as
  await expect.poll(() => ({ big: big(), head: head(), tile: tile() })).toEqual({ big: 'listening', head: 'listening', tile: 'listening' });
 });
 
-test('a Card\'s empty chat shows its Agent\'s state on its face and listens as the person types', async () => {
- server({ shared: { ads: 'asleep' } });
- await render(<Sidebar states={{ ads: 'asleep' }}><CardSheetChat slug="rs" company="co-1" card={4} chat={{ kind: 'empty', agent: { id: 'ads', name: 'Ads', connection_id: 'c-ads' } }} writer shown openLog={() => {}}/></Sidebar>);
- expect([big(), tile()]).toEqual(['asleep', 'asleep']);
- await userEvent.type(field(), 'Plan');
- await expect.poll(() => [big(), tile()]).toEqual(['listening', 'listening']);
-});
-
-test('a channel opened in a Card\'s sheet shows its called Agent thinking, working, then done', async () => {
- const message: ChannelMessage = { id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @Ads, plan it', at, files: [], mention: { agent: 'Ads', face: 'ads', state: 'open', permissions: [], questions: [] } };
- const open: ChannelRecord = { channel: { id: 'ch-1', company: 'co-1', kind: 'general' }, members: [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }],
-  agents: [{ id: 'ads', connection_id: 'c-ads', name: 'Ads', speciality: '', main: false, only: false, state: 'working' }],
-  writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages: [message], handoffs: [], open: true, handover: false };
- const answered: ChannelRecord = { ...open, open: false, messages: [{ ...message, mention: { ...message.mention!, state: 'answered' } },
-  { id: 3, author: 'agent', name: 'Ads', face: 'ads', body: 'Planned.', at } as ChannelMessage] };
- const fake = server({ shared: { ads: 'working' }, channel: [open] });
- await render(<Sidebar states={{ ads: 'working' }}><CardSheetChat slug="rs" company="co-1" card={4} chat={{ kind: 'channel', record: open, person: 'p-me' }} writer shown openLog={() => {}}/></Sidebar>);
- await expect.poll(() => tile()).toBe('thinking');
- fake.step({ run: 'run_9', steps: [], now: { tool: 'meta_ads', preview: null } });
- await expect.poll(() => tile()).toBe('working');
- fake.state.shared = { ads: 'idle' };
- fake.state.channel = [answered];
- await expect.poll(() => tile(), { timeout: 5000 }).toBe('done');
-});

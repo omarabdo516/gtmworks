@@ -470,45 +470,14 @@ test('opened from a mention the message rings once and the read names that menti
  await expect.poll(() => asked[1]).toBe('/api/channels?company=co-1&channel=ch-1');
 });
 
-// #151: a channel whose Card is on the board shows it in its details as "On the board", with the Card's title, its line
-// and the column it stands in, and opens the board at that Card. The channel's top corner carries the pill of #144.
-test('a channel with a Card shows "On the board" with its title, its line and its column, and opens the board at it', async () => {
- vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const board = { card: 41, title: 'Launch week', column: 'progress' as const, line: 'Write the launch post · 40%', waiting: false };
- const screen = await reader(team({ board }));
- const details = screen.getByRole('complementary', { name: 'Channel details' });
- await expect.element(details.getByRole('heading', { name: 'On the board' })).toBeVisible();
- const row = details.getByRole('link', { name: /Launch week/ });
- await expect.element(row).toHaveAttribute('href', '/c/rs-learning/work/board?show=41');
- expect(row.element().textContent).toBe('Launch weekWrite the launch post · 40%In progress');
- await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toHaveAttribute('href', '/c/rs-learning/work/board?show=41');
-});
-
-test('a channel with no Card has no "On the board" section and no pill', async () => {
+// #151: a channel's Card on the old board was shown in its details and its top corner; the old board is switched off
+// (#846), so a channel has no "On the board" section and no pill.
+test('a channel has no "On the board" section and no pill', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const screen = await reader(team());
  const details = screen.getByRole('complementary', { name: 'Channel details' });
  await expect.element(details.getByRole('heading', { name: 'On the board' })).not.toBeInTheDocument();
  await expect.element(screen.getByRole('link', { name: /On the board:/ })).not.toBeInTheDocument();
-});
-
-test('in Arabic the section and the pill carry the approved words, and a Viewer reads the waiting column as the team\'s', async () => {
- vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-3" initial={team({ writer: false, board: { card: 41, title: 'إطلاق الأسبوع', column: 'waiting', line: 'مراجعة', waiting: true } })}/></LanguageProvider>);
- const details = screen.getByRole('complementary', { name: 'تفاصيل القناة' });
- await expect.element(details.getByRole('heading', { name: 'على اللوحة' })).toBeVisible();
- expect(details.getByRole('link', { name: /إطلاق الأسبوع/ }).element().textContent).toBe('إطلاق الأسبوعمراجعةمستني الفريق');
- const pill = screen.getByRole('link', { name: 'على اللوحة: مستني الفريق' });
- await expect.element(pill).toHaveAttribute('href', '/c/rs-learning/work/board?show=41');
- expect(pill.element().querySelector('.dot')?.className).toContain('dot--waiting');
-});
-
-// #151: the quiet line a channel's Card adds says where it went, in both languages.
-test.each([['en', 'This card was added to the board under “In progress”'], ['ar', 'البطاقة دي اتضافت للوحة في «شغالين عليه»']] as const)('in the %s channel the Card\'s quiet line says where it went', async (language, words) => {
- vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const note: ChannelMessage = { id: -9, author: 'note', kind: 'card', at };
- const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([note])}/></LanguageProvider>);
- await expect.element(screen.getByText(words)).toBeVisible();
 });
 
 // #132 (design-reference: msgHTML's msg-in, .thinking .shimmer): a Viewer of the general channel sees what arrives rise

@@ -4,9 +4,23 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 test('agent work glossary defines every agreed term in English and Arabic', () => {
  const glossary=readFileSync('GLOSSARY.md','utf8');
- for(const [english,arabic] of [['Agent','وكيل'],['Run','تشغيل'],['Version','نسخة'],['Approval','موافقة'],['Project','مشروع'],['Routine','مهمة متكررة'],['Skill','مهارة'],['Connection','ربط'],['Inbox','الوارد']]) {
+ for(const [english,arabic] of [['Agent','وكيل'],['Run','تشغيل'],['Card','بطاقة'],['Assignee','المسؤول'],['Attachment','مرفق'],['Archived','مؤرشف'],['Review','مراجعة'],['Project','مشروع'],['Routine','مهمة متكررة'],['Skill','مهارة'],['Connection','ربط'],['Inbox','الوارد']]) {
   assert.ok(glossary.includes(`**${english} / ${arabic}**:`), `${english} / ${arabic}`);
  }
+});
+// Spec #831 (#846): the board is the Engine's own Kanban board. Its terms say what was built, and the old board's leave:
+// no Version, no Approval, no Handed to you and no Handover.
+test('the glossary says what the Engine\'s board is and holds none of the old board\'s terms', () => {
+ const glossary=readFileSync('GLOSSARY.md','utf8');
+ const entry=term=>{ const start=glossary.indexOf(`**${term} /`); assert.ok(start>=0,term); const next=glossary.indexOf('\n**',start+2); return glossary.slice(start,next<0?undefined:next); };
+ for(const gone of ['Version','Approval','Handed to you','Handover']) assert.ok(!glossary.includes(`**${gone} /`),`${gone} has left the glossary`);
+ assert.match(entry('Card'),/Kanban task/);
+ assert.match(entry('Card'),/archived, never deleted/);
+ assert.match(entry('Project'),/`tenant`/);
+ assert.match(entry('Review'),/passes it/);
+ assert.match(entry('Review'),/sends it back with a reason/);
+ assert.match(entry('Archived'),/stops its open Run/);
+ assert.match(entry('Assignee'),/at most one/);
 });
 test('UI source uses the glossary term for cards', () => {
  for(const directory of ['app','lib','components','src','worker','supabase/migrations'].filter(existsSync)) {
@@ -116,49 +130,13 @@ test('production worker exits with all missing setting names', async () => {
  assert.doesNotMatch(result.stderr,/SUPABASE_JWT_SECRET/);
 });
 
-test('every unavailable Home metric and chart remains unavailable rather than zero', async()=>{
- const {homeCharts,metricValue}=await import('../lib/home-data.mjs');
- const missing=homeCharts(null,null,null);
- assert.deepEqual(missing,{delivered:null,stages:null,acceptance:null});
- for(const source of [null,undefined,...Object.values(missing)]) {
+test('every unavailable Home metric remains unavailable rather than zero', async()=>{
+ const {metricValue}=await import('../lib/home-data.mjs');
+ for(const source of [null,undefined]) {
   assert.equal(metricValue(source),'Unavailable');
   assert.notEqual(metricValue(source),'0');
  }
  assert.equal(metricValue(0),'0','a real measured zero remains zero');
-});
-
-test('Home charts use fourteen days of the Company\'s zone (UTC here), actual stages and first acceptance without earlier rejection',async()=>{
- const {homeCharts}=await import('../lib/home-data.mjs');
- const now=Date.parse('2030-01-15T12:00:00Z');
- const stages=[{id:1,name:'كتابة'},{id:2,name:'تم الاعتماد',stage_key:'approved'}];
- const cards=[{id:1,stage_id:1,created_at:'2030-01-02T00:00:00Z'},{id:2,stage_id:2,created_at:'2030-01-01T23:59:59Z'}];
- const delivered=(id,card_id,created_at)=>({id,card_id,created_at,action:'card_changed',details:{field:'stage_id',new:2,new_name:'اسم قديم'}});
- const events=[{id:1,card_id:1,created_at:'2029-12-01T00:00:00Z',action:'approval_rejected',details:{}},delivered(2,1,'2030-01-03T12:00:00Z'),delivered(3,2,'2030-01-15T10:00:00Z'),delivered(4,3,'2030-01-01T23:59:59Z'),delivered(5,4,'2030-01-16T00:00:00Z')];
- const charts=homeCharts(cards,stages,events,now,'UTC');
- assert.equal(charts.delivered.length,14);
- assert.equal(charts.delivered[0].label,'2030-01-02');
- assert.equal(charts.delivered.at(-1).label,'2030-01-15');
- assert.equal(charts.delivered.reduce((sum,row)=>sum+row.value,0),2);
- assert.deepEqual(charts.stages,[{label:'كتابة',value:1},{label:'تم الاعتماد',value:0}]);
- assert.equal(charts.acceptance,50);
- assert.equal(homeCharts([],stages,[],now,'UTC').acceptance,null,'no denominator is unavailable');
-});
-
-test('an Agent works on its newest Card in progress, never one whose chat waits on a person', async()=>{
- const {currentAgentCard}=await import('../lib/home-data.mjs');
- const stages=[{id:1,name:'كتابة',board_column:'progress'},{id:2,name:'معتمد',board_column:'planned'},{id:3,name:'مراجعة',board_column:'waiting'}];
- const cards=[
-  {id:1,stage_id:1,agent_id:'a',created_at:'2030-01-02T00:00:00Z'},
-  {id:2,stage_id:1,agent_id:'a',created_at:'2030-01-03T00:00:00Z'},
-  {id:3,stage_id:1,agent_id:'a',created_at:'2030-01-04T00:00:00Z',wait:{person:'p',kind:'question',title:'Which tone?'}},
-  {id:4,stage_id:2,agent_id:'a',created_at:'2030-01-05T00:00:00Z'},
-  {id:5,stage_id:1,agent_id:'b',created_at:'2030-01-06T00:00:00Z'},
- ];
- assert.equal(currentAgentCard(cards,stages,'a')?.id,2,'the newest Card in progress, not one waiting or in another column');
- assert.equal(currentAgentCard(cards,stages,'b')?.id,5);
- assert.equal(currentAgentCard(cards,stages,'c'),null,'no Card is not a Card');
- assert.equal(currentAgentCard(null,stages,'a'),null,'an unread Card list is unavailable');
- assert.equal(currentAgentCard(cards,null,'a'),null,'an unread stage list is unavailable');
 });
 
 test('catalogues reject missing keys, empty messages and mismatched interpolation', async()=>{

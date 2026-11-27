@@ -1,5 +1,11 @@
 [
  {
+  "issue": 846,
+  "date": "2026-11-27",
+  "en": { "title": "The old board is gone", "body": "Waiting on you is the board opened on its first column, holding the Cards that wait on you and your other rows; Home shows the Card each Agent works on now, what waits on you and the Cards made last, all from the board; an Agent's Tasks are its Cards on the board; the old Card pages, their notes, Work settings and the sidebar's Recent list are gone, and old links to a Card open the board." },
+  "ar": { "title": "اللوحة القديمة اتشالت", "body": "«مستنيك» بقت اللوحة مفتوحة على أول عمود فيها، وفيه البطاقات اللي مستنياك وباقي اللي مستنيك؛ والرئيسية بتبيّن البطاقة اللي كل وكيل شغال عليها دلوقتي، واللي مستنيك، وآخر البطاقات اللي اتعملت، كله من اللوحة؛ ومهام الوكيل بقت بطاقاته على اللوحة؛ وصفحات البطاقات القديمة وملاحظاتها وإعدادات الشغل وقايمة «آخر البطاقات» في الشريط الجانبي اتشالوا، واللينكات القديمة للبطاقة بتفتح اللوحة." }
+ },
+ {
   "issue": 915,
   "date": "2026-11-27",
   "en": { "title": "Settings stay in gtmworks", "body": "Every setting is in gtmworks's own Settings; the row that opened the Engine's own dashboard is now «Engine logs and system (advanced)», for the install owner alone." },

@@ -1,9 +1,8 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
-import type { ComponentProps, ReactNode } from 'react';
+import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { ToastHost, toast } from '@/app/toast';
-import { CardSheet } from '@/app/card-sheet';
 import { OverlayFrame } from '@/app/settings-overlay-frame';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -15,6 +14,12 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); at.path = '/c/rs-learning/chat'; history.replaceState(null, '', '/'); });
 
+// A modal window over the page, as a Card's window opens over the board (app/card-window.tsx: a dialog shown modal).
+function Window({ title }: { title: string }) {
+ const box = useRef<HTMLDialogElement>(null);
+ useEffect(() => { box.current?.showModal(); }, []);
+ return <dialog ref={box} aria-label={title}><button type="button" onClick={() => box.current?.close()}>Close</button></dialog>;
+}
 const show = (page: ReactNode = null, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>{page}<ToastHost/></LanguageProvider>);
 const toasts = () => document.querySelectorAll('.toast');
 const leaving = () => document.querySelectorAll('.toast.is-leaving');
@@ -181,9 +186,9 @@ test('the action is a button the keyboard reaches, and pressing it runs it', asy
  expect(run).toHaveBeenCalledTimes(1);
 });
 
-test('a toast raised over the open card sheet shows above it, and stays on the page after the sheet closes', async () => {
+test('a toast raised over an open Card window shows above it, and stays on the page after the window closes', async () => {
  const screen = await show(<div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
+  <Window title="Launch post"/>
  </div>);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
  toast('Saved to the card');
@@ -195,20 +200,20 @@ test('a toast raised over the open card sheet shows above it, and stays on the p
  expect(onTop()).toBe(true);
 });
 
-test('a toast already showing when the card sheet opens moves above it', async () => {
+test('a toast already showing when a Card window opens moves above it', async () => {
  const screen = await show();
  toast('Moved to “Planned”');
  await expect.element(screen.getByText('Moved to “Planned”')).toBeVisible();
  await screen.rerender(<LanguageProvider language="en"><div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
+  <Window title="Launch post"/>
  </div><ToastHost/></LanguageProvider>);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();
  await expect.poll(onTop).toBe(true);
 });
 
-test('a toast showing in the card sheet stays on the page when the sheet is taken away open', async () => {
+test('a toast showing in a Card window stays on the page when the window is taken away open', async () => {
  const sheet = <div className="gw">
-  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={null} badge={null} sheet={{ id: 7, log: null, count: 0, working: false, chat: { kind: 'none' } }} canWrite={false} alone={false} send={vi.fn()}/>
+  <Window title="Launch post"/>
  </div>;
  const screen = await show(sheet);
  await expect.element(screen.getByRole('dialog', { name: 'Launch post' })).toBeVisible();

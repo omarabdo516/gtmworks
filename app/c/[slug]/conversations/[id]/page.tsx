@@ -11,7 +11,7 @@ import ConversationView, { ConversationLoaded, ConversationNotRead } from './con
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
-import { conversationRecord, tiedCard } from '@/lib/conversation-record';
+import { conversationRecord } from '@/lib/conversation-record';
 import { conversationSteps, type ConversationSteps } from '@/lib/conversation-steps';
 import { agentAppStates } from '@/lib/company-app-items';
 import { madeColumns, madeOf } from '@/lib/agent-made';
@@ -54,10 +54,6 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // once read, never awaited by the page or the messages: the chat shows them without first waiting for its script and
  // a second request (decision 0042). A read that fails is null, and the replies stay as they are.
  const steps=conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
- // Its Card on the board, in the corner from the start (design-reference: renderChat's corner pill): read beside the
- // frame's other reads, and handled the same way until the frame awaits it.
- const tiedRead=tiedCard(db,company.id,id);
- tiedRead.catch(()=>{});
  // The Agent's details beside the chat, while it is still attached to the company, and the reader's role. The details'
  // reads go out now with them, not after the frame's reads (decision 0042): they are the page's longest, and the page
  // has loaded only once they are drawn.
@@ -92,11 +88,10 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
  const title=conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
- const tied=await tiedRead;
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'}/></ConversationView></main>
  </Page>;
 }
 

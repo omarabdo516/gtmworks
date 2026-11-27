@@ -223,10 +223,10 @@ test('a leg claimed by begin_handover names the start\'s key and its own answer,
   [{h:7,attempt:1,leg:'returning',run:fake.runs[0].id}],'and the answer names that leg, and its attempt, with the Run');
 });
 
-test('hand_to_agent reads the Agent, the job and the context, asks the database, and asks the Engine nothing',async()=>{
+test('hand_to_agent reads the Agent, the job and the context, asks the database for the handover its Run serves, and asks the Engine nothing',async()=>{
  const fake=fakeEngine(); const calls=/** @type {[string,any][]} */([]);
  const db={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]); return {data:{state:'created',agent:'Ads'},error:null}; }};
- const call=(/** @type {unknown} */ args)=>runToolCall({db,engine:fake.engineFor({}),profile:leadProfile,conversation:conversation,run:'run-1'},{id:'call-1',name:'hand_to_agent',arguments:args});
+ const call=(/** @type {unknown} */ args)=>runToolCall({db,engine:fake.engineFor({}),profile:leadProfile,conversation:conversation,handover:{id:7},run:'run-1'},{id:'call-1',name:'hand_to_agent',arguments:args});
  for(const args of /** @type {unknown[]} */([null,'Ads',{agent:'Ads'},{agent:' ',goal:'Plan'},{agent:'Ads',goal:'  '},{agent:'x'.repeat(101),goal:'Plan'},{agent:'Ads',goal:'y'.repeat(501)},{agent:7,goal:'Plan'}]))
   assert.deepEqual(await call(args),{state:'ignored'},JSON.stringify(args)?.slice(0,60));
  assert.deepEqual(await call({agent:' Ads ',goal:' Plan the Meta ads for the March intake\n',context:' EGP 9,000 for 30 days. '}),{state:'created',agent:'Ads'});
@@ -235,10 +235,10 @@ test('hand_to_agent reads the Agent, the job and the context, asks the database,
  assert.deepEqual(await call({agent:'Ads',goal:'Plan the Meta ads',context:''}),{state:'created',agent:'Ads'});
  assert.deepEqual(await call({agent:'Ads',goal:'Plan the Meta ads',context:'   '}),{state:'created',agent:'Ads'});
  assert.deepEqual(await call({agent:'Ads',goal:'Plan the Meta ads',context:` ${'x'.repeat(2500)} `}),{state:'created',agent:'Ads'});
- assert.deepEqual(calls,[['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads for the March intake',context:'EGP 9,000 for 30 days.'}],
-  ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
-  ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
-  ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:`${'x'.repeat(1999)}…`}]]);
+ assert.deepEqual(calls,[['handover_hand_to_agent',{h:7,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads for the March intake',context:'EGP 9,000 for 30 days.'}],
+  ['handover_hand_to_agent',{h:7,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
+  ['handover_hand_to_agent',{h:7,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
+  ['handover_hand_to_agent',{h:7,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:`${'x'.repeat(1999)}…`}]]);
  assert.deepEqual(fake.runs,[],'the Target runs later, never during Lead\'s Run');
 });
 

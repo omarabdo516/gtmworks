@@ -87,7 +87,7 @@ test('the sidebar search narrows chats by title, ignoring case and surrounding s
 });
 
 test('"More sections" reaches every existing section the reference has no place for, each named in both languages', () => {
- assert.deepEqual(moreSections.map(([path]) => path), ['home', 'projects', 'skills', 'approvals', 'usage', 'settings/members', 'settings/work', 'agents']);
+ assert.deepEqual(moreSections.map(([path]) => path), ['home', 'projects', 'skills', 'approvals', 'usage', 'settings/members', 'agents']);
  for (const language of ['en', 'ar']) {
   const catalogue = JSON.parse(readFileSync(new URL(`../lib/messages/${language}.json`, import.meta.url), 'utf8'));
   for (const [path, key] of moreSections) assert.ok(catalogue[key], `${language}: ${path} has a name`);

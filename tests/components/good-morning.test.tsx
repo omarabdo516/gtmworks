@@ -16,7 +16,7 @@ vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?
 const lead = '6a000000-0000-0000-0000-000000000001';
 const ads = { id: '6a000000-0000-0000-0000-000000000002', connection_id: 'f0000000-0000-0000-0000-000000000011', name: 'Ads' };
 const card = (over: Partial<Card> = {}): Card => ({ day: '2026-11-11', main: lead, viewer: false, manage: true,
- waiting: [{ kind: 'question', id: 7, title: 'Which offer goes first?', body: '', asked_by: 'Lead', card_id: null, conversation_id: 'c1000000-0000-0000-0000-000000000001', channel_id: null, channel_message_id: null, note_id: null, agent: null }],
+ waiting: [{ kind: 'question', id: 7, title: 'Which offer goes first?', body: '', asked_by: 'Lead', card_id: null, conversation_id: 'c1000000-0000-0000-0000-000000000001', channel_id: null, channel_message_id: null, agent: null }],
  handed: [], overnight: [{ id: 1, agent: ads, routine: 'Ad-pause routine', line: 'Paused the Video 2 ad when cost per lead hit EGP 52', at: '2026-11-11T00:40:00Z' }],
  foot: { on: true, time: '9:30', custom: null, zone: 'Africa/Cairo' }, ...over });
 const cardPage = (value: Card, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}><MorningCard slug="rs-learning" card={value}/></LanguageProvider>);

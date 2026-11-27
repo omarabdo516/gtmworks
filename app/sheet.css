@@ -45,7 +45,7 @@
 .gw .sheet .dot--waiting { background: var(--gw-wait); }
 .gw .sheet .badge .dot { width: 6px; height: 6px; }
 
-/* «المحادثة» | «السجل»: Chat is drawn but not open on a Card with no Agent the reader sees (app/card-sheet-chat.tsx). */
+/* «المحادثة» | «السجل»: the sheet's tabs. */
 .gw .sheet .sheet-tabs { justify-content: flex-start; padding: 2px 0 0; margin-inline-start: -4px; }
 /* A plain button, as the reference's: the product's flex buttons would drop the space before the Log count. */
 .gw .sheet .sheet-tabs button { display: inline-block; }

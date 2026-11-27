@@ -1,5 +1,4 @@
 import type { supabase } from './supabase';
-import type { BoardColumn } from './board-columns.mjs';
 import { agentFaceStates, type AgentFaceState } from './agent-face-states';
 import type { SessionTurn as EngineTurn, SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
@@ -47,7 +46,6 @@ export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,files:ChannelFile[],mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true,sending?:{key:string,posting:boolean}}
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[],files?:ChannelFile[],missed?:string[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
- | {id:number,author:'note',kind:'card',at:string}
  | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true,stopped?:true,model?:{cause:ModelCause,agent:string}};
 // One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first,
 // and that it did not finish (#375) or was stopped (#478) when so.
@@ -61,9 +59,6 @@ type ChannelMember={person:string|null,name:string,role:MemberRole,invitation:st
 // `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state for
 // the reader (#699, agent_face_states), a call in this channel included; never whom that work is for or on what.
 export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentFaceState};
-// The Card a team channel put on the board (#151): its title, the column it stands in now, the line under it, and
-// whether it waits (a review stage or its chat's wait). Read only for a Member who sees its Agent, as the board reads it.
-type ChannelBoard={card:number,title:string,column:BoardColumn,line:string,waiting:boolean};
 export type ChannelRecord={
  channel:{id:string,company:string}&ChannelName,
  members:ChannelMember[],
@@ -88,8 +83,6 @@ export type ChannelRecord={
  stop?:{message:number,agent:string},
  // The choices the reader's role may send on a request of their own (permission_choices, #163).
  may:PermissionChoice[],
- // The channel's Card on the board (#151), when it has one the reader may see; absent otherwise.
- board?:ChannelBoard,
  // A Run or a handover shown failed for a cause a retry cannot fix (#428, #530): the Owner gets the link to
  // Subscription and models, a Member is told to ask the Owner. Absent otherwise.
  modelLine?:{owner:boolean},
@@ -183,9 +176,6 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
  // What the reader's Stop ends now (#478), on stop_channel_message's own rule.
  const stoppable=mustRead(await db.rpc('channel_stoppable',{ch:channel}),'what Stop ends');
  const stop=((stoppable||[]) as {message:number,agent_name:string|null}[])[0];
- // The channel's Card on the board (#151): the one Card a team channel has, the column it stands in now and its line,
- // read only for a Member who sees its Agent. The general channel has none.
- const board=mustRead(await db.rpc('channel_board_card',{ch:channel}),'channel card');
  const asked=runs.length?(mustRead(await db.from('channel_permissions').select('id,message_id,ordinal,title,content,state,decided_at,created_at,said_before').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id'),'channel requests')||[]) as StoredPermission[]:[];
  // A reply's cards (#136, #137, #139) are kept against the message its Run answers, and a question (#149) against the
  // same message, drawn under it before the reply. Every member of the channel reads them.
@@ -250,9 +240,8 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
     files:messageFiles(attached.filter(file=>file.message_id===message.id)),
     mention:mentions[0]??null,mentions,...(message.hand_card?{handDone:true as const}:{})};
   }),
-  notes.filter(note=>oldest===undefined||note.created_at>=oldest).map((note):ChannelMessage=>note.kind==='card'
-   ? {id:-note.id,author:'note',kind:'card',at:note.created_at}
-   : {id:-note.id,author:'note',kind:'invite',actor:note.actor_name,name:note.invitee_name??'',at:note.created_at}),
+  // The line the old board's Card of a channel added (#151) is not drawn: the old board is switched off (#846).
+  notes.filter(note=>note.kind==='invite'&&(oldest===undefined||note.created_at>=oldest)).map((note):ChannelMessage=>({id:-note.id,author:'note',kind:'invite',actor:note.actor_name,name:note.invitee_name??'',at:note.created_at})),
  ];
  // #150, #476: a handover is a quiet row "{asking Agent} asked {asked Agent}" under the reply that made it, then the
  // asked Agent's answer marked "to {asking Agent}" (an Agent outside the channel too, with its own name and face), then
@@ -282,7 +271,6 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
   ...(stop?{stop:{message:stop.message,agent:stop.agent_name??''}}:{}),
   may:(may||[]) as PermissionChoice[],
-  ...(board?{board:board as ChannelBoard}:{}),
   ...(modelLine?{modelLine:{owner:owner===true}}:{}),
  };
 }

@@ -41,6 +41,7 @@ const selfHosted=isSelfHosted();
 const waiting=new Map(); const moving=new Map(); const keyWaits=new Map(); const providerAccounts=new Map(); const fallbackModels=new Map(); const mainAgentPlugins=new Map();
 await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
  loop('Channel runs',()=>driveChannelRuns(db,{})),
+ // The old board's note Runs still open at an update are drained; no new one is made (#846).
  loop('Note runs',()=>driveNoteRuns(db,{})),
  loop('Handovers',()=>driveHandovers(db,{})),
  // Each archived or restored Conversation's session takes the same mark in its Engine once the Engine answers (#674).

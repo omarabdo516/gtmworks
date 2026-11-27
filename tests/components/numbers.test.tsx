@@ -78,10 +78,10 @@ for (const [language, dir] of [['en', 'ltr'], ['ar', 'rtl']] as const) test(`on 
 test('on a phone the Activity log\'s filters keep the reference\'s 34px fields, each with a 44px tap area', async () => {
  await page.viewport(390, 900);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><main className="log-page">
-  <LogFilters slug="rs-learning" who="all" card="all" people={[]} agents={[]} cards={[]} count={0}/>
+  <LogFilters slug="rs-learning" who="all" people={[]} agents={[]} count={0}/>
  </main></div></LanguageProvider>);
  const fields = screen.getByRole('group', { name: 'Log filters' }).getByRole('combobox').elements();
- expect(fields).toHaveLength(2);
+ expect(fields).toHaveLength(1);
  for (const field of fields) expect(tapArea(field)).toEqual({ reach: 44, seen: 34 });
 });
 

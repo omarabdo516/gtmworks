@@ -2,12 +2,11 @@ import { test, expect, freshSeed } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { clickPath, idle, measureClick, measuredCard, median, type Timing } from './navigation-measure';
 import { laneHermes } from './lane-hermes';
-import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
+import { signIn, openNavigation, closeNavigation } from './sign-in';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
-import { oldCard } from './old-card';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
@@ -174,53 +173,6 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
   }
 });
 
-test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
-  // An old Card on its own page: New card makes its Cards on the Engine since #836.
-  await signIn(page, 'omar@example.com', '/c/rs-learning/home');
-  const title = `بطاقة تحديث فوري ${Date.now()}`;
-  await oldCard(page, title);
-  await idle(page); // Home, the board and the inbox are prepared before any write.
-  await expect(page.locator('.modal h2').first()).toHaveText(title);
-  const cardPath = new URL(page.url()).pathname;
-  const comment = `تعليق فوري ${Date.now()}`;
-  await page.getByLabel("Comment", { exact: true }).fill(comment);
-  await page.getByRole('button', { name: "Send", exact: true }).click();
-  await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
-  await page.locator('.close-card').click();
-  // Closing the Card's page lands on the board, the Engine's own Kanban board since spec #831.
-  await expect(page).toHaveURL(/\/work\/board$/);
-  await expect(page.locator('#board-cols > .col')).toHaveCount(5);
-  // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
-  await openMoreSection(page, 'home');
-  await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
-  // Home's "Awaiting your approval" counts the old board's approvals, which are no part of Waiting on you since #841.
-  const awaiting = page.locator('.stats .stat').first().locator('strong');
-  const approvals = Number(await awaiting.textContent());
-  await page.locator(`.content a[href="${cardPath}"]`).first().click();
-  await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
-  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
-  await page.locator('.close-card').click();
-  await expect(page).toHaveURL(/\/work\/board$/);
-  // The Home prepared before the move counts it.
-  await openMoreSection(page, 'home');
-  await expect(awaiting).toHaveText(String(approvals + 1));
-  // The old board's own Waiting on you column, served where a chat shows a Card (?show=) until #846, holds it; its
-  // decision is on the Card's own page.
-  const oldBoard = `/c/rs-learning/work/board?show=${cardPath.split('/').pop()}`;
-  await page.goto(oldBoard);
-  const queued = page.locator('.col[data-column="waiting"] .approval-card').filter({ hasText: title });
-  await expect(queued).toBeVisible();
-  await page.goto(cardPath);
-  await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
-  await page.locator('.close-card').click();
-  await expect(page).toHaveURL(/\/work\/board$/);
-  await openMoreSection(page, 'home');
-  await expect(awaiting).toHaveText(String(approvals));
-  await page.goto(oldBoard);
-  await expect(queued).toHaveCount(0);
-});
-
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
@@ -261,12 +213,11 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
   }
 });
 
-test('with many recent chats and cards the drawer list scrolls above a footer that stays put, and no tap areas overlap', async ({ page }) => {
-  // The Manager's own chats and three recent cards make the list longer than a phone screen (#48).
+test('with many recent chats the drawer list scrolls above a footer that stays put, and no tap areas overlap', async ({ page }) => {
+  // The Manager's own chats make the list longer than a phone screen (#48). (The old board's recent Cards left with it, #846.)
   const company = '10000000-0000-0000-0000-000000000001', manager = '20000000-0000-0000-0000-000000000002', stamp = Date.now();
-  const chats = Array.from({ length: 12 }, (_, index) => `63000000-0000-4000-8000-${String(stamp + index).slice(-12).padStart(12, '0')}`);
+  const chats = Array.from({ length: 16 }, (_, index) => `63000000-0000-4000-8000-${String(stamp + index).slice(-12).padStart(12, '0')}`);
   query(`insert into public.conversations(id,company_id,person_id,agent_name) values ${chats.map(id => `('${id}','${company}','${manager}','Lead')`).join(',')}`);
-  query(`insert into public.work_card_visits(company_id,person_id,card_id) select '${company}','${manager}',id from public.work_cards where company_id='${company}' order by id limit 3 on conflict do nothing`);
   await page.setViewportSize({ width: 390, height: 900 });
   await signIn(page, 'manager@example.com', '/c/rs-learning/home');
   try {
@@ -276,7 +227,6 @@ test('with many recent chats and cards the drawer list scrolls above a footer th
       await page.goto('/c/rs-learning/home');
       await openNavigation(page);
       const drawer = page.getByRole('dialog', { name: language === 'ar' ? 'القايمة الرئيسية' : 'Main menu' });
-      await expect(drawer.locator('.recent-cards a')).toHaveCount(3);
       await expect(drawer.locator('#sb-recent .thread-item')).not.toHaveCount(0);
       const list = drawer.locator('.sb-scroll'), foot = drawer.locator('.sb-foot');
       // The list is longer than its place, so it scrolls, and its place ends where the footer begins.
@@ -294,10 +244,10 @@ test('with many recent chats and cards the drawer list scrolls above a footer th
         }
         expect.soft(await tapOverlaps(targets), `${language} ${position}: overlapping targets`).toEqual([]);
       }
-      // At the end of the list the last recent card is wholly above the footer and answers its own tap.
-      const last = drawer.locator('.recent-cards a').last();
+      // At the end of the list the last recent chat is wholly above the footer and answers its own tap.
+      const last = drawer.locator('#sb-recent .thread-item').last();
       const lastBox = (await last.boundingBox())!;
-      expect(lastBox.y + lastBox.height, `${language}: the last card ends above the footer`).toBeLessThanOrEqual(footBox!.y + 0.5);
+      expect(lastBox.y + lastBox.height, `${language}: the last chat ends above the footer`).toBeLessThanOrEqual(footBox!.y + 0.5);
       expect(await last.evaluate(node => { const box = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); })).toBe(true);
       await closeNavigation(page);
     }
@@ -305,6 +255,5 @@ test('with many recent chats and cards the drawer list scrolls above a footer th
     await page.setViewportSize({ width: 1440, height: 900 });
     await chooseLanguageInSettings(page, 'en');
     query(`delete from public.conversations where id in (${chats.map(id => `'${id}'`).join(',')})`);
-    query(`delete from public.work_card_visits where company_id='${company}' and person_id='${manager}'`);
   }
 });

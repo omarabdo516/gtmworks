@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { currentNoteText, dayOf, daysBack, describeEntry, groupByDay, logCursor, logEmptyNote, matchesFilters, parseBefore, parseCard, parseWho } from '../lib/activity-log.mjs';
+import { dayOf, daysBack, describeEntry, groupByDay, logCursor, logEmptyNote, matchesFilters, parseBefore, parseWho } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 
 // One log for the Company (#11): what each kind of row says, the page's filters and its days.
@@ -25,6 +25,11 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([cardRestored.act, cardRestored.from, cardRestored.to], [['logActRestored'], { key: 'logArchive' }, { key: 'boardColDone' }]);
  assert.deepEqual(['en', 'ar'].map(language => ['logActArchived', 'logActRestored', 'logArchive'].map(key => i18n(language).t(key))),
   [['archived the card', 'restored the card', 'Archived'], ['أرشف البطاقة', 'رجّع البطاقة', 'الأرشيف']]);
+ // An old row that names the old board's Live column keeps its name, in both languages, though the Engine's board has
+ // no Live column (ADR 0033, #846).
+ const fromLive = describeEntry({ subject: 'card', action: 'card_archived', details: { column: 'live' } });
+ assert.deepEqual(fromLive.from, { key: 'boardColLive' });
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('boardColLive')), ['Live', 'شغال لايف']);
  // Archiving and restoring a team channel (#675) name the channel, to the archive and back.
  const channelArchived = describeEntry({ subject: 'company', action: 'channel_archived', details: { channel_id: 'x', channel: 'Spring launch' } });
  assert.deepEqual([channelArchived.act, channelArchived.obj, channelArchived.from, channelArchived.to], [['logActChannelArchived'], '#Spring launch', undefined, { key: 'logArchive' }]);
@@ -299,9 +304,6 @@ test('the filters: everyone, one person, one Agent, gtmworks itself, one Card', 
  assert.deepEqual(ids(undefined, 5), [1, 2]);
  assert.deepEqual(ids(`p:${omar}`, 5), [1]);
  assert.deepEqual(parseWho("p:1' or 1=1"), { kind: 'all' }, 'anything but an id is everyone');
- assert.equal(parseCard('12'), 12);
- assert.equal(parseCard('1;drop'), null);
- assert.equal(parseCard('0'), null);
 });
 
 test('rows are grouped by the reader’s own day, newest first', () => {
@@ -399,17 +401,6 @@ test('an edit of the Company knowledge names the part by its title, and says whe
   assert.ok(t(edited.act[0], t('knowBanned')).includes(t('knowBanned')), language);
   assert.ok(t(cleared.act[0], t('knowVoice')).includes(t('knowVoice')), language);
  }
-});
-
-test('a comment in the Card activity reads as its note now stands, and nothing else changes (#22)', () => {
- const rows = [
-  { id: 1, action: 'comment_added', details: { id: 41, body: 'First text' } },
-  { id: 2, action: 'comment_added', details: { id: 42, body: 'Never edited' } },
-  { id: 3, action: 'card_changed', details: { id: 41, field: 'title' } },
- ];
- const shown = currentNoteText(rows, [{ id: 41, body: 'Edited text' }]);
- assert.deepEqual(shown.map(row => row.details), [{ id: 41, body: 'Edited text' }, { id: 42, body: 'Never edited' }, { id: 41, field: 'title' }]);
- assert.equal(rows[0].details.body, 'First text', 'the rows read from the database are left as they are');
 });
 
 test('with no row shown the log says nothing matches while the Company has rows, and that it is empty when it has none', () => {

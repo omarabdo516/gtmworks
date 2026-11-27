@@ -7,7 +7,6 @@ import { idle } from './navigation-measure';
 import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 import { appOrigin } from './lane.mjs';
-import { oldCard } from './old-card';
 import { laneHermes } from './lane-hermes';
 
 async function chooseLanguage(page:Page,language:Language) {
@@ -80,18 +79,13 @@ test('English default, account language across sessions/devices, automatic conte
  const suffix=Date.now();
  const titles=[`بطاقة من الإعدادات 1440 ${suffix}`,`Settings card 1440 ${suffix}`];
  const calendarTitles=[`ع 1440 ${suffix.toString(36)}`,`A 1440 ${suffix.toString(36)}`];
- const paths:string[]=[];
- for(const title of titles) {
-  // An old Card on its own page, for the old Card page, Waiting on you and Home, until #835 and #846 replace them.
-  paths.push((await oldCard(page,title)).path);
-  await expect(page.locator('.modal h2').first()).toHaveText(title);
- }
- // The calendar reads the Company's Engine's board (#845): each title is a Card on the fake Engine, dated today through
- // the board's own route.
+ // The board, a Card's window, Home and the calendar read the Company's Engine's board (spec #831, #845, #846): each
+ // title is a Card on the fake Engine, dated today through the board's own route.
  const fake=await laneHermes();
+ const ids:string[]=[];
  try {
  for(const title of [...titles,...calendarTitles]) {
-  const card=fake.settings.kanban.task({title,status:'ready'}).id;
+  const card=fake.settings.kanban.task({title,status:'ready'}).id; ids.push(card);
   const dated=await page.request.patch('/api/board/cards',{data:{company:'10000000-0000-0000-0000-000000000001',card,publishOn:new Date().toISOString().slice(0,10)}});
   expect(dated.status()).toBe(200);
  }
@@ -120,18 +114,20 @@ test('English default, account language across sessions/devices, automatic conte
    await expect(page.getByRole('menu').getByRole('menuitem').filter({hasText:new RegExp(`^${t('settings')}`)})).toHaveAttribute('href','/c/rs-learning/settings');
    await page.keyboard.press('Escape');
    await expect(page.getByRole('menu')).toHaveCount(0);
-   await page.goto('/c/rs-learning/approvals'); // The old board's Cards, until the Engine's board opens Cards (#835).
+   await page.goto('/c/rs-learning/work/board');
    for(const [index,title] of titles.entries()) {
-    const link=page.locator('.card').getByRole('link',{name:title,exact:true});
+    const link=page.locator('#board-cols .kcard').getByRole('link',{name:title,exact:true});
     const titleNode=link.locator('strong');
     await expect(titleNode).toHaveCSS('direction',index===0?'rtl':'ltr');
     await expectTitleAligned(titleNode,link.locator('..'),index===0?'right':'left');
     await expectNumberOrder(titleNode,index===0);
-    await page.goto(paths[index]);
-    await expect(page.locator('.modal h2').first()).toHaveCSS('direction',index===0?'rtl':'ltr');
-    await expectNumberOrder(page.locator('.modal h2').first(),index===0);
-    await expect(page.locator('.recent-cards').getByRole('link',{name:title,exact:true}).locator('.recent-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
-    await page.goto('/c/rs-learning/approvals');
+    await page.goto(`/c/rs-learning/work/board?card=${ids[index]}`);
+    // The Manager may rename it, so its title is the rename button inside the heading.
+    const heading=page.locator('#cw-title .cw-title-btn');
+    await expect(heading).toHaveText(title);
+    await expect(heading).toHaveCSS('direction',index===0?'rtl':'ltr');
+    await expectNumberOrder(heading,index===0);
+    await page.goto('/c/rs-learning/work/board');
    }
    await page.goto('/c/rs-learning/work/calendar');
    for(const [index,title] of [...calendarTitles,...titles].entries()) {

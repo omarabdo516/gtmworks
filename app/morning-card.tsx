@@ -14,9 +14,9 @@ import type { MorningCard as Card, MorningItem } from '@/lib/good-morning-card';
 // line summing it up, "Waiting on you" with the reader's own items (a Viewer reads "Waiting on the team"), "Ran
 // overnight" with the Routine results of the Agents they see, "Handed to you" with the steps handed to them (#139), and
 // the foot: when it arrives, or that it is off, with "Change the time" for the Owner and the Managers.
-// Each row opens where its item is decided: its Card, its Conversation at its card, its channel or the Inbox; a result
+// Each row opens where its item is decided: its Conversation at its card, its channel or the Inbox; a result
 // opens the reader's chat with its Agent.
-const placeOf=(slug:string,item:MorningItem)=>chatPlace(slug,item)??(item.card_id!=null?`/c/${slug}/work/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`:`/c/${slug}/approvals`);
+const placeOf=(slug:string,item:MorningItem)=>chatPlace(slug,item)??`/c/${slug}/approvals`;
 const initialOf=(name:string)=>Array.from(name.trim())[0]||'؟';
 
 function ItemRow({slug,item,on}:{slug:string,item:MorningItem,on:'forward'|'back'}) {

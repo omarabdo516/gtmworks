@@ -100,13 +100,10 @@ export function useConversationRecord({company,initial,steps:firstSteps}:{compan
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {list:sendingList,start:sending,reading}=useSending({company,conversation:id});
  const {messages,pending}=record;
- // What lives outside the Conversation comes from the server render: an Agent made in it (the sidebar's Agents) and its
- // Card's column on the board behind a Card's sheet are drawn again when they change, and nothing else is (#767):
- // sending, storing and a reply landing never redraw the page.
+ // What lives outside the Conversation comes from the server render: an Agent made in it (the sidebar's Agents) is
+ // drawn again when it changes, and nothing else is (#767): sending, storing and a reply landing never redraw the page.
  const router=useRouter();
  const made=useRef(madeCount(initial.messages));
- const column=record.board?.column; const drawnColumn=useRef(column);
- useEffect(()=>{ if(drawnColumn.current===column) return; drawnColumn.current=column; router.refresh(); },[column,router]);
  const asking=pending||requestWaits(messages)||record.handover===true;
  // The poll asks only whether the Conversation changed since its last read (a stamp from the database, #767), and its
  // answer is the record only when it did. A hidden tab asks nothing until it is shown again, then asks at once; a read
@@ -153,20 +150,6 @@ export function useConversationRecord({company,initial,steps:firstSteps}:{compan
   timer=setTimeout(poll,500);
   return ()=>{stopped=true;clearTimeout(timer);document.removeEventListener('visibilitychange',shown);};
  },[asking,sent,company,id]); // eslint-disable-line react-hooks/exhaustive-deps
- // The Card may move on the board in another window: coming back to this one reads its column again.
- const tied=!!record.board;
- useEffect(()=>{
-  if(!tied) return;
-  const again=async()=>{
-   try {
-    const response=await fetch(`/api/conversations?company=${company}&conversation=${id}`,{cache:'no-store'});
-    // The column alone: an answer that was on its way while a message was sent is older than the chat now shown.
-    if(response.ok) { const {board}=await response.json() as ConversationRecord; setRecord(current=>({...current,board})); }
-   } catch { /* The column shown stays until the next read. */ }
-  };
-  window.addEventListener('focus',again);
-  return ()=>window.removeEventListener('focus',again);
- },[tied,company,id]);
  const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
  // A press that changed nothing the Agent does (#167), or a Run's events that ended (#763), read the record once now; the
  // poll then asks quickly for a moment, until the reply is in.
@@ -365,7 +348,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const handed=(card:Extract<LeadCard,{kind:'handed'}>,key:string,as:'li'|'p',className?:string)=><HandedRow key={key} as={as} className={className} from={{id:card.from.face,name:card.from.name}} to={{id:card.face,name:card.name}}
   title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} ending={card} said={{stopped:c('handedStopped'),failed:c('handedFailed')}}/>;
  return <>
-  <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
+  <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
    // #477: a job an asked Agent handed on is its own quiet row between the turns, as a channel draws every handover.
    :message.kind==='handedOn'&&message.cards?.[0]?.kind==='handed'?handed(message.cards[0],`handedOn${message.id}`,'li',rise(index).trim()||undefined)
    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><ReaderTime at={message.created_at} className="sender__time"/></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&message.behind?' is-queued':''}${message.posting?' is-sending':''}${rise(index)}`} data-author="person" data-kind={message.kind} aria-busy={message.posting?true:undefined}>

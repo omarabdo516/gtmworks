@@ -7,8 +7,9 @@ import { toolConfig } from '../lib/agent-toolsets.mjs';
 import { expectDarkContrast, expectQuietContrast, type QuietCheck } from './contrast';
 
 // Text contrast on the key screens, measured from the styles the browser draws with, never from a picture (#805): every
-// visible text run keeps 4.5:1 in the dark theme, in Arabic and English at 1440 and 390, and the quiet labels of Home, the
-// board and a Card keep 4.5:1 and stay weaker than the body text in the light theme. These checks and the screens' states
+// visible text run keeps 4.5:1 in the dark theme, in Arabic and English at 1440 and 390, and the quiet labels of Home and
+// the board keep 4.5:1 and stay weaker than the body text in the light theme (the old board's Card page, with its comment
+// placeholder, and Home's old charts left with the old board, #846). These checks and the screens' states
 // were the visual lane's (#257); the lane went, and contrast checks never go away (#218). First run's form is measured in
 // first-run.spec.ts, which owns the empty install.
 const rsLearning = '10000000-0000-0000-0000-000000000001';
@@ -154,9 +155,8 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
 
 type Screen = { name: string, path: string, ready: string, state?: string, quiet?: QuietCheck[] };
 const screens: Screen[] = [
-  { name: 'home', path: '/c/rs-learning/home', ready: '.home-dashboard', state: 'agent-details', quiet: [['chart subtitle', '.home-charts article h2 + span'], ['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']] },
+  { name: 'home', path: '/c/rs-learning/home', ready: '.home-dashboard', state: 'agent-details', quiet: [['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']] },
   { name: 'board', path: '/c/rs-learning/work/board', ready: '.board', quiet: [['toolbar label', '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)']] },
-  { name: 'card', path: '/c/rs-learning/work/board/1', ready: '.modal', quiet: [['comment placeholder', '.modal textarea[name=body]', '::placeholder']] },
   { name: 'chat', path: '/c/rs-learning/chat', ready: '.chat' },
   { name: 'channel', path: `/c/rs-learning/channels/${general}`, ready: '.ch-intro', state: 'channel' },
   { name: 'agents', path: '/c/rs-learning/agents', ready: '.company-hermes-agents' },
