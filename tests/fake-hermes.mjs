@@ -137,6 +137,9 @@ function kanbanBoard() {
   // A person's move (#838): `ready` from `blocked` or `scheduled` lets the Card go on (unblock_task, the failure counter
   // starting again), `scheduled` parks it from todo, ready, running or blocked where the dispatcher does not start it
   // (schedule_task, an open Run ending `scheduled`), and `running` is the dispatcher's alone.
+  // A person's drop (#837): leaving `review` for `ready` or `todo` reopens it to its implementer (reopen_review_task), a
+  // Card goes back to `todo` rather than `ready` while a Card it waits for is open, and `blocked` or `review` are taken
+  // only from `ready` or `running`; a refusal for an open parent names it, as the Engine's does.
   // Answers null when done, or the Engine's refusal. `delete` is DELETE /tasks/{id}, which gtmworks never asks.
   /** @param {string} id @param {string} status @param {{summary?:string|null,result?:string|null}} [fields] @returns {{code:number,detail:string}|null} */
   status(id,status,{summary=null,result=null}={}) {
@@ -147,17 +150,26 @@ function kanbanBoard() {
    const children=links.filter(link=>link.parent_id===id).map(link=>tasks.find(found=>found.id===link.child_id)).filter(Boolean);
    if(!task) return {code:404,detail:`task ${id} not found`};
    if(status==='running') return {code:400,detail:'running is set by the dispatcher'};
+   const landing=satisfied(id)?'ready':'todo';
    if(status==='ready'&&['blocked','scheduled'].includes(task.status)) {
-    Object.assign(task,{status:'ready',current_run_id:null,consecutive_failures:0,last_failure_error:null});
-    event(id,'unblocked',null);
+    Object.assign(task,{status:landing,current_run_id:null,consecutive_failures:0,last_failure_error:null});
+    event(id,'unblocked',landing==='ready'?null:{status:landing});
     return null;
    }
-   // A review sent back (#839; reopen_review_task): `ready` from `review` goes to the implementer the latest
-   // review_requested names, as review_reopened.
-   if(status==='ready'&&task.status==='review') {
+   // A review sent back (#839) or dropped out of review (#837; reopen_review_task): `ready` or `todo` from `review` goes
+   // back to the implementer the latest review_requested names, as review_reopened, landing in `todo` while a Card it
+   // waits for is open.
+   if((status==='ready'||status==='todo')&&task.status==='review') {
     const implementer=events.filter(row=>row.task_id===id&&row.kind==='review_requested').at(-1)?.payload?.implementer??null;
-    Object.assign(task,{status:'ready',current_run_id:null,...implementer?{assignee:implementer}:{}});
-    event(id,'review_reopened',implementer?{status:'ready',implementer}:null);
+    Object.assign(task,{status:landing,current_run_id:null,claim_lock:null,claim_expires:null,worker_pid:null,...implementer?{assignee:implementer}:{}});
+    event(id,'review_reopened',implementer?{status:landing,implementer}:landing==='ready'?null:{status:landing});
+    return null;
+   }
+   if(status==='blocked'||status==='review') {
+    if(!['ready','running'].includes(task.status)||status==='review'&&!satisfied(id)) return refused(`status transition to '${status}' not valid from current state`);
+    if(open) Object.assign(open,{status:'done',outcome:status==='blocked'?'blocked':'review_requested',ended_at:++clock});
+    Object.assign(task,{status,claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,status==='blocked'?'blocked':'review_requested',null,open?.id??null);
     return null;
    }
    if(status==='scheduled') {
@@ -180,7 +192,8 @@ function kanbanBoard() {
     event(id,'status',{status,requested_status:status},open?.id??null);
     if(reopened) for(const child of children) if(['ready','review','running','done'].includes(child.status)) { child.status='todo'; event(child.id,'status',{status:'todo'}); }
    } else if(status==='done') {
-    if(!['ready','running','blocked','review'].includes(task.status)||!satisfied(id)) return refused(`status transition to 'done' not valid from current state`);
+    if(!satisfied(id)) return refused(`cannot move ${id} to 'done': unsatisfied parent dependencies; complete the parents first (done or archived)`);
+    if(!['ready','running','blocked','review'].includes(task.status)) return refused(`status transition to 'done' not valid from current state`);
     if(task.status!=='review'&&!summary?.trim()&&!result?.trim()&&!task.result?.trim()) return {code:400,detail:'completion needs a summary or a result'};
     const closing=open??this.run(id,{status:'done',profile:task.assignee});
     Object.assign(closing,{status:'done',outcome:'completed',summary:summary??result,ended_at:++clock});
@@ -193,6 +206,33 @@ function kanbanBoard() {
   },
   /** @param {string} id */
   delete(id) { const at=tasks.findIndex(found=>found.id===id); if(at<0) return false; tasks.splice(at,1); return true; },
+  // recompute_ready: a `todo` Card whose parents are all done or archived is `ready`.
+  recompute() {
+   for(const task of tasks.filter(found=>found.status==='todo')) {
+    const parents=links.filter(link=>link.child_id===task.id).map(link=>tasks.find(found=>found.id===link.parent_id));
+    if(parents.every(parent=>parent&&['done','archived'].includes(parent.status))) { task.status='ready'; event(task.id,'promoted',null); }
+   }
+  },
+  /** POST /links: a Card waits for another; a running Card, itself or a cycle is a 400. @param {string} parent @param {string} child @returns {[number,any]} */
+  addLink(parent,child) {
+   if(parent===child) return [400,{detail:'a task cannot depend on itself'}];
+   const [up,down]=[tasks.find(found=>found.id===parent),tasks.find(found=>found.id===child)];
+   if(!up||!down) return [400,{detail:`unknown task(s): ${[up?null:parent,down?null:child].filter(Boolean).join(', ')}`}];
+   if(down.status==='running') return [400,{detail:`cannot link ${parent} -> ${child}: child is already running`}];
+   const above=(/** @type {string} */ id,/** @type {Set<string>} */ seen=new Set())=>{ for(const link of links.filter(found=>found.child_id===id)) { if(seen.has(link.parent_id)) continue; seen.add(link.parent_id); above(link.parent_id,seen); } return seen; };
+   if(above(parent).has(child)) return [400,{detail:`linking ${parent} -> ${child} would create a cycle`}];
+   if(!links.some(link=>link.parent_id===parent&&link.child_id===child)) { links.push({parent_id:parent,child_id:child}); event(child,'linked',{parent,child}); }
+   const gated=!['done','archived'].includes(up.status)&&down.status==='ready';
+   if(gated) down.status='todo';
+   return [200,{ok:true,gated}];
+  },
+  /** DELETE /links @param {string} parent @param {string} child */
+  removeLink(parent,child) {
+   const at=links.findIndex(link=>link.parent_id===parent&&link.child_id===child);
+   if(at<0) return {ok:false};
+   links.splice(at,1); event(child,'unlinked',{parent,child}); this.recompute();
+   return {ok:true};
+  },
   /** @param {string} task @param {string} author @param {string} body */
   comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
   // The Engine's own stop for an open Run (reclaim_task, #838): the worker and its Run end `reclaimed`, the claim is
@@ -272,6 +312,8 @@ function kanbanBoard() {
   prompts:/** @type {{task:string,run:number,profile:string,prompt:string}[]} */([]),
   dispatch() {
    this.ticks++;
+   // A tick first promotes every Card whose parents are done (dispatch_once's recompute_ready).
+   this.recompute();
    const spawned=tasks.filter(task=>task.status==='ready'&&task.assignee);
    for(const task of spawned) {
     const opened=this.run(task.id,{profile:task.assignee,claim_lock:`fake:${task.id}`});
@@ -1618,10 +1660,23 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      task.assignee=body.assignee||null;
      settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
     }
+    // The status (#838, #842), then the title and body (#837; update_task's order); a refused move is the Engine's 400 or 409.
     if(typeof body?.status==='string') { const refused=settings.kanban.status(task.id,body.status,body); if(refused) return send(response,refused.code,{detail:refused.detail}); }
+    if(typeof body?.title==='string'||typeof body?.body==='string') {
+     if(typeof body.title==='string'&&!body.title.trim()) return send(response,400,{detail:'title cannot be empty'});
+     if(typeof body.title==='string') task.title=body.title.trim();
+     if(typeof body.body==='string') task.body=body.body;
+     settings.kanban.event(task.id,'edited',null);
+    }
     return send(response,200,{task});
    }
    if(kanbanTask&&request.method==='DELETE') return settings.kanban.delete(decodeURIComponent(kanbanTask[1]))?send(response,200,{ok:true}):send(response,404,{detail:'not found'});
+   if(url.pathname==='/api/plugins/kanban/links'&&request.method==='POST') { const [code,answer]=settings.kanban.addLink(String(body?.parent_id??''),String(body?.child_id??'')); return send(response,code,answer); }
+   if(url.pathname==='/api/plugins/kanban/links'&&request.method==='DELETE') {
+    const [parent,child]=[url.searchParams.get('parent_id'),url.searchParams.get('child_id')];
+    if(!parent||!child) return send(response,422,{detail:'parent_id and child_id are required'});
+    return send(response,200,settings.kanban.removeLink(parent,child));
+   }
    // A comment under the author the caller names (add_comment: an empty body is a 400, the author `dashboard` when none)
    // and the Engine's stop for a Card's open Run (reclaim_task_endpoint: 409 when it has none), #838.
    const kanbanComment=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)\/comments$/);

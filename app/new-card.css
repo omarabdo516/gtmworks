@@ -66,3 +66,6 @@
   .gw.nc-dlg .modal__foot--end .btn { position: relative; }
   .gw.nc-dlg .modal__foot--end .btn::before { content: ""; position: absolute; inset: -4px 0; }
 }
+/* A Card's Project, named when it is made (#837): the Engine's tenant. */
+.gw.nc-dlg .nc-proj { width: 160px; height: 36px; flex: none; }
+@media (max-width: 767px) { .gw.nc-dlg .nc-proj { flex: 1 1 100%; width: auto; } }

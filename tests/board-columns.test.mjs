@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards, statusOfColumn, moveTarget } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -198,4 +198,25 @@ test('Waiting on you lists the newest Card first; every other column keeps the E
   { id: 't_4', column: 'planned', createdAt: 100 }, { id: 't_5', column: 'waiting', createdAt: 200 },
  ];
  assert.deepEqual(orderCards(cards).map(card => card.id), ['t_3', 't_5', 't_1', 't_2', 't_4']);
+});
+
+// #837: a person moves a Card into Ideas, Planned or Done, each asking the Engine for one status; In progress and Waiting
+// on you are the work's own, and Shift with an arrow passes over them to the next column a person moves a Card into.
+test('a person\'s move asks the Engine for the status its column means, and In progress and Waiting on you for none', () => {
+  assert.equal(statusOfColumn('ideas', false), 'triage');
+  assert.equal(statusOfColumn('planned', false), 'ready');
+  assert.equal(statusOfColumn('planned', true), 'todo');
+  assert.equal(statusOfColumn('done', true), 'done');
+  assert.equal(statusOfColumn('progress', false), null);
+  assert.equal(statusOfColumn('waiting', false), null);
+  // Left to right in English: Waiting on you, Ideas, Planned, In progress, Done.
+  assert.equal(moveTarget('ideas', 'ArrowRight', false), 'planned');
+  assert.equal(moveTarget('planned', 'ArrowRight', false), 'done');
+  assert.equal(moveTarget('done', 'ArrowRight', false), null);
+  assert.equal(moveTarget('ideas', 'ArrowLeft', false), null);
+  assert.equal(moveTarget('progress', 'ArrowLeft', false), 'planned');
+  assert.equal(moveTarget('waiting', 'ArrowRight', false), 'ideas');
+  // In Arabic the columns run right to left.
+  assert.equal(moveTarget('ideas', 'ArrowLeft', true), 'planned');
+  assert.equal(moveTarget('planned', 'ArrowUp', false), null);
 });

@@ -5,7 +5,7 @@ import { lineDirection, numberOf, parseDescription, parseInline, todoRuns, type 
 
 // A Card's description read drawn (spec #831, #835; design-reference-card: deHTML, deReadHTML, deFold): one block per
 // line, each in its own direction with its marker on its own start; the count of each run of to-do items sits above it,
-// and each item is ticked or not. Reading ticks nothing here: a to-do is ticked by editing the Card (#837). Nothing is
+// and each item is ticked or not; a Member who may write ticks one in place (#837, onTick). Nothing is
 // drawn as HTML, a link leads only to a web page or an email address, and a picture is drawn as its words, never
 // loaded. A long description folds after about twelve lines.
 
@@ -22,9 +22,12 @@ function Phrasing({parts}:{parts:Inline[]}):ReactNode {
  });
 }
 
-export function CardDescription({body,ui,c}:{body:string,ui:'rtl'|'ltr',c:(key:string)=>string}) {
+// A Member who may write ticks a to-do in place (#837; design-reference-card: deReadHTML's is-w, the tick box a button):
+// `onTick` is given the item's place among the to-do items, its words and the state asked for.
+export function CardDescription({body,ui,c,onTick}:{body:string,ui:'rtl'|'ltr',c:(key:string)=>string,onTick?:(index:number,text:string,done:boolean)=>void}) {
  const id=useId();
  const blocks=parseDescription(body); const runs=todoRuns(blocks);
+ const todoIndex=new Map(blocks.flatMap((block,at)=>block.t==='todo'?[at]:[]).map((at,index)=>[at,index]));
  const box=useRef<HTMLDivElement>(null); const [fold,setFold]=useState<'none'|'folded'|'open'>('none');
  useLayoutEffect(()=>{ const element=box.current; if(!element||fold==='open') return;
   const line=parseFloat(getComputedStyle(element).lineHeight)||25; const cap=Math.round(line*12);
@@ -49,7 +52,9 @@ export function CardDescription({body,ui,c}:{body:string,ui:'rtl'|'ltr',c:(key:s
     else if(block.t==='code') line=<div {...attrs}><pre className="de-t"><code>{block.x}</code></pre></div>;
     else {
      let mark:ReactNode=null; const label=`${id}-t${index}`;
-     if(block.t==='todo') mark=<span className="de-box" role="checkbox" aria-checked={!!block.c} aria-disabled="true" aria-labelledby={label}><ShellIcon name="check"/></span>;
+     if(block.t==='todo') mark=onTick?<button type="button" className="de-box" role="checkbox" aria-checked={!!block.c} aria-labelledby={label}
+       onClick={()=>onTick(todoIndex.get(index)??0,block.x,!block.c)}><ShellIcon name="check"/></button>
+      :<span className="de-box" role="checkbox" aria-checked={!!block.c} aria-disabled="true" aria-labelledby={label}><ShellIcon name="check"/></span>;
      else if(block.t==='ul') mark=<span className="de-dot" aria-hidden="true"/>;
      else if(block.t==='ol') mark=<span className="de-num num">{numberOf(blocks,index)}.</span>;
      const heading=block.t==='h1'?{role:'heading','aria-level':3}:block.t==='h2'?{role:'heading','aria-level':4}:{};

@@ -200,3 +200,52 @@
 .gw .de-tbl th { font-weight: var(--gw-fw-semibold); background: var(--gw-bg-subtle); }
 .gw .de-img-out { color: var(--gw-text-3); }
 .gw .de-hr { width: 100%; height: 0; margin: 8px 0; border: 0; border-top: 0.5px solid var(--gw-border-1); }
+
+/* What a Member who may write changes (#837; design-reference-card: button.cw-status, .cw-title-btn, .cw-title-edit,
+   .cw-edit-row, .cw-desc-row, .cw-pen, .cw-empty--btn, .cwp__add, .cw-chip__x, .cw-input, button.de-box, .ib--sm). */
+.gw .cw button.cw-status { border: 0; font-family: inherit; cursor: pointer; transition: background-color var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .cw button.cw-status > .gw-icon { width: 14px; height: 14px; color: var(--gw-text-3); }
+@media (hover: hover) { .gw .cw button.cw-status:hover { background: var(--gw-bg-secondary-hover); } .gw .cw button.cw-status.is-wait:hover { background: var(--gw-wait-bg); } }
+.gw .cw button.cw-status:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw .cw-pop--start { inset-inline: 0 auto; }
+.gw .cw .cw-pop .menu__item[aria-disabled="true"] { color: var(--gw-text-3); cursor: default; }
+.gw .cw .cw-pop .menu__item[aria-disabled="true"] .menu__t { white-space: normal; }
+.gw .cw .cw-pop .menu__d { display: block; font-size: var(--gw-fs-xs); color: var(--gw-text-3); white-space: normal; }
+.gw .cw-title-btn { display: block; width: calc(100% + 12px); margin-inline: -6px; padding: 0 6px; border: 0; border-radius: var(--gw-r-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: text; transition: background-color var(--gw-dur-fast) var(--gw-ease-out); }
+@media (hover: hover) { .gw .cw-title-btn:hover { background: var(--gw-bg-hover); } }
+.gw .cw-title-btn:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw-title-edit { display: grid; gap: var(--s2); }
+.gw .cw .cw-title-in { font-size: var(--gw-fs-lg); font-weight: var(--gw-fw-semibold); height: 44px; }
+.gw .cw-edit-row { display: flex; justify-content: flex-end; gap: var(--s2); flex-wrap: wrap; }
+.gw .cw .cw-desc-in { min-height: 180px; resize: vertical; font-size: var(--gw-fs-sm); line-height: 1.6; }
+.gw .cw-desc-row { display: flex; align-items: flex-start; gap: var(--s2); }
+.gw .cw-desc-row > .de-host { flex: 1 1 0; min-width: 0; }
+.gw .cw .ib { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; border: 0; border-radius: var(--gw-r-full); background: transparent; color: var(--gw-text-2); cursor: pointer; }
+.gw .cw .ib--sm { min-width: 32px; height: 32px; padding: 0 7px; }
+.gw .cw .ib--sm::before { content: ""; position: absolute; inset: -6px; }
+.gw .cw .ib .gw-icon { width: 16px; height: 16px; }
+@media (hover: hover) { .gw .cw .ib:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+.gw .cw .ib:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw-pen { opacity: 0; transition: opacity var(--gw-dur-fast) var(--gw-ease-out), background-color var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .cw-desc-sec:hover .cw-pen, .gw .cw-pen:focus-visible { opacity: 1; }
+@media (hover: none) { .gw .cw-pen { opacity: 1; } }
+.gw .cw-empty--btn { width: 100%; min-height: 36px; padding: 0; border: 0; background: transparent; color: var(--gw-text-3); font: inherit; font-size: var(--gw-fs-sm); text-align: start; cursor: text; }
+.gw .cw-empty--btn:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cwp__add { opacity: 0; transition: opacity var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .cwp__b:hover .cwp__add, .gw .cwp__b:focus-visible .cwp__add { opacity: 1; }
+@media (hover: none) { .gw .cwp__add { opacity: 1; } }
+.gw .cw-chip__x { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: none; margin-inline-end: 2px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--gw-text-3); cursor: pointer; }
+@media (hover: hover) { .gw .cw-chip__x:hover { color: var(--gw-text-1); background: var(--gw-bg-secondary-hover); } }
+.gw .cw-chip__x:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw .cw-input { width: 100%; height: 36px; font-size: var(--gw-fs-sm); }
+/* A detail row's button starts its icon and value at the row's start, as its static rows do (design-reference-card: .cwp__b). */
+.gw .cw .cwp__b { justify-content: flex-start; }
+.gw button.de-box { width: 18px; height: 18px; min-width: 0; min-height: 0; padding: 0; cursor: pointer; transition: background-color var(--gw-dur-fast) var(--gw-ease-out), border-color var(--gw-dur-fast) var(--gw-ease-out), color var(--gw-dur-fast) var(--gw-ease-out); }
+.gw button.de-box::before { content: ""; position: absolute; inset: -6px -10px; }
+@media (hover: hover) { .gw button.de-box:hover { border-color: var(--gw-text-2); } }
+.gw button.de-box:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+@media (max-width: 767px) {
+  /* 44px touch targets on a phone (DESIGN.md), the to-do box's own included. */
+  .gw .cw :is(.ib--sm, .cw-chip__x) { min-width: 44px; min-height: 44px; }
+  .gw button.de-box::before { inset: -13px; }
+}
