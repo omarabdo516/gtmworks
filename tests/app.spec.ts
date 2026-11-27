@@ -189,9 +189,9 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  const queued=waiting.locator('.approval-card').filter({hasText:title});
  await expect(queued).toBeVisible();
  await expect(sidebarCount).toHaveText(String(counted));
- await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',new URL(cardUrl).pathname);
- // The decision is made inside the card, beside the caption and the brief it is about.
- await queued.getByRole('link',{name:title}).click();
+ await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',`/c/rs-learning/work/board?card=${new URL(cardUrl).pathname.split('/').pop()}`);
+ // The decision is made inside the card's own page, beside the caption and the brief it is about.
+ await page.goto(cardUrl);
  // By role: a filled textarea's text is part of its wrapping label's text, so getByLabel stops matching it once it has a caption.
  await expect(page.getByRole('textbox',{name:"Caption",exact:true})).toHaveValue('نص مخصص للمراجعة');
  await expect(page.getByLabel("Offering",{exact:true})).toHaveValue('عرض مخصص للمراجعة');
@@ -200,7 +200,7 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  // The second step is also Omar's: the card is still waiting on him.
  await page.goto(queue);
  await expect(waiting.locator('.approval-card').filter({hasText:title})).toBeVisible();
- await waiting.locator('.approval-card').filter({hasText:title}).getByRole('link',{name:title}).click();
+ await page.goto(cardUrl);
  await page.locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
  await page.goto(queue);
@@ -214,7 +214,8 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
  await page.goto(queue);
  const row=waiting.locator('.approval-card').filter({hasText:rejected});
- await row.getByRole('link',{name:rejected}).click();
+ await expect(row).toBeVisible();
+ await page.goto(rejectedUrl);
  const decision=page.locator('[data-card-section="review"]');
  await decision.getByText("Reject with a reason").click();
  await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم');
