@@ -15,6 +15,9 @@ const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const profile=`co-${company.replaceAll('-','')}`;
 const lead=randomUUID();
+const hidden=randomUUID();
+const hiddenProfile=`ag-${hidden.replaceAll('-','')}`;
+const manager='20000000-0000-0000-0000-000000000002';
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 let stopped=false;
 const stopFake=async()=>{ if(!stopped&&fake) { stopped=true; await fake.close(); } };
@@ -24,22 +27,26 @@ test.beforeAll(async({},testInfo)=>{
  freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
- query(`update public.people set language='en' where id='${omar}'`);
+ query(`update public.people set language='en' where id in ('${omar}','${manager}')`);
  query(`do $$ begin
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${profile}');
   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${hidden}','${company}',true);
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${hidden}','${company}','${randomUUID()}','Hidden','Ads',false,'${hiddenProfile}');
  end $$;`);
 });
 test.afterAll(async()=>{ await stopFake(); });
 
-// A Conversation of Omar's on its own Engine session, with the messages the fake Engine holds for it.
-function talk(messages:Record<string,unknown>[]) {
+// A Conversation of `person`'s with the main Agent, on its own Engine session, with the messages the fake Engine holds.
+function talkFor(person:string,messages:Record<string,unknown>[]) {
  const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`;
- query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${person}','${lead}','Lead','${session}')`);
  fake.settings.sessions.set(session,{profile,messages});
  return {conversation,session};
 }
+// A Conversation of Omar's on its own Engine session, with the messages the fake Engine holds for it.
+const talk=(messages:Record<string,unknown>[])=>talkFor(omar,messages);
 const open=(page:Page,conversation:string)=>page.goto(`/c/rs-learning/conversations/${conversation}`,{waitUntil:'commit'});
 const user=(timestamp:number,content:string,more:object={})=>({role:'user',content,timestamp,...more});
 const replied=(timestamp:number,content:string)=>({role:'assistant',content,timestamp});
@@ -136,6 +143,21 @@ test('a newest page of only tool calls loads the messages before it, and a page 
  // page that holds the person's message and the reply, without the person scrolling.
  await expect(page.getByText('The older message')).toBeVisible({timeout:15000});
  await expect(page.getByText('The older reply')).toBeVisible();
+});
+
+test('a Card step of an Agent hidden from the reader names no Card',async({page})=>{
+ test.setTimeout(120000);
+ const call={id:'call_card',type:'function',function:{name:'kanban_create',arguments:JSON.stringify({title:'Secret card',assignee:hiddenProfile})}};
+ const {conversation}=talkFor(manager,[
+  user(1,'Plan the ads'),
+  {role:'assistant',content:'',tool_calls:[call],timestamp:2},
+  {role:'tool',tool_call_id:'call_card',tool_name:'kanban_create',content:JSON.stringify({ok:true,task_id:'t_12345678'}),timestamp:3},
+  replied(4,'Here is the plan.')]);
+ await signIn(page,'manager@example.com','/c/rs-learning/home');
+ await open(page,conversation);
+ await expect(page.locator('.msg[data-author=agent]')).toContainText('Here is the plan.');
+ // The Card was given to an Agent the Manager does not see: the step is there, its Card's title is not.
+ await expect(page.getByText('Secret card')).toHaveCount(0);
 });
 
 test('a tab that comes back keeps the pages the person scrolled back through',async({page})=>{

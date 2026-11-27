@@ -1,14 +1,18 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { supabase } from './supabase';
-import type { ConversationMessage } from './conversations';
+import type { ConversationMessage, RunStep } from './conversations';
 import type { SessionMessage, SessionUsage } from './engine.mjs';
-import { agentEngine, stepsBetween, takeToolCalls } from './engine/handle.mjs';
+import { agentEngine, companyEngine, seenAgents, stepsBetween, takeToolCalls } from './engine/handle.mjs';
 import { takeFileTags } from './media-tags.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null};
 type ConversationMessagesPage={state:'found',messages:ConversationMessage[],nextOffset:number,hasMore:boolean}|{state:'none'|'notSeen'|'missing'|'refused'|'unreachable'};
+// A message whose Steps still hold the profile a Card was given to, kept on the server until the reader's Agents are
+// known (namedMessages); the profile never leaves here.
+type PageStep=import('./engine.mjs').RunStep;
+type PageMessage=Omit<ConversationMessage,'steps'>&{steps?:{list:PageStep[],seconds:number|null}};
 const summary=/^\s*\[CONTEXT COMPACTION/i;
 /** @param {unknown} content */
 function textOf(content:unknown) {
@@ -44,9 +48,9 @@ function replyText(message?:SessionMessage):string {
 // matched by time), and the Engine's compaction summary as the Engine's. Tool results are read for their step's end and
 // drawn under the reply. `prefix` is the page before, when the page starts in the middle of a turn.
 /** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {string} agentName @param {number} offset */
-function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:string,offset=0):ConversationMessage[] {
+function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:string,offset=0):PageMessage[] {
  const all=[...prefix,...page];
- const shown:ConversationMessage[]=[];
+ const shown:PageMessage[]=[];
  // The last message of each turn that has words is its reply: Hermes keeps the interim narration ("Let me check…")
  // beside the call it made, and the old record showed the Run's final output alone.
  const lastText=new Map<number,number>();
@@ -69,13 +73,33 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:st
   }
   if(message?.role==='assistant'&&lastText.get(turn)===index&&body.trim()) {
    const steps=stepsBetween(all,turn,index);
-   // The profile a Card step was given to never leaves the server; a Card here names no Agent but its title (#844).
-   const list=steps?.list.map(({card,...step})=>card?{...step,card:{id:card.id,title:card.title,agent:null}}:step)??[];
-   shown.push({id:idOf(message,index,offset),author:'agent',author_name:agentName,body,created_at:atOf(message),steps:{list,seconds:steps?.seconds??null}});
+   shown.push({id:idOf(message,index,offset),author:'agent',author_name:agentName,body,created_at:atOf(message),steps:{list:steps?.list??[],seconds:steps?.seconds??null}});
   }
  }
  return shown;
 }
+type SeenRow={agent?:unknown,name?:unknown,connection?:unknown,profile?:unknown};
+// A Card a Step made (#844) is named by the Agent its profile runs, as the board names it, and one given to an Agent
+// hidden from the reader is no row of theirs, as it is on no board of theirs (lib/conversation-steps.ts namedCards). A
+// profile that is no Agent of the Company's names no Agent; the profile itself never leaves the server.
+/** @param {PageMessage[]} messages @param {SeenRow[]} seen @param {string[]} profiles */
+function namedMessages(messages:PageMessage[],seen:SeenRow[],profiles:string[]):ConversationMessage[] {
+ const byProfile=new Map<string,{id:string,name:string,face:string}>();
+ for(const row of seen) if(typeof row.profile==='string'&&typeof row.agent==='string'&&!byProfile.has(row.profile)) byProfile.set(row.profile,{id:row.agent,name:String(row.name??''),face:String(row.connection??row.agent)});
+ return messages.map(message=>{
+  if(!message.steps) return message as ConversationMessage;
+  const list=message.steps.list.flatMap(step=>{
+   const card=step.card;
+   if(!card) return [step as RunStep];
+   const agent=byProfile.get(card.profile)??null;
+   if(!agent&&profiles.includes(card.profile)) return [];
+   const {card:givenCard,...rest}=step; void givenCard;
+   return [{...rest,card:{id:card.id,title:card.title,agent}}];
+  });
+  return {...message,steps:{...message.steps,list}};
+ });
+}
+
 // One page of a Conversation's messages from its Agent's Engine session (#875), read through the Engine handle on the
 // profile the reader sees the Agent on. None when the Conversation has no session yet or its Company no Engine; notSeen
 // when the Agent is hidden from the reader. gtmworks keeps none of it.
@@ -88,7 +112,14 @@ export async function conversationMessagesPage(db:Database,company:string,found:
  if(target.state!=='found') return {state:'unreachable'};
  const read=await target.engine.sessions.messages(found.hermes_session_id,{offset,limit});
  if(read.state!=='found') return {state:read.state};
- return {state:'found',messages:pageMessages(read.messages,read.prefix,found.agent_name,offset),nextOffset:offset+read.messages.length,hasMore:read.more&&read.messages.length>0};
+ const messages=pageMessages(read.messages,read.prefix,found.agent_name,offset);
+ const made=messages.some(message=>message.steps?.list.some(step=>step.card));
+ let named=messages as ConversationMessage[];
+ if(made) {
+  const [seen,engine]=await Promise.all([seenAgents(db,company),companyEngine(company,{reader:db})]);
+  named=namedMessages(messages,seen??[],engine?.profiles??[]);
+ }
+ return {state:'found',messages:named,nextOffset:offset+read.messages.length,hasMore:read.more&&read.messages.length>0};
 }
 
 // The Conversation's token use (#347), its session detail's, on a request of its own after the messages (ADR 0030): null
