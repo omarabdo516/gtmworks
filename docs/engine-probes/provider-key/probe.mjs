@@ -116,4 +116,9 @@ await main(async()=>{
  } else {
   say('VERDICT: PASS — a Provider\'s API key is kept once in the root\'s pool, and every Agent of the Company reads it there.');
  }
+ // The recorded result, re-checked at each pin bump: questions 1-4 hold, question 5 does not (the copy). An answer that
+ // differs means the Engine changed or the record is stale, so exit nonzero, as the record promises.
+ const expected=[true,true,true,true,false];
+ const changed=verdicts.filter(one=>one.ok!==expected[one.q-1]);
+ if(changed.length) fail('the Engine answered differently than the recorded result',changed.map(one=>`question ${one.q} ${one.ok?'passed':'failed'}`).join(', '));
 });
