@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { load } from 'js-yaml';
-import { CONTAINER_ENV, HOST_ONLY_ENV, generateInstallEnv, validateContainerEnv } from '../lib/install-env.mjs';
+import { CONTAINER_ENV, HOST_ONLY_ENV, OPTIONAL_ENV, generateInstallEnv, validateContainerEnv } from '../lib/install-env.mjs';
 import { checkSettings } from '../lib/settings.mjs';
 
 // #446: the web app and the worker get only the values they read, never the whole .env.install. The database password,
@@ -16,8 +16,10 @@ test('the web and worker containers name each value they get, and none of the ho
   const definition=compose.services[service];
   assert.equal(definition.env_file,undefined,`${service} reads no env_file: it would hand it every value in .env.install`);
   const environment=definition.environment;
-  assert.deepEqual(Object.keys(environment).sort(),[...CONTAINER_ENV[service],'GTMWORKS_SELF_HOSTED'].sort(),`${service} gets exactly its list`);
+  assert.deepEqual(Object.keys(environment).sort(),[...CONTAINER_ENV[service],...OPTIONAL_ENV[service],'GTMWORKS_SELF_HOSTED'].sort(),`${service} gets exactly its list`);
   for(const name of CONTAINER_ENV[service]) assert.equal(environment[name],`\${${name}:?Run scripts/install.sh}`,`${service} takes ${name} from .env.install by its own name`);
+  // An optional value is empty when the install has not added it, and the container still starts.
+  for(const name of OPTIONAL_ENV[service]) assert.equal(environment[name],`\${${name}:-}`,`${service} takes ${name} by its own name, empty when unset`);
   for(const name of HOST_ONLY_ENV) {
    assert.equal(Object.hasOwn(environment,name),false,`${service} is not given ${name}`);
    assert.doesNotMatch(JSON.stringify(environment),new RegExp(`\\$\\{${name}\\b`),`${service} interpolates no ${name}`);

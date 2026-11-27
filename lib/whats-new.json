@@ -6,6 +6,12 @@
   "ar": { "title": "الإعدادات كلها جوه gtmworks", "body": "كل الإعدادات بقت في إعدادات gtmworks نفسها؛ والسطر اللي كان بيفتح لوحة المحرّك بقى اسمه «سجلات المحرك والنظام (متقدم)»، ولصاحب التثبيت بس." }
  },
  {
+  "issue": 914,
+  "date": "2026-11-27",
+  "en": { "title": "Meta Ads connects with your install's own Meta app", "body": "Meta lets no new app sign in on its own, so Meta Ads now signs in with a Meta app the install owner adds once; until then its page says what to add and links to the steps instead of opening a window that closes at once, and a sign-in an app refuses now says why." },
+  "ar": { "title": "Meta Ads بيتوصل بتطبيق Meta الخاص بالتثبيت بتاعك", "body": "Meta مش بيسمح لأي تطبيق جديد يدخل لوحده، فـ Meta Ads بقى بيدخل بتطبيق Meta صاحب التثبيت بيضيفه مرة واحدة؛ ولحد ما يتضاف، صفحته بتقول إيه اللي يتضاف وفيها رابط للخطوات بدل ما تفتح نافذة تتقفل على طول، والدخول اللي تطبيق يرفضه بقى بيقول السبب." }
+ },
+ {
   "issue": 910,
   "date": "2026-11-27",
   "en": { "title": "Connect the Open Design you run", "body": "Open Design is no longer built into gtmworks: put it in your Company's work sandbox and start it as the guide on its page says, then pick Open Design in Apps, and the command form opens with its command filled in; Test lists its tools, Add turns it on for the Agents you pick, and it draws with the model you set up inside Open Design." },
