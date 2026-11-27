@@ -190,27 +190,32 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
   await openMoreSection(page, 'home');
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
+  // Home's "Awaiting your approval" counts the old board's approvals, which are no part of Waiting on you since #841.
+  const awaiting = page.locator('.stats .stat').first().locator('strong');
+  const approvals = Number(await awaiting.textContent());
   await page.locator(`.content a[href="${cardPath}"]`).first().click();
   await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
   await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
   await page.locator('.close-card').click();
-  // The old board's columns stay on the board opened on Waiting on you until spec #831 takes it off (#846).
-  await page.goto('/c/rs-learning/approvals');
-  await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
-  await openNavigation(page);
-  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
-  // The board draws the same Card in its own column, opening its sheet (#116): the queued Card is read on Waiting on you.
-  await expect(page).toHaveURL(/\/approvals$/);
-  const queued = page.locator('.approval-card').filter({ hasText: title });
+  await expect(page).toHaveURL(/\/work\/board$/);
+  // The Home prepared before the move counts it.
+  await openMoreSection(page, 'home');
+  await expect(awaiting).toHaveText(String(approvals + 1));
+  // The old board's own Waiting on you column, served where a chat shows a Card (?show=) until #846, holds it; its
+  // decision is on the Card's own page.
+  const oldBoard = `/c/rs-learning/work/board?show=${cardPath.split('/').pop()}`;
+  await page.goto(oldBoard);
+  const queued = page.locator('.col[data-column="waiting"] .approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
-  await queued.getByRole('link', { name: title }).click();
+  await page.goto(cardPath);
   await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
   await expect(page.locator('.card-stage-line')).toContainText('معتمد');
-  await openNavigation(page);
-  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
+  await page.locator('.close-card').click();
+  await expect(page).toHaveURL(/\/work\/board$/);
+  await openMoreSection(page, 'home');
+  await expect(awaiting).toHaveText(String(approvals));
+  await page.goto(oldBoard);
   await expect(queued).toHaveCount(0);
-  await page.goto('/c/rs-learning/approvals');
-  await expect(page.locator('.column[data-stage-name="معتمد"] .card').filter({ hasText: title })).toBeVisible();
 });
 
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {
