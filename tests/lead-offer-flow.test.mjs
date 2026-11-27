@@ -29,7 +29,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
   if(name==='conversation_handover_agents') return ok([]);
   if(name==='pin_run') return ok({tools:null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
-  if(name==='pin_lead_brief') return ok({...brief,role});
+  if(name==='pin_run_brief') return ok({...brief,role});
   if(name==='begin_turn_start') return ok(1);
   if(name==='send_conversation_message') return ok(true);
   if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p1000000-0000-0000-0000-000000000001',company:'co',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
@@ -99,4 +99,18 @@ test('a Contributor types the answer while the card is open: no new Run starts, 
  const [requested]=store.calls.filter(([name])=>name==='lead_request_agent');
  assert.equal(requested?.[1]?.agent_name,'Reach');
  assert.deepEqual(store.calls.filter(([name])=>name==='lead_create_agent'),[],'a Member makes nothing');
+});
+
+// Spec #831 (#844): a Conversation's Run is offered no Card tool of gtmworks's own, so no reply's text is read for one. A
+// Run the previous app version started may still write a hand_to_agent block: the Run closes with its reply and the
+// other calls it made, and no Handover is asked of the database.
+test('a hand_to_agent block in a Conversation\'s reply makes no Handover, and the Run still closes with its other calls',async()=>{
+ const fake=fakeEngine(); fake.settings.agentProfile='noModel'; await fake.engineFor({}).createAgent({name:'writer',instructions:''});
+ fake.settings.toolCalls=input=>input.includes('Meta ads')?[{id:'call-1',name:'hand_to_agent',arguments:{agent:'Ads',goal:'Plan the Meta ads'}},{id:'call-2',name:'create_agent',arguments:{template:'meta'}}]:[];
+ const store=databases(fake,'owner');
+ assert.deepEqual(await start(fake,store.person,store.service,'k1'),{conversation});
+ await withEngineContract(fake.engineFor,()=>closeOpenRuns(store.service,{conversation}));
+ assert.ok(store.closed.has(fake.runs[0].id),'the Run closed');
+ assert.deepEqual(store.calls.filter(([name])=>/hand/.test(name)),[],'no Handover is kept');
+ assert.equal(store.calls.filter(([name])=>name==='lead_create_agent').length,1,'its other call is carried out');
 });

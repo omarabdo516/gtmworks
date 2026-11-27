@@ -47,7 +47,7 @@ function databases({has_files=false,retry=false,begin=null,files=[],download=nul
   if(name==='claim_conversation_turn') { const turn=turns[claimed];
    return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:retried(),has_files:turn.has_files}]:[]); }
   if(name==='conversation_handover_agents') return ok([]);
-  if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
+  if(['pin_run','pin_run_history','pin_run_model','pin_run_brief'].includes(name)) return ok(null);
   if(name==='begin_turn_start') return begin==='fails'?{data:null,error:{code:'40001',message:'could not serialize access'}}:begin==='none'?ok(null):ok(retried()?2:1);
   // The three-argument form fails a turn nobody attempted yet (attempt 0): it leaves the queue, so the next claim gets
   // the next turn. A retried turn's attempt is above 0, or its start was attempted before this claim, and the database

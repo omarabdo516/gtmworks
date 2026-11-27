@@ -21,7 +21,9 @@ export type QuestionAnswer=string|string[];
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
 // `routine`: the Routine a create through the Engine's scheduling tool made (#205), its name and schedule as the Engine shows them.
-export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true,routine?:{name:string,schedule:string}};
+// `card`: the Card a create through the Engine's Kanban tool made (#844), its task id, its title and the profile it was
+// given to, which only the server reads.
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true,routine?:{name:string,schedule:string},card?:{id:string,title:string,profile:string}};
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};

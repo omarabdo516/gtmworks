@@ -57,7 +57,7 @@ function databases({queue={state:'queued'},claim=[],usable=true,attempt=1,kept=t
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:model,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
-  if(name==='pin_lead_brief') return {data:null,error:null};
+  if(name==='pin_run_brief') return {data:null,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
   if(name==='release_queued_start') return {data:true,error:null};
   return {data:null,error:{message:'unexpected'}}; };

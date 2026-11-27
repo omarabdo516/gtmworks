@@ -777,7 +777,7 @@ function conversationDatabases({profile,claim=true}) {
   if(name==='begin_turn_start') return {data:1,error:null};
   if(name==='conversation_handover_agents') return {data:[],error:null};
   if(name==='pin_run') return {data:{tools:null,rules:[]},error:null};
-  if(['pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return {data:null,error:null};
+  if(['pin_run_history','pin_run_model','pin_run_brief'].includes(name)) return {data:null,error:null};
   if(name==='record_conversation_turn'||name==='fail_conversation_turn') { settled=true; return {data:true,error:null}; }
   return {data:null,error:{message:'unexpected'}};
  };
@@ -800,7 +800,7 @@ test('a message is stored before Hermes is called, and its Run starts on its pin
  // The record names the pin the run started on, the one the claim made.
  assert.equal(args.record_conversation_turn.started_on,'f9000000-0000-0000-0000-000000000001');
  assert.deepEqual(order.slice(0,2),['conversation_agent','queue_conversation_turn']);
- assert.deepEqual(order.filter(step=>step.startsWith('service ')||step.startsWith('start ')).filter(step=>step!=='service pin_lead_brief'),['service queued_conversations','service claim_conversation_turn','service conversation_handover_agents','service pin_run','service pin_run_history','service pin_run_model','service begin_turn_start',`start ${companyProfile(two)}`,'service record_conversation_turn']);
+ assert.deepEqual(order.filter(step=>step.startsWith('service ')||step.startsWith('start ')).filter(step=>step!=='service pin_run_brief'),['service queued_conversations','service claim_conversation_turn','service pin_run','service pin_run_history','service pin_run_model','service begin_turn_start',`start ${companyProfile(two)}`,'service record_conversation_turn']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools are not the fixed set', async () => {

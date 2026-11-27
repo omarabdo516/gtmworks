@@ -14,7 +14,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
-import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
+import type { Decision, LeadCard, RunStepCard, SavedRule } from '@/lib/conversations';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import { LiveTurn, WorkingLine, useLanding, useLiveSteps } from '@/app/run-activity';
 import { showRoutines } from '@/app/details-routines';
@@ -396,7 +396,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='handed'?handed(card,`handed${message.id}:${card.name}:${card.goal}`,'p')
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
-  </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
+  </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:step.card?[<CardLine key={at} slug={slug} card={step.card} rise={rise(index)}/>]:[])}</Fragment>)}
    {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
   {working&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
   {/* The record could not be read three times in a row (#768): what was drawn stays above, and Try again reads it now. */}
@@ -447,6 +447,16 @@ function RoutineLine({routine,details,rise}:{routine:{name:string,schedule:strin
  const schedule=scheduleLabel(t,{expr:formOf(routine.schedule)?routine.schedule:null,display:routine.schedule});
  return <li className={`note note--icon${rise}`} data-kind="routine"><ShellIcon name="repeat" className="note__icon"/><span><bdi>{t('chatRoutineMade',routine.name,schedule)}</bdi></span>
   {details&&<button type="button" className="link-btn note__link" onClick={showRoutines}>{t('chatRoutineSee')}</button>}</li>;
+}
+
+// Under a reply in which the Agent made a Card with the Engine's own Kanban tool (spec #831, #844; design-reference:
+// the chat's note with the board icon): the Card's Agent and title, and the way to the Card over the board. It is drawn
+// from the step the Engine reported for the call, so gtmworks keeps nothing for it, and no Handover row is made.
+function CardLine({slug,card,rise}:{slug:string,card:RunStepCard,rise:string}) {
+ const {cb,c}=useConversationText();
+ return <li className={`note note--icon${rise}`} data-kind="card"><ShellIcon name="board" className="note__icon"/>
+  <span><bdi>{card.agent?cb('chatCardMade',card.agent.name):c('chatCardMadeAlone')}</bdi> · <bdi dir="auto">{card.title}</bdi></span>
+  <Link className="link-btn note__link" href={`/c/${slug}/work/board?card=${encodeURIComponent(card.id)}`}>{c('chatCardOpen')}</Link></li>;
 }
 
 // The tool calls the Engine reported for the reply's Run (#141; design-reference: stepsHTML, toggle-steps) are drawn by

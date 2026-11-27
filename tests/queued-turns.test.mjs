@@ -25,7 +25,7 @@ function databases({pages}) {
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
-  if(name==='pin_lead_brief') return {data:null,error:null};
+  if(name==='pin_run_brief') return {data:null,error:null};
   if(name==='begin_turn_start') return {data:1,error:null};
   if(name==='record_conversation_turn') return {data:true,error:null};
   if(['keep_unknown_start','fail_conversation_turn','refuse_run_model'].includes(name)) return {data:true,error:null};
@@ -79,7 +79,7 @@ function counted({model=null}={}) {
   if(name==='pin_run') return {data:{tools:null},error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:model,error:null};
-  if(name==='pin_lead_brief') return {data:null,error:null};
+  if(name==='pin_run_brief') return {data:null,error:null};
   if(name==='conversation_handover_agents') return {data:[],error:null};
   if(name==='begin_turn_start') return {data:++state.attempts,error:null};
   if(name==='release_queued_start') { state.released.push(given); if(given.attempt===state.attempts) { state.attempts--; return {data:true,error:null}; } return {data:false,error:null}; }
