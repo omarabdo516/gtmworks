@@ -26,8 +26,10 @@ const columns='/c/rs-learning/approvals';
 const sheetOf=(page:Page)=>page.getByRole('dialog').filter({has:page.locator('#sheet-title')});
 const confirmOf=(page:Page)=>page.getByRole('dialog',{name:/^Archive/});
 const waitingCount=(page:Page)=>page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
-// The count comes once the board has been read beside the list's rows (#841): it is read when it has come.
-const count=async(page:Page)=>{ await expect(waitingCount(page)).toHaveText(/^\d+$/); return Number(await waitingCount(page).textContent()); };
+// The Company layout streams the count beside the page, and the pill stays empty until it comes (app/approvals-count.tsx,
+// #789); the Engine's board draws its frame before it (#834). So the count is read once it has come: an empty pill read
+// as 0 made the Owner's count before the archive 0 when the page was slow.
+const count=async(page:Page)=>{ await expect(waitingCount(page)).not.toBeEmpty(); return Number(await waitingCount(page).textContent()); };
 
 async function memberClient(email:string) {
  const value=status();

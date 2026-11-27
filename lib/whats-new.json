@@ -6,6 +6,12 @@
   "ar": { "title": "عدّي مراجعة البطاقة أو رجّعها", "body": "لما وكيل يسلّم بطاقة للمراجعة، الأدمن أو المدير يعدّيها فتروح «خلصت»، أو يرجّعها بسبب الوكيل بيقراه في المحاولة الجاية؛ والوكيل اللي بيراجع الشغل بيعمل نفس الحاجة لوحده، والبطاقة بتقول مين عدّاها أو رجّعها." }
  },
  {
+  "issue": 837,
+  "date": "2026-11-27",
+  "en": { "title": "Change a Card after it's made, and filter the board by Project", "body": "Rename a Card, edit its description, tick a to-do in place, set its date and the Card it waits for, and drag it to Ideas, Planned or Done with Undo; the board filters by Assignee and by the Project a Card was made in." },
+  "ar": { "title": "عدّل البطاقة بعد ما تتعمل، وفلتر اللوحة بالمشروع", "body": "غيّر اسم البطاقة، وعدّل وصفها، وعلّم على مهمة في مكانها، وحط ميعادها والبطاقة اللي مستنياها، واسحبها لأفكار أو متخطط أو خلص مع التراجع؛ واللوحة بتتفلتر بالمسؤول وبالمشروع اللي البطاقة اتعملت فيه." }
+ },
+ {
   "issue": 842,
   "date": "2026-11-27",
   "en": { "title": "Archive and restore Cards", "body": "Archive a Card from its More menu, several at once in select mode, or everything in Done, with Undo; archiving a Card an Agent is working on asks once and stops the work, and the archive icon lists the archived Cards to page through, search and restore." },

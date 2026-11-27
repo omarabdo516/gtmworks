@@ -9,6 +9,7 @@ export type Inline = { t: 'text', v: string } | { t: 'code', v: string } | { t: 
 export declare function parseDescription(markdown: string | null | undefined): Block[];
 export declare function numberOf(list: Block[], at: number): number;
 export declare function todoRuns(list: Block[]): Map<number, { done: number, total: number }>;
+export declare function tickTodo(markdown: string | null | undefined, index: number, text: string, done: boolean): string | null;
 export declare function todoCount(markdown: string | null | undefined): { done: number, total: number };
 export declare function lineDirection(value: string): 'rtl' | 'ltr' | '';
 export declare function parseInline(value: string): Inline[];

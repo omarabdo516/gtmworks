@@ -11,6 +11,7 @@ import { CardCallout, CommentField, RunControl } from './card-talk';
 import { PassedLine, ReviewCallout } from './card-review';
 import { CardFileChips, CardFilesRow } from './card-files';
 import { useCardChanges } from './board-live';
+import { DateRow, DescriptionEdit, StatusMenu, TitleEdit, WaitsFor } from './card-window-edit';
 import { ArchivedCallout, CardMore } from './board-archive';
 import en from '@/lib/messages/card-window.en.json';
 import ar from '@/lib/messages/card-window.ar.json';
@@ -27,8 +28,10 @@ import './card-window.css';
 //
 // A Member who may write comments under the tabs, answers a question or lets a Card stopped after two failures go on from
 // the callout at the top, and stops or starts its Agent at the end of the Assignee row (#838, app/card-talk.tsx); a Viewer
-// reads the Read only line there instead. The status, the details and the description become controls with #837. Closing lets it
-// leave first; then the board's own address comes back and the keyboard is on the Card.
+// reads the Read only line there instead. For a Member who may write, the status, the title, the description with its
+// to-do items, the publishing date and the Cards it waits for are controls (#837, app/card-window-edit.tsx); a Card's
+// Project is named when it is made, as the Engine takes no other, so here it is read only. Closing lets it leave first;
+// then the board's own address comes back and the keyboard is on the Card.
 
 type Read={card:CompanyCard|null,state:'reading'|'read'|'failed'|'missing'};
 export type BoardCardSeen={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null};
@@ -173,9 +176,10 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned,control}:{company:
 }
 
 // `archive` and `restore` are the board's (#842, app/board-archive.tsx), for a Member who may write: the window stays on
-// the Card, archived and read only, and reads it again once the archive or the restore is done.
-export function CardWindow({company,id,seen,writer,reviewer=false,cardHref,fileHref,showCard,onBoard,archive,restore,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,reviewer?:boolean,cardHref:(id:string)=>string,
- fileHref:(card:string,file:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,
+// the Card, archived and read only, and reads it again once the archive or the restore is done. `board` is the board's
+// Cards, which a Card may wait for (#837).
+export function CardWindow({company,id,seen,writer,reviewer=false,board=[],cardHref,fileHref,showCard,onBoard,archive,restore,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,reviewer?:boolean,
+ board?:{id:string,title:string,column:string}[],cardHref:(id:string)=>string,fileHref:(card:string,file:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,
  archive?:(id:string,done:()=>void)=>void,restore?:(id:string)=>Promise<unknown>,onClose:()=>void}) {
  const {t,language,locale}=useI18n();
  const text:Record<string,string>=language==='ar'?ar:en;
@@ -206,6 +210,9 @@ export function CardWindow({company,id,seen,writer,reviewer=false,cardHref,fileH
  const agent=card?card.agent:seen?.agent??null;
  const person=card?card.person:seen?.person??null;
  const waiting=column==='waiting';
+ // A change saved from here (#837): the board takes its answer and the Card is read again.
+ const editable=writer&&!!card&&!card.archived;
+ const saved=(answer:{cards?:unknown[],main?:{id:string,name:string}|null})=>{ onBoard(answer as BoardAnswer); read.reread(); };
  const columnName=column?t(columnLabel(column,writer)):'';
  const symbolName=(kind:CardSymbol)=>kind.kind==='waits'&&kind.count>1?t('symWaitsN',kind.count):t(symbolKey[kind.kind]);
  const sym=(kind:CardSymbol)=>{ const look=symbols[kind.kind]; const name=symbolName(kind);
@@ -216,19 +223,25 @@ export function CardWindow({company,id,seen,writer,reviewer=false,cardHref,fileH
  // ---- the details ----
  const icon=(name:ShellIconName,label:string)=><span className="cwp__ic" title={label} aria-hidden="true"><ShellIcon name={name}/></span>;
  const row=(lead:ReactNode,label:string,value:ReactNode)=><div className="cwp"><span className="cwp__s"><span className="cwp__ic" title={label} aria-hidden="true">{lead}</span><span className="sr-only">{label}:</span>{value}</span></div>;
- const chip=(other:CompanyCard['waitsFor'][number],index:number)=><li key={other.id??`hidden-${index}`} className="cw-chip">{other.id==null||other.title==null
+ const chipOpen=(other:CompanyCard['waitsFor'][number])=>other.id==null||other.title==null
   ?<span className="cw-chip__open is-hidden"><ShellIcon name="lock"/><span>{c('cwHiddenCard')}</span></span>
   :<a className="cw-chip__open" href={cardHref(other.id)} onClick={event=>{ if(event.metaKey||event.ctrlKey||event.shiftKey||event.button!==0) return; event.preventDefault(); showCard(other.id!); }}
     aria-label={`${other.title} · ${other.column?t(columnLabel(other.column,writer)):''}`} title={other.column?t(columnLabel(other.column,writer)):undefined}>
-   {other.done?<ShellIcon name="check"/>:<span className="dot" aria-hidden="true"/>}<bdi className="od-truncate" dir="auto">{other.title}</bdi></a>}</li>;
+   {other.done?<ShellIcon name="check"/>:<span className="dot" aria-hidden="true"/>}<bdi className="od-truncate" dir="auto">{other.title}</bdi></a>;
+ const chip=(other:CompanyCard['waitsFor'][number],index:number)=><li key={other.id??`hidden-${index}`} className="cw-chip">{chipOpen(other)}</li>;
+ // The Cards this one may wait for (design-reference-card: popHTML 'waits'): the board's other Cards not done, not already
+ // waited for and not waiting for it; the Engine refuses any longer loop itself.
+ const waitChoices=card?board.filter(other=>other.id!==card.id&&other.column!=='done'&&!card.waitsFor.some(link=>link.id===other.id)&&!card.waitedBy.some(link=>link.id===other.id)):[];
  const side=<aside className="cw-side" aria-label={c('cwDetails')}><div className="cwp-list">
   {writer&&card&&!card.archived?<AssigneeMenu company={company} card={card.id} agent={agent} person={person} c={c} onAssigned={talked}
    control={<RunControl company={company} card={card} c={c} onDone={talked} onSaid={text=>setRunSaid({id,text})}/>}/>
    :row(agent?<AgentFace agent={agent.id} size={20}/>:person?<Letter name={person.name} size={20}/>:<NoOne size={20}/>,c('cwAssignee'),<bdi className="od-truncate">{agent?.name||person?.name||c('cwNoOne')}</bdi>)}
   {runSaid.id===id&&runSaid.text&&<p className="cw-said is-bad" role="alert">{runSaid.text}</p>}
-  {card?.publishOn&&row(<ShellIcon name="calendar"/>,t('publishingDate'),<span className="num">{new Date(`${card.publishOn}T12:00:00Z`).toLocaleDateString(locale,{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}</span>)}
+  {editable&&card&&<DateRow company={company} card={card.id} publishOn={card.publishOn} c={c} label={t('publishingDate')} onSaved={saved}/>}
+  {!editable&&card?.publishOn&&row(<ShellIcon name="calendar"/>,t('publishingDate'),<span className="num">{new Date(`${card.publishOn}T12:00:00Z`).toLocaleDateString(locale,{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}</span>)}
   {card?.project&&row(<ShellIcon name="folder"/>,c('cwProject'),<bdi className="od-truncate" dir="auto">{card.project}</bdi>)}
-  {card&&card.waitsFor.length>0&&<div className="cwp cwp--chips">{icon('hourglass',c('cwWaitsFor'))}<span className="sr-only">{c('cwWaitsFor')}:</span><ul className="cw-chips">{card.waitsFor.map(chip)}</ul></div>}
+  {editable&&card&&<WaitsFor company={company} card={card.id} chips={card.waitsFor.map(other=>({id:other.id,title:other.title,node:chipOpen(other)}))} choices={waitChoices} c={c} onSaved={saved}/>}
+  {!editable&&card&&card.waitsFor.length>0&&<div className="cwp cwp--chips">{icon('hourglass',c('cwWaitsFor'))}<span className="sr-only">{c('cwWaitsFor')}:</span><ul className="cw-chips">{card.waitsFor.map(chip)}</ul></div>}
   {card&&card.waitedBy.length>0&&<div className="cwp cwp--chips">{icon('link',c('cwWaitedBy'))}<span className="sr-only">{c('cwWaitedBy')}:</span><ul className="cw-chips">{card.waitedBy.map(chip)}</ul></div>}
   {card&&<CardFilesRow company={company} card={card.id} files={card.files} href={file=>fileHref(card.id,file.key)} writer={writer&&!card.archived} c={c}
    whoOf={file=>[file.by?'person' in file.by?file.by.person:file.by.agent?.name??c('cwAnAgent'):'',file.at!=null?at(file.at):''].filter(Boolean).join(' · ')} onAdded={read.reread}/>}
@@ -271,7 +284,8 @@ export function CardWindow({company,id,seen,writer,reviewer=false,cardHref,fileH
  return <dialog ref={box} className={`cw${leaving?' is-closing':''}`} aria-labelledby="cw-title" data-card={id} onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="cw__inner">
    <header className="cw-head"><div className="cw-head__row">
-    {column&&<span className={`cw-status is-static${waiting?' is-wait':''}`}>{symbol&&sym(symbol)}<span>{columnName}</span></span>}
+    {column&&editable&&card?<StatusMenu company={company} card={card.id} column={column} lead={symbol&&sym(symbol)} writer={writer} onBoard={saved}/>
+     :column&&<span className={`cw-status is-static${waiting?' is-wait':''}`}>{symbol&&sym(symbol)}<span>{columnName}</span></span>}
     {card?.archived&&<span className="cw-status is-static"><ShellIcon name="archive"/><span>{t('cardArchived')}</span></span>}
     {!writer&&<span className="sym sym--mute" role="img" aria-label={c('cwReadOnly')} title={c('cwReadOnly')}><ShellIcon name="eye"/></span>}
     <span className="od-fill"/>
@@ -280,13 +294,14 @@ export function CardWindow({company,id,seen,writer,reviewer=false,cardHref,fileH
    </div></header>
    <div className="cw-body">
     <div className="cw-top">
-     <h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{title}</h2>
+     <TitleEdit company={company} card={id} title={title} editable={editable} c={c} onSaved={saved}/>
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
      {card?.archived&&<ArchivedCallout restore={restore&&(()=>void restore(card.id).then(read.reread))}/>}
      {card&&card.symbol&&<CardCallout key={card.id} company={company} card={card} writer={writer} c={c} sym={sym(card.symbol)} onDone={talked}/>}
      {card&&<ReviewCallout key={`review-${card.id}`} company={company} card={card} reviewer={reviewer} ui={ui} c={c} sym={kind=>sym({kind})} label={t('symReview')} onDone={talked}/>}
-     {card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
+     {editable&&card&&<DescriptionEdit key={`description:${card.id}`} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
+     {!editable&&card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
      {card&&card.column==='done'&&(card.summary||card.files.some(file=>file.from==='summary')||card.review?.state==='passed')&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result">
       {card.summary&&<p className="cw-sum" dir="auto">{card.summary}</p>}<CardFileChips files={card.files.filter(file=>file.from==='summary')} href={file=>fileHref(card.id,file.key)} c={c}/><PassedLine card={card} c={c} sym={sym({kind:'passed'})}/></div></section>}
     </div>

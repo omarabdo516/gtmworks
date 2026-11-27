@@ -54,7 +54,7 @@ export async function POST(request:NextRequest) {
   if(!sent) return reply({error:'boardNotAllowed'},403);
   const who=await caller(db,'POST',sent.company); if('answer' in who) return who.answer;
   const company=sent.company as string;
-  const made=await makeCompanyCard(db,{company,person:who.person,key:sent.key,title:sent.title,description:sent.description,assignee:sent.assignee,publishOn:sent.publishOn});
+  const made=await makeCompanyCard(db,{company,person:who.person,key:sent.key,title:sent.title,description:sent.description,assignee:sent.assignee,publishOn:sent.publishOn,project:sent.project});
   if(made.state==='made') return await board(db,company,who.person,{made:made.id});
   const [error,status]=failures[made.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }

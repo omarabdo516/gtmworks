@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards, waitsOn, waitsOnReader } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards, statusOfColumn, moveTarget, waitsOn, waitsOnReader } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -227,4 +227,25 @@ test('a Card waits on the reader when it waits on them by name, or on the Admini
  for (const [role, mine] of [['owner', true], ['manager', true], ['contributor', false], ['viewer', false], [null, false]])
   assert.equal(waitsOnReader({ leads: true }, { me: 'x', role }), mine, String(role));
  assert.equal(waitsOnReader(null, { me: 'mona', role: 'owner' }), false);
+});
+
+// #837: a person moves a Card into Ideas, Planned or Done, each asking the Engine for one status; In progress and Waiting
+// on you are the work's own, and Shift with an arrow passes over them to the next column a person moves a Card into.
+test('a person\'s move asks the Engine for the status its column means, and In progress and Waiting on you for none', () => {
+  assert.equal(statusOfColumn('ideas', false), 'triage');
+  assert.equal(statusOfColumn('planned', false), 'ready');
+  assert.equal(statusOfColumn('planned', true), 'todo');
+  assert.equal(statusOfColumn('done', true), 'done');
+  assert.equal(statusOfColumn('progress', false), null);
+  assert.equal(statusOfColumn('waiting', false), null);
+  // Left to right in English: Waiting on you, Ideas, Planned, In progress, Done.
+  assert.equal(moveTarget('ideas', 'ArrowRight', false), 'planned');
+  assert.equal(moveTarget('planned', 'ArrowRight', false), 'done');
+  assert.equal(moveTarget('done', 'ArrowRight', false), null);
+  assert.equal(moveTarget('ideas', 'ArrowLeft', false), null);
+  assert.equal(moveTarget('progress', 'ArrowLeft', false), 'planned');
+  assert.equal(moveTarget('waiting', 'ArrowRight', false), 'ideas');
+  // In Arabic the columns run right to left.
+  assert.equal(moveTarget('ideas', 'ArrowLeft', true), 'planned');
+  assert.equal(moveTarget('planned', 'ArrowUp', false), null);
 });

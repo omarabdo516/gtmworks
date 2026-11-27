@@ -5,6 +5,8 @@ export declare const boardCardColumns: '*,wait:card_wait';
 export declare const cardColumns: readonly ['waiting', 'ideas', 'planned', 'progress', 'done'];
 export type CardColumn = typeof cardColumns[number];
 export declare function columnOfStatus(status: string): CardColumn | null;
+export declare function statusOfColumn(column: string, waits: boolean): 'triage' | 'ready' | 'todo' | 'done' | null;
+export declare function moveTarget(column: string, key: string, rtl: boolean): CardColumn | null;
 // 'sentBack' and 'passed' are a review's outcome, which only a Card's own read knows (lib/company-card.mjs, #839).
 export type CardSymbol = {kind:'working'|'question'|'review'|'failed'|'stopped'|'sentBack'|'passed'} | {kind:'waits', count:number};
 export declare function cardSymbol(card: {status:string, failures:number, parents:number}): CardSymbol | null;
@@ -29,9 +31,9 @@ export declare function orderColumn<C extends {id:number, board_order?:number|nu
 /** The Card a Card moved one place up or down its column lands above; null at the column's end, undefined when it stays. */
 export declare function placeByOne(ids: number[], id: number, key: string): number | null | undefined;
 /** A column's order once a Card is placed above `before` (null: at the column's end). */
-export declare function placeOrder(ids: number[], id: number, before: number | null): number[];
+export declare function placeOrder<I extends string | number>(ids: I[], id: I, before: I | null): I[];
 /** Whether a drop would change the column's order at all. */
-export declare function placeChanges(ids: number[], id: number, before: number | null): boolean;
+export declare function placeChanges<I extends string | number>(ids: I[], id: I, before: I | null): boolean;
 export declare function blockReason(from: string, to: string, byChat?: boolean): '' | 'same' | 'decide' | 'chat' | 'waiting';
 export declare function cardAgent(card: {id:number, next_actor:string|null}, assignees: {card_id:number, person_id:string}[], agentIds: Set<string>): string | null;
 export declare function inEdgeBand(box: {left:number, right:number, top:number, bottom:number, width:number, height:number}, point: {x:number, y:number}, scrolls?: {x:boolean, y:boolean}, share?: number): boolean;

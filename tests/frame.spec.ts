@@ -260,6 +260,8 @@ test('the company switcher lists only the person\'s companies, and the old all-c
  await page.keyboard.press('Escape');
  await expect(page.locator('.sidebar').getByRole('link',{name:"New chat",exact:true})).toBeVisible();
  const badge=page.locator('.sidebar .sb-count[href$="/approvals"]');
+ // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
+ await expect(badge).not.toBeEmpty();
  const count=Number(await badge.textContent());
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();

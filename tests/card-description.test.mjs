@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lineDirection, numberOf, parseDescription, parseInline, todoCount, todoRuns } from '../lib/card-description.mjs';
+import { lineDirection, numberOf, parseDescription, parseInline, tickTodo, todoCount, todoRuns } from '../lib/card-description.mjs';
 
 // A Card's description is its Engine task's Markdown body, read drawn as the approved Card draws it (spec #831, #835;
 // design-reference-card: deParse, deIn, deRuns): a block per line, to-do items ticked or not with the count of each run
@@ -58,4 +58,20 @@ test('a line\'s direction is its main language, by words', () => {
   assert.equal(lineDirection('SEO كتب مقال عن الكورس'), 'rtl');
   assert.equal(lineDirection('Write the copy for الكورس'), 'ltr');
   assert.equal(lineDirection('`code` 123'), '');
+});
+
+// #837: ticking a to-do changes only its own line of the Markdown, found by its place among the to-do items and its
+// words, so a description changed since it was read (a line added above, the item renamed) is never ticked blind.
+test('ticking a to-do changes that line only, and a to-do that is no longer there is not ticked', () => {
+  const body = '# Steps\n```\n- [ ] not a to-do in code\n```\n- [ ] Draft the copy\n  * [X] Check the price\n1. [ ] Send it\n[ ] Bare one';
+  assert.equal(tickTodo(body, 0, 'Draft the copy', true), body.replace('- [ ] Draft', '- [x] Draft'));
+  assert.equal(tickTodo(body, 1, 'Check the price', false), body.replace('* [X] Check', '* [ ] Check'));
+  assert.equal(tickTodo(body, 2, 'Send it', true), body.replace('1. [ ] Send', '1. [x] Send'));
+  assert.equal(tickTodo(body, 3, 'Bare one', true), body.replace('[ ] Bare', '[x] Bare'));
+  // Already as asked: the same text back.
+  assert.equal(tickTodo(body, 1, 'Check the price', true), body);
+  // Another person renamed it, or added a to-do above it: not ticked.
+  assert.equal(tickTodo(body, 0, 'Draft the ad', true), null);
+  assert.equal(tickTodo(body, 4, 'Bare one', true), null);
+  assert.equal(tickTodo('- [ ] A\r\n- [ ] B', 1, 'B', true), '- [ ] A\n- [x] B');
 });
