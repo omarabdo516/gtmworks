@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { supabase } from './supabase';
 import type { ConversationMessage } from './conversations';
 import type { SessionMessage, SessionUsage } from './engine.mjs';
-import { agentEngine, stepsBetween } from './engine/handle.mjs';
+import { agentEngine, stepsBetween, takeToolCalls } from './engine/handle.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null};
@@ -43,7 +43,9 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:st
  for(let index=prefix.length;index<all.length;index++) {
   const message=all[index];
   if(startsTurn(message)) turn=index;
-  const body=textOf(message?.content);
+  // gtmworks tells the model its own tool blocks are never shown (#875); a stored session keeps them, so they are
+  // taken out here as the Run record's reply is (lib/engine/runs.mjs takeToolCalls).
+  const body=message?.role==='assistant'?takeToolCalls(textOf(message.content)).reply:textOf(message?.content);
   if(message?.role==='user') {
    if(summary.test(body)) { shown.push({id:idOf(message,index,offset),author:'engine',author_name:'',body:summaryText(body),created_at:atOf(message),kind:'summary'}); continue; }
    if(message.display_kind==='hidden') continue;

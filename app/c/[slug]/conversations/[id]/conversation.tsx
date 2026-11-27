@@ -184,9 +184,12 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
   void readUsage();
   const readNow=await read(0);
   if(readNow.state==='found') {
-   if(readNow.messages.length) {
+   // A page of only tool calls draws nothing, and a page with messages after it is not the end: an empty page is the
+   // first page all the same, so the read goes on to the page before it (#875).
+   if(readNow.messages.length||readNow.hasMore) {
     const next={messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
-    pageRef.current=next; setPage(next); setMode('engine'); rememberPage(storage,next); setFailed(false);
+    pageRef.current=next; setPage(next); setMode('engine'); setFailed(false);
+    if(readNow.messages.length) rememberPage(storage,next);
    } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
    else if(oldRef.current()>0) setMode('fallback');
    else { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); setMode('engine'); }
@@ -207,17 +210,26 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
   return ()=>{ window.removeEventListener('focus',shown); document.removeEventListener('visibilitychange',shown); };
  },[company,conversation]);
  const more=async()=>{
-  const current=pageRef.current;
+  let current=pageRef.current;
   if(!current?.hasMore||olderRef.current) return false;
   olderRef.current=true; setOlder(true);
   try {
-   const readNow=await read(current.nextOffset);
-   if(readNow.state!=='found'||!pageRef.current) return false;
-   const seen=new Set(pageRef.current.messages.map(message=>message.id));
-   const carried=readNow.messages.filter(message=>!seen.has(message.id));
-   if(!carried.length) { const done={...pageRef.current,hasMore:false}; pageRef.current=done; setPage(done); return false; }
-   const next={messages:[...carried,...pageRef.current.messages],nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
-   pageRef.current=next; setPage(next); return true;
+   // A page can hold only tool calls, tool results or hidden messages: read on until a page has something to draw, or
+   // the history ends, so the messages before it are never lost. Twenty pages at a time; a later scroll goes on.
+   for(let step=0;step<20;step++) {
+    const readNow=await read(current.nextOffset);
+    if(readNow.state!=='found'||!pageRef.current) return false;
+    const seen=new Set(pageRef.current.messages.map(message=>message.id));
+    const carried=readNow.messages.filter(message=>!seen.has(message.id));
+    if(carried.length) {
+     current={messages:[...carried,...pageRef.current.messages],nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
+     pageRef.current=current; setPage(current); return true;
+    }
+    current={...pageRef.current,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
+    pageRef.current=current; setPage(current);
+    if(!readNow.hasMore) return false;
+   }
+   return false;
   } finally { olderRef.current=false; setOlder(false); }
  };
  return {page,mode,failed,older,more,usage,refresh:()=>void refreshRef.current(),hasMore:page?.hasMore??false};
@@ -245,6 +257,13 @@ export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,st
   if(held) { view.scrollTop=view.scrollHeight-held.height+held.top; preserve.current=null; }
   else if(stick.current) view.scrollTop=view.scrollHeight;
  },[shown.messages.length]);
+ // A newest page of only tool calls and results can be shorter than the viewport: read the older pages until the
+ // transcript scrolls or the history ends, so there is no history a person cannot reach (#875).
+ useLayoutEffect(()=>{
+  const view=box.current;
+  if(!view||!engine.page||engine.older||!engine.hasMore) return;
+  if(!engine.page.messages.length||view.scrollHeight<=view.clientHeight+80) void engine.more();
+ },[engine.page?.nextOffset,engine.hasMore,engine.older]); // eslint-disable-line react-hooks/exhaustive-deps
  const welcome=!shown.messages.length&&agent?.main;
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
