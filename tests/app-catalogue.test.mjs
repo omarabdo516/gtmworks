@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { apps, appByKey, appKey, appState, appConfig, knownApp, serverKeyOf } from '../lib/app-catalogue.mjs';
+import { apps, appByKey, appKey, appState, appConfig, knownApp, serverKeyOf, offeredApp, presetOf, customApp, openDesignGuide } from '../lib/app-catalogue.mjs';
 
 // #458: the apps a Company's Agents may use are the pinned Engine's whole catalogue, gtmworks's ready-made remote servers
 // and one card for the Owner's own server. Under ADR 0020 each app comes with every tool it lists, so the list holds no
@@ -83,4 +83,20 @@ test('every catalogue key has use, can and alias lines in English and Arabic', (
   assert.equal(typeof ar[key],'string',`ar ${key}`);
   assert.ok(en[key].trim()&&ar[key].trim(),key);
  }
+});
+
+// Decision 0079 (ADR 0035): Open Design is a preset of the own-tool card, never an app gtmworks connects itself. A command
+// server added under its name keeps its name and guide; any other server of that name is the Owner's own.
+test('Open Design is a preset of the command card, linking its guide, and no app source runs it', () => {
+  const entry = presetOf('open-design');
+  assert.equal(entry?.source, 'own');
+  assert.equal(entry.auth, 'command');
+  assert.equal(entry.docs, openDesignGuide);
+  assert.deepEqual(entry.preset, { command: 'node', args: ['/home/pn/open-design/apps/daemon/dist/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'] });
+  assert.equal(offeredApp('open-design'), undefined);
+  assert.equal(presetOf('own'), undefined);
+  assert.ok(!apps.some(app => !['engine', 'remote', 'own'].includes(app.source)), 'no other source kind');
+  assert.deepEqual([customApp('open-design', { command: true }).name, customApp('open-design', { command: true }).docs], ['Open Design', openDesignGuide]);
+  assert.deepEqual([customApp('open-design').name, customApp('open-design').docs], ['open-design', undefined]);
+  assert.equal(knownApp('Open Design')?.key, 'open-design', 'an Agent can ask for it by name');
 });

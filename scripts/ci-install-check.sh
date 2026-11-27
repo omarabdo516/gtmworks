@@ -1056,11 +1056,11 @@ engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps write
 scan_engines
 }
 
-# open-design: the Open Design app (#544, ADR 0025), an area of its own beside agents and agents-sandbox, which it would
-# take past their time limits (#553). The install, its first run and the second Company are made as the agents area makes them; the first Company's
-# main Agent then gets Open Design and makes a design from a Conversation. Then an Agent works a Card on the Engine's own
-# Kanban board in the work sandbox (spec #831, #833), moved here from agents-sandbox, which it took past its 12 minutes:
-# the area makes the first Company's second Agent for it as agents-sandbox does.
+# open-design: the area that carried the Open Design app (#544), which is no longer shipped (decision 0079, ADR 0035): an
+# Owner connects their own Open Design as a command server, which the agents area proves for any command (ADR 0024). It
+# now holds only the Engine's Kanban board proof (spec #831, #833), moved here from agents-sandbox, which it took past its
+# 12 minutes; #911 moves that proof to an area that stays and removes this one. The install, its first run and the second
+# Company are made as the agents area makes them, and the area makes the first Company's second Agent as agents-sandbox does.
 open_design() {
 cd "$root"
 area_setup
@@ -1076,80 +1076,6 @@ engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee p
 first=$(tail -n 1 prepare-profiles.log)
 [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
 sandbox=gtmworks-sandbox-first
-# The Open Design app (#544, ADR 0025): turned on for the Agent through the driver, then, after an Engine restart that
-# connects it, the Agent is asked for a design from a Conversation. Open Design's daemon in the sandbox draws it through
-# its `hermes` runtime, a Run on the Agent's design profile on the Engine over the socket the Engine's ssh session
-# forwards. While the call holds, the host's Docker lists both containers' processes: Open Design's MCP command and its
-# daemon are processes of the sandbox, and the Engine holds only the ssh client. The design's file is in the Agent's own
-# folder of the Company's work folder, and the sandbox holds no provider credential: the fake model's key, which is the
-# Engine's model access here, is in no process environment and no file of the sandbox.
-od_marker="open-design-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-engine_node "$engine_key" - open-design-add "$od_marker" < scripts/check-install-profiles.mjs \
-  || { docker exec "$sandbox" sh -c 'tail -n 40 /home/pn/.gtmworks/open-design/*.log' >&2 || true; fail 'Open Design is turned on for an Agent and Test lists its tools'; }
-docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
-engine_healthy "$engine_id" 60 || fail 'the Engine is healthy after its restart'
-engine_node "$engine_key" - open-design "$od_marker" < scripts/check-install-profiles.mjs > open-design-proof.log 2>&1 &
-od_check=$!
-od_file="/work/$first/open-design/projects/$od_marker/index.html"
-od_drawn=''
-for attempt in $(seq 1 600); do
-  docker exec "$sandbox" test -f "$od_file" 2> /dev/null && { od_drawn=yes; break; }
-  kill -0 "$od_check" 2> /dev/null || break
-  sleep 1
-done
-if [[ $od_drawn != yes ]]; then
-  wait "$od_check" || true
-  cat open-design-proof.log >&2
-  docker exec "$sandbox" sh -c 'tail -n 60 /home/pn/.gtmworks/open-design/*.log; ls -la /home/pn/.gtmworks' >&2 || true
-  fail 'an Agent makes a design with Open Design from a Conversation'
-fi
-sandbox_ps=$(docker exec "$sandbox" ps -eo comm=,args=) || fail 'list the work sandbox processes'
-engine_ps=$(docker exec "$engine_id" ps -eo comm=,args=) || fail 'list the Engine processes'
-grep -q '/opt/open-design/app/dist/cli\.js mcp --daemon-url' <<< "$sandbox_ps" \
-  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's MCP command is a process of the work sandbox"; }
-grep -q '/opt/open-design/app/dist/cli\.js --no-open' <<< "$sandbox_ps" \
-  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's daemon is a process of the work sandbox"; }
-if grep -q 'open-design/app\|dist/cli\.js' <<< "$engine_ps"; then printf '%s\n' "$engine_ps" >&2; fail 'no process of the Engine runs Open Design'; fi
-awk '$1 == "ssh" && /pn@sandbox/ && /open-design-mcp/ {found=1} END {exit !found}' <<< "$engine_ps" \
-  || { printf '%s\n' "$engine_ps" >&2; fail 'the Engine reaches Open Design over ssh into the sandbox'; }
-wait "$od_check" || { cat open-design-proof.log >&2; fail 'an Agent makes a design with Open Design and returns its file'; }
-cat open-design-proof.log
-docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's file is in the Agent's own folder of the Company's work folder"
-# No provider credential in the sandbox: the Engine's model key and the Agent's provider key are in no process environment
-# and no file there, no provider key variable is set for any process, and no sign-in or key file of the Engine's kind (no
-# auth.json, no .env, no Hermes home) is in the work user's home or the work folder, where a synced sign-in would land.
-# Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
-# could fail the pipe on a match. They run as the work user, who owns every process and file there: the sandbox drops every
-# capability, so its root reads none of the work user's private folders.
-# A scan that could not run never reads as one that found nothing (#634): the environments read must hold the scanning
-# shell's own, and grep's "no match" (1) is told apart from an error (2 or higher).
-sandbox_env=$(docker exec --user pn --env GTMWORKS_SCAN=read "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
-grep -qx 'GTMWORKS_SCAN=read' <<< "$sandbox_env" || fail "read the sandbox's process environments"
-env_found=0
-grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null || env_found=$?
-case $env_found in
-  0) fail 'no process of the sandbox holds a provider credential' ;;
-  1) ;;
-  *) fail "scan the sandbox's process environments" ;;
-esac
-# Only the files the work user can read are scanned, so a folder it may not open is no error, and a file that went between
-# the listing and the read is read again without it; any other grep error is one. A file the scan writes first with a
-# marker of its own must be found, so a listing that found nothing fails too.
-scan_marker="gtmworks-scan-$od_marker"
-sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'printf "%s\n" "$2" > /tmp/gtmworks-scan
-  find /home /work /tmp /run -type f -readable -print0 2> /dev/null | xargs -0r sh -c '"'"'
-    marker=$1; shift
-    grep -Il -e fake-model-key -e "$0" -e "$marker" -- "$@" 2> /dev/null; [ $? -le 1 ] && exit 0
-    for file; do [ ! -e "$file" ] || set -- "$@" "$file"; shift; done
-    [ $# -gt 0 ] || exit 0
-    grep -Il -e fake-model-key -e "$0" -e "$marker" -- "$@"; [ $? -le 1 ] || exit 255'"'"' "$1" "$2"
-  found=$?; rm -f /tmp/gtmworks-scan; exit "$found"' sh "sk-or-v1-$od_marker" "$scan_marker") \
-  || fail "scan the sandbox's files"
-grep -qx /tmp/gtmworks-scan <<< "$sandbox_files" || fail "scan the sandbox's files"
-sandbox_files=$(grep -vx /tmp/gtmworks-scan <<< "$sandbox_files" | sort -u) || true
-[[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
-sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
-[[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
 # The Engine's own Kanban board (spec #831, #833, ADR 0033 item 2), with settings alone and the image unmodified: every
 # Engine of the install, the new Company's included, holds the board worker's setting in its managed scope and the short
 # temp folder its ssh control socket needs (engine_board_settings). On the first
