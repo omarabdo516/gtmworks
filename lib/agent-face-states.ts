@@ -10,18 +10,18 @@ export type AgentFaceState='waiting'|'working'|'stuck'|'asleep'|'idle';
 export const faceStateWords={waiting:'agentStatusWaiting',working:'agentStatusWorking',stuck:'agentStatusStuck',asleep:'agentStatusAsleep',
  idle:'agentStatusIdle',done:'agentStatusDone',listening:'agentStatusListening',thinking:'agentStatusThinking'} as const satisfies Record<FaceState,string>;
 // Where a stuck Agent failed, so opening there clears it (seeAgentFailure): exactly one place.
-export type FailurePlace={conversation:string}|{channel:string}|{card:number};
+export type FailurePlace={conversation:string}|{channel:string};
 // One Agent's face for the reader: its state, whether it also works under a waiting state, its failure (when and where)
 // while it is stuck, and the times asleep is read from: its newest work of any kind, when it was made, and when the
 // reader last opened its chat.
 export type AgentFace={state:AgentFaceState,working:boolean,waiting:boolean,failedAt:string|null,failedIn:FailurePlace|null,
  lastWorkAt:string|null,createdAt:string|null,wokenAt:string|null};
 type Row={agent:string,state:AgentFaceState,working:boolean,waiting:boolean,failed_at:string|null,failed_conversation:string|null,
- failed_channel:string|null,failed_card:number|null,last_work_at:string|null,created_at:string|null,woken_at:string|null};
+ failed_channel:string|null,last_work_at:string|null,created_at:string|null,woken_at:string|null};
 
 const idle:AgentFace={state:'idle',working:false,waiting:false,failedAt:null,failedIn:null,lastWorkAt:null,createdAt:null,wokenAt:null};
 const placeOf=(row:Row):FailurePlace|null=>row.failed_conversation?{conversation:row.failed_conversation}
- :row.failed_channel?{channel:row.failed_channel}:row.failed_card!==null?{card:row.failed_card}:null;
+ :row.failed_channel?{channel:row.failed_channel}:null;
 
 // Every Agent the reader sees, from one agent_face_states call as the signed-in reader: the sidebar's poll and every page
 // that draws a face ask it. An Agent the read did not answer for (one hidden from the reader, or a read that failed,
@@ -34,7 +34,7 @@ export async function agentFaceStates(db:Database,company:string):Promise<{avail
  return {available:!error,of:agent=>faces.get(agent)??idle,states:Object.fromEntries([...faces].map(([agent,face])=>[agent,face.state]))};
 }
 
-// The reader opened a Conversation, a channel or a Card: a failure of an Agent there is seen by them, and its face stops
+// The reader opened a Conversation or a channel: a failure of an Agent there is seen by them, and its face stops
 // looking stuck for them until it fails again. Answers how many Agents it cleared, or null when the call failed.
 export async function seeAgentFailure(db:Database,company:string,place:FailurePlace):Promise<number|null> {
  const {data,error}=await db.rpc('see_agent_failure',{c:company,...place});

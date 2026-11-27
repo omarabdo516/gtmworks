@@ -1,11 +1,12 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(6);
 -- #754: the state read of #699, read once for all the reader's Agents (20270416000008), still finds a failure where only
--- some readers see it: a note Run on a Card, and a Handover leg in a Conversation or a channel. agent_face_states.sql
--- holds every other case. The Contributor (…03) is shown Maker, Helper, Planner and Scout; Hidden is hidden from them.
---  Maker    its note Run failed on its own Card: stuck to both
---  Helper   its note Run failed on Hidden's Card, which the Contributor does not see: stuck to the Owner only
+-- some readers see it: a Handover leg in a Conversation or a channel. A note Run on an old board's Card is no failure
+-- since the old board was switched off (#846): no one can open the old Card to see it. agent_face_states.sql holds every
+-- other case. The Contributor (…03) is shown Maker, Helper, Planner and Scout; Hidden is hidden from them.
+--  Maker    its note Run failed on its own old Card: stuck to no one
+--  Helper   its note Run failed on Hidden's old Card: stuck to no one
 --  Planner  Lead handed it work in the Owner's Conversation and its leg failed: stuck to the Owner only
 --  Scout    it handed work on in the general channel and its follow-up failed: stuck to both, who are both in it
 --  Lead     its last leg there completed: idle
@@ -54,10 +55,10 @@ select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select results_eq($$select * from pg_temp.states()$$,
- $$values ('Helper','stuck'),('Hidden','idle'),('Lead','idle'),('Maker','stuck'),('Planner','stuck'),('Scout','stuck')$$,
- 'the Owner sees every failure: two note Runs, a Handover leg in their Conversation, a follow-up in the general channel');
-select results_eq($$select failed_card from public.agent_face_states('10000000-0000-0000-0000-000000000001') where agent=(select agent from named where name='Helper')$$,
- $$values (-7542::bigint)$$,'a note Run''s failure names its Card');
+ $$values ('Helper','idle'),('Hidden','idle'),('Lead','idle'),('Maker','idle'),('Planner','stuck'),('Scout','stuck')$$,
+ 'the Owner sees every failure, a Handover leg in their Conversation and a follow-up in the general channel, and no note Run''s on an old Card');
+select results_eq($$select failed_at,failed_card from public.agent_face_states('10000000-0000-0000-0000-000000000001') where agent in (select agent from named where name in ('Helper','Maker'))$$,
+ $$values (null::timestamptz,null::bigint),(null,null)$$,'a note Run''s failure on an old Card names no failure and no Card');
 select results_eq($$select failed_conversation,failed_channel from public.agent_face_states('10000000-0000-0000-0000-000000000001') where agent=(select agent from named where name='Planner')$$,
  $$values ('b7540000-0000-0000-0000-000000000001'::uuid,null::uuid)$$,'a Handover leg''s failure names the Conversation it ran in');
 select results_eq($$select failed_conversation,failed_channel from public.agent_face_states('10000000-0000-0000-0000-000000000001') where agent=(select agent from named where name='Scout')$$,
@@ -67,18 +68,8 @@ select ok((select last_work_at >= now()-interval '21 minutes' from public.agent_
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select results_eq($$select * from pg_temp.states()$$,
- $$values ('Helper','idle'),('Lead','idle'),('Maker','stuck'),('Planner','idle'),('Scout','stuck')$$,
- 'the Contributor sees a failure on a Card and in a channel they see, not on a Card or in a Conversation they do not');
+ $$values ('Helper','idle'),('Lead','idle'),('Maker','idle'),('Planner','idle'),('Scout','stuck')$$,
+ 'the Contributor sees a failure in a channel they see, not in a Conversation they do not, and none on an old Card');
 
--- Opening the Card clears its failure for that reader only, and a person's note after it clears it for everyone.
-select is(public.see_agent_failure('10000000-0000-0000-0000-000000000001',card=>-7541),1,'the Contributor opens the Maker''s Card');
-select is((select state from pg_temp.states() where name='Maker'),'idle','and Maker is no longer stuck for them');
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is((select state from pg_temp.states() where name='Maker'),'stuck','but still for the Owner');
-reset role;
-insert into public.work_comments(id,company_id,card_id,body,author_id) overriding system value values
- (-7543,'10000000-0000-0000-0000-000000000001',-7542,'Never mind','20000000-0000-0000-0000-000000000001');
-set local role authenticated;
-select is((select state from pg_temp.states() where name='Helper'),'idle','a person''s note on the Card after the failure is followed');
 select * from finish();
 rollback;

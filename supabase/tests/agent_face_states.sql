@@ -14,7 +14,8 @@ select plan(29);
 --         board's Card of it waits too, which the old board's switch-off (#846) leaves out: Coder stays idle
 --  Numbers its last Run failed in the general channel and a person wrote there after it
 --  Critic  its Run failed in the Owner's Conversation, then it worked in the general channel
---  Old    its Run failed a day and a half ago
+--  Old    its Run failed a day and a half ago; then its note Run on an old board's Card failed an hour ago, which no
+--         one can open since the switch-off (#846), so it is stuck for no one
 --  New    made today, no work at all
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile,created_at)
  select ('a6990000-0000-0000-0000-0000000000'||lpad(n::text,2,'0'))::uuid,'10000000-0000-0000-0000-000000000001',
@@ -82,6 +83,13 @@ insert into public.work_cards(id,company_id,stage_id,title,agent_id,board_order)
  from named where name='Coder';
 insert into public.waiting_items(company_id,person_id,kind,title,card_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','mention','Coder card',-6992);
+-- Old's last Run is a note Run on that Card that failed: no one can open the old Card to see it any more, so it
+-- leaves Old stuck for no one (#846).
+insert into public.work_comments(id,company_id,card_id,body,author_id,created_at) overriding system value values
+ (-6992,'10000000-0000-0000-0000-000000000001',-6992,'@Old go','20000000-0000-0000-0000-000000000001',now()-interval '61 minutes');
+insert into public.note_runs(note_id,company_id,card_id,agent_id,agent_name,session,input,created_at,outcome,closed_at)
+ select -6992,'10000000-0000-0000-0000-000000000001',-6992,agent,'Old',gen_random_uuid(),'go',now()-interval '60 minutes','failed',now()-interval '59 minutes'
+ from named where name='Old';
 -- Hook's question in the Owner's own Conversation, and its Routine's last result.
 insert into public.waiting_items(company_id,person_id,kind,title,conversation_id)
  select '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','question','Which day?',id from chat where name='Hook';

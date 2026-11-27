@@ -1,7 +1,9 @@
 -- #846: the old board is switched off. Its approvals and the mentions in its Cards' notes are no rows of anyone's Waiting
 -- on you (lib/approval-queue.ts leaves them out, and nothing in the product answers them any more), so they no longer make
--- an Agent wait on the reader either. Only that test changes; the function keeps its signature, its grants and every
--- other part, so the previous app version reads it as before. No table is changed and no row is touched.
+-- an Agent wait on the reader either. A failed note Run on an old Card makes no Agent stuck either: no one can open the
+-- old Card to see it any more, which is what cleared it (see_agent_failure), so it would stay stuck a day for nothing.
+-- Only those two tests change; the function keeps its signature, its grants and every other part, so the previous app
+-- version reads it as before. No table is changed and no row is touched.
 create or replace function public.agent_face_states(c uuid) RETURNS TABLE(agent uuid, state text, working boolean, waiting boolean, failed_at timestamp with time zone, failed_conversation uuid, failed_channel uuid, failed_card bigint, last_work_at timestamp with time zone, created_at timestamp with time zone, woken_at timestamp with time zone)
     LANGUAGE plpgsql STABLE
     SET search_path TO ''
@@ -30,11 +32,15 @@ begin
   ) x where x.agent is not null and w.kind not in ('approval','mention'));
  return query
  select a.agent,
-  case when s.waiting then 'waiting' when a.working then 'working' when a.failed_at is not null then 'stuck'
+  case when s.waiting then 'waiting' when a.working then 'working' when f.failed_at is not null then 'stuck'
    when coalesce(a.created_at, '-infinity') < now() - interval '7 days'
     and coalesce(greatest(a.last_work_at, a.woken_at), '-infinity') < now() - interval '7 days' then 'asleep'
    else 'idle' end,
-  a.working, s.waiting, a.failed_at, a.failed_conversation, a.failed_channel, a.failed_card, a.last_work_at, a.created_at, a.woken_at
+  a.working, s.waiting, f.failed_at, f.failed_conversation, f.failed_channel, null::bigint, a.last_work_at, a.created_at, a.woken_at
  from public.agent_work(c) a
- cross join lateral (select a.agent = any(asking) waiting) s;
+ cross join lateral (select a.agent = any(asking) waiting) s
+ -- A failure on an old board's Card is no failure here.
+ cross join lateral (select case when a.failed_card is null then a.failed_at end failed_at,
+  case when a.failed_card is null then a.failed_conversation end failed_conversation,
+  case when a.failed_card is null then a.failed_channel end failed_channel) f;
 end $$;

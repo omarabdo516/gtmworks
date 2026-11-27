@@ -321,13 +321,17 @@ begin
   ) x where x.agent is not null and w.kind not in ('approval','mention'));
  return query
  select a.agent,
-  case when s.waiting then 'waiting' when a.working then 'working' when a.failed_at is not null then 'stuck'
+  case when s.waiting then 'waiting' when a.working then 'working' when f.failed_at is not null then 'stuck'
    when coalesce(a.created_at, '-infinity') < now() - interval '7 days'
     and coalesce(greatest(a.last_work_at, a.woken_at), '-infinity') < now() - interval '7 days' then 'asleep'
    else 'idle' end,
-  a.working, s.waiting, a.failed_at, a.failed_conversation, a.failed_channel, a.failed_card, a.last_work_at, a.created_at, a.woken_at
+  a.working, s.waiting, f.failed_at, f.failed_conversation, f.failed_channel, null::bigint, a.last_work_at, a.created_at, a.woken_at
  from public.agent_work(c) a
- cross join lateral (select a.agent = any(asking) waiting) s;
+ cross join lateral (select a.agent = any(asking) waiting) s
+ -- A failure on an old board's Card is no failure here.
+ cross join lateral (select case when a.failed_card is null then a.failed_at end failed_at,
+  case when a.failed_card is null then a.failed_conversation end failed_conversation,
+  case when a.failed_card is null then a.failed_channel end failed_channel) f;
 end $$;
 
 ALTER FUNCTION public.agent_face_states(c uuid) OWNER TO postgres;

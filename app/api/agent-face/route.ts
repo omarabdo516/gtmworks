@@ -6,7 +6,7 @@ import { uuid } from '@/lib/conversations';
 import { seeAgentFailure, wakeAgent, type FailurePlace } from '@/lib/agent-face-states';
 
 // The reader opened a place or an Agent's chat (#699; app/sidebar-live OpenedHere): a failure of an Agent in that
-// Conversation, channel or Card is seen by them (see_agent_failure), and the Agent whose chat they opened wakes for them
+// Conversation or channel is seen by them (see_agent_failure), and the Agent whose chat they opened wakes for them
 // (wake_agent). The page tells it once it has mounted; server rendering and link prefetch never call this. Both
 // functions run as the reader and answer only for what they see. `changed` says whether a face may look different now.
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -16,7 +16,6 @@ const placeOf=(value:unknown):FailurePlace|null|undefined=>{
  if(!place||typeof place!=='object'||Object.keys(place).length!==1) return undefined;
  if(typeof place.conversation==='string'&&uuid.test(place.conversation)) return {conversation:place.conversation};
  if(typeof place.channel==='string'&&uuid.test(place.channel)) return {channel:place.channel};
- if(Number.isSafeInteger(place.card)&&(place.card as number)>0) return {card:place.card as number};
  return undefined;
 };
 export async function POST(request:NextRequest) {
