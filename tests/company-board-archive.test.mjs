@@ -126,6 +126,33 @@ test('a restore the Engine refuses part way starts nothing, a stopped Card that 
  } finally { await fake.close(); }
 });
 
+test('a move out of the archive whose answer is lost keeps the Card with no Agent, and two restores of one Card at once restore it once', async () => {
+ const fake=await engineServing(company);
+ try {
+  const kanban=fake.settings.kanban;
+  const lost=kanban.task({title:'Meta campaign',status:'blocked',assignee:profileOf(ads)}).id;
+  const twice=kanban.task({title:'Google Ads numbers',status:'running',assignee:profileOf(ads)}).id;
+  kanban.run(twice,{profile:profileOf(ads)});
+  await archiveCompanyCards(reader(),{company,cards:[lost,twice],stop:true});
+  // The Engine made the move to ready, but its answer never came: the Card may be out of the archive, so its Agent is not
+  // given back, and no tick starts it.
+  kanban.loseAnswer=(id,body)=>id===lost&&body.status==='ready';
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[lost]}),{state:'restored',restored:[],left:[lost]});
+  kanban.loseAnswer=null;
+  kanban.dispatch();
+  assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===lost)),{status:'ready',assignee:null});
+  // Two restores at once (a double click, two tabs), the first one's first move slow: the second waits for it, reads the
+  // Card once it is done and leaves it.
+  let held=false;
+  fake.settings.managedDelay=(method,path)=>method==='PATCH'&&path.startsWith(`/api/plugins/kanban/tasks/${twice}`)&&!held?(held=true,300):null;
+  const [first,second]=await Promise.all([restoreCompanyCards(reader(),{company,cards:[twice]}),restoreCompanyCards(reader(),{company,cards:[twice]})]);
+  fake.settings.managedDelay=null;
+  assert.deepEqual([first.restored,second.restored].flat(),[twice]);
+  kanban.dispatch();
+  assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===twice)),{status:'scheduled',assignee:profileOf(ads)});
+ } finally { await fake.close(); }
+});
+
 test('a Card that waited for an archived Card no longer waits, and waits again once that Card is restored', async () => {
  const fake=await engineServing(company);
  try {

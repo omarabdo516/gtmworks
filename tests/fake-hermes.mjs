@@ -305,6 +305,9 @@ function kanbanBoard() {
   // Every PATCH /tasks/{id} body asked, in order (#842: a restore never leaves a Card ready with an Agent between moves).
   /** @type {{id:string,body:any}[]} */
   patches:[],
+  // A PATCH /tasks/{id} this names is made, then its answer is lost (the connection closed), as a network drop would.
+  /** @type {((id:string,body:any)=>boolean)|null} */
+  loseAnswer:null,
   // One dispatcher tick (dispatch_once): every `ready` Card with an Agent is claimed and its worker spawned, so it is
   // `running`; a Card with no Agent is never claimed. `ticks` counts the ticks asked for. The Engine's own tick runs
   // every 60 s; the fake runs one only when it is asked, through POST /dispatch or a test calling this. Each claim is a
@@ -1672,6 +1675,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if(typeof body.body==='string') task.body=body.body;
      settings.kanban.event(task.id,'edited',null);
     }
+    // An answer lost on the way (#842): the Engine made the change and the caller never hears it.
+    if(settings.kanban.loseAnswer?.(task.id,body)) return response.destroy();
     return send(response,200,{task});
    }
    if(kanbanTask&&request.method==='DELETE') return settings.kanban.delete(decodeURIComponent(kanbanTask[1]))?send(response,200,{ok:true}):send(response,404,{detail:'not found'});
