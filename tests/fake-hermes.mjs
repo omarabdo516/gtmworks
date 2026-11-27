@@ -580,6 +580,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // vendor's answer unless the server's config names a fixed client (tools/mcp_oauth.py, oauth.client_id), and a
   // vendor's own sign-in page by server name, which the fixed client's id is sent to.
   dcrRefused:/** @type {Set<string>} */(new Set()),appAuthPages:/** @type {Record<string,string>} */({}),
+  // A sign-in start that fails inside Hermes itself, with its own words (a fault of the Engine, not the vendor's).
+  appAuthFailure:/** @type {{status:number,detail:string}|null} */(null),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
   // The provenance `GET /api/skills` reports for a profile's own Skill (`hub`, `bundled` or `agent`), as `profile:name`;
@@ -1446,6 +1448,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if([...settings.appFlows.values()].some(flow=>flow.server===name&&flow.profile===scoped&&['authorization_required','callback_received'].includes(flow.status))) return send(response,409,{detail:`MCP OAuth for '${name}' is already in progress`});
      const id=randomUUID().replaceAll('-',''); const state=randomUUID();
      const redirect=servers[name].oauth?.redirect_uri||`http://${request.headers.host}/api/mcp/oauth/callback/${name}`;
+     if(settings.appAuthFailure) return send(response,settings.appAuthFailure.status,{detail:settings.appAuthFailure.detail});
      const client=typeof servers[name].oauth?.client_id==='string'?servers[name].oauth.client_id:null;
      if(!client&&settings.dcrRefused.has(name)) return send(response,200,{flow_id:id,server_name:name,status:'error',authorization_url:null,error:'Registration failed: 400 {"error":"invalid_client_metadata","error_description":"Dynamic registration is not available for this client."}'});
      settings.appFlows.set(id,{server:name,profile:scoped,status:'authorization_required',state,redirect});

@@ -421,9 +421,9 @@ test('a sign-in the vendor refused says its reason, naming the app, and closes t
   const opened = { opener: {}, location: { href: 'about:blank' }, close: vi.fn() };
   vi.stubGlobal('open', vi.fn(() => opened));
   answers([502, { error: 'appsRegistrationRefused' }]);
-  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('tiktok-ads')} text={text} failed={false}/>);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('meta-ads')} text={text} failed={false}/>);
   await screen.getByRole('button', { name: 'Connect', exact: true }).click();
-  await expect.element(screen.getByRole('alert')).toHaveTextContent('TikTok Ads refused the sign-in: it doesn’t let a new app register on its own. The install owner adds this install’s own TikTok Ads app ID.');
+  await expect.element(screen.getByRole('alert')).toHaveTextContent('Meta Ads refused the sign-in: it doesn’t let a new app register on its own. The install owner adds this install’s own Meta Ads app ID.');
   expect(screen.getByRole('alert').element().textContent).not.toMatch(/engine/i);
   expect((opened.close as Mock).mock.calls.length).toBe(1);
 });

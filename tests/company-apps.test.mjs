@@ -606,12 +606,11 @@ test('connecting a made server uses its target Agent\'s own address, and refuses
 
 // #914: Meta refuses OAuth dynamic client registration, so Meta Ads signs in only with the install's own Meta app.
 const metaGuide='https://github.com/omarabdo516/gtmworks/blob/main/docs/connect-meta-ads.md';
+const setEnv=values=>{ for(const [name,value] of Object.entries(values)) { if(value===undefined) delete process.env[name]; else process.env[name]=value; } };
 const withMetaClient=async(values,run)=>{
- const before={id:process.env.META_ADS_CLIENT_ID,secret:process.env.META_ADS_CLIENT_SECRET};
- for(const [name,value] of [['META_ADS_CLIENT_ID',values.id],['META_ADS_CLIENT_SECRET',values.secret]]) { if(value===undefined) delete process.env[name]; else process.env[name]=value; }
- try { return await run(); } finally {
-  for(const [name,value] of [['META_ADS_CLIENT_ID',before.id],['META_ADS_CLIENT_SECRET',before.secret]]) { if(value===undefined) delete process.env[name]; else process.env[name]=value; }
- }
+ const before={META_ADS_CLIENT_ID:process.env.META_ADS_CLIENT_ID,META_ADS_CLIENT_SECRET:process.env.META_ADS_CLIENT_SECRET};
+ setEnv({META_ADS_CLIENT_ID:values.id,META_ADS_CLIENT_SECRET:values.secret});
+ try { return await run(); } finally { setEnv(before); }
 };
 
 test('without the install\'s Meta app, Meta Ads says so and its connect never reaches the Engine', async () => {
@@ -659,16 +658,22 @@ test('a sign-in the vendor refuses is answered with its reason and logged once w
  const fake=await engineServing(company);
  try {
   makeProfile(fake,companyProfile(company));
-  // The vendor refuses even the install's client: Hermes's start fails with the vendor's answer.
+  // A vendor gtmworks names no install client for refuses registration: nothing can connect it here yet, and it says so.
   fake.settings.dcrRefused.add('tiktok-ads');
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const lines=[];
   const refused=await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'tiktok-ads',action:'connect',log:line=>lines.push(line)});
-  assert.deepEqual(refused,{status:502,body:{error:'appsRegistrationRefused'}});
+  assert.deepEqual(refused,{status:502,body:{error:'appsRegistrationUnsupported'}});
   assert.equal(lines.length,1);
   const line=JSON.parse(lines[0]);
   assert.deepEqual([line.event,line.company,line.agent,line.app,line.reason],['app_sign_in_failed',company,lead,'tiktok-ads','registration']);
   assert.match(line.message,/Registration failed: 400 .*Dynamic registration is not available/);
   assert.equal(omar.calls.some(([name])=>name==='start_app_sign_in'),false,'no sign-in is kept');
+  // Meta, which names the install's client, refusing it all the same: the install owner's ID is the fix it names.
+  fake.settings.appAuthFailure={status:502,detail:'Registration failed: 400 invalid_client_metadata'};
+  await withMetaClient({id:'1234567890'},async()=>{
+   assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'meta-ads',action:'connect',log:line=>lines.push(line)}),{status:502,body:{error:'appsRegistrationRefused'}});
+  });
+  assert.equal(lines.length,2);
  } finally { await fake.close(); }
 });
