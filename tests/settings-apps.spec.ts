@@ -172,19 +172,21 @@ test('Meta Ads signs in with the install\'s own Meta app: the window goes to Met
  fake.settings.dcrRefused.add('meta-ads');
  fake.settings.appAuthPages['meta-ads']='https://www.facebook.example/v27.0/dialog/oauth';
  await context.route(/^https:\/\/www\.facebook\.example\//,route=>route.fulfill({status:200,contentType:'text/html',body:'<title>Meta</title>'}));
- const answers:string[]=[];
- page.on('response',response=>{ if(response.url().includes('/api/company-apps')) void response.text().then(body=>answers.push(body),()=>{}); });
- await signIn(page,'omar@example.com','/c/rs-learning/home');
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await page.goto('/c/rs-learning/settings?section=apps&app=meta-ads');
  await expect(page.locator('#sov-h')).toHaveText('Connect Meta Ads');
  await expect(page.locator('#app-client-needed')).toHaveCount(0);
+ // The connect's own answer and the apps list, each read whole: an answer that cannot be read fails the check.
+ const connected=page.waitForResponse(response=>response.url().includes('/api/company-apps')&&response.request().method()==='POST');
  const [vendor]=await Promise.all([page.waitForEvent('popup'),page.getByRole('button',{name:'Connect',exact:true}).click()]);
+ const answers=[await (await connected).text(),await (await page.request.get(`/api/company-apps?company=${company}`)).text()];
  await expect(vendor).toHaveURL(/^https:\/\/www\.facebook\.example\/v27\.0\/dialog\/oauth\?client_id=e2e-meta-app-id&/);
  expect(servers()['meta-ads'].oauth).toEqual({redirect_uri:`${appOrigin}/api/apps/callback/meta-ads`,client_id:'e2e-meta-app-id',client_secret:'e2e-meta-app-secret'});
  await page.locator('#app-wait-cancel').click();
  await expect(page.locator('#app-wait-cancel')).toHaveCount(0);
  await vendor.close().catch(()=>{});
- expect(answers.length).toBeGreaterThan(0);
+ expect(answers[0]).toContain('client_id=e2e-meta-app-id');
+ expect(answers[1]).toContain('"key":"meta-ads"');
  expect(answers.join('\n')).not.toContain('e2e-meta-app-secret');
  expect(await page.content()).not.toContain('e2e-meta-app-secret');
  delete fake.settings.profiles.get(profile)!.config.mcp_servers['meta-ads'];

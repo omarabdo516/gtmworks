@@ -675,5 +675,10 @@ test('a sign-in the vendor refuses is answered with its reason and logged once w
    assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'meta-ads',action:'connect',log:line=>lines.push(line)}),{status:502,body:{error:'appsRegistrationRefused'}});
   });
   assert.equal(lines.length,2);
+  // A fault of the Engine's own is no vendor's refusal: the browser reads it as the Engine's, and it is logged once too.
+  fake.settings.appAuthFailure={status:500,detail:'Internal error at /opt/data/mcp'};
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'tiktok-ads',action:'connect',log:line=>lines.push(line)}),{status:502,body:{error:'appsFailed'}});
+  assert.equal(lines.length,3);
+  assert.deepEqual([JSON.parse(lines[2]).app,JSON.parse(lines[2]).reason,JSON.parse(lines[2]).message],['tiktok-ads','engine','Internal error at /opt/data/mcp']);
  } finally { await fake.close(); }
 });

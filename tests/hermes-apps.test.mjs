@@ -467,8 +467,14 @@ test('a sign-in the vendor refuses says why, and hands Hermes\'s words on only f
   assert.ok(refused.detail.length<=400);
   // A fault of Hermes's own is the Engine's, never blamed on the vendor; the vendor's refusal in its words still is.
   fake.settings.appAuthFailure={status:500,detail:'Internal error at /opt/data/mcp'};
-  assert.deepEqual(await startAppSignIn(target,'tiktok-ads',back('tiktok-ads')),{state:'failed',flow:null,url:null});
+  assert.deepEqual(await startAppSignIn(target,'tiktok-ads',back('tiktok-ads')),{state:'failed',flow:null,url:null,detail:'Internal error at /opt/data/mcp'});
   fake.settings.appAuthFailure={status:502,detail:'Registration failed: 400 invalid_client_metadata'};
+  assert.equal((await startAppSignIn(target,'tiktok-ads',back('tiktok-ads'))).reason,'registration');
+  // Only an explicit refusal is the vendor's: a registration that timed out is a fault, with Hermes's words for the log.
+  fake.settings.appAuthFailure={status:502,detail:'Dynamic client registration request timed out'};
+  assert.deepEqual(await startAppSignIn(target,'tiktok-ads',back('tiktok-ads')),{state:'failed',flow:null,url:null,detail:'Dynamic client registration request timed out'});
+  // The reason is read from the whole answer, before its words are bounded.
+  fake.settings.appAuthFailure={status:502,detail:`${'x'.repeat(450)} Registration failed: 400 invalid_client_metadata`};
   assert.equal((await startAppSignIn(target,'tiktok-ads',back('tiktok-ads'))).reason,'registration');
  } finally { await fake.close(); }
 });

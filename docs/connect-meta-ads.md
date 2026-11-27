@@ -39,7 +39,8 @@ docker compose --env-file .env.install -f docker-compose.install.yml up -d web
 
 Only the web app reads them, on the server. The ID and the secret are written into the Engine's config for the Meta Ads
 server (`mcp_servers.meta-ads.oauth.client_id` / `client_secret`, as Hermes's own dashboard writes them) when someone
-connects it; they never reach a browser, a log or the database.
+connects it. The App ID is public by design: it is part of Meta's sign-in address, so the sign-in window shows it. The
+App secret never reaches a browser, a log or the database.
 
 ## 3. Connect
 
