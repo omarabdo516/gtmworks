@@ -10,9 +10,12 @@ create table public.install_owner (
 alter table public.install_owner enable row level security;
 revoke all on public.install_owner from public, anon, authenticated, service_role;
 
--- An install set up before this: first-run made the install's first account, so the earliest person is the install owner.
+-- An install set up before this kept no record of which account first-run made, so it is read from what is there:
+-- first-run made the install's first account and made it an Administrator, so the install owner is the earliest account
+-- that is still an active Administrator of a Company. An earlier sign-in account first-run left behind and a later
+-- invitation brought in at another Role is passed over; who the install owner is can be changed later (#917).
 insert into public.install_owner(person_id)
-select p.id from public.people p join auth.users u on u.id=p.id order by u.created_at, u.id limit 1;
+select p.id from public.people p join auth.users u on u.id=p.id where exists(select 1 from public.members m where m.person_id=p.id and m.role='owner' and m.removed_at is null) order by u.created_at, u.id limit 1;
 
 create function public.is_install_owner() returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.install_owner where person_id=auth.uid());
