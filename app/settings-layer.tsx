@@ -1,4 +1,8 @@
 import { redirect } from 'next/navigation';
+import { after } from 'next/server';
+import { headers } from 'next/headers';
+import { settingsRenderKind } from '@/lib/diagnostics.mjs';
+import { logSettingsOpen, markSettingsOpen, startSettingsOpen } from '@/lib/settings-open-timing';
 import { signedInUser, supabase } from '@/lib/supabase';
 import SettingsOverlay from './settings-overlay';
 import { OnSettingsAddress } from './settings-address';
@@ -12,6 +16,7 @@ export type SettingsQuery = Parameters<typeof SettingsOverlay>[0]['query'];
 // was on, read with their own session. A Company they cannot read draws nothing here: the page says it was not found.
 // It is drawn beside the page, outside its Shell, so it reads the Company's looks for its own faces once (#697).
 export default async function SettingsLayer({slug,query}:{slug:string,query:SettingsQuery}) {
+ const timing=startSettingsOpen();
  const db=await supabase(); const {data:{user}}=await signedInUser();
  // Signed out (a session that ran out while a page stayed open, a link): sign in, then back to these Settings with their
  // own state (section, agent, period) kept.
@@ -24,5 +29,9 @@ export default async function SettingsLayer({slug,query}:{slug:string,query:Sett
   db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
   companyLooks(db,company.id),
  ]);
+ markSettingsOpen('frame');
+ // Each step's time, written once the response has gone (docs/production-logs.md: settings_opened).
+ const render=settingsRenderKind(await headers(),slug,query);
+ after(()=>logSettingsOpen(timing,company.id,render));
  return <OnSettingsAddress slug={slug}><LooksProvider looks={looks} change={membership?.role==='owner'?{company:company.id,slug,save:changeAgentLook,reset:resetAgentLook}:null}><SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={query}/></LooksProvider></OnSettingsAddress>;
 }

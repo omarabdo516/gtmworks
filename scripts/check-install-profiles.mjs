@@ -65,7 +65,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
-const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSettingsDiffer}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
+const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSettingsDiffer,isMainAgentProfile,mainAgentToolset}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/engine/agents.mjs`);
 const {writeProof,writeName,stepClock}=await import(`${process.cwd()}/lib/install-proof.mjs`);
@@ -108,7 +108,9 @@ const checkProfile=async(engine,profile)=>{
  const toolsets=await (await fetch(`${engine.address}/p/${encodeURIComponent(profile)}/v1/toolsets`,{headers:{Authorization:`Bearer ${engine.key}`}})).json();
  const enabled=toolsets.data.filter(toolset=>toolset.enabled).map(toolset=>toolset.name);
  assert.deepEqual(forbiddenOf(enabled),[],`${profile} offers no tool no Agent gets`);
- assert.deepEqual([...enabled].sort(),[...fixedToolsets()].sort(),`${profile} offers exactly the fixed set`);
+ // The main Agent's profile also offers its plugin's tool (#884); no other profile does.
+ const plugin=isMainAgentProfile(profile)?[mainAgentToolset]:[];
+ assert.deepEqual([...enabled].sort(),[...fixedToolsets(),...plugin].sort(),`${profile} offers exactly the fixed set${plugin.length?' and the main Agent\'s tool':''}`);
  assert.equal(profileSettingsDiffer(config,profile),false,`${profile} starts in its own folder and needs no approval for code`);
 };
 const spaceOf=entry=>`cs-${entry.company.replaceAll('-','')}`;

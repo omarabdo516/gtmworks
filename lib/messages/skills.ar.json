@@ -21,6 +21,6 @@
   "disableSkill": "تعطيل",
   "enableSkillFor": "تفعيل {0} لـ{1}",
   "disableSkillFor": "تعطيل {0} لـ{1}",
-  "skillProblemNotAllowed": "المالك أو المدير بس اللي يقدر يغيّر المهارات",
+  "skillProblemNotAllowed": "الأدمن أو المدير بس اللي يقدر يغيّر المهارات",
   "skillProblemSecret": "شكلها فيها باسورد أو مفتاح أو توكن، والوكيل ده هيقراها في كل شغل"
 }

@@ -206,7 +206,7 @@ test('request_agent reads its arguments as create_agent does, and asks the datab
  assert.deepEqual(fake.agentReads,[],'the Engine is not asked: nothing is made');
  const specs=toolSpecTexts();
  assert.deepEqual(JSON.parse(specs.request_agent).parameters,JSON.parse(specs.create_agent).parameters,'the model gives the same arguments to either');
- assert.match(JSON.parse(specs.request_agent).description,/Nothing is made until the Owner says yes/);
+ assert.match(JSON.parse(specs.request_agent).description,/Nothing is made until an Administrator says yes/);
 });
 
 // #696 (ADR 0027): Lead may give the Agent it makes or requests a temperament, from the six it is told what each suits.

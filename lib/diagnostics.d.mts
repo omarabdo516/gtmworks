@@ -8,6 +8,8 @@ export function senderLimiter(options?: { perSender?: number; ceiling?: number; 
 export function clientErrorResponse(request: Request, options?: { sender?: string; write?: Write; env?: Env; allowed?: (sender: string) => boolean }): Promise<Response>;
 export type RenderKind = 'open' | 'prefetch' | 'refresh';
 export function chatOpenLine(open: { company: string; conversation: string; steps: Record<string, number>; render?: RenderKind }, options?: { now?: Date }): string;
+export function settingsOpenLine(open: { company: string; section: string; steps: Record<string, number>; render?: RenderKind }, options?: { now?: Date }): string;
+export function settingsRenderKind(headers: { get(name: string): string | null }, slug: string, query: Record<string, string | undefined>): RenderKind;
 export function renderKind(headers: { get(name: string): string | null }, path: string): RenderKind;
 export type Wait = { event: 'message_drawn' | 'run_started' | 'reply_drawn'; company: string; conversation: string; ms: number; from?: 'stream' | 'stored' };
 export function waitLine(wait: Wait, options?: { now?: Date }): string | null;

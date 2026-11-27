@@ -1,0 +1,7 @@
+{
+  "name": "gtmworks",
+  "label": "gtmworks",
+  "description": "gtmworks tells the main Agent's tool which Conversations are an Owner's.",
+  "version": "1.0.0",
+  "api": "plugin_api.py"
+}

@@ -62,6 +62,8 @@ async function sheetMatches(page:Page,section:Awaited<ReturnType<typeof catalogu
  await page.locator('#btn-apps').click();
  await expect(sheetOf(page).locator('#apps-q')).toBeFocused();
  await expect(sheetOf(page).locator('.app-card')).toHaveCount(34);
+ // The list shows at once and each app that is on reads "Checking…" until its own test answers (#898).
+ await expect(sheetOf(page).locator('.app__state',{hasText:'Checking…'})).toHaveCount(0);
  expect(await catalogueOf(sheetOf(page))).toEqual(section);
 }
 
@@ -231,7 +233,7 @@ test('a Viewer opens the sheet and reads the states with no button',async({brows
   await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
   await viewer.locator('#btn-apps').click();
   const sheet=sheetOf(viewer);
-  await expect(sheet.locator('.apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
+  await expect(sheet.locator('.apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by an Administrator only.');
   await expect(card(viewer,'Canva').locator('.app__state')).toHaveText('Not connected');
   await expect(sheet.locator('.app-card').getByRole('button')).toHaveCount(0);
   await noEngineText(viewer,'.apps-sheet');
@@ -245,7 +247,7 @@ test('a Manager reads the states with no button, and the server refuses their co
   await signIn(manager,'manager@example.com','/c/rs-learning/home');
   await manager.goto('/c/rs-learning/settings?section=apps');
   // In Settings the line is the title's help (#614), behind its "i".
-  await expect(manager.locator('#apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
+  await expect(manager.locator('#apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by an Administrator only.');
   await expect(card(manager,'Canva').locator('.app__state')).toHaveText('Not connected');
   await expect(manager.locator('.app-card').getByRole('link')).toHaveCount(0);
   const refused=await manager.request.post('/api/company-apps',{data:{company,app:'canva',action:'connect'}});

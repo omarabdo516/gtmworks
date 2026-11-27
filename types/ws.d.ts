@@ -1,4 +1,4 @@
-// The part of the `ws` client tests/agent-screen.spec.ts uses to open the Screen's stream as a signed-in person (#713): `ws`
+// The part of the `ws` client tests/agent-screen.spec.ts and the dashboard's specs use to open a socket as a signed-in person (#713, #869, #870): `ws`
 // ships no typings, and Node's own WebSocket sends no cookie or Origin of a caller's choosing.
 declare module 'ws' {
   import type { IncomingMessage } from 'node:http';
@@ -7,6 +7,7 @@ declare module 'ws' {
     send(data: string | Uint8Array): void;
     close(code?: number): void;
     terminate(): void;
+    on(event: 'open', listener: () => void): this;
     on(event: 'message', listener: (data: Buffer, binary: boolean) => void): this;
     on(event: 'close', listener: (code: number) => void): this;
     on(event: 'unexpected-response', listener: (request: unknown, response: IncomingMessage) => void): this;

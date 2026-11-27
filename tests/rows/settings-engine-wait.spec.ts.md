@@ -1,0 +1,6 @@
+| `settings-engine-wait.spec.ts` | Settings never waits on the Engine (#898, ADR 0030): with the fake Engine holding every management read four seconds (just under a call's five-second deadline), an Agent's page, Company, Models, Usage, Learning, Routines, Company knowledge and Apps each draw what gtmworks stores with a first byte under half a second, say «Reading…» for each part the Engine backs and fill it in when its read lands, and the page never has more than four Engine reads open at once; an Agent's page fills its About from the Engine and the server writes its `settings_opened` line. | 90 s | settings-part-queue.test.mjs (the cap of four), components/settings-models-parts.test.tsx (a part's states) | new |
+
+## Cases
+
+| `settings-engine-wait.spec.ts` "with every management read held four seconds, each Settings page draws at once and fills in when the Engine answers" | stays | Only the whole app with a held fake Engine shows a page drawn before its Engine reads land, and how many of them a page opens at once. |
+| `settings-engine-wait.spec.ts` "an open of an Agent's page fills in its About from the Engine, and the server writes its settings_opened line" | stays | The log line is written by the server once the response has gone; only the running app writes it. |

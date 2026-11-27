@@ -14,7 +14,7 @@ const hex=company.replaceAll('-','');
 const space=`cs-${hex}`; const co=`co-${hex}`;
 const line='This company has no AI subscription or model key connected yet, so its agents can’t reply.';
 const connect='Connect one in Providers';
-const askOwner='Ask the company’s Owner to connect one in Settings.';
+const askOwner='Ask an Administrator of the company to connect one in Settings.';
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.describe.configure({mode:'serial'});

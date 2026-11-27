@@ -77,7 +77,7 @@ test('the Owner sets the language to Automatic once and every profile of the Com
 test('a Manager reads the Voice page with no control and the server refuses their save; a Contributor has no Voice page',async({page})=>{
  await voicePage(page,'manager@example.com');
  const overlay=page.getByRole('dialog',{name:'Settings'});
- await expect(overlay.getByText('Only the Owner changes these.')).toBeVisible();
+ await expect(overlay.getByText('Only an Administrator changes these.')).toBeVisible();
  await expect(overlay.locator('#vc-language-row')).toContainText('Arabic');
  await expect(overlay.getByRole('combobox')).toHaveCount(0);
  const refused=await page.request.post('/api/voice-settings',{data:{company,language:''}});

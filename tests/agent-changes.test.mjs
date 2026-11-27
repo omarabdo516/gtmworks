@@ -66,7 +66,7 @@ test('arguments that do not read are ignored, and nothing is asked of the databa
   assert.deepEqual(await call(args),{state:'ignored'},JSON.stringify(args)?.slice(0,60));
  assert.deepEqual([rpcs,engineCalls],[[],[]]);
  const {description,parameters}=JSON.parse(toolSpecTexts().propose_change);
- assert.match(description,/Nothing changes until the Owner approves it/);
+ assert.match(description,/Nothing changes until an Administrator approves it/);
  assert.match(description,/ask_for_app/,'an app is asked for with its own tool');
  assert.deepEqual(parameters.properties.change.enum,['model','instructions','toolset','setting']);
 });

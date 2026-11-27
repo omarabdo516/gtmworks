@@ -53,7 +53,7 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
  await expect(row.getByRole('switch',{name:'مراجع · Lead'})).toHaveCount(0);
  const toggle=row.getByRole('switch',{name:'مراجع · Meta Ads'});
  await expect(toggle).toHaveAttribute('aria-checked','false');
- await expect(page.getByRole('dialog').locator('.ta-table tbody tr').filter({hasText:'Owner'}).getByText('The Owner sees every agent')).toBeVisible();
+ await expect(page.getByRole('dialog').locator('.ta-table tbody tr').filter({hasText:'Administrator'}).getByText('Administrators see every agent')).toBeVisible();
  await toggle.click();
  await expect(page.locator('.toast')).toHaveText('Meta Ads now shows for مراجع');
  await expect(toggle).toHaveAttribute('aria-checked','true');
@@ -137,7 +137,7 @@ test('a Company worked alone opens the narrower dialog: the Owner’s row, the i
  expect(detail).toBe('Just you for now · invite a member');
  await expect(dialog.getByText(/It’s just you in this workspace for now/)).toBeVisible();
  await expect(dialog.getByText('(you)')).toBeVisible();
- await expect(dialog.getByText('Owner · You see every agent and approve everything')).toBeVisible();
+ await expect(dialog.getByText('Administrator · You see every agent and approve everything')).toBeVisible();
  await expect(dialog.getByLabel('Member’s email')).toBeFocused();
  await expect(dialog.getByText('As soon as someone you invite joins, channels and per-member agents turn on by themselves.')).toBeVisible();
  const box=await page.locator('dialog.team-dlg--solo').boundingBox();
