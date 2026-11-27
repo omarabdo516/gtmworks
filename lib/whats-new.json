@@ -2,8 +2,8 @@
  {
   "issue": 834,
   "date": "2026-11-27",
-  "en": { "title": "The board is your Engine's own Kanban board", "body": "The board now shows the Cards your Agents work on the Company's Engine, and it updates live as they move; make a Card and give it to an Agent, a Member or nobody, open it to see everything the Engine keeps about it, comment, answer its Agent or stop its work, and Waiting on you and the bell show the Cards that wait on you." },
-  "ar": { "title": "اللوحة بقت لوحة كانبان بتاعة المحرّك", "body": "اللوحة دلوقتي بتبيّن البطاقات اللي وكلاءك بيشتغلوا عليها على محرّك الشركة، وبتتحدّث لوحدها وهي بتتحرّك؛ اعمل بطاقة وادّيها لوكيل أو لعضو أو لا لحد، وافتحها تشوف كل اللي المحرّك شايله عنها، وعلّق، وردّ على وكيلها أو وقّف شغله، و«مستنيك» والجرس بيبيّنوا البطاقات اللي مستنياك." }
+  "en": { "title": "The board is your Engine's own Kanban board", "body": "The board now shows the Cards your Agents work on the Company's Engine, and it updates live as they move; make a Card and give it to an Agent, a Member or nobody, open it to see everything the Engine keeps about it, comment, answer its Agent or stop its work, and Waiting on you and the bell show the Cards that wait on you; the list and the calendar show the same Cards." },
+  "ar": { "title": "اللوحة بقت لوحة كانبان بتاعة المحرّك", "body": "اللوحة دلوقتي بتبيّن البطاقات اللي وكلاءك بيشتغلوا عليها على محرّك الشركة، وبتتحدّث لوحدها وهي بتتحرّك؛ اعمل بطاقة وادّيها لوكيل أو لعضو أو لا لحد، وافتحها تشوف كل اللي المحرّك شايله عنها، وعلّق، وردّ على وكيلها أو وقّف شغله، و«مستنيك» والجرس بيبيّنوا البطاقات اللي مستنياك؛ والقائمة والتقويم بيبيّنوا نفس البطاقات." }
  },
  {
   "issue": 839,
