@@ -25,7 +25,8 @@ const reader=(seen=agents,{role='owner',rows=[]}={})=>({rpc:async name=>{
  return {data:null,error:{message:`unexpected ${name}`}};
 },from:table=>{
  // The rows beside the Cards, and the active Members whom a Card may wait on (#841): the reader alone.
- const answer=table==='kanban_cards'?rows.map(task_id=>({task_id,assignee:null,publish_on:null,made_by:me,people:null}))
+ const answer=table==='kanban_cards'?rows.map(row=>typeof row==='string'?{task_id:row,assignee:null,publish_on:null,made_by:me,people:null}
+  :{task_id:row.id,assignee:row.member,publish_on:null,made_by:me,people:{name:'Mona'}})
   :table==='members'?[{person_id:me,role,people:{name:'Reader'}}]:null;
  const read={select:()=>read,eq:()=>read,not:()=>read,is:()=>read,then:(done,failed)=>Promise.resolve(answer?{data:answer,error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
  return read;
@@ -182,7 +183,7 @@ test('a move out of the archive whose answer is lost keeps the Card with no Agen
  } finally { await fake.close(); }
 });
 
-test('a Card with no Agent fails closed: during a restore a Member who cannot see its Agent gets nothing, row or no row, and an idea Card with a row shows as before', async () => {
+test('a Card with no Agent fails closed: during a restore a Member who cannot see its Agent gets nothing, whatever its row says, and an idea Card with a row shows as before', async () => {
  const fake=await engineServing(company);
  try {
   const kanban=fake.settings.kanban;
@@ -191,8 +192,10 @@ test('a Card with no Agent fails closed: during a restore a Member who cannot se
   const idea=kanban.task({title:'Reel: a day in an accountant\'s life',status:'triage'}).id;
   const loose=kanban.task({title:'Card an Agent made for nobody',status:'todo'}).id;
   // The Contributor sees neither Seo nor Seo's Card; a Card with no Agent shows to them only with its row. Seo's Card has
-  // a row too, as one the board made for Seo has (lib/company-board-cards.mjs makeCompanyCard): a row alone is no leave.
-  const contributor=(rows=[idea,secret])=>reader(agents,{role:'contributor',rows});
+  // a row too, as one the board made for Seo has (lib/company-board-cards.mjs makeCompanyCard), and it still names the
+  // Member the Card was given before Seo, as a row whose update failed after the Agent was given would: a row alone is
+  // no leave, whatever it says.
+  const contributor=(rows=[idea,{id:secret,member:me}])=>reader(agents,{role:'contributor',rows});
   const shown=async db=>(await readCompanyBoard(db,{company,me})).cards.map(card=>card.id);
   assert.deepEqual(await shown(contributor()),[idea]);
   assert.deepEqual((await shown(reader(everyone,{rows:[idea]}))).sort(),[secret,idea,loose].sort());
