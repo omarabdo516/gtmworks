@@ -158,7 +158,7 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
  const [failed,setFailed]=useState(false);
  const [older,setOlder]=useState(false);
  const [usage,setUsage]=useState<ConversationRecord['usage']>(null);
- const pageRef=useRef<EnginePage|null>(null); const modeRef=useRef(mode); const olderRef=useRef(false); const oldRef=useRef(hasOldMessages);
+ const pageRef=useRef<EnginePage|null>(null); const modeRef=useRef(mode); const olderRef=useRef(false); const oldRef=useRef(hasOldMessages); const lastAsk=useRef(0);
  useEffect(()=>{ pageRef.current=page; },[page]);
  useEffect(()=>{ modeRef.current=mode; },[mode]);
  useEffect(()=>{ oldRef.current=hasOldMessages; },[hasOldMessages]);
@@ -187,9 +187,15 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    // A page of only tool calls draws nothing, and a page with messages after it is not the end: an empty page is the
    // first page all the same, so the read goes on to the page before it (#875).
    if(readNow.messages.length||readNow.hasMore) {
-    const next={messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
+    // A refresh keeps the pages the person scrolled back through: the newest page is merged into what is drawn, its
+    // duplicates by id dropped, and the older cursor and its history kept (#875).
+    const current=pageRef.current;
+    const fresh=new Set(readNow.messages.map(message=>message.id));
+    const kept=current?current.messages.filter(message=>!fresh.has(message.id)):[];
+    const older=!!current&&current.nextOffset>readNow.nextOffset;
+    const next={messages:[...kept,...readNow.messages],nextOffset:Math.max(readNow.nextOffset,current?.nextOffset??0),hasMore:older?current!.hasMore:readNow.hasMore};
     pageRef.current=next; setPage(next); setMode('engine'); setFailed(false);
-    if(readNow.messages.length) rememberPage(storage,next);
+    if(readNow.messages.length) rememberPage(storage,{messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore});
    } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
    else if(oldRef.current()>0) setMode('fallback');
    else { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); setMode('engine'); }
@@ -203,8 +209,14 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
  // The last good read this browser kept shows at once, then a read asks the Engine again (and a tab that comes back
  // asks once more). A first read that fails or finds no messages leaves the old record in charge.
  useEffect(()=>{
+  lastAsk.current=Date.now();
   void refreshRef.current();
-  const shown=()=>{ if(document.visibilityState==='visible') void refreshRef.current(); };
+  // A tab that comes back asks once, whichever of the two events arrives first (they fire together).
+  const shown=()=>{
+   if(document.visibilityState!=='visible') return;
+   const now=Date.now(); if(now-lastAsk.current<1000) return;
+   lastAsk.current=now; void refreshRef.current();
+  };
   window.addEventListener('focus',shown);
   document.addEventListener('visibilitychange',shown);
   return ()=>{ window.removeEventListener('focus',shown); document.removeEventListener('visibilitychange',shown); };

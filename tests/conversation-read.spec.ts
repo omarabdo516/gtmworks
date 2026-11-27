@@ -105,17 +105,19 @@ test('each reply lists the tool calls its own turn holds, with no matching by ti
  const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
  const {conversation}=talk([
   user(100,'Plan the ads'),
-  {role:'assistant',content:'',tool_calls:[call('call_1','web_search',{query:'accounting courses Cairo'})],timestamp:101},
+  {role:'assistant',content:'Let me check.',tool_calls:[call('call_1','web_search',{query:'accounting courses Cairo'})],timestamp:101},
   {role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:102},
   // The reply's own stamp is before its turn began: it is still the reply of the turn its session order puts it after.
-  replied(90,'Here is the plan.\n\n```gtmworks-tool\n{"name":"save_rule","arguments":{"rule":"Audit the ads"}}\n```'),
+  replied(90,'Here is the plan.\n\n```gtmworks-tool\n{"name":"save_rule","arguments":{"rule":"Audit the ads"}}\n```\n\nMEDIA:/work/co-rs-learning/plan.pdf'),
   user(200,'And the budget?'),replied(201,'15,000 a month.')]);
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await open(page,conversation);
  const replies=page.locator('.msg[data-author=agent]');
  await expect(replies).toHaveCount(2);
  await expect(replies.first().locator('.bubble--agent')).toHaveText('Here is the plan.');
+ await expect(page.getByText('Let me check.')).toHaveCount(0);
  await expect(page.getByText('gtmworks-tool')).toHaveCount(0);
+ await expect(page.getByText(/MEDIA:|\/work\//)).toHaveCount(0);
  await expect(replies.first().locator('.steps__toggle')).toHaveText('Used 1 tool · 2 sec');
  await expect(replies.nth(1).locator('.steps__toggle')).toHaveCount(0);
  await replies.first().locator('.steps__toggle').click();
@@ -134,6 +136,26 @@ test('a newest page of only tool calls loads the messages before it, and a page 
  // page that holds the person's message and the reply, without the person scrolling.
  await expect(page.getByText('The older message')).toBeVisible({timeout:15000});
  await expect(page.getByText('The older reply')).toBeVisible();
+});
+
+test('a tab that comes back keeps the pages the person scrolled back through',async({page})=>{
+ test.setTimeout(120000);
+ const messages:Record<string,unknown>[]=[];
+ for(let n=0;n<100;n++) messages.push(user(n*2+1,`Message ${n*2}`),replied(n*2+2,`Reply ${n*2}`));
+ const {conversation}=talk(messages);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await open(page,conversation);
+ const rows=page.locator('.msg');
+ await expect(rows).toHaveCount(50,{timeout:20000});
+ await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
+ await expect(rows).toHaveCount(100,{timeout:20000});
+ await expect(page.getByText('Message 100')).toBeVisible();
+ // Past the debounce, a tab that comes back reads the newest page again. It merges into what is drawn: the page the
+ // person scrolled back to stays, and so does its place.
+ await page.waitForTimeout(1100);
+ await page.evaluate(()=>{ window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+ await expect(rows).toHaveCount(100,{timeout:15000});
+ await expect(page.getByText('Message 100')).toBeVisible();
 });
 
 test('with the Engine stopped after one good read, the Conversation keeps what it last read and says it could not refresh',async({page})=>{

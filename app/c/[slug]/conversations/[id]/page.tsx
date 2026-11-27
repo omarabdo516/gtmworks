@@ -53,9 +53,6 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Each reply's steps and the token use (#766, ADR 0030) go out now beside the record and come down the same response
  // once read, never awaited by the page or the messages: the chat shows them without first waiting for its script and
  // a second request (decision 0042). A read that fails is null, and the replies stay as they are.
- // The Engine's messages and their steps are one read now (#875); the old record's steps and usage are read only for a
- // Conversation with no Engine session yet.
- const steps=conversation.hermes_session_id?Promise.resolve(null):conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
  // The Agent's details beside the chat, while it is still attached to the company, and the reader's role. The details'
  // reads go out now with them, not after the frame's reads (decision 0042): they are the page's longest, and the page
  // has loaded only once they are drawn.
@@ -67,23 +64,29 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
  // A first message that still waits for its Run (#764) names the chat as well, with the files sent with it.
- const [{data:stored},{data:waiting},{data:agent},roleRead]=await Promise.all([
+ const [{data:stored},{data:waiting},{data:agent},roleRead,{count:storedCount}]=await Promise.all([
   db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
   db.from('conversation_queued_turns').select('message,send_key').eq('conversation_id',id).order('queued_at').limit(1).maybeSingle(),
   agentRead,
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   readerRead,
+  // The old record's row count: a Conversation it still holds opens as it always has, and the Engine's read (#875) is
+  // for one whose messages are the Engine's alone — a Conversation made after this read, as #876 sends them.
+  db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id),
  ]);
  const person=roleRead?.person, role=roleRead?.role||'', writer=!!roleRead?.canWrite;
+ // A Conversation whose own record holds nothing and whose Engine session exists reads its messages from the Engine on
+ // their own request (#875). One the old record still holds keeps that record until #883 switches it off.
+ const engine=!!conversation.hermes_session_id&&storedCount===0&&!waiting;
+ const steps=engine?Promise.resolve(null):conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
  const waitingFiles=!stored&&waiting?(await db.from('conversation_attachments').select('name').eq('conversation_id',id).eq('send_key',waiting.send_key).order('position').limit(1)).data:null;
  const first=stored??(waiting&&{body:waiting.message,conversation_attachments:waitingFiles??[]});
  markOpen('reads',timing);
  // #434: the Owner's empty Conversation with Lead (first run makes one) is where Lead opens the Company's first
  // Conversation, once the Company has a model (lib/lead-opening.mjs); the record is then read again with its message.
  // Only a Conversation with nothing in it asks, so every other open costs nothing more.
- if(!first&&agent?.is_default&&role==='owner') {
-  const {count}=await db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id);
-  const opened=count===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
+ if(!first&&!conversation.hermes_session_id&&agent?.is_default&&role==='owner') {
+  const opened=storedCount===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
    {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
   if(opened===id) { record.catch(()=>{}); record=readRecord(); }
  }
@@ -93,7 +96,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={!!conversation.hermes_session_id}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={engine}/></ConversationView></main>
  </Page>;
 }
 

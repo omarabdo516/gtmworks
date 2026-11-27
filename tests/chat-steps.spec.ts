@@ -38,13 +38,9 @@ test.beforeAll(async({browser},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 test('a reply\'s steps on screen are its Hermes session\'s, and the chat\'s first byte is under one second',async({page})=>{
- const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`steps-${conversation.slice(0,8)}`;
+ const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
- query(`do $$ begin
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Plan the Meta campaign','${randomUUID()}','${run}','2026-11-16T10:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${lead}','Lead','Here is the plan.','${run}','2026-11-16T10:14:00Z');
- end $$;`);
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
  const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
  fake.settings.sessions.set(session,{profile,messages:[
   {role:'user',content:'Plan the Meta campaign',timestamp:sent+1},
@@ -79,16 +75,12 @@ test('a reply\'s steps on screen are its Hermes session\'s, and the chat\'s firs
 
 // #875 (ADR 0030): the page's frame, Agent and composer never wait on the Engine; the messages are the Engine's own
 // request now. With the session's read held three seconds, the first byte and the composer are drawn without it, the
-// messages and their steps arrive once it answers, and a read that never answers leaves the old record's messages, with
-// no error line.
+// messages and their steps arrive once it answers, and a read that never answers keeps the last good read and says it
+// could not refresh.
 test('a session read held three seconds holds neither the first byte nor the composer, and the messages and steps arrive after',async({page})=>{
- const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`slow-${conversation.slice(0,8)}`;
+ const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T11:12:00Z')/1000;
- query(`do $$ begin
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Draft the ad copy','${randomUUID()}','${run}','2026-11-16T11:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${lead}','Lead','Here is the copy.','${run}','2026-11-16T11:14:00Z');
- end $$;`);
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
  const call={id:'call_1',type:'function',function:{name:'web_search',arguments:JSON.stringify({query:'ad copy'})}};
  fake.settings.sessions.set(session,{profile,messages:[
   {role:'user',content:'Draft the ad copy',timestamp:sent+1},
@@ -115,10 +107,10 @@ test('a session read held three seconds holds neither the first byte nor the com
   expect(took,'the messages arrive once the session answers').toBeLessThan(6000);
   await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 41 sec',{timeout:15000});
   await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
-  // A session read that never answers falls back to the old record's messages, with no error line in the Conversation.
+  // A session read that never answers keeps the last good read, and says it could not refresh (ADR 0030).
   fake.settings.sessionDelay=Infinity;
   await page.reload({waitUntil:'commit'});
   await expect(page.getByText('Here is the copy.')).toBeVisible({timeout:15000});
-  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
+  await expect(page.locator('[data-refresh]')).toBeVisible({timeout:12000});
  } finally { fake.settings.sessionDelay=0; }
 });

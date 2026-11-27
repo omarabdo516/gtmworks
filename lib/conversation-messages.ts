@@ -4,6 +4,7 @@ import type { supabase } from './supabase';
 import type { ConversationMessage } from './conversations';
 import type { SessionMessage, SessionUsage } from './engine.mjs';
 import { agentEngine, stepsBetween, takeToolCalls } from './engine/handle.mjs';
+import { takeFileTags } from './media-tags.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null};
@@ -30,29 +31,43 @@ function summaryText(content:unknown) {
  return textOf(content).replace(/\[CONTEXT COMPACTION[^\]]*\]/gi,'').trim();
 }
 const startsTurn=(message?:SessionMessage)=>message?.role==='user'&&(message.display_kind!=='hidden'||summary.test(textOf(message.content)));
-// The page's messages as the transcript draws them (#875): the person's words as theirs, the Agent's replies with the
-// tool calls their own turn made beside them (never matched by time), and the Engine's compaction summary as the
-// Engine's. Tool results are read for their step's end and drawn under the reply. `prefix` is the page before, when the
-// page starts in the middle of a turn. An image part is asked for but not drawn yet (#880), as the ticket reads.
+// The words of an Agent's stored message as a person reads them: gtmworks's own tool blocks are taken out as the Run
+// record's reply takes them (lib/engine/runs.mjs takeToolCalls), and a MEDIA: tag is taken out with no file named until
+// #880 reads the Engine's files. An image part is asked for but not drawn yet either.
+/** @param {SessionMessage} [message] */
+function replyText(message?:SessionMessage):string {
+ const content=message?.role==='assistant'?takeToolCalls(textOf(message.content)).reply:textOf(message?.content);
+ return message?.role==='assistant'?takeFileTags(content).body:content;
+}
+// The page's messages as the transcript draws them (#875): the person's words as theirs, one reply for each turn — its
+// last assistant message with words, the interim narration dropped — with the tool calls that turn made beside it (never
+// matched by time), and the Engine's compaction summary as the Engine's. Tool results are read for their step's end and
+// drawn under the reply. `prefix` is the page before, when the page starts in the middle of a turn.
 /** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {string} agentName @param {number} offset */
 function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:string,offset=0):ConversationMessage[] {
  const all=[...prefix,...page];
  const shown:ConversationMessage[]=[];
+ // The last message of each turn that has words is its reply: Hermes keeps the interim narration ("Let me check…")
+ // beside the call it made, and the old record showed the Run's final output alone.
+ const lastText=new Map<number,number>();
  let turn=0;
+ for(let index=0;index<all.length;index++) {
+  if(startsTurn(all[index])) turn=index;
+  if(all[index]?.role==='assistant'&&replyText(all[index]).trim()) lastText.set(turn,index);
+ }
+ turn=0;
  for(let index=0;index<prefix.length;index++) if(startsTurn(all[index])) turn=index;
  for(let index=prefix.length;index<all.length;index++) {
   const message=all[index];
   if(startsTurn(message)) turn=index;
-  // gtmworks tells the model its own tool blocks are never shown (#875); a stored session keeps them, so they are
-  // taken out here as the Run record's reply is (lib/engine/runs.mjs takeToolCalls).
-  const body=message?.role==='assistant'?takeToolCalls(textOf(message.content)).reply:textOf(message?.content);
+  const body=replyText(message);
   if(message?.role==='user') {
-   if(summary.test(body)) { shown.push({id:idOf(message,index,offset),author:'engine',author_name:'',body:summaryText(body),created_at:atOf(message),kind:'summary'}); continue; }
+   if(summary.test(body)) { shown.push({id:idOf(message,index,offset),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary'}); continue; }
    if(message.display_kind==='hidden') continue;
    if(body.trim()) shown.push({id:idOf(message,index,offset),author:'person',author_name:'',body,created_at:atOf(message)});
    continue;
   }
-  if(message?.role==='assistant'&&body.trim()) {
+  if(message?.role==='assistant'&&lastText.get(turn)===index&&body.trim()) {
    const steps=stepsBetween(all,turn,index);
    // The profile a Card step was given to never leaves the server; a Card here names no Agent but its title (#844).
    const list=steps?.list.map(({card,...step})=>card?{...step,card:{id:card.id,title:card.title,agent:null}}:step)??[];
