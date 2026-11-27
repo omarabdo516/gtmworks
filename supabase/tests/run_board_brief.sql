@@ -11,6 +11,7 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,pro
  select 'f8440000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Lead','General','co-10000000000000000000000000000001',true
  where not exists(select 1 from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default);
 select set_config('test.main',(select id::text from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and is_default),true);
+select set_config('test.main_name',(select name from public.hermes_agents where id=current_setting('test.main')::uuid),true);
 select set_config('test.main_profile',(select profile from public.hermes_agents where id=current_setting('test.main')::uuid),true);
 -- The Contributor (…05) sees Reach; the Owner sees everyone. One Run of the main Agent for the Contributor, one of Reach
 -- for the Owner.
@@ -32,7 +33,7 @@ select is(public.pin_run_brief('e8440000-0000-0000-0000-000000000001','d8440000-
 select is(public.pin_run_brief('e8440000-0000-0000-0000-000000000002','d8440000-0000-0000-0000-000000000002')->'main','false'::jsonb,'another Agent''s Run is pinned a brief too');
 select is(public.pin_run_brief('e8440000-0000-0000-0000-000000000002','d8440000-0000-0000-0000-000000000002')->'self','"ag-f8440000000000000000000000000002"'::jsonb,'with its own profile');
 select is((select e->'board' from jsonb_array_elements(public.pin_run_brief('e8440000-0000-0000-0000-000000000002','d8440000-0000-0000-0000-000000000002')->'agents') e
-  where e->>'name'=(select name from public.hermes_agents where id=current_setting('test.main')::uuid)),
+  where e->>'name'=current_setting('test.main_name')),
  to_jsonb(current_setting('test.main_profile')),'it names the main Agent by the Company''s profile');
 select is(public.pin_run_brief('e8440000-0000-0000-0000-000000000002','d8440000-0000-0000-0000-000000000002')->'hidden','[]'::jsonb,'and is told no hidden job, which is the main Agent''s');
 -- Pinned once: a later change to the team changes no brief already pinned.
