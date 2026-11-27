@@ -208,3 +208,13 @@ test('one command brings the app up, one checks the journey, one stops it; the s
  assert.equal(refused.status,2);
  assert.match(refused.stderr,/usage: npm run cloud:up/);
 });
+
+// The journey's first-run answer stayed on Home: `next dev` threw away a page nobody had opened for a minute, the rebuild
+// changed the client code the Company layout shares, and the page reloaded itself under the press. The dev server keeps
+// every page it compiled for a working day, and the journey compiles its pages before it walks them.
+test('the dev server keeps the pages it compiled, and the journey compiles its pages before it walks',async()=>{
+ const {default:config}=await import(join(root,'next.config.mjs'));
+ assert.ok(config.onDemandEntries?.maxInactiveAge>=8*60*60*1000,`maxInactiveAge ${config.onDemandEntries?.maxInactiveAge}`);
+ const journey=readFileSync(join(root,'scripts/cloud-verify.mjs'),'utf8');
+ assert.match(journey,/async function journey\(page\) \{\n await compileJourneyPages\(/);
+});

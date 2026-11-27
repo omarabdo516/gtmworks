@@ -23,7 +23,8 @@ One command, about a minute and a half on a warm VM:
 4. starts the fake Engine (`scripts/cloud-hermes.mjs`, the browser suite's fake Hermes) where the app looks for the
    bundled one, so a message to an Agent gets the reply `Reply to: <message>`;
 5. starts the app and its worker (`scripts/web.sh`, `next dev` on port 3000) in the background and waits until it answers;
-6. signs the seeded Administrator in with Chromium (`node scripts/cloud-verify.mjs --sign-in`) and prints the page it reached.
+6. signs the seeded Administrator in with Chromium (`node scripts/cloud-verify.mjs --sign-in`), prints the page it reached, and
+   opens each page the journey walks once, so `next dev` has compiled them (see "A page's first compile" below).
 
 It ends by printing:
 
@@ -47,6 +48,7 @@ makes it recompile without end.
 With the app up, this walks the product's main journey in Chromium, driven by Playwright, and checks each step on the
 page and in the local database:
 
+0. has the seeded Administrator open each page it walks (`journeyPages`), so the dev server compiles none of them mid-walk;
 1. empties the install, then walks first run from the setup link: creates the Administrator and the first Company, and checks
    both in `public.companies` and `public.members` (role `owner`);
 2. signs out, signs back in with that email and password, answers "Alone" and lands in a Conversation with Lead;
@@ -59,6 +61,14 @@ page and in the local database:
 Screenshots of every step (`cloud-verify-NN-<step>.png`) go to `$TMPDIR/gtmworks-cloud/screens` (`--out DIR` puts them elsewhere); attach the ones
 that show your change to the pull request. The journey always ends with the seed back, its own Owner and Company gone too, also when a step
 fails; a failure leaves a `cloud-verify-NN-failed.png` beside the others. It refuses any app or database but the local stack's.
+
+**A page's first compile.** `next dev` compiles a page the first time it is asked for, and that compile rebuilds the
+client code the Company layout shares: the page the browser is on reloads itself ("[Fast Refresh] performing full
+reload" in its console) and the press that asked for the new page is lost; first run's "Alone" made its Conversation and
+stayed on Home. A production server never does this. So the journey compiles its pages before it walks, and
+`next.config.mjs` keeps every compiled page while the server runs (by default an idle one goes after a minute, and the
+rebuild reloads the page the same way). A step you add that opens another page adds it to `journeyPages`; a failure
+after such a reload says so. Walking your own change, open a page once before you press what leads to it.
 
 ## 3. Walk your own change
 
