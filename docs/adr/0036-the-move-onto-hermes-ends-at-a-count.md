@@ -7,6 +7,8 @@ date: 2026-11-27
 
 Omar's decisions of 2026-11-27 (vault decisions 0081, 0082, 0083 and 0084, a grill of nine questions). It carries [ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) to its end and supersedes its item 3 (Channels) and the bullet of its item 4 that retires gtmworks's settings screens.
 
+Corrected on 2026-11-27, the day it was written, after the code was read for the specs: there is no tools level to set (every Agent has had one fixed set of tools since #391); the Company's default model and learning mode are held in the Engine's shared space, and gtmworks stores only each Agent's choice to follow the Company or not, while the Fallback model is the one such setting with a table and a worker loop of its own; and the code and Hermes do not disagree about keys. No decision of Omar's changes.
+
 Nothing here is built yet. The code, `GLOSSARY.md` and the tests describe today's product until each spec lands; a spec changes the glossary terms it touches in its own pull request.
 
 ## Context
@@ -19,7 +21,7 @@ Nothing here is built yet. The code, `GLOSSARY.md` and the tests describe today'
   - Sixteen facts are kept both in the database and in the Engine with a sync between them, a Conversation's messages and a Company's model settings among them.
 - Read in the pinned Engine (Hermes v0.23.0), the same way:
   - Hermes has no Company. A profile owns its settings, keys and model and inherits nothing from another profile; a new profile can be made as a copy of an existing one (`hermes_cli/profiles.py`, `hermes_cli/web_routers/profiles.py`).
-  - The root profile's credential pool is read by a profile that holds no credential of its own for that provider (`hermes_cli/auth.py`, `agent/credential_pool.py`). A comment in `lib/engine/providers.mjs` says a profile never reads another's key. One of the two is wrong, and a probe settles it.
+  - A sign-in held in the root profile's credential pool is lent to every profile that holds none of its own for that provider (`hermes_cli/auth.py`, `agent/credential_pool.py`), and gtmworks already keeps a Company's subscriptions there, once. An API key is a value of one profile's own environment, which no other profile reads, so gtmworks writes it to the Company's shared space and again to each Agent's profile (`lib/engine/providers.mjs`). Whether an API key can be kept once is not known; a probe settles it.
   - Hermes has no switch for one model of a provider, no route that reorders credentials or switches one off, and no way to rename a credential after it is added.
   - The Hermes Desktop App is a shell over the same server: it keeps no record of its own, signs in with the one credential Hermes has, and sends a chat turn over `/api/ws` on the dashboard listener (`apps/desktop/`, `hermes_cli/web_routers/chat_ws.py`).
 - Production on 2026-11-26: no Channel message ever.
@@ -37,13 +39,14 @@ Nothing here is built yet. The code, `GLOSSARY.md` and the tests describe today'
 5. **Channels leave the product.** The screen goes and its code is deleted. If a team asks for a group chat later, it is built on the Engine in a simpler shape.
 6. **A table is dropped only on Omar's yes to the removal spec that names it**, after a full backup that was checked. Each removal has two stages: the code is switched off, then the tables are dropped ([ADR 0023](0023-a-change-the-previous-release-cannot-run-against-is-staged.md)). There are up to four: the old board, the old Conversation record, Channels, and the features ADR 0033 item 6 removes.
 7. **gtmworks edits the Engine's own code in three places and no more**, at the Engine's start (`scripts/engine-template.yml`): the work sandbox's file sync (#393), and the two that let a Company hold several ChatGPT accounts and go on with the next when one runs out (#618, #621). Each is offered to Hermes's maintainers, from Omar's account and only after he has read the request. An edit Hermes takes is removed here.
-8. **A Company-wide setting is an action, not a record.** For the default model, the Fallback model, the learning mode and the tools level, the Administrator picks a value and gtmworks writes it into every Agent's profile at that moment, keeping nothing. Each Agent's page shows its real value, read from the Engine. A new Agent starts as a copy of the main Agent.
+8. **A Company-wide setting is an action, not a record.** For the default model, the Fallback model, the learning mode and any other setting gtmworks writes into every profile for the Company, the Administrator picks a value and gtmworks writes it into every Agent's profile at that moment, keeping nothing. Each Agent's page shows its real value, read from the Engine. A new Agent starts as a copy of the main Agent.
 9. **gtmworks invents no setting for Agents' work that Hermes does not have.** One that is really needed is asked of Hermes's maintainers. Two leave now: the switch for each model of a Provider, and renaming a Provider after it is added. The order of accounts and switching one off stay, carried by the edits of item 7.
 
 Technical calls of the grill, put to Omar in its closing summary and confirmed with it:
 
 - A Conversation's Runs stay on the Run API (port 8642), the listener built for a server that calls Hermes, which spec #864 is designed on and Probe A measured. `/api/ws` is built for one person at one program.
-- Provider keys go to the root profile's credential pool instead of a copy in each Agent's profile, once a probe proves every profile reads them there. If it fails, keys stay in each profile, with no table of them in gtmworks.
+- A Provider's API key is kept once, where every profile of the Company reads it, instead of a copy in each Agent's profile, if a probe finds such a place in the pinned Engine. If it finds none, keys stay in each profile, with no table of them in gtmworks.
+- A new Agent is made a copy of the main Agent by writing the main Agent's values of those settings into its profile, not by the Engine's own clone: a clone also copies the Skills folder, and a local Skill then hides the Company's shared one (`lib/engine/providers.mjs`).
 - gtmworks keeps one row for each Agent, holding only what is about people: its Look, who talks to it, who asked for it. The rest is read from the Engine.
 - The record behind connecting an app stays: it says which person started the sign-in, which the Engine does not keep.
 - The copies of Routine runs and the guard records for revoking a standing permission go; a screen reads the Engine when it needs them.
@@ -52,7 +55,7 @@ Technical calls of the grill, put to Omar in its closing summary and confirmed w
 ## Considered options
 
 - **Give the team Hermes Desktop, or a copy of it in gtmworks's look.** Rejected: Hermes has one credential and no Roles, so everyone who signs in is its owner; a copy would be a third piece to install and update on every machine, and about 2 400 source files to follow at each Hermes release.
-- **Keep a Company's settings in the database and copy them into each profile.** Rejected: it is the sync this decision ends, and about 8 tables and 5 worker loops stay for it.
+- **Keep a Company's settings in the database and copy them into each profile.** Rejected: it is the sync this decision ends, and its tables and worker loops stay for it.
 - **Remove the three edits to reach an unmodified Engine.** Rejected: the several-accounts feature is Omar's own and works. The simpler route is that Hermes carries it.
 - **Keep Channels until a team uses them** (ADR 0033 item 3). Rejected: after spec #864 they would be the last place that keeps messages in gtmworks and the last copy of the old Run code, for a feature nobody has used.
 - **Send a chat turn the way the Desktop App does**, over `/api/ws`. Rejected for now: that socket serves one interactive client on the listener that holds every power, and the Run API is measured and already carries the design of spec #864.
