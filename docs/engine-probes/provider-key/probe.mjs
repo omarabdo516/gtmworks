@@ -11,6 +11,7 @@ const ROOT='default';
 const SPACE='key-space';
 const AGENT='key-agent';
 const ENVAGENT='key-env';
+const PREC='key-prec';
 const MODEL_HOST='http://fake-model:8080/v1';
 const KEY_A=`sk-probe-a-${randomUUID().slice(0,8)}`;
 const KEY_B=`sk-probe-b-${randomUUID().slice(0,8)}`;
@@ -54,12 +55,12 @@ await main(async()=>{
  if(!entry) fail('the root pool lists one api_key entry for the provider',JSON.stringify(listed));
  say(`the root's pool holds one ${PROVIDER} entry: ${JSON.stringify(entry)}`);
 
- for(const name of [SPACE,AGENT,ENVAGENT]) await makeProfile(name);
+ for(const name of [SPACE,AGENT,ENVAGENT,PREC]) await makeProfile(name);
  const options=await must('list the space\'s model options',manage(`/api/model/options${q(SPACE)}`));
  const offered=options.providers.find(row=>row.slug===PROVIDER);
  const MODEL=Array.isArray(offered?.models)&&offered.models[0]?offered.models[0]:'deepseek-flash';
  say(`the space's model options list ${PROVIDER}: ${JSON.stringify({models:offered?.models,authenticated:offered?.authenticated})}; the probe uses model ${MODEL}`);
- await Promise.all([setModel(AGENT,MODEL),setModel(ENVAGENT,MODEL)]);
+ await Promise.all([setModel(AGENT,MODEL),setModel(ENVAGENT,MODEL),setModel(PREC,MODEL)]);
 
  // --- 1. a Run on a profile that holds no key of its own answers with a key held only in the root's pool -------------
  const agentEnv=await envRow(AGENT);
@@ -92,10 +93,18 @@ await main(async()=>{
  mark(4,stopped.done.status==='failed'&&gap.done.status==='completed'&&gap.auth===`Bearer ${KEY_B}`,'removing the one entry stops the next Run, and a second entry added before the first is removed leaves no Run without a key');
 
  // --- 5. a profile that still holds the key in its own environment: which answers, and after the env copy is removed --
- await must(`give ${ENVAGENT} its own env key`,manage(`/api/env${q(ENVAGENT)}`,{method:'PUT',body:{key:KEY_ENV,value:ENV_KEY}}));
- const both=await runOnce(ENVAGENT,'q5 both');
- say(`question 5: ${ENVAGENT} holds ${KEY_ENV} in its own .env and the root's pool holds one; a Run ended ${both.done.status} and was sent with ${both.auth}`);
- if(both.done.status!=='completed'||both.auth!==`Bearer ${KEY_B}`) fail('a profile holding both answers with the pool key',JSON.stringify({status:both.done.status,auth:both.auth}));
+ // Precedence, with a different key in the profile's own .env: the root's pool key answers first (priority 0, before the
+ // env key the Engine seeds at priority 1). This is not the migration — the product copies one identical value everywhere
+ // (lib/engine/providers.mjs setProviderKey) — so it is answered on a profile of its own and only to say which key wins.
+ await must(`give ${PREC} its own env key`,manage(`/api/env${q(PREC)}`,{method:'PUT',body:{key:KEY_ENV,value:ENV_KEY}}));
+ const precedence=await runOnce(PREC,'q5 precedence');
+ say(`question 5, precedence: ${PREC} holds a different ${KEY_ENV} than the root's pool; a Run ended ${precedence.done.status} and was sent with ${precedence.auth}`);
+ if(precedence.done.status!=='completed'||precedence.auth!==`Bearer ${KEY_B}`) fail('with two different keys the pool key answers first',JSON.stringify({status:precedence.done.status,auth:precedence.auth}));
+ // The migration itself: the profile holds the SAME key in its own .env as the root's pool, then its env copy is removed.
+ await must(`give ${ENVAGENT} the same key in its env`,manage(`/api/env${q(ENVAGENT)}`,{method:'PUT',body:{key:KEY_ENV,value:KEY_B}}));
+ const same=await runOnce(ENVAGENT,'q5 same key');
+ say(`question 5: ${ENVAGENT} holds the same ${KEY_ENV} as the root's pool; a Run ended ${same.done.status} and was sent with ${same.auth}`);
+ if(same.done.status!=='completed'||same.auth!==`Bearer ${KEY_B}`) fail('a profile holding the same key answers',JSON.stringify({status:same.done.status,auth:same.auth}));
  await must(`remove ${ENVAGENT}'s env key`,manage(`/api/env${q(ENVAGENT)}`,{method:'DELETE',body:{key:KEY_ENV}}));
  const afterEnv=await runOnce(ENVAGENT,'q5 after env');
  say(`question 5: with the env copy removed the Run ended ${afterEnv.done.status} and was sent with ${afterEnv.auth}`);
@@ -105,8 +114,8 @@ await main(async()=>{
  say(`question 5: with the root's pool entry removed too, the Run ended ${afterRoot.done.status} and was sent with ${afterRoot.auth}`);
  // Kept once means the key was only ever borrowed: with the root's entry gone, the next Run must fail. It answered, so the
  // profile copied the key into its own store on an earlier Run, and that copy outlives the removal of both keys.
- if(afterRoot.done.status==='failed') mark(5,true,'the pool key answers first, and with the env copy and then the root\'s entry removed the next Run fails: the key stayed once, borrowed and never copied');
- else mark(5,false,`the pool key answers first, but the profile copied it into its own auth.json on an earlier Run, and the copy outlives the removal of both keys (after the root's entry was removed the Run still ended ${afterRoot.done.status}, sent with ${afterRoot.auth})`);
+ if(afterRoot.done.status==='failed') mark(5,true,'the key answered, and with the env copy and then the root\'s entry removed the next Run fails: the key stayed once, borrowed and never copied');
+ else mark(5,false,`the key answered, but the profile copied it into its own auth.json on an earlier Run, and the copy outlives the removal of both keys (after the root's entry was removed the Run still ended ${afterRoot.done.status}, sent with ${afterRoot.auth})`);
 
  say('');
  const failed=verdicts.filter(one=>!one.ok);
