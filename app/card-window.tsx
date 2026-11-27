@@ -276,7 +276,7 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
    </div></header>
    <div className="cw-body">
     <div className="cw-top">
-     {editable&&card?<TitleEdit key={card.id} company={company} card={card.id} title={card.title} c={c} onSaved={saved}/>:<h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{title}</h2>}
+     <TitleEdit company={company} card={id} title={title} editable={editable} c={c} onSaved={saved}/>
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
      {editable&&card&&<DescriptionEdit key={card.id} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}

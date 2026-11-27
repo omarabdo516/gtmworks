@@ -48,12 +48,14 @@ async function carry(page:Page,id:string,column:string) {
  await page.setViewportSize({width:1680,height:900});
  const source=cardOn(page,id);
  await expect(source).toBeVisible();
+ await source.scrollIntoViewIfNeeded();
  const target=page.locator(`#board-cols .col[data-column="${column}"] .col__body`);
  const [from,to]=[(await source.boundingBox())!,(await target.boundingBox())!];
  await page.mouse.move(from.x+from.width/2,from.y+20);
  await page.mouse.down();
  await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
- await page.mouse.move(to.x+to.width/2,to.y+40,{steps:12});
+ // A point of the column in view, wherever its body starts and ends.
+ await page.mouse.move(to.x+to.width/2,Math.min(Math.max(to.y+40,40),Math.min(to.y+to.height,900)-20),{steps:12});
  await page.mouse.up();
 }
 
@@ -217,9 +219,12 @@ test('a Card set to wait for another stays out of the dispatcher\'s reach until 
  kanban().dispatch();
  expect(task(then).status).toBe('todo');
  await sheet.getByRole('button',{name:'Close the card',exact:true}).click();
+ await expect(sheet).toHaveCount(0);
  // The first is done by a person's drop: the Engine frees the second, gtmworks asks for a tick, and Ads starts on it.
  const ticks=kanban().ticks;
  await carry(page,first,'done');
+ await expect(inColumn(page,'done',first)).toBeVisible();
+ expect(task(first).status).toBe('done');
  await expect(inColumn(page,'progress',then)).toBeVisible();
  expect(task(then).status).toBe('running');
  expect(kanban().ticks).toBe(ticks+1);
@@ -240,7 +245,7 @@ test('a Project name set on a Card appears in the board\'s filter, and the filte
  await page.getByRole('button',{name:'New card'}).click();
  const dialog=page.getByRole('dialog',{name:'New card'});
  await dialog.getByPlaceholder('Title').fill('Spring launch ads');
- await dialog.getByRole('textbox',{name:'Project'}).fill(name);
+ await dialog.getByLabel('Project',{exact:true}).fill(name);
  await dialog.getByRole('button',{name:'Add card'}).click();
  await expect(dialog).toHaveCount(0);
  const made=kanban().tasks.find(found=>found.title==='Spring launch ads')!;
@@ -254,7 +259,7 @@ test('a Project name set on a Card appears in the board\'s filter, and the filte
  await expect(page.getByRole('button',{name:`Project: ${name}`})).toBeFocused();
  // A Card made while the board shows a Project is made in it.
  await page.getByRole('button',{name:'New card'}).click();
- await expect(dialog.getByRole('textbox',{name:'Project'})).toHaveValue(name);
+ await expect(dialog.getByLabel('Project',{exact:true})).toHaveValue(name);
  await dialog.getByPlaceholder('Title').fill('Spring launch email');
  await dialog.getByRole('button',{name:'Add card'}).click();
  await expect(page.locator('#board-cols .kcard')).toHaveCount(2);

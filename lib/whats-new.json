@@ -1,5 +1,11 @@
 [
  {
+  "issue": 837,
+  "date": "2026-11-27",
+  "en": { "title": "Change a Card after it's made, and filter the board by Project", "body": "Rename a Card, edit its description, tick a to-do in place, set its date and the Card it waits for, and drag it to Ideas, Planned or Done with Undo; the board filters by Assignee and by the Project a Card was made in." },
+  "ar": { "title": "عدّل البطاقة بعد ما تتعمل، وفلتر اللوحة بالمشروع", "body": "غيّر اسم البطاقة، وعدّل وصفها، وعلّم على مهمة في مكانها، وحط ميعادها والبطاقة اللي مستنياها، واسحبها لأفكار أو متخطط أو خلص مع التراجع؛ واللوحة بتتفلتر بالمسؤول وبالمشروع اللي البطاقة اتعملت فيه." }
+ },
+ {
   "issue": 843,
   "date": "2026-11-26",
   "en": { "title": "Files on a Card", "body": "Add a file to a Card and the Agent working it opens it; every Member sees the Card's files and downloads them, pictures as thumbnails, and the files the Agent made for the Card are listed there too." },

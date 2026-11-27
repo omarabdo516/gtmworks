@@ -5,7 +5,7 @@ import { lineDirection, numberOf, parseDescription, parseInline, todoRuns, type 
 
 // A Card's description read drawn (spec #831, #835; design-reference-card: deHTML, deReadHTML, deFold): one block per
 // line, each in its own direction with its marker on its own start; the count of each run of to-do items sits above it,
-// and each item is ticked or not. Reading ticks nothing here: a to-do is ticked by editing the Card (#837). Nothing is
+// and each item is ticked or not; a Member who may write ticks one in place (#837, onTick). Nothing is
 // drawn as HTML, a link leads only to a web page or an email address, and a picture is drawn as its words, never
 // loaded. A long description folds after about twelve lines.
 

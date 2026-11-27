@@ -62,9 +62,15 @@ export function StatusMenu({company,card,column,lead,writer,onBoard}:{company:st
 /** The answer a refused save says, by the route's error. */
 const saveRefusal=(c:Say,error?:string)=>error==='cardChanged'?c('cwChanged'):error==='cardInvalid'?c('cwTitleMissing'):c('cwSaveFailed');
 
-/** The title: a button that becomes a field with Save and Cancel; Enter saves, Escape cancels. */
-export function TitleEdit({company,card,title,c,onSaved}:{company:string,card:string,title:string,c:Say,onSaved:Done}) {
- const [editing,setEditing]=useState<{from:string,value:string}|null>(null);
+/**
+ * The title: for a Member who may write, a button that becomes a field with Save and Cancel (Enter saves, Escape
+ * cancels); for anyone else, and before the Card's read, its text. The window keeps this one heading for every Card it
+ * shows, so another Card opened in it starts on its own title with no field open.
+ */
+export function TitleEdit({company,card,title,editable,c,onSaved}:{company:string,card:string,title:string,editable:boolean,c:Say,onSaved:Done}) {
+ const [open,setOpen]=useState<{card:string,from:string,value:string}|null>(null);
+ const editing=open?.card===card&&editable?open:null;
+ const setEditing=(next:{from:string,value:string}|null)=>setOpen(next&&{card,...next});
  const [said,setSaid]=useState(''); const [saving,setSaving]=useState(false);
  const field=useRef<HTMLInputElement>(null); const opener=useRef<HTMLButtonElement>(null);
  useEffect(()=>{ if(editing&&document.activeElement!==field.current) { field.current?.focus(); field.current?.select(); } },[editing]);
@@ -79,8 +85,8 @@ export function TitleEdit({company,card,title,c,onSaved}:{company:string,card:st
   if(answer.ok) { onSaved(answer); leave(); return; }
   setSaid(saveRefusal(c,answer.error)); onSaved({});
  }
- if(!editing) return <h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">
-  <button ref={opener} type="button" className="cw-title-btn" title={c('cwRename')} onClick={()=>setEditing({from:title,value:title})}>{title}</button></h2>;
+ if(!editing) return <h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{!editable?title:
+  <button ref={opener} type="button" className="cw-title-btn" title={c('cwRename')} onClick={()=>setEditing({from:title,value:title})}>{title}</button>}</h2>;
  return <div className="cw-title-edit">
   <h2 className="sr-only" id="cw-title" tabIndex={-1}>{title}</h2>
   <label className="sr-only" htmlFor="cw-title-in">{c('cwTitleLabel')}</label>
