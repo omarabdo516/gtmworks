@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { engineRecord } from './engine-records.mjs';
 import { withEngineContract } from '../lib/engine/handle.mjs';
-import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
+import { driveChannelRuns, driveNoteRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -87,7 +87,7 @@ test('a channel Run shows its draft and review cards once, ignores a call that d
 // no_credit, key_refused or model_missing, so the channel or the Card says what to fix, as a Conversation does. Any other
 // failure still ends as failed.
 test('a channel or note Run that failed for want of a model, credit, key or model keeps that cause, any other failure ends as failed',async()=>{
- /** @param {'channel'} kind @param {object} read */
+ /** @param {'channel'|'note'} kind @param {object} read */
  const closedAs=async(kind,read)=>{
   const closed=[];
   const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
@@ -97,10 +97,11 @@ test('a channel or note Run that failed for want of a model, credit, key or mode
    return {data:null,error:{message:`unexpected ${name}`}};
   }};
   const engine={read:async()=>({reply:null,session:null,usage:null,toolCalls:[],...read})};
-  assert.deepEqual(await withEngineContract(()=>/** @type {any} */(engine),()=>driveChannelRuns(/** @type {any} */(service),{})),{started:0,closed:1});
+  const drive=kind==='channel'?driveChannelRuns:driveNoteRuns;
+  assert.deepEqual(await withEngineContract(()=>/** @type {any} */(engine),()=>drive(/** @type {any} */(service),{})),{started:0,closed:1});
   return closed;
  };
- for(const kind of /** @type {const} */(['channel'])) {
+ for(const kind of /** @type {const} */(['channel','note'])) {
   assert.deepEqual(await closedAs(kind,{state:'failed',noModel:true}),['no_model'],kind);
   assert.deepEqual(await closedAs(kind,{state:'failed',modelRefused:'credit'}),['no_credit'],kind);
   assert.deepEqual(await closedAs(kind,{state:'failed',modelRefused:'key'}),['key_refused'],kind);
@@ -129,8 +130,8 @@ const counted=(source)=>{
  return {state,service};
 };
 const notReached=Object.freeze({state:'notReached'});
-for(const source of /** @type {const} */(['channel'])) {
- const drive=(service,options)=>driveChannelRuns(/** @type {any} */(service),options);
+for(const source of /** @type {const} */(['channel','note'])) {
+ const drive=(service,options)=>(source==='channel'?driveChannelRuns:driveNoteRuns)(/** @type {any} */(service),options);
  const place=source==='channel'?{ordinal:1}:{};
 
  test(`a stopped Engine leaves a ${source} Run due, and its next start is a first attempt a refusal fails`,async()=>{

@@ -10,7 +10,8 @@ select plan(29);
 --  Reach  a Card of it waits on the Owner, and a note Run of it is open on that Card
 --  Hook   a question waits on the Owner in their Conversation with it; a Routine of it ended two days ago
 --  Writer its last Run failed in a team channel the Owner is in and the Contributor is not
---  Coder  the Owner stopped its last Run; its turn waits behind SEO's
+--  Coder  the Owner stopped its last Run; its turn waits behind SEO's; a mention of the Owner in a note on an old
+--         board's Card of it waits too, which the old board's switch-off (#846) leaves out: Coder stays idle
 --  Numbers its last Run failed in the general channel and a person wrote there after it
 --  Critic  its Run failed in the Owner's Conversation, then it worked in the general channel
 --  Old    its Run failed a day and a half ago
@@ -74,6 +75,13 @@ insert into public.work_comments(id,company_id,card_id,body,author_id,created_at
  (-6991,'10000000-0000-0000-0000-000000000001',-6991,'@Reach go','20000000-0000-0000-0000-000000000001',now()-interval '3 minutes');
 insert into public.note_runs(note_id,company_id,card_id,agent_id,agent_name,session,input,created_at)
  select -6991,'10000000-0000-0000-0000-000000000001',-6991,agent,'Reach',gen_random_uuid(),'go',now()-interval '3 minutes' from named where name='Reach';
+-- A mention of the Owner in a note on Coder's Card of the old board (#22): the old board is switched off (#846), so it
+-- makes Coder wait on nobody.
+insert into public.work_cards(id,company_id,stage_id,title,agent_id,board_order) overriding system value
+ select -6992,'10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1),'Coder card',agent,1
+ from named where name='Coder';
+insert into public.waiting_items(company_id,person_id,kind,title,card_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','mention','Coder card',-6992);
 -- Hook's question in the Owner's own Conversation, and its Routine's last result.
 insert into public.waiting_items(company_id,person_id,kind,title,conversation_id)
  select '10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','question','Which day?',id from chat where name='Hook';

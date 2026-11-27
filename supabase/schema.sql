@@ -318,7 +318,7 @@ begin
    union all select unnest(array[p.agent_id, p.proposed_by]) from public.agent_change_proposals p
     where w.kind='agent_change' and p.id=w.id and p.company_id=c
    union all select r.agent_id from public.agent_access_requests r where w.kind='agent_access' and r.id=w.id and r.company_id=c
-  ) x where x.agent is not null);
+  ) x where x.agent is not null and w.kind not in ('approval','mention'));
  return query
  select a.agent,
   case when s.waiting then 'waiting' when a.working then 'working' when a.failed_at is not null then 'stuck'
