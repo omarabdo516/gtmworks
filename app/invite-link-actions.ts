@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { appUrl } from '@/lib/app-origin.mjs';
 import { generateLinkSecret, inviteLink, linkSecretHash } from '@/lib/company-link.mjs';
+import { inviteRoleKeys } from '@/lib/member-roles.mjs';
 
-const roles=new Set(['manager','contributor','viewer']);
+const roles=new Set(inviteRoleKeys);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const refusals:Record<string,string>={inviteLinkLabel:'inviteLinkNameEmpty'};
 

@@ -4,10 +4,11 @@ import { useI18n } from '@/lib/i18n-client';
 import { setupCodeFromHash } from '@/lib/setup-link.mjs';
 import { Button } from '@/components/paperclip/ui/button';
 import { Input } from '@/components/paperclip/ui/input';
+import { inviteRoleKeys } from '@/lib/member-roles.mjs';
 const onHashChange=(changed:()=>void)=>{ window.addEventListener('hashchange',changed); return ()=>window.removeEventListener('hashchange',changed); };
 export type JoinInvalid='setupInvalid'|'passwordTooShort'|'passwordsDoNotMatch'|'inviteLinkEmailTaken';
 type Checked={code:string,state:'open'|'refused',company?:string,role?:string};
-const roles=new Set(['manager','contributor','viewer']);
+const roles=new Set(inviteRoleKeys);
 
 // An Invite link's page (#950, ADR 0019). Its secret sits after `#`, so the page reads it from the fragment and sends
 // it only in a request body. It first asks the server whether the link is open, and which Company and Role it gives;
