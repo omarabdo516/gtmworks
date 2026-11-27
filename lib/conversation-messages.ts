@@ -35,6 +35,9 @@ function summaryText(content:unknown) {
  return textOf(content).replace(/\[CONTEXT COMPACTION[^\]]*\]/gi,'').trim();
 }
 const startsTurn=(message?:SessionMessage)=>message?.role==='user'&&(message.display_kind!=='hidden'||summary.test(textOf(message.content)));
+// An assistant message that made a call is no reply, even when it carries narrative words: the Engine marks it
+// finish_reason tool_calls, and the turn's reply comes after its results.
+const toolTurn=(message?:SessionMessage)=>message?.role==='assistant'&&(message.finish_reason==='tool_calls'||(Array.isArray(message.tool_calls)&&message.tool_calls.length>0&&message.finish_reason!=='stop'));
 // The words of an Agent's stored message as a person reads them: gtmworks's own tool blocks are taken out as the Run
 // record's reply takes them (lib/engine/runs.mjs takeToolCalls), and a MEDIA: tag is taken out with no file named until
 // #880 reads the Engine's files. An image part is asked for but not drawn yet either.
@@ -57,7 +60,7 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:st
  let turn=0;
  for(let index=0;index<all.length;index++) {
   if(startsTurn(all[index])) turn=index;
-  if(all[index]?.role==='assistant'&&replyText(all[index]).trim()) lastText.set(turn,index);
+  if(all[index]?.role==='assistant'&&!toolTurn(all[index])&&replyText(all[index]).trim()) lastText.set(turn,index);
  }
  turn=0;
  for(let index=0;index<prefix.length;index++) if(startsTurn(all[index])) turn=index;

@@ -180,6 +180,47 @@ test('a tab that comes back keeps the pages the person scrolled back through',as
  await expect(page.getByText('Message 100')).toBeVisible();
 });
 
+test('a reply split across the page boundary is drawn once',async({page})=>{
+ test.setTimeout(120000);
+ const messages:Record<string,unknown>[]=[];
+ for(let n=0;n<30;n++) messages.push(user(n*2+1,`Older ${n*2}`),replied(n*2+2,`Older ${n*2+1}`));
+ const call={id:'call_1',type:'function',function:{name:'web_search',arguments:JSON.stringify({query:'ads'})}};
+ messages.push(user(1000,'Plan the ads'));
+ messages.push({role:'assistant',content:'Let me check.',tool_calls:[call],finish_reason:'tool_calls',timestamp:1001});
+ messages.push({role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:1002});
+ messages.push({role:'assistant',content:'Here is the plan.',finish_reason:'stop',timestamp:1003});
+ for(let n=0;n<24;n++) messages.push(user(2000+n*2,`Newer ${n*2}`),replied(2001+n*2,`Newer ${n*2+1}`));
+ messages.push(user(2100,'Newer last'));
+ const {conversation}=talk(messages);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await open(page,conversation);
+ await expect(page.getByText('Here is the plan.')).toBeVisible();
+ // The older page holds the interim words beside the call, but its reply is in the page already drawn: the interim is
+ // no reply, and the one reply is not drawn twice.
+ await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
+ await expect(page.getByText('Older 13',{exact:true})).toBeVisible({timeout:20000});
+ await expect(page.getByText('Let me check.')).toHaveCount(0);
+ await expect(page.getByText('Here is the plan.')).toBeVisible();
+});
+
+test('a tab that comes back after more than a page replaces the window, never leaving a gap',async({page})=>{
+ test.setTimeout(120000);
+ const messages:Record<string,unknown>[]=[];
+ for(let n=0;n<100;n++) messages.push(user(n*2+1,`Message ${n*2}`),replied(n*2+2,`Reply ${n*2}`));
+ const {conversation,session}=talk(messages);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await open(page,conversation);
+ await expect(page.locator('.msg')).toHaveCount(50,{timeout:20000});
+ await expect(page.getByText('Message 150',{exact:true})).toBeVisible();
+ // Sixty raw messages arrive while the tab is away: the newest page no longer overlaps what was drawn, so that page is
+ // replaced rather than joined to it with a gap (ADR 0030's last read still holds when the Engine does not answer).
+ for(let n=0;n<30;n++) fake.settings.sessions.get(session)!.messages.push(user(5000+n*2,`New ${n*2}`),replied(5001+n*2,`New ${n*2+1}`));
+ await page.waitForTimeout(1100);
+ await page.evaluate(()=>{ window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+ await expect(page.getByText('New 10',{exact:true})).toBeVisible({timeout:15000});
+ await expect(page.getByText('Message 150',{exact:true})).toHaveCount(0);
+});
+
 test('with the Engine stopped after one good read, the Conversation keeps what it last read and says it could not refresh',async({page})=>{
  test.setTimeout(120000);
  const {conversation}=talk([user(1,'Plan the launch'),replied(2,'Here is the plan.')]);
