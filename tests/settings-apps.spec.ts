@@ -165,6 +165,31 @@ test('the Owner connects an app through the vendor\'s window and disconnects it;
  }
 });
 
+// #914: Meta refuses OAuth dynamic client registration. This web server runs with a test Meta app ID and secret
+// (playwright.config.ts), so Meta Ads signs in with that app: its ID goes to Meta, and its secret only to the Engine. The
+// browser reaches nothing outside (tests/offline-browser.ts), so Meta's sign-in page stands in on www.facebook.example.
+test('Meta Ads signs in with the install\'s own Meta app: the window goes to Meta with its ID, and its secret never reaches the browser',async({page,context})=>{
+ fake.settings.dcrRefused.add('meta-ads');
+ fake.settings.appAuthPages['meta-ads']='https://www.facebook.example/v27.0/dialog/oauth';
+ await context.route(/^https:\/\/www\.facebook\.example\//,route=>route.fulfill({status:200,contentType:'text/html',body:'<title>Meta</title>'}));
+ const answers:string[]=[];
+ page.on('response',response=>{ if(response.url().includes('/api/company-apps')) void response.text().then(body=>answers.push(body),()=>{}); });
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await page.goto('/c/rs-learning/settings?section=apps&app=meta-ads');
+ await expect(page.locator('#sov-h')).toHaveText('Connect Meta Ads');
+ await expect(page.locator('#app-client-needed')).toHaveCount(0);
+ const [vendor]=await Promise.all([page.waitForEvent('popup'),page.getByRole('button',{name:'Connect',exact:true}).click()]);
+ await expect(vendor).toHaveURL(/^https:\/\/www\.facebook\.example\/v27\.0\/dialog\/oauth\?client_id=e2e-meta-app-id&/);
+ expect(servers()['meta-ads'].oauth).toEqual({redirect_uri:`${appOrigin}/api/apps/callback/meta-ads`,client_id:'e2e-meta-app-id',client_secret:'e2e-meta-app-secret'});
+ await page.locator('#app-wait-cancel').click();
+ await expect(page.locator('#app-wait-cancel')).toHaveCount(0);
+ await vendor.close().catch(()=>{});
+ expect(answers.length).toBeGreaterThan(0);
+ expect(answers.join('\n')).not.toContain('e2e-meta-app-secret');
+ expect(await page.content()).not.toContain('e2e-meta-app-secret');
+ delete fake.settings.profiles.get(profile)!.config.mcp_servers['meta-ads'];
+});
+
 test('the Owner turns Open Design on for Lead with no window; it runs in the work sandbox on a design profile of Lead\'s own, and turns off again',async({page})=>{
  // #544, ADR 0025: no vendor window, no field and no token; the Engine gets ssh into the work sandbox with its Run API
  // forwarded, and the key the sandbox gets runs only Lead's design profile.

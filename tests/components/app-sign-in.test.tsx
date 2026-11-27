@@ -128,3 +128,13 @@ test('an app that needs a token or a declared field opens the apps sheet and con
  expect(actions(fetch.mock.calls)).toEqual(['connect']);
  expect(opened.close).toHaveBeenCalled();
 });
+
+test('an app that signs in only with the install\'s own client opens its own page, never a window (#914)', async () => {
+ const open = vi.spyOn(window, 'open');
+ const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+ const openApp = vi.fn();
+ await expect(signInToApp({ ...given, app: 'meta-ads', openApp })).resolves.toEqual({ state: 'manual' });
+ expect(openApp).toHaveBeenCalledWith('meta-ads');
+ expect(open).not.toHaveBeenCalled();
+ expect(fetch).not.toHaveBeenCalled();
+});

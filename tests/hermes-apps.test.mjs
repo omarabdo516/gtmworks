@@ -435,3 +435,35 @@ test('a key set with no model listed still stays unfinished when the profile lis
   assert.notEqual(set.profiles[target.profile],'written');
  } finally { fake.settings.profilesListStatus=null; await fake.close(); }
 });
+
+// #914: Meta refuses OAuth dynamic client registration, so its server signs in with the install's own Meta app: its id
+// (and a secret, when the install has one) are written into the server's oauth config, the config Hermes reads to skip
+// registration, and the vendor's page is asked for with that id.
+test('a vendor that refuses dynamic registration signs in with the install\'s own client, written for its server', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.dcrRefused.add('meta-ads');
+  fake.settings.appAuthPages['meta-ads']='https://www.facebook.com/v27.0/dialog/oauth';
+  const started=await startAppSignIn(target,'meta-ads',back('meta-ads'),{client:{id:'1234567890',secret:'meta-app-secret'}});
+  assert.equal(started.state,'started');
+  const page=new URL(started.url);
+  assert.equal(`${page.origin}${page.pathname}`,'https://www.facebook.com/v27.0/dialog/oauth');
+  assert.equal(page.searchParams.get('client_id'),'1234567890');
+  assert.deepEqual(servers()['meta-ads'].oauth,{redirect_uri:back('meta-ads'),client_id:'1234567890',client_secret:'meta-app-secret'});
+  assert.equal(JSON.stringify(started).includes('meta-app-secret'),false,'the secret goes only to the Engine');
+ } finally { await fake.close(); }
+});
+
+test('a sign-in the vendor refuses says why, and hands Hermes\'s words on only for the log', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.dcrRefused.add('meta-ads');
+  const refused=await startAppSignIn(target,'meta-ads',back('meta-ads'));
+  assert.equal(refused.state,'vendorRefused');
+  assert.equal(refused.reason,'registration');
+  assert.equal(refused.url,null);
+  assert.match(refused.detail,/^Registration failed: 400 .*Dynamic registration is not available/);
+  // Hermes's own text is bounded: a long answer never reaches the log whole.
+  assert.ok(refused.detail.length<=400);
+ } finally { await fake.close(); }
+});

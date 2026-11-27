@@ -31,6 +31,10 @@ password, anything shaped like a token, and short digit runs such as authenticat
   `timedOut`, never unreachable. The worker leaves an Engine whose write failed out of its upkeep after 2 s, then 4 s,
   and so on up to five minutes. It writes an Agent's rules and its Company's shared Skills only when they changed since
   its own last write, and reads every profile once every five minutes for drift.
+- `"event":"app_sign_in_failed"`: the Engine could not start an app's sign-in (#914), one line per attempt. Fields:
+  `company`, `agent`, `app` (the app's key, such as `meta-ads`), `reason` (`registration`: the vendor refuses OAuth
+  dynamic client registration, so the install needs its own client: `docs/connect-meta-ads.md`; `other`) and `message`
+  (Hermes's own words, redacted). The person sees the reason, never the message.
 - `"event":"apps_unread"`: an Agent's apps that could not be listed for its Connected tools (#770), one line per failed
   read. Fields: `company`, `agent`, `cause` (`unreachable`, `timedOut`, `refused`, `noNetwork`, `errorAnswer`, `failed`,
   `noProfile`, `database`, `missing`). The page keeps the last good list it read in the last minute and reads again.

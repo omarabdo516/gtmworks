@@ -401,3 +401,29 @@ test('the own-tool OAuth queue retries a failed Agent first and finishes after e
   await expect.poll(() => replace.mock.calls.map(([href]) => href), { timeout: 8000 }).toEqual(['/c/rs-learning/settings?section=apps']);
   expect(adds).toEqual([lead, lead, writer]);
 });
+
+// #914: Meta refuses dynamic client registration, so Meta Ads connects only with the install's own Meta app.
+test('an app whose install has no client of its own opens no window and says what the install owner adds first, with the steps', async () => {
+  const open = vi.fn();
+  vi.stubGlobal('open', open);
+  const sent = answers();
+  const guide = 'https://github.com/omarabdo516/gtmworks/blob/main/docs/connect-meta-ads.md';
+  const meta = { ...item('meta-ads'), clientNeeded: { guide } };
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={meta} text={text} failed={false}/>);
+  await expect.poll(() => document.getElementById('app-client-needed')?.textContent).toBe('Meta Ads doesn’t let a new app sign in on its own, so it needs this install’s own Meta Ads app. The install owner adds that app’s ID first. See the steps');
+  await expect.element(screen.getByRole('link', { name: 'See the steps' })).toHaveAttribute('href', guide);
+  expect(screen.getByRole('button', { name: 'Connect', exact: true }).elements(), 'nothing to press that could only fail').toHaveLength(0);
+  expect(open).not.toHaveBeenCalled();
+  expect(sent).toEqual([]);
+});
+
+test('a sign-in the vendor refused says its reason, naming the app, and closes the window it opened', async () => {
+  const opened = { opener: {}, location: { href: 'about:blank' }, close: vi.fn() };
+  vi.stubGlobal('open', vi.fn(() => opened));
+  answers([502, { error: 'appsRegistrationRefused' }]);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('tiktok-ads')} text={text} failed={false}/>);
+  await screen.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent('TikTok Ads refused the sign-in: it doesn’t let a new app register on its own. The install owner adds this install’s own TikTok Ads app ID.');
+  expect(screen.getByRole('alert').element().textContent).not.toMatch(/engine/i);
+  expect((opened.close as Mock).mock.calls.length).toBe(1);
+});

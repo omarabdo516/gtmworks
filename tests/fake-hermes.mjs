@@ -576,6 +576,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   serverTokens:/** @type {Map<string,string>} */(new Map()),
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),appAuthScheme:/** @type {'https'|'http'} */('https'),
+  // A vendor that refuses OAuth dynamic client registration (#914; Meta's Ads MCP): Hermes's sign-in start fails with the
+  // vendor's answer unless the server's config names a fixed client (tools/mcp_oauth.py, oauth.client_id), and a
+  // vendor's own sign-in page by server name, which the fixed client's id is sent to.
+  dcrRefused:/** @type {Set<string>} */(new Set()),appAuthPages:/** @type {Record<string,string>} */({}),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
   // The provenance `GET /api/skills` reports for a profile's own Skill (`hub`, `bundled` or `agent`), as `profile:name`;
@@ -1442,8 +1446,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if([...settings.appFlows.values()].some(flow=>flow.server===name&&flow.profile===scoped&&['authorization_required','callback_received'].includes(flow.status))) return send(response,409,{detail:`MCP OAuth for '${name}' is already in progress`});
      const id=randomUUID().replaceAll('-',''); const state=randomUUID();
      const redirect=servers[name].oauth?.redirect_uri||`http://${request.headers.host}/api/mcp/oauth/callback/${name}`;
+     const client=typeof servers[name].oauth?.client_id==='string'?servers[name].oauth.client_id:null;
+     if(!client&&settings.dcrRefused.has(name)) return send(response,200,{flow_id:id,server_name:name,status:'error',authorization_url:null,error:'Registration failed: 400 {"error":"invalid_client_metadata","error_description":"Dynamic registration is not available for this client."}'});
      settings.appFlows.set(id,{server:name,profile:scoped,status:'authorization_required',state,redirect});
-     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`${settings.appAuthScheme}://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
+     const page=settings.appAuthPages[name]??`${settings.appAuthScheme}://auth.${name}.example/authorize`;
+     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`${page}?${client?`client_id=${encodeURIComponent(client)}&`:''}state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
     }
    }
    // The dashboard's other pages an Owner changes things on (#871, spec #866), small: Channels (messaging.py 974-1033: a

@@ -603,3 +603,72 @@ test('connecting a made server uses its target Agent\'s own address, and refuses
   assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:analyst,app:'my-crm',action:'connect'}),{status:400,body:{error:'appsServerInvalid'}},'the other profiles disagree');
  } finally { await fake.close(); }
 });
+
+// #914: Meta refuses OAuth dynamic client registration, so Meta Ads signs in only with the install's own Meta app.
+const metaGuide='https://github.com/omarabdo516/gtmworks/blob/main/docs/connect-meta-ads.md';
+const withMetaClient=async(values,run)=>{
+ const before={id:process.env.META_ADS_CLIENT_ID,secret:process.env.META_ADS_CLIENT_SECRET};
+ for(const [name,value] of [['META_ADS_CLIENT_ID',values.id],['META_ADS_CLIENT_SECRET',values.secret]]) { if(value===undefined) delete process.env[name]; else process.env[name]=value; }
+ try { return await run(); } finally {
+  for(const [name,value] of [['META_ADS_CLIENT_ID',before.id],['META_ADS_CLIENT_SECRET',before.secret]]) { if(value===undefined) delete process.env[name]; else process.env[name]=value; }
+ }
+};
+
+test('without the install\'s Meta app, Meta Ads says so and its connect never reaches the Engine', async () => {
+ const fake=await engineServing(company);
+ try {
+  makeProfile(fake,companyProfile(company));
+  fake.settings.dcrRefused.add('meta-ads');
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  await withMetaClient({},async()=>{
+   const meta=(await readCompanyApps(omar.db,{company,test:false})).find(app=>app.key==='meta-ads');
+   assert.deepEqual(meta.clientNeeded,{guide:metaGuide});
+   assert.equal((await readCompanyApps(omar.db,{company,test:false})).find(app=>app.key==='tiktok-ads').clientNeeded,undefined,'a vendor that registers clients needs none');
+   fake.settings.managementRequests.length=0;
+   assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'meta-ads',action:'connect'}),{status:409,body:{error:'appsClientNeeded'}});
+   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method!=='GET'),[],'nothing is written and no sign-in starts');
+   assert.equal(omar.calls.some(([name])=>name==='start_app_sign_in'),false);
+  });
+ } finally { await fake.close(); }
+});
+
+test('with the install\'s Meta app, Meta Ads signs in with its id, and its secret reaches only the Engine', async () => {
+ const fake=await engineServing(company);
+ try {
+  makeProfile(fake,companyProfile(company));
+  fake.settings.dcrRefused.add('meta-ads');
+  fake.settings.appAuthPages['meta-ads']='https://www.facebook.com/v27.0/dialog/oauth';
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  await withMetaClient({id:'1234567890',secret:'meta-app-secret-value'},async()=>{
+   const listed=await readCompanyApps(omar.db,{company,test:false});
+   assert.equal(listed.find(app=>app.key==='meta-ads').clientNeeded,undefined);
+   const started=await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'meta-ads',action:'connect'});
+   assert.equal(started.status,200);
+   const page=new URL(String(started.body.url));
+   assert.equal(`${page.origin}${page.pathname}`,'https://www.facebook.com/v27.0/dialog/oauth');
+   assert.equal(page.searchParams.get('client_id'),'1234567890');
+   assert.equal(serversOf(fake,companyProfile(company))['meta-ads'].oauth.client_secret,'meta-app-secret-value','the Engine has it');
+   const polled=await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'meta-ads',action:'poll'});
+   const again=await readCompanyApps(omar.db,{company,test:false});
+   assert.equal(JSON.stringify([listed,started,polled,again,omar.calls]).includes('meta-app-secret-value'),false,'no answer of /api/company-apps and no database call carries it');
+  });
+ } finally { await fake.close(); }
+});
+
+test('a sign-in the vendor refuses is answered with its reason and logged once with the app and Hermes\'s words', async () => {
+ const fake=await engineServing(company);
+ try {
+  makeProfile(fake,companyProfile(company));
+  // The vendor refuses even the install's client: Hermes's start fails with the vendor's answer.
+  fake.settings.dcrRefused.add('tiktok-ads');
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  const lines=[];
+  const refused=await changeCompanyApp(omar.db,{company,agent:lead,person:owner,app:'tiktok-ads',action:'connect',log:line=>lines.push(line)});
+  assert.deepEqual(refused,{status:502,body:{error:'appsRegistrationRefused'}});
+  assert.equal(lines.length,1);
+  const line=JSON.parse(lines[0]);
+  assert.deepEqual([line.event,line.company,line.agent,line.app,line.reason],['app_sign_in_failed',company,lead,'tiktok-ads','registration']);
+  assert.match(line.message,/Registration failed: 400 .*Dynamic registration is not available/);
+  assert.equal(omar.calls.some(([name])=>name==='start_app_sign_in'),false,'no sign-in is kept');
+ } finally { await fake.close(); }
+});

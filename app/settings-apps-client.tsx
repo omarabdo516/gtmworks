@@ -25,7 +25,7 @@ export type AppsPlace={kind:'address',slug:string}|{kind:'sheet',open:(key:strin
 type Text=Record<string,string>;
 // The reference's count of connected apps: every app in the Connected group, a sign-in needing attention included.
 export const connectedCount=(items:AppItem[])=>items.filter(item=>item.state!=='off').length;
-const sayer=(text:Text)=>(key:string,...values:string[])=>values.reduce((line,value,index)=>line.replace(`{${index}}`,()=>value),text[key]??'');
+const sayer=(text:Text)=>(key:string,...values:string[])=>values.reduce((line,value,index)=>line.replaceAll(`{${index}}`,()=>value),text[key]??'');
 const order:AppCategory[]=['ads','content','communication','analytics','sales','more'];
 // A line naming the app or an Agent keeps each name in its own direction.
 const named=(line:string,...names:string[])=>line.split(/(\{\d\})/).map((part,index)=>{ const at=/^\{(\d)\}$/.exec(part); return at?<bdi key={index}>{names[Number(at[1])]}</bdi>:part; });
@@ -190,8 +190,12 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
   if(missing) { setError('envRequired'); return false; }
   return true;
  };
+ // A vendor that refuses dynamic registration, on an install with no client of its own yet (#914): no sign-in can
+ // start, so no window opens; the page says what the install owner adds first.
+ const clientNeeded=item.clientNeeded;
  const connect=(queue:string[],one:boolean,done:string[]=[])=>startTransition(async()=>{
   const agent=queue[0]; if(!agent||!ready()) return;
+  if(clientNeeded) { setError('error.appsClientNeeded'); return; }
   setError('');
   const body={company,app:item.key,action:'connect',...(item.fields?.length?{fields:values}:{}),...(item.auth==='header'?{token}:{})};
   if(direct) {
@@ -262,6 +266,8 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
    <div className="app-hero"><AppTile app={item} size="lg"/><p>{item.use}</p></div>
    {item.care&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say(item.care==='money'?'careMoney':'careCustomers')}</span></p>}
    {state==='attention'&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say('attentionNote')}</span></p>}
+   {clientNeeded&&<p className="ro-note sov-warn" role="note" id="app-client-needed"><SettingsIcon name="shield"/><span>{named(say('clientNeeded'),item.name)}{' '}
+    <a href={clientNeeded.guide} target="_blank" rel="noopener noreferrer" id="app-client-guide">{say('clientGuide')}</a></span></p>}
    <dl className="kv app-kv">
     <div className="kv__row"><dt>{say('can')}</dt><dd>{item.can}</dd></div>
     <div className="kv__row"><dt>{say('kindTitle')}</dt><dd>{say(item.auth==='header'?'kindHeader':item.auth==='oauth'?'kindOauth':item.auth==='command'?'kindCommand':'kindNone')}</dd></div>
@@ -287,7 +293,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
        <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div>
      <span className="set-err" id="app-pick-err" hidden={!pickError}>{say('pickOne')}</span></section>}
    {waiting&&<p className="set-hint" role="status">{named(say('waiting'),item.name)}</p>}
-   {error&&<p className="set-err" role="alert">{say(error)}</p>}
+   {error&&<p className="set-err" role="alert">{say(error,item.name)}</p>}
    {/* A server the Owner added keeps Remove while it is off for every Agent: it is still in their profiles. */}
    {owner&&(on||custom)&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(custom?'removeAsk':having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
      <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" id="app-off-cancel" disabled={pending} onClick={()=>setAsking(false)}>{say('cancel')}</button>
@@ -296,12 +302,12 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
   </div>
   <footer className="modal__foot modal__foot--end">
    {owner&&(state!=='connected'&&state!=='checking'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
-    <button type="button" className="btn btn--primary" id="app-connect" aria-disabled={busy} onClick={()=>{
+    {!clientNeeded&&<button type="button" className="btn btn--primary" id="app-connect" aria-disabled={busy} onClick={()=>{
      if(busy) return;
      if(next) connect(run.queue,run.one,run.done);
      else if(state==='off') connectPicked();
      else connect(own.filter(agent=>agent.state==='attention').map(agent=>agent.id),false);
-    }}>{busy?say('connecting'):next?named(say('connectFor'),nameOf(next)):say(state==='attention'?'reconnect':'connect')}</button></>
+    }}>{busy?say('connecting'):next?named(say('connectFor'),nameOf(next)):say(state==='attention'?'reconnect':'connect')}</button>}</>
    :<To place={place} step={{back:item.key}} stay={busy} className="btn btn--primary" id="apps-done">{say('done')}</To>}
   </footer>
  </>;

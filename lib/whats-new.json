@@ -1,5 +1,11 @@
 [
  {
+  "issue": 914,
+  "date": "2026-11-27",
+  "en": { "title": "Meta Ads connects with your install's own Meta app", "body": "Meta lets no new app sign in on its own, so Meta Ads now signs in with a Meta app the install owner adds once; until then its page says what to add and links to the steps instead of opening a window that closes at once, and a sign-in an app refuses now says why." },
+  "ar": { "title": "Meta Ads بيتوصل بتطبيق Meta الخاص بالتثبيت بتاعك", "body": "Meta مش بيسمح لأي تطبيق جديد يدخل لوحده، فـ Meta Ads بقى بيدخل بتطبيق Meta صاحب التثبيت بيضيفه مرة واحدة؛ ولحد ما يتضاف، صفحته بتقول إيه اللي يتضاف وفيها رابط للخطوات بدل ما تفتح نافذة تتقفل على طول، والدخول اللي تطبيق يرفضه بقى بيقول السبب." }
+ },
+ {
   "issue": 834,
   "date": "2026-11-27",
   "en": { "title": "The board is your Engine's own Kanban board", "body": "The board now shows the Cards your Agents work on the Company's Engine, and it updates live as they move; make a Card and give it to an Agent, a Member or nobody, open it to see everything the Engine keeps about it, comment, answer its Agent or stop its work, and Waiting on you and the bell show the Cards that wait on you; the list and the calendar show the same Cards." },

@@ -10,7 +10,8 @@ import { getI18n } from '@/lib/i18n-server';
 // Engine cannot be read), for the Connect apps sheet and the sidebar's count (#201); with `agent`, that Agent's connected
 // tools for its details (#204). An Owner connects one for an Agent (the answer is the vendor's https sign-in page),
 // follows or cancels that sign-in, or disconnects one for an Agent or for every Agent. The Agent is named by its id only; the database says which profile is its. lib/company-apps.mjs
-// checks the Owner on the server for every step. Nothing from the request or from the Engine is logged.
+// checks the Owner on the server for every step. Nothing from the request is logged; a sign-in the Engine could not
+// start is logged once with the app and the Engine's words (#914, app_sign_in_failed), and the answer names only its reason.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 export async function GET(request:NextRequest) {
