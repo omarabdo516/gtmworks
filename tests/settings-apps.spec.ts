@@ -174,14 +174,14 @@ test('picking Open Design opens the command card filled in, in English and Arabi
  await page.goto('/c/rs-learning/settings?section=apps');
  await page.locator('#apps-q').fill('open design');
  await expect(page.locator('.app__name')).toHaveText(['Open Design']);
- await expect(card(page,'Open Design').locator('.app__use')).toHaveText('Open Design makes designs in the work sandbox, with the model you set up inside Open Design. You put it in the company’s work folder and start its daemon; the guide says how.');
+ await expect(card(page,'Open Design').locator('.app__use')).toHaveText('Open Design makes designs in the work sandbox, with the model you set up inside Open Design. You put it in the company’s work sandbox and start its daemon; the guide says how.');
  await card(page,'Open Design').getByRole('link',{name:'Connect Open Design'}).click();
  await expect(page.locator('#sov-h')).toHaveText('Connect Open Design');
  await expect(page.locator('#own-name')).toHaveValue('open-design');
  await expect(page.locator('#own-kind')).toHaveValue('command');
  await expect(page.locator('#own-command')).toHaveValue('node');
  await expect(page.locator('#own-args')).toHaveValue(preset.args.join('\n'));
- await expect(page.locator('#app-guide')).toHaveText('How to put Open Design in the work folder and start it');
+ await expect(page.locator('#app-guide')).toHaveText('How to put Open Design in the work sandbox and start it');
  await expect(page.locator('#app-guide')).toHaveAttribute('href','https://github.com/omarabdo516/gtmworks/blob/main/docs/open-design.md');
  await page.screenshot({path:test.info().outputPath('open-design-preset.png')});
  await page.locator('#own-add').click();
@@ -190,15 +190,16 @@ test('picking Open Design opens the command card filled in, in English and Arabi
  expect(entry.command).toBe('ssh');
  expect(entry.args).toContain('pn@sandbox');
  expect(entry.args).not.toContain('-R');
- expect(entry.args.at(-1)).toBe(`builtin cd -- /work/${profile} || exit 126; exec 'node' '/work/open-design/apps/daemon/dist/cli.js' 'mcp' '--daemon-url' 'http://127.0.0.1:7456'`);
+ expect(entry.args.at(-1)).toBe(`builtin cd -- /work/${profile} || exit 126; exec 'node' '/home/pn/open-design/apps/daemon/dist/cli.js' 'mcp' '--daemon-url' 'http://127.0.0.1:7456'`);
  expect([...fake.settings.profiles.keys()].filter(name=>name.startsWith('od-')),'no design profile').toEqual([]);
  await page.locator('#apps-q').fill('open design');
  await expect(page.locator('.app__name')).toHaveText(['Open Design']);
  await expect(card(page,'Open Design').locator('.app__state')).toHaveText(/Connected/);
+ // The list names no Engine path; the card below shows the command as the Owner kept it, a path in the sandbox's home.
+ await noEngineText(page);
  await card(page,'Open Design').getByRole('link',{name:'Manage Open Design'}).click();
  await expect(page.locator('#app-command')).toHaveText(['node',...preset.args].join(' '));
  await expect(page.locator('#app-guide')).toBeVisible();
- await noEngineText(page);
  await page.locator('#app-off').click();
  await page.locator('#app-off-go').click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=apps$/);
@@ -208,7 +209,7 @@ test('picking Open Design opens the command card filled in, in English and Arabi
  try {
   await page.goto('/c/rs-learning/settings?section=apps&app=open-design');
   await expect(page.locator('#sov-h')).toHaveText('وصّل Open Design');
-  await expect(page.locator('#app-guide')).toHaveText('إزاي تحط Open Design في فولدر الشغل وتشغّله');
+  await expect(page.locator('#app-guide')).toHaveText('إزاي تحط Open Design في صندوق الشغل وتشغّله');
   await expect(page.locator('#own-kind option:checked')).toHaveText('أمر في صندوق الشغل');
   await expect(page.locator('#own-command')).toHaveValue('node');
   await expect(page.locator('#own-command')).toHaveAttribute('dir','ltr');

@@ -337,14 +337,14 @@ test('Open Design opens the command card filled in, with its guide, and sends wh
     }
     reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
   });
-  const args = ['/work/open-design/apps/daemon/dist/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'];
+  const args = ['/home/pn/open-design/apps/daemon/dist/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'];
   const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('open-design')} text={text} failed={false}/>);
   await expect.element(screen.getByRole('heading', { name: 'Connect Open Design' })).toBeVisible();
   await expect.element(screen.getByRole('textbox', { name: /Name/ })).toHaveValue('open-design');
   await expect.element(screen.getByRole('combobox', { name: 'How it connects' })).toHaveValue('command');
   await expect.element(screen.getByRole('textbox', { name: /^Command/ })).toHaveValue('node');
   await expect.element(screen.getByRole('textbox', { name: /Arguments/ })).toHaveValue(args.join('\n'));
-  await expect.element(screen.getByRole('link', { name: 'How to put Open Design in the work folder and start it' })).toHaveAttribute('href', 'https://github.com/omarabdo516/gtmworks/blob/main/docs/open-design.md');
+  await expect.element(screen.getByRole('link', { name: 'How to put Open Design in the work sandbox and start it' })).toHaveAttribute('href', 'https://github.com/omarabdo516/gtmworks/blob/main/docs/open-design.md');
   await screen.getByRole('button', { name: 'Test' }).click();
   await expect.element(screen.getByText('list_projects')).toBeVisible();
   expect(sent[0]).toEqual({ company: 'c-1', agent: lead, action: 'test', name: 'open-design', kind: 'command', command: 'node', args });

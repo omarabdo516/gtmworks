@@ -92,7 +92,7 @@ test('Open Design is a preset of the command card, linking its guide, and no app
   assert.equal(entry?.source, 'own');
   assert.equal(entry.auth, 'command');
   assert.equal(entry.docs, openDesignGuide);
-  assert.deepEqual(entry.preset, { command: 'node', args: ['/work/open-design/apps/daemon/dist/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'] });
+  assert.deepEqual(entry.preset, { command: 'node', args: ['/home/pn/open-design/apps/daemon/dist/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'] });
   assert.equal(offeredApp('open-design'), undefined);
   assert.equal(presetOf('own'), undefined);
   assert.ok(!apps.some(app => !['engine', 'remote', 'own'].includes(app.source)), 'no other source kind');

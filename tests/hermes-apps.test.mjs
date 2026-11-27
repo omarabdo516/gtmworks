@@ -283,7 +283,7 @@ test('Open Design is a preset of the command card: a form until its server is ad
   fake.settings.managementRequests.length=0;
   const preset=apps.find(app=>app.key==='open-design');
   assert.equal(preset?.source,'own');
-  assert.deepEqual(preset.preset,{command:'node',args:['/work/open-design/apps/daemon/dist/cli.js','mcp','--daemon-url','http://127.0.0.1:7456']});
+  assert.deepEqual(preset.preset,{command:'node',args:['/home/pn/open-design/apps/daemon/dist/cli.js','mcp','--daemon-url','http://127.0.0.1:7456']});
   const before=(await readApps(target,{test:false})).apps.filter(app=>app.key==='open-design');
   assert.deepEqual(before.map(app=>[app.source,app.installed,app.state]),[['own',false,'off']]);
   assert.deepEqual(before[0].preset,preset.preset,'the card carries what the form is filled with');
