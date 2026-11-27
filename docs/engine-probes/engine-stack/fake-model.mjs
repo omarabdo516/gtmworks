@@ -38,7 +38,7 @@ const server=createServer((request,response)=>{
   if(!request.url.endsWith('/chat/completions')) { response.writeHead(404); return response.end(); }
   const body=JSON.parse(raw||'{}');
   const {delay,call,reply}=plan(body.messages||[],body.tools);
-  kept.push({at:Date.now(),tools:(body.tools||[]).map(tool=>tool.function?.name),last:body.messages?.at(-1)});
+  kept.push({at:Date.now(),tools:(body.tools||[]).map(tool=>tool.function?.name),last:body.messages?.at(-1),auth:request.headers.authorization||null});
   if(kept.length>500) kept.splice(0,kept.length-500);
   if(delay) await new Promise(resolve=>setTimeout(resolve,delay*1000));
   const finish=call?'tool_calls':'stop';
