@@ -21,7 +21,7 @@ Nothing here is built yet. The code, `GLOSSARY.md` and the tests describe today'
   - Hermes has no Company. A profile owns its settings, keys and model and inherits nothing from another profile; a new profile can be made as a copy of an existing one (`hermes_cli/profiles.py`, `hermes_cli/web_routers/profiles.py`).
   - The root profile's credential pool is read by a profile that holds no credential of its own for that provider (`hermes_cli/auth.py`, `agent/credential_pool.py`). A comment in `lib/engine/providers.mjs` says a profile never reads another's key. One of the two is wrong, and a probe settles it.
   - Hermes has no switch for one model of a provider, no route that reorders credentials or switches one off, and no way to rename a credential after it is added.
-  - The Hermes Desktop App is a shell over the same server: it keeps no record of its own, signs in with the one session token, and sends a chat turn over `/api/ws` on the dashboard listener (`apps/desktop/`, `hermes_cli/web_routers/chat_ws.py`).
+  - The Hermes Desktop App is a shell over the same server: it keeps no record of its own, signs in with the one credential Hermes has, and sends a chat turn over `/api/ws` on the dashboard listener (`apps/desktop/`, `hermes_cli/web_routers/chat_ws.py`).
 - Production on 2026-11-26: no Channel message ever.
 
 ## Decision
