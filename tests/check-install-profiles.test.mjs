@@ -119,6 +119,23 @@ test('the Kanban step works a Card through the Engine\'s own routes and its disp
  assert.deepEqual(kept,{step:'kanban',board:{card:'t_1',told:true}},'the board\'s findings are a named field of the proof');
 });
 
+// #843: the install job read the person's file's path and the worker's write from the Kanban step's line, but the proof
+// dropped both as unnamed fields, so the job read nothing (open-design, ee82404). Every field the step's line names is
+// printed, and every field the job reads from kanban-proof.log is one of them.
+test('the Kanban step\'s proof keeps every field it names, the attachment\'s path and write among them', () => {
+ const call=script.match(/writeProof\(\{(step:'kanban',[^{]*)board:\{/)?.[1];
+ assert.ok(call,'the step prints its line');
+ const named=[...call.split(',').filter(Boolean).map(part=>part.split(':')[0]),'board'];
+ const figures=Object.fromEntries(named.map(field=>[field,field==='board'?{card:'t_1'}:`${field}-value`]));
+ assert.deepEqual(Object.keys(JSON.parse(proof(figures))).sort(),[...named].sort(),'the proof keeps every field the step names');
+ const kept=JSON.parse(proof({step:'kanban',attachment_path:'/opt/data/kanban/attachments/t_1/brief.txt',attachment_write:'refused'}));
+ assert.deepEqual(kept,{step:'kanban',attachment_path:'/opt/data/kanban/attachments/t_1/brief.txt',attachment_write:'refused'});
+ const job=readFileSync('scripts/ci-install-check.sh','utf8');
+ const read=[...job.matchAll(/"([a-z_]+)":[^\n]*kanban-proof\.log/g)].map(found=>found[1]);
+ assert.deepEqual([...new Set(read)].sort(),['attachment_path','attachment_write','sandbox_host']);
+ for(const field of read) assert.ok(named.includes(field),`the job reads ${field}, which the step prints`);
+});
+
 // Spec #831 (#833): the step ran past its area's 12 minutes on run 45841934073 having printed nothing. Its time is now its
 // clock's: a budget that fits the open-design area beside what it ran before, a line as each phase ends, every wait
 // held inside the budget (the waits it makes itself and the fake model's hold on a reviewer alike), and no fixed wait for
