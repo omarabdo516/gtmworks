@@ -1191,6 +1191,11 @@ done
 engine_left=$(docker exec "$engine_id" sh -c 'find / \( -path /proc -o -path /sys -o -path /dev -o -path /opt/data/kanban -o -path /opt/data/work \) -prune -o -name "$1*" -print 2> /dev/null; true' sh "$kanban_marker") \
   || fail "read the Engine's disk for the board worker's files"
 [[ -z $engine_left ]] || fail "a board worker left a file on the Engine's own disk: $engine_left"
+# Restoring an archived Card (#842): in the install's Engine, on a board of its own, a Card with no Agent is never started
+# out of the archive, a stopped Card gets its Agent back and starts nothing, and the moves restoreCard avoids
+# (lib/engine/board.mjs) still do what docs/engine-probes/kanban-board.md section 10 measured.
+docker exec -i "$engine_id" sh -c 'cd /opt/hermes && exec python -' < docs/engine-probes/kanban-board/restore.py \
+  || fail "the Engine restores an archived Card stopped with its Agent and starts nothing"
 }
 
 # backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data, refused onto an occupied install

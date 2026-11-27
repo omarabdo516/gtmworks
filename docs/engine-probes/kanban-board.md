@@ -282,9 +282,11 @@ sandbox. A link put there by the Engine itself would show the sandbox more of th
 
 ## 10. Restoring an archived Card without starting it (#842)
 
-Measured on 2026-11-27 on the same pinned image by `kanban-board/restore.py`, which drives the Kanban plugin's own
-routes on an empty board and asks a dry-run dispatcher tick whether each Card would start. Each Card was left by its
-worker's own tools (`claim_task`, then `block_task`, `request_review` or `schedule_task`), then archived.
+Measured on 2026-11-27 on the same pinned image by `kanban-board/restore.py`, which the install proof's open-design
+area also runs in the install's own Engine (on a board of its own), so a new Engine that moves differently fails there.
+It drives the Kanban plugin's own routes and asks a dry-run dispatcher tick whether each Card would start. Each Card was
+left by its worker's own tools (`claim_task`, then `block_task`, `request_review`, `schedule_task` or `complete_task`),
+then archived.
 
 | Was | Back to `ready` | Unassigned `ready`, the same status asked, the Agent back | Unassigned `ready`, `scheduled`, the Agent back |
 | --- | --- | --- | --- |
@@ -292,9 +294,13 @@ worker's own tools (`claim_task`, then `block_task`, `request_review` or `schedu
 | blocked | ready, starts | **triage**: the person's block counts as the Agent's second (`BLOCK_RECURRENCE_LIMIT` 2, `block_kind` kept since the Agent's block) | stopped, does not start |
 | review | ready, starts | review, starts its reviewer; the new `review_requested` names no implementer, so the reviewer's `kanban_request_changes` is refused | stopped, does not start; the Agent's `review_requested` (implementer, summary) is still the latest |
 | scheduled | ready, starts | stopped, does not start | stopped, does not start |
+| done | ready, starts until `done` is asked | done with its summary, its Agent back | |
 
 An unassigned `ready` Card is never claimed (`skipped_unassigned`; the install writes no `kanban.default_assignee`), so
-the moves between leave nothing startable. So gtmworks restores a Card that was stopped, waiting on a question or a
-review, or being worked as stopped with its Agent (`lib/engine/board.mjs` restoreCard), and a person lets it go on
-(#838). The Undo of the archive that stopped a working Card puts it back to `ready` and asks for a tick, so its Agent
-goes on. Nothing gtmworks can ask puts a Card back into `blocked` or `review` on this Engine without starting it.
+the moves between leave nothing startable, and a stopped Card's Continue (`PATCH status: ready`, unblock_task) puts it
+`ready`, or `todo` while a Card it waits for is open. So gtmworks restores a Card that was stopped, waiting on a question
+or a review, or being worked as stopped with its Agent, and a done Card done again with its Agent
+(`lib/engine/board.mjs` restoreCard), each through an unassigned Card. The Undo of the archive that stopped a working
+Card puts it back to `ready` and asks for a tick, so its Agent goes on. Nothing gtmworks can ask puts a Card back into
+`blocked` or `review` on this Engine without starting it: a Card that waited on you comes back stopped in Planned, not
+in Waiting on you.

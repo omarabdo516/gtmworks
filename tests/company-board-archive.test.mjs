@@ -100,6 +100,32 @@ test('Restore starts nothing: a Card that was worked on, waited on a question, w
  } finally { await fake.close(); }
 });
 
+test('a restore the Engine refuses part way starts nothing, a stopped Card that waits for an open one waits after Continue, and a done Card with nothing said comes back stopped', async () => {
+ const fake=await engineServing(company);
+ try {
+  const kanban=fake.settings.kanban;
+  const refused=kanban.task({title:'Meta campaign',status:'blocked',assignee:profileOf(ads)}).id;
+  const parent=kanban.task({title:'Brand book',status:'ready',assignee:profileOf(ads)}).id;
+  const child=kanban.task({title:'Ad copy',status:'blocked',assignee:profileOf(ads)}).id;
+  kanban.link(parent,child);
+  const silent=kanban.task({title:'Old report',status:'done',assignee:profileOf(ads)}).id;
+  await archiveCompanyCards(reader(),{company,cards:[refused,child,silent],stop:true});
+  // The Engine refuses the stop: the Card stays out of the archive with no Agent, so no tick starts it, and it is named.
+  let patched=0;
+  fake.settings.managedFail=(method,path)=>method==='PATCH'&&path.startsWith(`/api/plugins/kanban/tasks/${refused}`)&&++patched===2?409:null;
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[refused]}),{state:'restored',restored:[],left:[refused]});
+  fake.settings.managedFail=null;
+  kanban.dispatch();
+  assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===refused)),{status:'ready',assignee:null});
+  // Waiting for an open Card, it is stopped too, and Continue lets it wait for that Card rather than start.
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[child,silent]}),{state:'restored',restored:[child,silent],left:[]});
+  assert.equal(kanban.status(child,'ready'),null);
+  assert.equal(kanban.tasks.find(task=>task.id===child).status,'todo');
+  // A done Card the Engine holds no summary or result for cannot be done again: it comes back stopped with its Agent.
+  assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===silent)),{status:'scheduled',assignee:profileOf(ads)});
+ } finally { await fake.close(); }
+});
+
 test('a Card that waited for an archived Card no longer waits, and waits again once that Card is restored', async () => {
  const fake=await engineServing(company);
  try {
