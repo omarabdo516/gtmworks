@@ -1,0 +1,58 @@
+/* Talking to the work on a Card (spec #831, #838), ported from the approved look (design-reference-card/index.html:
+   .cw-call, .cw-call__head, .cw-call__face, .cw-call__body, .cw-call__q, .cw-call__acts, .cw-ans, .set-input,
+   .set-textarea, .set-err, .btn--primary, .btn--sm, .ib, .ib--sm, .cw-comp .composer, .note-composer). Colours come from
+   the shell's gw tokens (app/tokens.css); the composer's own shape is the shell's (app/shell.css). */
+
+/* the callout at the top: a question with its answer box, or a Card stopped after two failures with Continue */
+.gw .cw .cw-call { display: grid; gap: var(--s3); padding: var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-tertiary); }
+.gw .cw .cw-call--wait { background: var(--gw-wait-bg); }
+.gw .cw .cw-call__head { display: flex; align-items: flex-start; gap: var(--s3); }
+.gw .cw .cw-call__head > .sym { height: 28px; }
+.gw .cw .cw-call__face { display: inline-flex; flex: none; }
+.gw .cw .cw-call__body { flex: 1 1 0; min-width: 0; display: grid; gap: 4px; margin: 0; }
+.gw .cw .cw-call__q { margin: 1px 0 0; font-size: var(--gw-fs-msg); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gw .cw .cw-call__acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.gw .cw .cw-ans { display: grid; gap: 6px; }
+.gw .cw .set-input {
+  display: block; width: 100%; min-height: 0; padding: var(--s2) 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font-family: inherit; font-size: var(--gw-fs-sm); outline: none;
+  transition: border-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+/* the reference's 3px ring around the field, drawn as an outline in its colour token */
+.gw .cw .set-input:focus { border-color: var(--gw-border-1); outline: 3px solid var(--gw-bg-active); outline-offset: 0; }
+.gw .cw .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .cw .set-textarea { height: auto; min-height: 64px; line-height: 1.7; resize: vertical; }
+.gw .cw .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw .cw .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-height: 0; padding: 0 var(--s4);
+  border: 0; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: var(--gw-fw-semibold); white-space: nowrap;
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .cw .btn .gw-icon { width: 16px; height: 16px; }
+.gw .cw .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
+.gw .cw .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .cw .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); }
+@media (hover: hover) { .gw .cw .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+[dir="ltr"] .gw .cw .cw-call__q { unicode-bidi: plaintext; }
+
+/* Stop and Start at the end of the Assignee row */
+.gw .cw .ib {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 32px; height: 32px; padding: 0 7px;
+  border: 0; border-radius: var(--gw-r-full); background: transparent; color: var(--gw-text-2);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out), color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .cw .ib::before { content: ""; position: absolute; inset: -6px; }
+.gw .cw .ib .gw-icon { width: 16px; height: 16px; }
+.gw .cw .ib:disabled { color: var(--gw-text-4); }
+@media (hover: hover) { .gw .cw .ib:hover:not(:disabled) { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+
+/* the comment field under the tabs */
+.gw .cw .cw-comp .composer { max-width: none; width: 100%; margin: 0; }
+.gw .cw .note-composer .composer__input { padding-inline-start: var(--s2); }
+[dir="ltr"] .gw .cw #ta-note:placeholder-shown { direction: ltr; }
+
+/* a phone: every control is a 44px target (DESIGN.md) */
+@media (max-width: 767px) {
+  .gw .cw .btn--sm { height: 44px; }
+  .gw .cw .ib { min-width: 44px; height: 44px; }
+}
