@@ -303,3 +303,46 @@ test('Open Design is a preset of the command card: a form until its server is ad
   assert.deepEqual(named,[],'no design profile is listed, made or keyed');
  } finally { await fake.close(); }
 });
+
+// #914: Meta refuses OAuth dynamic client registration, so its server signs in with the install's own Meta app: its id
+// (and a secret, when the install has one) are written into the server's oauth config, the config Hermes reads to skip
+// registration, and the vendor's page is asked for with that id.
+test('a vendor that refuses dynamic registration signs in with the install\'s own client, written for its server', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.dcrRefused.add('meta-ads');
+  fake.settings.appAuthPages['meta-ads']='https://www.facebook.com/v27.0/dialog/oauth';
+  const started=await startAppSignIn(target,'meta-ads',back('meta-ads'),{client:{id:'1234567890',secret:'meta-app-secret'}});
+  assert.equal(started.state,'started');
+  const page=new URL(started.url);
+  assert.equal(`${page.origin}${page.pathname}`,'https://www.facebook.com/v27.0/dialog/oauth');
+  assert.equal(page.searchParams.get('client_id'),'1234567890');
+  assert.deepEqual(servers()['meta-ads'].oauth,{redirect_uri:back('meta-ads'),client_id:'1234567890',client_secret:'meta-app-secret'});
+  assert.equal(JSON.stringify(started).includes('meta-app-secret'),false,'the secret goes only to the Engine');
+ } finally { await fake.close(); }
+});
+
+test('a sign-in the vendor refuses says why, and hands Hermes\'s words on only for the log', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.dcrRefused.add('meta-ads');
+  const refused=await startAppSignIn(target,'meta-ads',back('meta-ads'));
+  assert.equal(refused.state,'vendorRefused');
+  assert.equal(refused.reason,'registration');
+  assert.equal(refused.url,null);
+  assert.match(refused.detail,/^Registration failed: 400 .*Dynamic registration is not available/);
+  // Hermes's own text is bounded: a long answer never reaches the log whole.
+  assert.ok(refused.detail.length<=400);
+  // A fault of Hermes's own is the Engine's, never blamed on the vendor; the vendor's refusal in its words still is.
+  fake.settings.appAuthFailure={status:500,detail:'Internal error at /opt/data/mcp'};
+  assert.deepEqual(await startAppSignIn(target,'tiktok-ads',back('tiktok-ads')),{state:'failed',flow:null,url:null,detail:'Internal error at /opt/data/mcp'});
+  fake.settings.appAuthFailure={status:502,detail:'Registration failed: 400 invalid_client_metadata'};
+  assert.equal((await startAppSignIn(target,'tiktok-ads',back('tiktok-ads'))).reason,'registration');
+  // Only an explicit refusal is the vendor's: a registration that timed out is a fault, with Hermes's words for the log.
+  fake.settings.appAuthFailure={status:502,detail:'Dynamic client registration request timed out'};
+  assert.deepEqual(await startAppSignIn(target,'tiktok-ads',back('tiktok-ads')),{state:'failed',flow:null,url:null,detail:'Dynamic client registration request timed out'});
+  // The reason is read from the whole answer, before its words are bounded.
+  fake.settings.appAuthFailure={status:502,detail:`${'x'.repeat(450)} Registration failed: 400 invalid_client_metadata`};
+  assert.equal((await startAppSignIn(target,'tiktok-ads',back('tiktok-ads'))).reason,'registration');
+ } finally { await fake.close(); }
+});
