@@ -98,7 +98,8 @@ test('a Card an Agent works on asks once; Cancel archives nothing, "Archive and 
  await sheet.getByRole('button',{name:'Close the card',exact:true}).click();
  await expect(onBoard(page,cards.meta)).toHaveCount(0);
 
- // Restored from the archived list: back on the board, its Run not started again and no tick asked.
+ // Restored from the archived list: back on the board stopped with its Agent (`scheduled`, which the Engine's own tick
+ // never starts), its Run not started again and no tick asked.
  const ticks=fake.settings.kanban.ticks;
  await page.getByRole('button',{name:/^Archived/}).click();
  await page.getByRole('list',{name:'Archived cards'}).getByRole('button',{name:'Restore Meta campaign'}).click();
@@ -107,6 +108,8 @@ test('a Card an Agent works on asks once; Cancel archives nothing, "Archive and 
  await expect(inColumn(page,'planned',cards.meta)).toBeVisible();
  expect(fake.settings.kanban.ticks).toBe(ticks);
  expect(fake.settings.kanban.runs.filter(found=>found.task_id===cards.meta)).toHaveLength(1);
+ expect(status(cards.meta)).toBe('scheduled');
+ expect(fake.settings.kanban.tasks.find(task=>task.id===cards.meta)?.assignee).toBe(fake.settings.kanban.runs.find(found=>found.task_id===cards.meta)?.profile);
 });
 
 test('a Card that waited for an archived Card no longer waits, and waits again after Undo',async({page})=>{

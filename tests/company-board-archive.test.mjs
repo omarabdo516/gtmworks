@@ -67,12 +67,36 @@ test('a Card an Agent works on asks once: nothing is archived until the person c
   assert.deepEqual(archived,{state:'archived',archived:[running,question,quiet],left:[]});
   assert.deepEqual({status:run.status,outcome:run.outcome,ended:run.ended_at!=null},{status:'reclaimed',outcome:'reclaimed',ended:true});
   // Undo: the Card that was worked on is ready again and the dispatcher is asked at once, so its Agent goes on. The
-  // question's Card comes back ready, waiting on no one, and its Agent starts again with the same tick, as the Engine's
-  // own tick of the whole board would start it.
+  // question's Card cannot be put back to wait on its question (the Engine re-blocks it into triage): it comes back
+  // stopped with its Agent, and neither that tick nor the Engine's next one starts it.
   const undone=await restoreCompanyCards(reader(),{company,cards:[running,question,quiet],undo:true});
   assert.deepEqual(undone,{state:'restored',restored:[running,question,quiet],left:[]});
   assert.equal(kanban.ticks,1);
-  assert.deepEqual([await columnOf(running),await columnOf(question),await columnOf(quiet)],['progress','progress','planned']);
+  assert.deepEqual([await columnOf(running),await columnOf(question),await columnOf(quiet)],['progress','planned','planned']);
+  kanban.dispatch();
+  assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===question)),{status:'scheduled',assignee:companyProfile});
+ } finally { await fake.close(); }
+});
+
+test('Restore starts nothing: a Card that was worked on, waited on a question, was in review or was stopped comes back stopped with its Agent', async () => {
+ const fake=await engineServing(company);
+ try {
+  const kanban=fake.settings.kanban;
+  const cards=['running','blocked','review','scheduled'].map(status=>kanban.task({title:`Card ${status}`,status,assignee:profileOf(ads)}).id);
+  kanban.run(cards[0],{profile:profileOf(ads)});
+  await archiveCompanyCards(reader(),{company,cards,stop:true});
+  // Every move out of the archive goes through a Card with no Agent, which the dispatcher never starts, and the Agent
+  // comes back only once the Card is stopped.
+  const restored=await restoreCompanyCards(reader(),{company,cards});
+  const moves=kanban.patches.filter(patch=>cards.includes(patch.id)&&patch.body.status!=='archived');
+  assert.deepEqual(moves.filter(patch=>patch.id===cards[1]).map(patch=>patch.body),[{assignee:'',status:'ready'},{status:'scheduled'},{assignee:profileOf(ads)}]);
+  assert.ok(moves.every(patch=>patch.body.status!=='ready'||patch.body.assignee===''));
+  assert.deepEqual(restored,{state:'restored',restored:cards,left:[]});
+  assert.equal(kanban.ticks,0);
+  kanban.dispatch();
+  for(const id of cards) assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===id)),{status:'scheduled',assignee:profileOf(ads)});
+  const board=await readCompanyBoard(reader(),{company});
+  for(const id of cards) assert.deepEqual((({column,symbol,agent})=>({column,symbol,agent}))(board.cards.find(card=>card.id===id)),{column:'planned',symbol:{kind:'stopped'},agent:{id:ads,name:'Ads'}});
  } finally { await fake.close(); }
 });
 
