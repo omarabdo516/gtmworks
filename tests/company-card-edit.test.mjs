@@ -21,6 +21,7 @@ function reader() {
   if(name==='company_app_agents') return {data:agents,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  },from:table=>{
+  if(table==='people') { const who={select:()=>who,eq:()=>who,maybeSingle:async()=>({data:{name:'Omar Abdo'},error:null})}; return who; }
   assert.equal(table,'kanban_cards');
   const where={}; let change=null;
   const chain={update:value=>{ change=value; return chain; },eq:(field,value)=>{ where[field]=value; return chain; },
@@ -97,6 +98,8 @@ test('a drop into Ideas, Planned or Done moves the Card on the Engine; In progre
   assert.equal(kanban.tasks[0].status,'triage');
   assert.deepEqual(await change(db,id,{column:'done'}),{state:'changed'});
   assert.equal(kanban.tasks[0].status,'done');
+  // The Engine completes an Idea only from ready, and with a line of evidence: the line names the person who moved it.
+  assert.equal(kanban.runs.filter(run=>run.task_id===id).at(-1)?.summary,'Moved to Done by Omar Abdo');
   assert.deepEqual(await change(db,id,{column:'planned'}),{state:'changed'});
   assert.equal(kanban.tasks[0].status,'ready');
   // The Engine sets In progress itself and refuses `running`; Waiting on you is a question or a review, asked by the work.

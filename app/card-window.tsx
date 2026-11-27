@@ -11,6 +11,7 @@ import { CardCallout, CommentField, RunControl } from './card-talk';
 import { CardFileChips, CardFilesRow } from './card-files';
 import { useCardChanges } from './board-live';
 import { DateRow, DescriptionEdit, StatusMenu, TitleEdit, WaitsFor } from './card-window-edit';
+import { ArchivedCallout, CardMore } from './board-archive';
 import en from '@/lib/messages/card-window.en.json';
 import ar from '@/lib/messages/card-window.ar.json';
 import './log.css';
@@ -172,8 +173,12 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned,control}:{company:
  </>;
 }
 
-export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,showCard,onBoard,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,board?:{id:string,title:string,column:string}[],cardHref:(id:string)=>string,
- fileHref:(card:string,file:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,onClose:()=>void}) {
+// `archive` and `restore` are the board's (#842, app/board-archive.tsx), for a Member who may write: the window stays on
+// the Card, archived and read only, and reads it again once the archive or the restore is done. `board` is the board's
+// Cards, which a Card may wait for (#837).
+export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,showCard,onBoard,archive,restore,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,
+ board?:{id:string,title:string,column:string}[],cardHref:(id:string)=>string,fileHref:(card:string,file:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,
+ archive?:(id:string,done:()=>void)=>void,restore?:(id:string)=>Promise<unknown>,onClose:()=>void}) {
  const {t,language,locale}=useI18n();
  const text:Record<string,string>=language==='ar'?ar:en;
  const c=(key:string,...values:unknown[])=>(text[key]??key).replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)]??''));
@@ -279,8 +284,10 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
    <header className="cw-head"><div className="cw-head__row">
     {column&&editable&&card?<StatusMenu company={company} card={card.id} column={column} lead={symbol&&sym(symbol)} writer={writer} onBoard={saved}/>
      :column&&<span className={`cw-status is-static${waiting?' is-wait':''}`}>{symbol&&sym(symbol)}<span>{columnName}</span></span>}
+    {card?.archived&&<span className="cw-status is-static"><ShellIcon name="archive"/><span>{t('cardArchived')}</span></span>}
     {!writer&&<span className="sym sym--mute" role="img" aria-label={c('cwReadOnly')} title={c('cwReadOnly')}><ShellIcon name="eye"/></span>}
     <span className="od-fill"/>
+    {card&&archive&&restore&&<CardMore archived={card.archived} archive={()=>archive(card.id,read.reread)} restore={()=>void restore(card.id).then(read.reread)}/>}
     <button type="button" className="circle-btn" aria-label={c('cwClose')} title={c('cwCloseTip')} onClick={close}><ShellIcon name="x"/></button>
    </div></header>
    <div className="cw-body">
@@ -288,6 +295,7 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
      <TitleEdit company={company} card={id} title={title} editable={editable} c={c} onSaved={saved}/>
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
+     {card?.archived&&<ArchivedCallout restore={restore&&(()=>void restore(card.id).then(read.reread))}/>}
      {card&&card.symbol&&<CardCallout key={card.id} company={company} card={card} writer={writer} c={c} sym={sym(card.symbol)} onDone={talked}/>}
      {editable&&card&&<DescriptionEdit key={`description:${card.id}`} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
      {!editable&&card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}

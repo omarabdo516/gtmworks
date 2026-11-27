@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
+import { noteRoute } from './engine-routes.mjs';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
@@ -129,33 +130,78 @@ function kanbanBoard() {
   },
   /** @param {string} parent @param {string} child */
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
-  // #837: a person's move, rename and link through the routes, as the pinned release answers them
-  // (plugins/kanban/dashboard/plugin_api.py _patch_status, _drag_to, _set_status_direct; hermes_cli/kanban_db.py
-  // complete_task, block_task, request_review, unblock_task, reopen_review_task, link_tasks, unlink_tasks,
-  // recompute_ready). `status(id,s)` answers null when the move is taken, else the Engine's refusal [code, detail].
-  /** @param {string} id @param {string} s @returns {[number,string]|null} */
-  status(id,s) {
-   const task=tasks.find(found=>found.id===id); if(!task) return [404,`task ${id} not found`];
-   const open=links.filter(link=>link.child_id===id).map(link=>tasks.find(found=>found.id===link.parent_id)).filter(parent=>parent&&!['done','archived'].includes(parent.status));
-   const landing=open.length?'todo':'ready';
-   const stopRun=()=>{ if(task.status!=='running') return; const run=runs.find(found=>found.task_id===id&&!found.ended_at); if(run) Object.assign(run,{status:'reclaimed',outcome:'reclaimed',ended_at:++clock}); Object.assign(task,{claim_lock:null,current_run_id:null}); };
-   const set=(next,kind='status',payload={status:next})=>{ stopRun(); task.status=next; if(next==='done') task.completed_at=++clock; event(id,kind,payload); };
-   if(s==='running') return [400,"Cannot set status to 'running' directly; use the dispatcher/claim path"];
-   if(s==='archived') { set('archived','archived',null); return null; }
-   if(s==='done') { if(open.length) return [409,`cannot move ${id} to 'done': unsatisfied parent dependencies: ${open.map(parent=>`${parent.id} (${parent.status})`).join(', ')}; complete the parents first (done or archived)`];
-    set('done','completed',{summary:null}); this.recompute(); return null; }
-   if(s==='blocked'||s==='review') { if(!['ready','running'].includes(task.status)||s==='review'&&open.length) return [409,`status transition to '${s}' not valid from current state`];
-    set(s,s==='blocked'?'blocked':'review_requested',null); this.recompute(); return null; }
-   if(s==='ready'||s==='todo') {
-    if(task.status==='review') { set(landing,'review_reopened',{status:landing}); this.recompute(); return null; }
-    if(s==='ready'&&['blocked','scheduled'].includes(task.status)) { Object.assign(task,{current_run_id:null,consecutive_failures:0,last_failure_error:null}); set(landing,'unblocked',landing==='ready'?null:{status:landing}); this.recompute(); return null; }
-    if(s==='ready'&&open.length) return [409,`Cannot move to 'ready': blocked by parent(s) not done — ${open.map(parent=>`'${parent.title}' (${parent.id}, status=${parent.status})`).join(', ')}`];
-    set(s); if(s==='ready') this.recompute(); return null;
+  // PATCH /tasks/{id} with a status (#842; plugin_api.py _patch_status, kanban_db.py archive_task, complete_task and
+  // _set_status_direct): `archived` closes an open Run as `reclaimed` (the Engine stops its worker) and frees every Card
+  // that waited for it; a move back from the archive is to triage, todo or ready (kanban_workflow.py ARCHIVED), and
+  // re-gates the Cards that wait for it; `done` completes a ready, running, blocked or review Card with its summary.
+  // A person's move (#838): `ready` from `blocked` or `scheduled` lets the Card go on (unblock_task, the failure counter
+  // starting again), `scheduled` parks it from todo, ready, running or blocked where the dispatcher does not start it
+  // (schedule_task, an open Run ending `scheduled`), and `running` is the dispatcher's alone.
+  // A person's drop (#837): leaving `review` for `ready` or `todo` reopens it to its implementer (reopen_review_task), a
+  // Card goes back to `todo` rather than `ready` while a Card it waits for is open, and `blocked` or `review` are taken
+  // only from `ready` or `running`; a refusal for an open parent names it, as the Engine's does.
+  // Answers null when done, or the Engine's refusal. `delete` is DELETE /tasks/{id}, which gtmworks never asks.
+  /** @param {string} id @param {string} status @param {{summary?:string|null,result?:string|null}} [fields] @returns {{code:number,detail:string}|null} */
+  status(id,status,{summary=null,result=null}={}) {
+   const task=tasks.find(found=>found.id===id);
+   const satisfied=other=>links.filter(link=>link.child_id===other).every(link=>['done','archived'].includes(tasks.find(found=>found.id===link.parent_id)?.status));
+   const refused=detail=>({code:409,detail});
+   const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+   const children=links.filter(link=>link.parent_id===id).map(link=>tasks.find(found=>found.id===link.child_id)).filter(Boolean);
+   if(!task) return {code:404,detail:`task ${id} not found`};
+   if(status==='running') return {code:400,detail:'running is set by the dispatcher'};
+   const landing=satisfied(id)?'ready':'todo';
+   if(status==='ready'&&['blocked','scheduled'].includes(task.status)) {
+    Object.assign(task,{status:landing,current_run_id:null,consecutive_failures:0,last_failure_error:null});
+    event(id,'unblocked',landing==='ready'?null:{status:landing});
+    return null;
    }
-   if(s==='scheduled') return this.setStatus(id,s)===200?null:[409,"status transition to 'scheduled' not valid from current state"];
-   if(s==='triage') { set(s); return null; }
-   return [400,`unknown status: ${s}`];
+   if((status==='ready'||status==='todo')&&task.status==='review') {
+    Object.assign(task,{status:landing,current_run_id:null,claim_lock:null,claim_expires:null,worker_pid:null});
+    event(id,'review_reopened',landing==='ready'?null:{status:landing});
+    return null;
+   }
+   if(status==='blocked'||status==='review') {
+    if(!['ready','running'].includes(task.status)||status==='review'&&!satisfied(id)) return refused(`status transition to '${status}' not valid from current state`);
+    if(open) Object.assign(open,{status:'done',outcome:status==='blocked'?'blocked':'review_requested',ended_at:++clock});
+    Object.assign(task,{status,claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,status==='blocked'?'blocked':'review_requested',null,open?.id??null);
+    return null;
+   }
+   if(status==='scheduled') {
+    if(!['todo','ready','running','blocked'].includes(task.status)) return refused(`status transition to 'scheduled' not valid from current state`);
+    if(open) Object.assign(open,{status:'scheduled',outcome:'scheduled',ended_at:++clock});
+    Object.assign(task,{status:'scheduled',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'scheduled',{reason:null},open?.id??null);
+    return null;
+   }
+   if(status==='archived') {
+    if(task.status==='archived') return refused(`status transition to 'archived' not valid from current state`);
+    if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',summary:'task archived with run still active',ended_at:++clock});
+    Object.assign(task,{status:'archived',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'archived',null,open?.id??null);
+   } else if(['triage','todo','ready'].includes(status)) {
+    if(status==='ready'&&!satisfied(id)) return refused(`Cannot move to 'ready': blocked by parent(s) not done`);
+    if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',summary:`status changed to ${status} (dashboard/direct)`,ended_at:++clock});
+    const reopened=['done','archived'].includes(task.status);
+    Object.assign(task,{status,claim_lock:null,claim_expires:null,worker_pid:null});
+    event(id,'status',{status,requested_status:status},open?.id??null);
+    if(reopened) for(const child of children) if(['ready','review','running','done'].includes(child.status)) { child.status='todo'; event(child.id,'status',{status:'todo'}); }
+   } else if(status==='done') {
+    if(!satisfied(id)) return refused(`cannot move ${id} to 'done': unsatisfied parent dependencies; complete the parents first (done or archived)`);
+    if(!['ready','running','blocked','review'].includes(task.status)) return refused(`status transition to 'done' not valid from current state`);
+    if(task.status!=='review'&&!summary?.trim()&&!result?.trim()&&!task.result?.trim()) return {code:400,detail:'completion needs a summary or a result'};
+    const closing=open??this.run(id,{status:'done'});
+    Object.assign(closing,{status:'done',outcome:'completed',summary:summary??result,ended_at:++clock});
+    Object.assign(task,{status:'done',result,completed_at:clock,claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'completed',null,closing.id);
+   } else return {code:400,detail:`unknown status: ${status}`};
+   // Cards that waited for this one go on once it is done or archived (recompute_ready).
+   for(const child of children) if(child.status==='todo'&&satisfied(child.id)) { child.status='ready'; event(child.id,'promoted',null); }
+   return null;
   },
+  /** @param {string} id */
+  delete(id) { const at=tasks.findIndex(found=>found.id===id); if(at<0) return false; tasks.splice(at,1); return true; },
   // recompute_ready: a `todo` Card whose parents are all done or archived is `ready`.
   recompute() {
    for(const task of tasks.filter(found=>found.status==='todo')) {
@@ -196,29 +242,6 @@ function kanbanBoard() {
    Object.assign(task,{status:'ready',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null,consecutive_failures:0,last_failure_error:null});
    event(id,'reclaimed',{manual:true,reason},open?.id??null);
    return true;
-  },
-  // A person's move (update_task's status, #838): `ready` from `blocked` or `scheduled` lets the Card go on
-  // (unblock_task, the failure counter starting again), `scheduled` parks it from todo, ready, running or blocked where
-  // the dispatcher does not start it (schedule_task, an open Run ending `scheduled`), and `running` is the dispatcher's
-  // alone. Answers the status code: 400 for `running` or an unknown status, 409 for a move from where the Card is not.
-  /** @param {string} id @param {string} status */
-  setStatus(id,status) {
-   const task=tasks.find(found=>found.id===id);
-   if(!task) return 404;
-   if(status==='running'||![...kanbanStatuses,'archived'].includes(status)) return 400;
-   if(status==='ready'&&['blocked','scheduled'].includes(task.status)) {
-    Object.assign(task,{status:'ready',current_run_id:null,consecutive_failures:0,last_failure_error:null});
-    event(id,'unblocked',null);
-    return 200;
-   }
-   if(status==='scheduled'&&['todo','ready','running','blocked'].includes(task.status)) {
-    const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
-    if(open) Object.assign(open,{status:'scheduled',outcome:'scheduled',ended_at:++clock});
-    Object.assign(task,{status:'scheduled',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
-    event(id,'scheduled',{reason:null},open?.id??null);
-    return 200;
-   }
-   return 409;
   },
   // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
   // a Card that is not archived, the Engine answers that Card again. `ready` unless asked for triage or a parent is not
@@ -376,6 +399,8 @@ function dashboardAnswer(settings,request,response) {
 export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) {
  // Run ids are unique across fakes, as Hermes's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
+ // Every route this fake is asked for, on either listener, once each, in the run's log (tests/engine-routes.mjs, #842).
+ const routes=new Set();
  // Each run's event stream (#141; api_server_runs.py _RunStream): its numbered events in memory, the last `backlogLimit`
  // of them kept, and the readers following it. A null event is the stream's end, as in the pinned release.
  const streams=/** @type {Map<string,{backlog:{seq:number,event:any}[],next:number,ended:boolean,readers:Set<import('node:http').ServerResponse>}>} */(new Map());
@@ -739,6 +764,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   if(settings.answerDelay>0) { request.pause(); setTimeout(()=>request.resume(),settings.answerDelay); }
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    settings.requests.push({method:request.method,path:request.url,authorization:request.headers.authorization,session:request.headers['x-hermes-session-key'],idempotency:request.headers['idempotency-key']});
+   noteRoute(routes,request.method||'GET',request.url||'');
    const managed=settings.profiles.get(decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||''));
    const key=managed?managed.key:settings.key;
    const status=key&&request.headers.authorization===`Bearer ${key}`?settings.status:401;
@@ -1590,8 +1616,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      task.assignee=body.assignee||null;
      settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
     }
-    // #837: the status, then the title and body (update_task's order); a refused move is the Engine's 400 or 409.
-    if(typeof body?.status==='string') { const refused=settings.kanban.status(task.id,body.status); if(refused) return send(response,refused[0],{detail:refused[1]}); }
+    // The status (#838, #842), then the title and body (#837; update_task's order); a refused move is the Engine's 400 or 409.
+    if(typeof body?.status==='string') { const refused=settings.kanban.status(task.id,body.status,body); if(refused) return send(response,refused.code,{detail:refused.detail}); }
     if(typeof body?.title==='string'||typeof body?.body==='string') {
      if(typeof body.title==='string'&&!body.title.trim()) return send(response,400,{detail:'title cannot be empty'});
      if(typeof body.title==='string') task.title=body.title.trim();
@@ -1600,6 +1626,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     }
     return send(response,200,{task});
    }
+   if(kanbanTask&&request.method==='DELETE') return settings.kanban.delete(decodeURIComponent(kanbanTask[1]))?send(response,200,{ok:true}):send(response,404,{detail:'not found'});
    if(url.pathname==='/api/plugins/kanban/links'&&request.method==='POST') { const [code,answer]=settings.kanban.addLink(String(body?.parent_id??''),String(body?.child_id??'')); return send(response,code,answer); }
    if(url.pathname==='/api/plugins/kanban/links'&&request.method==='DELETE') {
     const [parent,child]=[url.searchParams.get('parent_id'),url.searchParams.get('child_id')];
@@ -1658,6 +1685,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   if(dashboardAnswer(settings,request,response)) return;
   // What the management listener was asked (#782), as `requests` keeps the API listener's.
   settings.managed.push({method:request.method,path:request.url});
+  noteRoute(routes,request.method||'GET',request.url||'');
   // `managedFail` answers a request it names with that status (#782): one profile's read failing while the rest answer.
   const failing=settings.managedFail?.(request.method||'GET',request.url||'');
   if(failing) return send(response,failing,{detail:'Internal Server Error'});

@@ -982,8 +982,9 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(await runToolCall({db:service,engine:engineFor({address:hermes.address,profile,key:'test-only-key'}),profile,conversation,run:fake.runs[0].id},
    {id:'call-0',name:'create_agent',arguments:{template:'writer'}})).toEqual({state:'created',agent:agent.id});
   // The lane's worker keeps its own upkeep on the same Engine on its own clock (the accounts, their switches, the config
-  // it reads each pass): those reads are not the call's.
-  const upkeep=new Set(['GET /api/credentials/pool','GET /api/credentials/pool/switches','GET /api/config']);
+  // it reads each pass, and each Agent profile's Routines it lists to show which run now, lib/routine-runs.mjs #699):
+  // those reads are not the call's.
+  const upkeep=new Set(['GET /api/credentials/pool','GET /api/credentials/pool/switches','GET /api/config','GET /api/cron/jobs']);
   expect(managed(hermes).slice(before).filter(request=>!upkeep.has(request))).toEqual([]);
   expect(madeBy(conversation,lead)).toHaveLength(1);
 
