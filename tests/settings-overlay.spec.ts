@@ -11,8 +11,10 @@ const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // The sections in their groups (#612): Company, Agents and Engine, then Backups, Your account and About on their own.
 // Backup and the Hermes dashboard's row are the Owner's alone (#33, #869).
-const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Voice','Usage','gtmworks','Backups','Your account','About'];
-const staffSections=sections.filter(section=>section!=='Backups'&&section!=='gtmworks');
+// The seeded Administrator is the install owner, so the Engine dashboard's row is theirs too (#915).
+const dashboardRow='Engine logs and system (advanced)';
+const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Voice','Usage',dashboardRow,'Backups','Your account','About'];
+const staffSections=sections.filter(section=>section!=='Backups'&&section!==dashboardRow);
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
