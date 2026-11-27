@@ -13,8 +13,11 @@ services:
     image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
     restart: unless-stopped
     container_name: ${ENGINE_NAME:?Run scripts/install.sh}
-    # The key is required: an Engine with no key must refuse to start rather than serve an API with none.
-    command: [sh, -ec, 'test -n "$${API_SERVER_KEY}" || { echo "The Engine has no key: run scripts/install.sh" >&2; exit 1; }; exec hermes gateway run']
+    # The key is required: an Engine with no key must refuse to start rather than serve an API with none. The temp folder
+    # (TMPDIR below) is made next, before the gateway, the Engine's user's alone: a fresh volume has none, and Python
+    # passes over a TMPDIR that is not there. So is the board's attachments folder (#843), which the sandbox mounts by its
+    # path in this volume once the Engine is healthy (below): a mount of a folder that is not there does not start.
+    command: [sh, -ec, 'test -n "$${API_SERVER_KEY}" || { echo "The Engine has no key: run scripts/install.sh" >&2; exit 1; }; mkdir -p -m 0700 "$${TMPDIR}"; mkdir -p -m 0755 "$${HERMES_HOME}/kanban/attachments"; exec hermes gateway run']
     # No ports and no env file: the Run API and the management listener are on this Engine's own network only, and only
     # this Engine's own key reaches it. No gtmworks secret is passed to an Engine. The file tools write only under the
     # work folder, which is the sandbox's (#390), so an Agent's file never lands on the Engine's own disk.
@@ -33,6 +36,13 @@ services:
       # it runs is the sandbox's, over ssh. The screen-driver service below copies the sandbox image's own pinned driver
       # here before the Engine starts, so the Engine never downloads one.
       HERMES_CUA_DRIVER_CMD: /opt/data/screen-driver/cua-driver
+      # One short temp folder for every process of the Engine (#833): a board worker runs re-homed to its Agent's
+      # profile, and Hermes points TMPDIR at that profile's cache/scratch unless one is set
+      # (hermes_constants.apply_scratch_tmp_env). The ssh backend keeps its control socket under it
+      # (tools/environments/ssh.py), and under a profile named ag- or co- and 32 hex the socket's path ran past Linux's
+      # 108 bytes for a Unix socket, so the worker's first command failed (CI run 45854207378). This is the root
+      # profile's own scratch, the one the gateway's Conversations already use, so only the workers move.
+      TMPDIR: /opt/data/cache/scratch
       # A cont-init hook that fails stops the container (s6-overlay's default carries on): an Engine never serves without
       # the file-sync patch or its listener address (#393).
       S6_BEHAVIOUR_IF_STAGE2_FAILS: 2
@@ -166,6 +176,22 @@ services:
       # The host key is made once with the Engine's key pair and kept here, mounted read-only at the path sshd reads it
       # from, so a recreated container keeps the key its Engine's known_hosts is pinned to.
       - host-key:/home/pn/.ssh-host:ro
+      # The Engine's Kanban attachments folder (spec #831, #843), read-only at the same path: the Engine keeps a person's
+      # file on a Card there and names it to the Agent working the Card by that absolute path
+      # (hermes_cli/kanban_db_context.py, _ctx_attachments: "remote terminal backends need the attachments dir
+      # mounted"), and the Agent's terminal and files run here. Only that folder of the Engine's volume, never the rest
+      # of it (the Engine's keys and sign-ins are there), and nothing in the sandbox can write in it (ADR 0018). It needs
+      # Docker's volume subpath (Engine 26, Compose 2.26), and the folder made by the Engine's start, so the sandbox
+      # starts once its Engine is healthy.
+      - type: volume
+        source: data
+        target: /opt/data/kanban/attachments
+        read_only: true
+        volume:
+          subpath: kanban/attachments
+    depends_on:
+      engine:
+        condition: service_healthy
     networks:
       work:
         aliases:

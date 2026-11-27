@@ -95,10 +95,12 @@ test('a fresh install walks from the setup link to sign-in, Lead, the board, Age
  await expect(page.locator('.msg').filter({hasText:'Reply to: Plan the launch'})).toBeVisible({timeout:20000});
  await expect(page).toHaveURL(conversation);
 
- // 4. The board, from the sidebar, with its six columns; Agents with Lead as main; Lead's details.
+ // 4. The board, from the sidebar: the Company's Engine's own Kanban board (spec #831) with its five columns, empty on a
+ // new Engine, naming Lead; Agents with Lead as main; Lead's details.
  await page.locator('.sidebar').getByRole('link',{name:'Marketing board',exact:true}).click();
  await expect(page).toHaveURL(`/c/${slug}/work/board`);
- await expect(page.locator('#board-cols > .col')).toHaveCount(6);
+ await expect(page.locator('#board-cols > .col .col__name')).toHaveText(['Waiting on you','Ideas','Planned','In progress','Done']);
+ await expect(page.locator('.board-bare')).toContainText('The board is empty for now. Once you ask Lead for an agent');
  seen();
  // The sidebar's Agents: Lead alone, marked as main; the Agents page, from the account menu's sections, lists it.
  const agents=page.locator('.sidebar section[aria-labelledby="lbl-agents"]');

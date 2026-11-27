@@ -229,6 +229,22 @@
 
 /* ---------- list and calendar share the head ---------- */
 .gw .board-view--page .board-body { padding: 0 var(--s8) var(--s8); font-size: var(--gw-fs-base); }
+/* The list's four filters wrap on a narrow screen. The calendar keeps its undated Cards beside the month on a wide
+   screen, and under it, side by side with the month's dates, where a day would grow too narrow for its titles (#845). */
+.gw .board-view--page .work-filters { flex-wrap: wrap; }
+.gw .board-view--page .view-calendar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.gw .board-view--page .day__n { display: block; }
+.gw .board-view--page .muted { color: var(--gw-text-3); }
+.gw .board-view--page .view-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s4); align-items: start; }
+.gw .board-view--page .view-side__h { margin: 0 0 var(--s3); font-size: var(--gw-fs-sm); font-weight: var(--gw-fw-semibold); }
+.gw .board-view--page .view-side ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s2); }
+.gw .board-view--page .view-side__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); font-size: var(--gw-fs-sm); }
+.gw .board-view--page .view-side__row .authored-title { min-width: 0; overflow-wrap: anywhere; }
+.gw .board-view--page .view-date { height: 30px; min-height: 0; padding: 0 var(--s2); font-size: var(--gw-fs-xs); }
+@media (min-width: 1600px) {
+  .gw .board-view--page .view-calendar { grid-template-columns: minmax(0, 1fr) 280px; }
+  .gw .board-view--page .view-side { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- motion and narrow screens ---------- */
 @media (prefers-reduced-motion: reduce) {
@@ -385,3 +401,52 @@
   .gw .board-view .col__head .col__act { min-width: 44px; height: 44px; }
   .gw .board-view .link-btn { min-height: 44px; }
 }
+
+/* The Engine board's tile (spec #831, #834; design-reference-card: kcardHTML, .kt-head, .kt-syms, .sym, .kcard__foot): its
+   title and one state symbol, then its assignee's face and only the counts above zero. */
+.gw .kcard > .kt-head { display: flex; align-items: flex-start; gap: var(--s2, 8px); }
+.gw .kt-head > .kcard__title { flex: 1 1 0; min-width: 0; }
+.gw .kt-syms { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: calc(var(--gw-fs-base) * 1.55); }
+.gw .sym { display: inline-flex; align-items: center; gap: 2px; flex: none; line-height: 1; -webkit-touch-callout: none; }
+.gw .sym .gw-icon { width: 16px; height: 16px; }
+.gw .sym--wait { color: var(--gw-wait-text); }
+.gw .sym--bad { color: var(--gw-danger-text); }
+.gw .sym--ok { color: var(--gw-accent); }
+.gw .sym--mute { color: var(--gw-text-2); }
+.gw .sym__n { font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-semibold); line-height: 1; }
+.gw .sym__dot { position: relative; display: inline-block; width: 8px; height: 8px; margin: 4px; border-radius: 50%; background: var(--gw-accent); flex: none; }
+.gw .sym__dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--gw-accent); animation: gw-dot-ping 1.6s var(--gw-ease-out) infinite; }
+.gw .kcard > .kcard__foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; padding-top: 2px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .kt-face { display: inline-flex; flex: none; }
+/* A Card given to a Member shows that Member's initial where an Agent shows its face (#836); New card opens from the
+   board's tools, at their end (design-reference-card: .bt-new). */
+.gw .kt-face .lg-av {
+  width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; flex: none; background: var(--gw-bg-active); box-sizing: border-box; border: 0.5px solid var(--gw-border-3);
+  color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: var(--gw-fw-semibold); line-height: 1;
+}
+.gw .board-view .bt-new { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; }
+.gw .board-view .bt-new .gw-icon { width: 16px; height: 16px; }
+.gw .kt-face .cw-noone { width: var(--av, 20px); height: var(--av, 20px); border-radius: 50%; display: inline-block; box-sizing: border-box; border: 1px solid var(--gw-border-1); }
+.gw .kt-metas { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--s3, 12px); flex: none; }
+.gw .kt-m { display: inline-flex; align-items: center; gap: 3px; }
+.gw .kt-m .gw-icon { width: 13px; height: 13px; }
+@media (prefers-reduced-motion: reduce) { .gw .sym__dot::after { animation: none; } }
+
+/* The board's filters and moves (#837; design-reference-card: .ib.is-val, .ib__v, .col.is-blocked): an icon button that
+   shows its value once one is chosen, with its menu under it; a column that is the work's own dims while a Card carried
+   over it would land there, and says why. */
+.gw .board-view .bf-pick { position: relative; display: inline-flex; }
+.gw .board-view .ib { border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+.gw .board-view .ib.is-val { padding-inline: 8px 12px; background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
+.gw .board-view .ib__v { max-width: 168px; font-weight: var(--gw-fw-semibold); }
+.gw .board-view .ib[aria-expanded="true"] { background: var(--gw-bg-active); color: var(--gw-text-1); }
+.gw .board-view .ib:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .board-view .bf-menu { position: absolute; z-index: 60; top: calc(100% + 6px); inset-inline-start: 0; width: 260px; max-height: min(420px, 60vh); overflow-y: auto; }
+.gw .board-view .bf-menu .menu__item[aria-checked="true"] { background: var(--gw-bg-active); }
+.gw .board-view .bf-menu .menu__t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw .board-view .col.is-blocked .col__body:has(> .col__note) { opacity: 1; }
+.gw .board-view .col.is-blocked .col__body > :not(.col__note) { opacity: .5; }
+.gw .board-view .col__note { display: none; margin: 0; padding: var(--s2) var(--s3); border-radius: var(--gw-r-sm); background: var(--gw-bg-tertiary); color: var(--gw-text-2); font-size: var(--gw-fs-xs); line-height: 1.5; }
+.gw .board-view .col.is-blocked .col__note { display: block; }
+.gw .board-view .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 767px) { .gw .board-view .bf-menu { width: min(340px, calc(100vw - 16px)); } }

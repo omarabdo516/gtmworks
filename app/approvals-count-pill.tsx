@@ -6,6 +6,7 @@ import { waitingLabel } from '@/lib/sidebar.mjs';
 
 import { useShellPlace } from './shell-place';
 import { useSidebarApprovals } from './sidebar-live';
+import { useWaitingCards } from './board-read';
 
 // The pill's name: Approvals while its count is on its way, then how many things wait.
 const label=(t:(key:string,...values:unknown[])=>string,count?:number)=>{ const [key,...values]=count===undefined?['approvals']:waitingLabel(count); return t(key,...values); };
@@ -15,12 +16,19 @@ const label=(t:(key:string,...values:unknown[])=>string,count?:number)=>{ const 
 // that falls or stays, and a count still on its way do not. The pill is drawn once per Company (keyed by its address),
 // so another Company's count is never read as a rise. A second rise takes the class off for a frame, so the pop plays
 // again on the same link and the keyboard keeps its place on it.
-export function CountPill({href,current:drawn,count:drawnCount}:{href:string,current?:boolean,count?:number}) {
+//
+// The count is the rows of the reader's list (app/approvals-count.tsx) and the Cards of the Company's board that wait on
+// them (#841), worked out from the board read in this browser, after the page has drawn and live with the board's stream:
+// it waits, empty, for the first read of the board, and while the Engine does not answer it keeps the Cards of the last
+// good read. Outside a Company (`company` empty) only the rows count.
+export function CountPill({href,company='',current:drawn,count:drawnCount}:{href:string,company?:string,current?:boolean,count?:number}) {
  const {t}=useI18n();
  // Current while Waiting on you is the page shown (app/shell-place).
  const place=useShellPlace(); const current=drawn??place.section==='approvals';
  // The sidebar's poll counts again while a page stays open (#789); until it answers, the Shell's count stands.
- const polled=useSidebarApprovals(); const count=polled??drawnCount;
+ const polled=useSidebarApprovals(); const rows=polled??drawnCount;
+ const cards=useWaitingCards(company)?.length;
+ const count=rows===undefined||cards===undefined?undefined:rows+cards;
  const seen=useRef<number|undefined>(undefined);
  const [pop,setPop]=useState(false);
  useEffect(()=>{

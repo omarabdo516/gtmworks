@@ -34,7 +34,7 @@ function databases(fake,{profile}) {
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
-  if(name==='pin_lead_brief') return {data:null,error:null};
+  if(name==='pin_run_brief') return {data:null,error:null};
   if(name==='begin_turn_start') return {data:attempt(given.message_key),error:null};
   if(name==='channel_runs_due') return {data:[{message:7,run:null,company}],error:null};
   if(name==='begin_channel_start') return {data:[{attempt:attempt('channel'),company,profile,session:'s',input:'Omar: draft the offer email',instructions:role,rules:[rule]}],error:null};

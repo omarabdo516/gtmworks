@@ -109,7 +109,8 @@ export const placements: Record<string, Placement> = {
   button: { path: '/c/rs-learning/settings/members', selector: 'main button[name="op"][value="update"]' },
   'button-hover': { path: '/c/rs-learning/settings/members', selector: 'main button[name="op"][value="update"]', hover: true },
   'button-primary': { path: '/c/rs-learning/projects', selector: 'main button.primary' },
-  'button-toolbar-primary': { path: board, selector: 'main [data-toolbar-primary]' },
+  // The work list's toolbar opens New card on the board (#836, #845).
+  'button-toolbar-primary': { path: '/c/rs-learning/work/list', selector: 'main [data-toolbar-primary]' },
   input: { path: '/c/rs-learning/projects', selector: 'main input:not([type=hidden]):not([type=checkbox])' },
   panel: { path: '/c/rs-learning/usage', selector: 'main section.panel' },
   'board-card': { path: board, selector: 'main .kcard' },
@@ -119,7 +120,7 @@ export const placements: Record<string, Placement> = {
   'column-title': { path: board, selector: 'main .col:not(:has(.dot--waiting)) .col__name' },
   'table-header': { path: '/c/rs-learning/work/list', selector: 'main .table th' },
   'label-chip': { path: `${board}/1`, selector: 'main .label-chip' },
-  // A person's first letter, beside the next actor in the work list (spec #695 took the role agents' avatars off Agents).
+  // A Member's first letter, beside the Assignee in the work list (#845; spec #695 took the role agents' avatars off Agents).
   avatar: { path: '/c/rs-learning/work/list', selector: 'main .table .avatar' },
   stat: { path: '/c/rs-learning/home', selector: 'main .stat', text: 'main .stat strong:not(.unavailable)' },
   dialog: { path: '/c/rs-learning/home', selector: '.gw.modal', open: async page => { await page.locator('.sb-add').first().click(); } },

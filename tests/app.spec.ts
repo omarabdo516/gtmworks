@@ -2,7 +2,7 @@ import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the next
 // case reads the English faces (#257); Arabic at 390 is held to the design system (#805).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
@@ -167,64 +167,62 @@ test('approval queue, rejection and ordered steps',async({page})=>{
  await settings.getByLabel("New approver").selectOption('role:owner');
  await settings.getByRole('button',{name:"Add step"}).click();
  await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
- ensureRequestAgent();
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
+ // The old board's approvals wait in its own Waiting on you column, opened where a chat shows a Card (?show=) since #841
+ // took them out of the list and the sidebar's count, which counts the Engine board's Cards instead.
+ const queue='/c/rs-learning/work/board?show=1';
+ const sidebarCount=page.locator('.sidebar .sb-count[href$="/approvals"]');
+ await page.goto('/c/rs-learning/approvals');
+ await expect(sidebarCount).toHaveText(/^\d+$/);
+ const counted=await sidebarCount.textContent();
+ // An old Card on its own page: New card makes its Cards on the Engine since #836.
  const title=`بطاقة موافقة ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+ await oldCard(page,title);
  const cardUrl=page.url();
  await page.getByLabel("Caption",{exact:true}).fill('نص مخصص للمراجعة');
  await page.getByLabel("Offering",{exact:true}).fill('عرض مخصص للمراجعة');
  await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), page.getByRole('button',{name:"Save changes"}).click()]);
  await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- // "Waiting on you" (ADR 0013) holds the card; the sidebar counts the cards waiting for this approver.
- await page.goto('/c/rs-learning/approvals');
+ // The old board's "Waiting on you" column (ADR 0013) holds the card; the sidebar's count does not name it.
+ await page.goto(queue);
  const waiting=page.locator('.col[data-column="waiting"]');
  const queued=waiting.locator('.approval-card').filter({hasText:title});
  await expect(queued).toBeVisible();
- const count=await waiting.locator('.approval-card').count();
- await expect(page.locator('.sidebar .sb-count[href$="/approvals"]')).toHaveText(String(count));
- await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',new URL(cardUrl).pathname);
- // The decision is made inside the card, beside the caption and the brief it is about.
- await queued.getByRole('link',{name:title}).click();
+ await expect(sidebarCount).toHaveText(String(counted));
+ await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',`/c/rs-learning/work/board?card=${new URL(cardUrl).pathname.split('/').pop()}`);
+ // The decision is made inside the card's own page, beside the caption and the brief it is about.
+ await page.goto(cardUrl);
  // By role: a filled textarea's text is part of its wrapping label's text, so getByLabel stops matching it once it has a caption.
  await expect(page.getByRole('textbox',{name:"Caption",exact:true})).toHaveValue('نص مخصص للمراجعة');
  await expect(page.getByLabel("Offering",{exact:true})).toHaveValue('عرض مخصص للمراجعة');
  const review=page.locator('[data-card-section="review"]');
  await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), review.getByRole('button',{name:"Approve"}).click()]);
  // The second step is also Omar's: the card is still waiting on him.
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(queue);
  await expect(waiting.locator('.approval-card').filter({hasText:title})).toBeVisible();
- await waiting.locator('.approval-card').filter({hasText:title}).getByRole('link',{name:title}).click();
+ await page.goto(cardUrl);
  await page.locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(queue);
  await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);
  await page.goto(cardUrl);
  await expect(page.locator('.card-stage-line')).toContainText('معتمد');
- ensureRequestAgent();
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
  const rejected=`بطاقة رفض ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(rejected);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+ await oldCard(page,rejected);
  const rejectedUrl=page.url();
  await page.getByLabel("Move to list").selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(queue);
  const row=waiting.locator('.approval-card').filter({hasText:rejected});
- await row.getByRole('link',{name:rejected}).click();
+ await expect(row).toBeVisible();
+ await page.goto(rejectedUrl);
  const decision=page.locator('[data-card-section="review"]');
  await decision.getByText("Reject with a reason").click();
  await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم');
  await decision.getByLabel("Design needs work",{exact:true}).check();
  await decision.getByRole('button',{name:"Confirm rejection"}).click();
  await expect(page.locator('.rejection-notice')).toContainText('يرجى تعديل التصميم');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(queue);
  await expect(row).toHaveCount(0);
  await page.goto(rejectedUrl);
  await expect(page.locator('.card-stage-line')).toContainText('تصميم ومونتاج');

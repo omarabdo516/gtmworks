@@ -33,7 +33,7 @@ export async function GET(request:NextRequest) {
   if(allowed==='failed') return reply({error:'channelNotRead'},503);
   if(allowed==='refused') return reply({error:'channelNotFound'},404);
   const [channels,faces,handed,chats,waiting,{t,language}]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company),readScreenHands(db,company),
-   recentChats(db,company),approvalQueue(db,company,user.id).then(({count})=>count,()=>undefined),getI18n()]);
+   recentChats(db,company),approvalQueue(db,company,user.id).then(({rows})=>rows,()=>undefined),getI18n()]);
   // Any of the three that could not be read is an error: the sidebar keeps what it shows, never idle faces or no steps.
   // Chats or a count that could not be read are left out, and the sidebar keeps the ones it shows.
   if(!faces.available||!handed) return reply({error:'channelNotRead'},503);

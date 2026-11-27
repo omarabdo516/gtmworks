@@ -6,8 +6,11 @@ import type { WorkProps } from '@/app/c/[slug]/[[...section]]/work';
 import type { CompanyLooks } from '@/lib/agent-looks';
 import { card, placed, sent, showWork, workProps, workView } from './work-page';
 
-const { push, toast } = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
+// Next's router is one object for the page's life, as the real one is.
+const { push, toast, router } = vi.hoisted(() => { const push = vi.fn(); return { push, toast: vi.fn(), router: { push, refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() } }; });
+vi.mock('next/navigation', () => ({ useRouter: () => router, usePathname: () => '/c/rs-learning/work/board' }));
+// The Engine board's live stream (#840) is not followed here; the board's read is the page's fetch of /api/board.
+vi.mock('@/app/board-live', () => ({ followBoard: () => () => {} }));
 vi.mock('@/app/toast', () => ({ toast }));
 vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll, ...props }: ComponentProps<'a'> & { prefetch?: unknown, scroll?: unknown }) => <a {...props}/> }));
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ decideAgentRule: vi.fn(), answerAgentRequest: vi.fn() }));
@@ -48,25 +51,6 @@ test('the board\'s Month filter lists each month of the Cards, newest first, aft
  const select = screen.getByRole('combobox', { name: 'Month' });
  await expect.element(select).toBeVisible();
  expect([...(select.element() as HTMLSelectElement).options].map(option => option.textContent)).toEqual(['All months', 'December 2026', 'November 2026']);
-});
-
-test('the List filters by month too, and a row\'s title opens its Card', async () => {
- const screen = await showWork(workProps({ section: 'work/list', cards }));
- const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board/${id}"]`).length;
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board/1');
- await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
- await expect.poll(() => row(1)).toBe(0);
- expect(row(3)).toBe(1);
- await userEvent.selectOptions(screen.getByLabelText('Month'), '');
- await expect.poll(() => row(1)).toBe(1);
-});
-
-test('the Calendar shows a Card on its publishing day in its month, linking to the Card', async () => {
- const screen = await showWork(workProps({ section: 'work/calendar', cards }));
- await userEvent.fill(screen.getByLabelText('Month'), '2026-11');
- const link = screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' });
- await expect.element(link).toHaveAttribute('href', '/c/rs-learning/work/board/1');
- expect(link.element().closest('.day')!.firstChild!.textContent).toBe('12');
 });
 
 test('Work settings name every stage\'s and every label\'s fields for what they change', async () => {
@@ -311,14 +295,36 @@ test('a Card that both waits for the reader\'s approval and holds their chat\'s 
  expect(document.querySelector('.board-tools__summary')!.textContent).toBe('1 things waiting on you');
 });
 
-// On the reader's own list (/approvals) the Card stands for its chat's rows too, and a chat with no Card keeps its item.
-test('the reader\'s own Waiting on you draws a Card whose chat waits once, in place of its question and hand, beside the item of a chat with no Card', async () => {
- const rows = [handed, { ...handed, kind: 'question', id: 43 }, { ...handed, id: 44, card_id: null, conversation_id: 'c-10' }];
- await showWork(workProps({ cards: [chatCard()], members, waiting: rows, focus: 'waiting' }));
+// On the reader's own list (/approvals) the old board's Cards are no part of it since #841: a chat's question and hand are
+// each drawn on their own row, as a chat with no Card's is, and its approval is left out.
+test('the reader\'s own Waiting on you draws a chat\'s question and hand each on its own row, and no old Card', async () => {
+ const rows = [handed, { ...handed, kind: 'question', id: 43 }, { ...handed, id: 44, card_id: null, conversation_id: 'c-10' }, { ...handed, kind: 'approval', id: 9, conversation_id: null }];
+ await showWork(workProps({ cards: [chatCard()], members, waiting: rows, focus: 'waiting', approvableIds: [9] }));
  const column = document.querySelector('.col[data-column="waiting"]')!;
- expect(column.querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
- expect([...column.querySelectorAll('a.mcard')].map(item => item.getAttribute('href'))).toEqual(['/c/rs-learning/conversations/c-10#hand-44']);
- expect(column.querySelector('.col__count')!.textContent).toBe('2');
+ expect(column.querySelectorAll('.kcard[data-card-id]')).toHaveLength(0);
+ expect([...column.querySelectorAll('a.mcard')].map(item => item.getAttribute('href'))).toEqual(['/c/rs-learning/conversations/c-9#hand-42', '/c/rs-learning/conversations/c-9', '/c/rs-learning/conversations/c-10#hand-44']);
+ await expect.poll(() => column.querySelector('.col__count')!.textContent).toBe('3');
+});
+
+// #841: the reader's own list holds the Company's Engine board Cards that wait on them, read by the browser after the
+// page has drawn, first and in the board's order, each opening over the board with the hand; the column counts them.
+test('the reader\'s own Waiting on you draws the board\'s Cards that wait on them first, with the hand, and counts them', async () => {
+ const board = { cards: [
+  { id: 't_ask', title: 'Google Ads numbers', column: 'waiting', symbol: { kind: 'question' }, agent: null, person: null, waits: { mine: true, person: null }, comments: 0 },
+  { id: 't_theirs', title: 'Mona’s question', column: 'waiting', symbol: { kind: 'question' }, agent: null, person: null, waits: { mine: false, person: { id: 'p-2', name: 'Mona' } }, comments: 0 },
+  { id: 't_mine', title: 'Write the alumni email', column: 'planned', symbol: null, agent: null, person: { id: 'p-1', name: 'Omar' }, waits: { mine: true, person: { id: 'p-1', name: 'Omar' } }, comments: 2 },
+ ], main: null };
+ const fetched = vi.spyOn(window, 'fetch').mockImplementation(async input => String(input).startsWith('/api/board?') ? new Response(JSON.stringify(board), { headers: { 'content-type': 'application/json' } }) : new Response(null, { status: 404 }));
+ try {
+  await showWork(workProps({ company: 'co-841', members, waiting: [{ ...handed, id: 44, card_id: null, conversation_id: 'c-10' }], focus: 'waiting' }));
+  const column = document.querySelector('.col[data-column="waiting"]')!;
+  await expect.poll(() => [...column.querySelectorAll(':is(.kcard[data-card], a.mcard)')].map(item => item.getAttribute('data-card') ?? item.getAttribute('href'))).toEqual(['t_ask', 't_mine', '/c/rs-learning/conversations/c-10#hand-44']);
+  expect(column.querySelector('.col__count')!.textContent).toBe('3');
+  expect(column.querySelector('.kcard[data-card="t_mine"] a')!.getAttribute('href')).toBe('/c/rs-learning/work/board?card=t_mine');
+  expect(column.querySelector('.kcard[data-card="t_mine"] [data-sym="onYou"]')!.getAttribute('title')).toBe('On you');
+  expect(column.querySelector('.kcard[data-card="t_ask"]')!.getAttribute('aria-label')).toBe('Google Ads numbers · Waiting on you · Has a question · On you · Assignee: No one');
+  expect(fetched).toHaveBeenCalledWith('/api/board?company=co-841', expect.anything());
+ } finally { fetched.mockRestore(); }
 });
 
 // A filter that leaves the Card out leaves its chat's step drawn on its own, as before #146, and counted once.

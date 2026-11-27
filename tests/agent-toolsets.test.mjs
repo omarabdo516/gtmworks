@@ -8,12 +8,12 @@ import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, pr
 const pinnedToolsets=['web','search','x_search','vision','video','image_gen','video_gen','computer_use','terminal','skills','browser','cronjob','file','tts','todo','memory','context_engine',
  'session_search','connections','project','bot_room','desktop_ui','onboarding','catalog','clarify','code_execution','delegation','kanban','debugging','safe','coding'];
 
-test('every Agent gets the terminal, files and code in the work sandbox and its own Screen beside the fixed set', () => {
+test('every Agent gets the terminal, files and code in the work sandbox, its own Screen and the board beside the fixed set', () => {
  // ADR 0018: web, vision, image generation, skills, the task list, memory, session search, the question tool,
- // scheduled work, the work sandbox's terminal, files and code execution (#393), and its Screen (#711), read as one
- // literal list so a change is seen here.
+ // scheduled work, the work sandbox's terminal, files and code execution (#393), its Screen (#711), and the Engine's
+ // Kanban board (spec #831), read as one literal list so a change is seen here.
  assert.deepEqual([...everyAgentGets],['web','vision','image_gen','skills','todo','memory','session_search','clarify','cronjob',
-  'terminal','file','code_execution','computer_use']);
+  'terminal','file','code_execution','computer_use','kanban']);
  for(const name of [...everyAgentGets,...noAgentGets]) assert.ok(pinnedToolsets.includes(name),name);
  const config=toolConfig({profile:'ag-a0000000000000000000000000000001'});
  assert.deepEqual(config.platform_toolsets.api_server,[...everyAgentGets]);
@@ -46,6 +46,21 @@ test('every Agent\'s Screen wakes when the Agent needs it and sleeps after the E
  assert.equal(toolsDiffer(fixedToolsets().filter(name=>name!=='computer_use')),true);
 });
 
+test('every Agent may make and work Cards on the Engine\'s board, and a sub-agent may not', () => {
+ // Spec #831: a Run started through the Run API is offered the Engine's Kanban tools, so an Agent in a Conversation makes
+ // a Card for another Agent, and a board worker keeps its lifecycle tools: the profile's disabled list is applied last,
+ // also to a worker (docs/engine-probes/kanban-board.md, section 4). The Engine keeps the board from a child Run.
+ for(const subagents of [false,true]) {
+  const config=toolConfig({subagents,profile:'ag-a0000000000000000000000000000001'});
+  assert.ok(config.platform_toolsets.api_server.includes('kanban'),'the Run API offers the board');
+  assert.ok(!config.agent.disabled_toolsets.includes('kanban'),'no profile disables the board, a worker\'s included');
+  assert.ok(!childToolsets(config).toolsets.includes('kanban'));
+  assert.ok(childToolsets(config).disabled.includes('kanban'),'a child Run is never offered the board');
+ }
+ // A profile the Engine reports without the board is not the fixed set, so the worker writes it again.
+ assert.equal(toolsDiffer(fixedToolsets().filter(name=>name!=='kanban')),true);
+});
+
 test('a profile starts in its own folder in the work folder and needs no approval for code, or it is written again', () => {
  const own='ag-a0000000000000000000000000000001';
  const other='co-10000000000000000000000000000002';
@@ -62,8 +77,8 @@ test('a profile starts in its own folder in the work folder and needs no approva
  assert.equal(profileSettingsDiffer({approvals:{unattended_mode:'deny'},terminal:{cwd:`/work/${own}`}},own),true);
 });
 
-test('no Agent gets a switch for browser, speech, video, project, desktop, catalog, onboarding, kanban or connections', () => {
- assert.deepEqual([...noAgentGets],['browser','tts','video','video_gen','project','desktop_ui','catalog','onboarding','kanban','connections']);
+test('no Agent gets a switch for browser, speech, video, project, desktop, catalog, onboarding or connections', () => {
+ assert.deepEqual([...noAgentGets],['browser','tts','video','video_gen','project','desktop_ui','catalog','onboarding','connections']);
  for(const subagents of [false,true]) {
   const config=toolConfig({subagents});
   for(const name of noAgentGets) {

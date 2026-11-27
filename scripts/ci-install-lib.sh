@@ -182,6 +182,35 @@ YAML
   docker restart "$1" > /dev/null || fail 'restart the Engine'
   engine_healthy "$1" 60 || fail 'the Engine is healthy after configuration'
 }
+# Whether an Engine holds the settings a board worker needs (spec #831, #833). Its managed scope approves the worker's
+# dangerous command: the dispatcher runs a Card's worker as a single-query Run, which refuses one unless
+# `approvals.single_query_mode` is approve. Read from inside the Engine, at the managed scope's own path, so a template
+# that mounts another file fails here; read whole before it is parsed, so no early exit of a pipe can pass for a match.
+# And the Engine's own user has a temp folder short enough for the ssh backend's control socket, there and writable: with
+# none set, Hermes gives a worker its profile's scratch, where the socket's path ran past a Unix socket's 108 bytes (CI run
+# 45854207378). 50 characters is Hermes's own budget for a temp root that holds sockets (SOCKET_TMPDIR_MAX_LEN).
+engine_board_settings() {
+  local managed scratch
+  managed=$(docker exec "$1" cat /etc/hermes/config.yaml) || return 1
+  awk '/^[^[:space:]#]/ {section=$1} section == "approvals:" && $1 == "single_query_mode:" && $2 == "approve" {found=1} END {exit !found}' <<< "$managed" || return 1
+  scratch=$(docker exec -u hermes "$1" sh -c 'test -n "$TMPDIR" && test -d "$TMPDIR" && test -w "$TMPDIR" && printf %s "$TMPDIR"') || return 1
+  [[ $scratch == /* ]] && (( ${#scratch} <= 50 ))
+}
+# The Engine's Kanban attachments folder in its Company's work sandbox (spec #831, #843), asked of an Engine container (a
+# name or an id): the sandbox mounts that one folder of the Engine's own data volume, read-only, at the Engine's own path,
+# so the Agent working a Card opens a person's file where the Engine names it, and the sandbox's user cannot write there.
+sandbox_card_files() {
+  local name volume sandbox mount subpath
+  name=$(docker inspect -f '{{.Name}}' "$1") || return 1
+  volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$1") || return 1
+  sandbox=$(sandbox_of "${name#/}")
+  mount=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data/kanban/attachments"}}{{.Type}} {{.Name}} {{.RW}}{{end}}{{end}}' "$sandbox") || return 1
+  [[ -n $volume && $mount == "volume $volume false" ]] || return 1
+  subpath=$(docker inspect -f '{{range .HostConfig.Mounts}}{{if eq .Target "/opt/data/kanban/attachments"}}{{with .VolumeOptions}}{{.Subpath}}{{end}}{{end}}{{end}}' "$sandbox") || return 1
+  [[ $subpath == kanban/attachments ]] || return 1
+  docker exec "$sandbox" test -d /opt/data/kanban/attachments || return 1
+  ! docker exec "$sandbox" sh -c 'touch /opt/data/kanban/attachments/.gtmworks-write' 2> /dev/null
+}
 # The registry's own digest is the one named: Docker's containerd image store also lists the digest of a local tag.
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks:$1" | grep -m 1 '^localhost:5000/gtmworks@'; }
 # The work sandbox image the source install built (or CI loaded), pushed beside the app image so a release file pins it
@@ -319,7 +348,7 @@ sys.exit(0 if env_write_refusal("HERMES_WRITE_SAFE_ROOT", "set") else 1)' || ret
 from hermes_cli.config import load_config
 config = load_config()
 sys.exit(0 if config["terminal"]["backend"] == "ssh" and set(sys.argv[1:]) <= set(config["agent"]["disabled_toolsets"]) else 1)' \
-    browser tts video video_gen project desktop_ui catalog onboarding kanban connections
+    browser tts video video_gen project desktop_ui catalog onboarding connections
 }
 # Every address a container has, on every network it joins, comma-separated.
 addresses_of() { docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$1" | grep . | paste -sd, -; }

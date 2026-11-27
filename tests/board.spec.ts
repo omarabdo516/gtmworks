@@ -2,24 +2,20 @@ import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 import { laneHermes } from './lane-hermes';
 import { inbox } from './lane.mjs';
 
 // The board's six columns and "Waiting on you" (#34, #16; ADR 0013). The seeded accounts read English.
+// Spec #831 made /work/board the Engine's own Kanban board (#834). The old board's drag, places and Waiting on you are
+// still served on the board opened on Waiting on you (/approvals), where these run until the Engine's board moves Cards
+// (#837), makes them (#836) and works out what waits (#841), and the old board is switched off (#846).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const rs='10000000-0000-0000-0000-000000000001';
 
-async function newCard(page:Page,label:string) {
- ensureRequestAgent();
- await page.goto('/c/rs-learning/work/new');
- const title=`${label} ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:'Create card'}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- return {title,path:new URL(page.url()).pathname,id:Number(new URL(page.url()).pathname.split('/').pop())};
-}
+// An old Card, on its own page (New card makes its Cards on the Engine since #836).
+const newCard=(page:Page,label:string)=>oldCard(page,`${label} ${Date.now()}`);
 // A card that is being drawn again after a move can be read between columns (null); the loop below waits for it to land.
 const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]`).evaluate(el=>el.closest('[data-column]')?.getAttribute('data-column') ?? null);
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
@@ -50,9 +46,9 @@ async function carry(page:Page,id:number,to:{column:string,before?:number,end?:b
 }
 
 test('a card moves by drag and by keyboard, and both moves are logged',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const card=await newCard(page,'Board move');
- await page.goto('/c/rs-learning/work/board');
+ await page.goto('/c/rs-learning/approvals');
  const source=page.locator(`.kcard[data-card-id="${card.id}"]`);
  await expect(source).toBeVisible();
  expect(await columnOf(page,card.id)).toBe('ideas');
@@ -65,7 +61,7 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  await page.mouse.up();
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card.id}"]`)).toBeVisible();
- await expect(page).toHaveURL(/\/work\/board$/);
+ await expect(page).toHaveURL(/\/approvals$/);
  // Keyboard: Shift and the arrow toward the reading end is the next column; the card keeps the focus.
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
  await page.keyboard.press('Shift+ArrowRight');
@@ -79,7 +75,7 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from بريف جاهز to كتابة'})).toHaveCount(1);
  // Waiting on you fills by itself: a drop there is refused on the board.
- await page.goto('/c/rs-learning/work/board');
+ await page.goto('/c/rs-learning/approvals');
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
  for(let step=0;step<3;step++) { const before=await landedColumn(page,card.id); if(before==='waiting'||before==='ideas') break; await page.keyboard.press('Shift+ArrowLeft'); await expect.poll(async()=>{ const now=await columnOf(page,card.id); return now!==null&&now!==before; }).toBe(true); await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus(); }
  expect(await columnOf(page,card.id)).toBe('ideas');
@@ -94,7 +90,7 @@ test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, rais
  const lead=randomUUID(), ads=randomUUID();
  try {
   query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${lead}','${rs}','Lead','General','idea-lead-${stamp}',true),('${ads}','${rs}','Ads','Meta ads','idea-ads-${stamp}',false)`);
-  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
   const ideas=page.locator('.col[data-column="ideas"]');
   const before=Number(await ideas.locator('.col__count').textContent());
   await ideas.getByRole('button',{name:'Add an idea'}).click();
@@ -123,10 +119,14 @@ test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, rais
  }
 });
 
+// The old board's approvals are no part of Waiting on you since #841; the old board itself, with its own Waiting on you
+// column, is still served where a chat shows its Card (?show=) until #846.
+const oldBoard=(card:number)=>`/c/rs-learning/work/board?show=${card}`;
+
 test('a card waiting for a decision moves only by it: a drop on Live opens the card, a drop elsewhere says to decide in the chat',async({page})=>{
  // Wide enough to show Waiting on you and Live together, so the card is carried from one to the other.
  await page.setViewportSize({width:2200,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com',oldBoard(5));
  const source=page.locator('.col[data-column="waiting"] .kcard[data-card-id="5"]');
  await expect(source).toBeVisible();
  const from=(await source.boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
@@ -139,18 +139,18 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await expect(page.locator('.toast')).toHaveText('It needs your OK first. Decide here and the card moves on its own');
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
- await page.goto('/c/rs-learning/work/board');
+ await page.goto(oldBoard(5));
  await page.locator('.kcard[data-card-id="5"] a').focus();
  await page.keyboard.press('Shift+ArrowRight');
  await expect(page.locator('.toast')).toHaveText('This card is waiting for your decision. Decide in the chat first');
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await expect(page).toHaveURL(/\/work\/board\/5$/);
- await page.goto('/c/rs-learning/work/board');
+ await page.goto(oldBoard(5));
  expect(await landedColumn(page,5)).toBe('waiting');
 });
 
 test('a Viewer cannot move a card',async({page})=>{
- await signIn(page,'viewer@example.com','/c/rs-learning/work/board');
+ await signIn(page,'viewer@example.com','/c/rs-learning/approvals');
  await expect(page.getByText('Read only: approvals and moves are up to the rest of the team')).toBeVisible();
  const card=page.locator('.kcard[data-card-id="1"]');
  const before=await columnOf(page,1);
@@ -159,7 +159,7 @@ test('a Viewer cannot move a card',async({page})=>{
  await page.mouse.down();
  await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
  await page.mouse.up();
- await page.goto('/c/rs-learning/work/board');
+ await page.goto('/c/rs-learning/approvals');
  await page.locator('.kcard[data-card-id="1"] a').focus();
  await page.keyboard.press('Shift+ArrowRight');
  await page.reload();
@@ -167,40 +167,46 @@ test('a Viewer cannot move a card',async({page})=>{
  await expect(page.getByRole('button',{name:'Add an idea'})).toHaveCount(0);
 });
 
-test('a card waiting for my approval is in Waiting on you and leaves it when I approve its version',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+test('a card waiting for my approval is in the old board\'s Waiting on you and leaves it when I approve its version',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const card=await newCard(page,'Waiting approval');
  await page.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
  await page.getByRole('button',{name:'Add design'}).click();
  await expect(page.getByText(/Version 1:/)).toBeVisible();
  await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(oldBoard(card.id));
  const waiting=page.locator('.col[data-column="waiting"]');
  const queued=waiting.locator(`.kcard[data-card-id="${card.id}"]`);
  await expect(queued).toBeVisible();
  await expect(queued.locator('.badge--wait')).toHaveText('Waiting on you');
  const count=Number(await waiting.locator('.col__count').textContent());
- await queued.getByRole('link',{name:card.title}).click();
- await expect(page).toHaveURL(new RegExp(`${card.path}$`));
+ // The old board opens it over itself; its decision is on the Card's own page.
+ await expect(queued.getByRole('link',{name:card.title})).toBeVisible();
+ await page.goto(card.path);
  await page.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
  await expect(page.locator('.card-stage-line')).not.toContainText('مراجعة');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(oldBoard(card.id));
  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
 });
 
-test('Waiting on you shows exactly the reader\'s own list, approvals and items newest first, and nothing for someone else',async({page,browser})=>{
- // Omar holds the review step: a card he must approve, one item from before it entered review and one from after, so
- // approvals and items interleave by time. The Manager holds no approval, so a card in review is not theirs.
+test('Waiting on you shows exactly the reader\'s own list, items newest first, no approval of the old board, and nothing for someone else',async({page,browser})=>{
+ // Omar holds the review step: a card he must approve, one item from before it entered review and one from after. Since
+ // #841 the old board's approvals are no part of the list (the Engine board's Cards are, kanban-waiting.spec.ts): the
+ // items are listed newest first, and the approval is counted on Home alone. The Manager holds no approval.
  const omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', stamp=Date.now();
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const card=await newCard(page,'Own list approval');
  await page.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
  await page.getByRole('button',{name:'Add design'}).click();
  await expect(page.getByText(/Version 1:/)).toBeVisible();
  await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+ await page.goto('/c/rs-learning/home');
+ const awaiting=page.locator('.stats .stat').first().locator('strong');
+ const approvals=Number(await awaiting.textContent());
+ expect(approvals).toBeGreaterThanOrEqual(1);
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Older than the approval ${stamp}','',1)`);
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Newer than the approval ${stamp}','',1)`);
  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','For the Manager ${stamp}','',1)`);
@@ -210,21 +216,20 @@ test('Waiting on you shows exactly the reader\'s own list, approvals and items n
   await page.goto('/c/rs-learning/approvals');
   const waiting=page.locator('.col[data-column="waiting"]');
   const entries=waiting.locator(':is(.kcard,.mcard)');
-  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toBeVisible();
-  const order=await entries.evaluateAll(list=>list.map(entry=>entry.getAttribute('data-card-id')?`card:${entry.getAttribute('data-card-id')}`:entry.textContent||''));
+  await expect(waiting.locator('.mcard').filter({hasText:`Newer than the approval ${stamp}`})).toBeVisible();
+  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
+  await expect(waiting.locator('.kcard[data-card-id]')).toHaveCount(0);
+  const order=await entries.evaluateAll(list=>list.map(entry=>entry.textContent||''));
   const at=(match:string)=>order.findIndex(entry=>entry.includes(match));
-  expect(at(`card:${card.id}`)).toBeGreaterThan(at(`Newer than the approval ${stamp}`));
-  expect(at(`Older than the approval ${stamp}`)).toBeGreaterThan(at(`card:${card.id}`));
+  expect(at(`Older than the approval ${stamp}`)).toBeGreaterThan(at(`Newer than the approval ${stamp}`));
   expect(at(`Newer than the approval ${stamp}`)).toBeGreaterThanOrEqual(0);
   expect(at(`For the Manager ${stamp}`)).toBe(-1);
   // The column and the sidebar count the same list.
   await expect(waiting.locator('.col__count')).toHaveText(String(order.length));
   await expect(page.locator(`a[href="/c/rs-learning/approvals"]`).first()).toContainText(String(order.length));
-  // Home's "Awaiting your approval" counts approvals only; the items (two of them here) are not approvals.
-  const approvals=order.filter(entry=>entry.startsWith('card:')).length;
-  expect(approvals).toBeLessThan(order.length);
+  // Home's "Awaiting your approval" counts approvals only; the items are not approvals.
   await page.goto('/c/rs-learning/home');
-  await expect(page.locator('.stats .stat').first().locator('strong')).toHaveText(String(approvals));
+  await expect(awaiting).toHaveText(String(approvals));
 
   // The Manager sees their own item and not Omar's card in review, nor Omar's items.
   const other=await browser.newContext(); const managerPage=await other.newPage();
@@ -347,7 +352,7 @@ const placed=(order:number[],id:number,before:number|null)=>{ const rest=order.f
 
 test('a Card is carried to the top, the middle and the end of its own column, and into another, kept after a reload',async({page})=>{
  await page.setViewportSize({width:2200,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const stamp=Date.now();
  const [a,b,c]=placeCards(stamp,3);
  await page.reload();
@@ -387,7 +392,7 @@ test('a Card is carried to the top, the middle and the end of its own column, an
 
 // #174: Shift with Up or Down moves the focused Card one place, and nothing happens at either end.
 test('Shift with Up or Down moves the focused Card one place in its column, and at the ends nothing happens',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const stamp=Date.now();
  const [,b]=placeCards(stamp,3);
  await page.reload();
@@ -423,7 +428,7 @@ test('Shift with Up or Down moves the focused Card one place in its column, and 
 test('a second Member sees the same order; a place inside a column is not announced or logged, a move to another column is',async({page,browser})=>{
  // A tall window keeps the whole Ideas column on screen: the cases before this one leave about ten Cards in it.
  await page.setViewportSize({width:2200,height:2000});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const stamp=Date.now();
  const [a,b]=placeCards(stamp,2);
  await page.reload();
@@ -438,11 +443,11 @@ test('a second Member sees the same order; a place inside a column is not announ
  const other=await browser.newContext(); const managerPage=await other.newPage();
  try {
   await managerPage.setViewportSize({width:2200,height:2000});
-  await signIn(managerPage,'manager@example.com','/c/rs-learning/work/board');
+  await signIn(managerPage,'manager@example.com','/c/rs-learning/approvals');
   await expect.poll(()=>orderIn(managerPage,'ideas')).toEqual(shown);
  } finally { await other.close(); }
  // A move to another column is announced and logged.
- await page.goto('/c/rs-learning/work/board');
+ await page.goto('/c/rs-learning/approvals');
  const planned=await orderIn(page,'planned');
  await carry(page,b,{column:'planned',before:planned[0]});
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
@@ -455,7 +460,7 @@ test('a second Member sees the same order; a place inside a column is not announ
 // board and is offered no "Undo", and a reload shows the Card where it stood.
 test('a Contributor dropping a Card on Live is told it cannot move it, stays on the board with no Undo, and the Card stays put',async({page})=>{
  await page.setViewportSize({width:2200,height:900});
- await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
+ await signIn(page,'reviewer@example.com','/c/rs-learning/approvals');
  // Card 1 is seeded in Ideas; a Contributor moves Cards, but not into Live, which only the people who manage the Company do.
  await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
  const from=(await page.locator('.kcard[data-card-id="1"]').boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
@@ -465,7 +470,7 @@ test('a Contributor dropping a Card on Live is told it cannot move it, stays on 
  await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
  await page.mouse.up();
  await expect(page.locator('.work-error')).toHaveText('You cannot move the card to this stage.');
- await expect(page).toHaveURL(/\/work\/board$/);
+ await expect(page).toHaveURL(/\/approvals$/);
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
  await page.reload();
@@ -476,7 +481,7 @@ test('a Contributor dropping a Card on Live is told it cannot move it, stays on 
 // the keyboard returns to it and the log keeps both rows. A move the board refuses offers no "Undo".
 test('a move to another column is offered as Undo, which puts the Card back in the stage and place it left, focused, with both log rows',async({page})=>{
  await page.setViewportSize({width:2200,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const stamp=Date.now();
  // Two Cards in «كتابة», a stage of In progress: a Card put back returns to that stage, not to the column's first one.
  const [a,b]=placeCards(stamp,2,'كتابة');
@@ -502,7 +507,7 @@ test('a move to another column is offered as Undo, which puts the Card back in t
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from كتابة to بريف جاهز'})).toHaveCount(1);
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from Planned to In progress'})).toHaveCount(1);
  // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
- await page.goto('/c/rs-learning/work/board');
+ await page.goto('/c/rs-learning/approvals');
  await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
  // In English the board reads left to right, so Planned is the column to the left of In progress.
  await page.keyboard.press('Shift+ArrowLeft');

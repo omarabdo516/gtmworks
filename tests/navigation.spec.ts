@@ -1,73 +1,40 @@
 import { test, expect, freshSeed } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
-import { clickPath, idle, measureClick, median, type Timing } from './navigation-measure';
+import { clickPath, idle, measureClick, measuredCard, median, type Timing } from './navigation-measure';
+import { laneHermes } from './lane-hermes';
 import { signIn, openNavigation, closeNavigation, openMoreSection } from './sign-in';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
-import { appOrigin } from './lane.mjs';
-import { ensureRequestAgent } from './request-agent';
+import { oldCard } from './old-card';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
 
-// The prepared-navigation test measures a non-empty Inbox: before this file's tests one new card is moved to review,
-// where it waits on Omar (the seed's approver). The setup runs in its own hooks, so the measured test keeps its own
-// deadline. Cleanup approves only that card, found by its own address and its run-unique title; each worker (a retry
-// starts a new one) cleans the card it created and nothing else.
-let inboxFixture: { title: string, path: string } | undefined;
-test.beforeAll(async ({ browser }, testInfo) => {
+// The prepared-navigation test measures a non-empty Inbox: the lane's fake Engine holds a Card that needs review, which
+// waits on Omar, an Administrator (#841: Waiting on you is worked out from the Engine's board). The lane's fake Engine
+// also holds the one Card the measured path opens over the board (#835), at the id the path names. The setup runs in its
+// own hooks, so the measured test keeps its own deadline; closing the fake Engine takes both away.
+let engine: Awaited<ReturnType<typeof laneHermes>> | undefined;
+test.beforeAll(async ({}, testInfo) => {
   freshSeed(testInfo);
-  const context = await browser.newContext({ baseURL: appOrigin });
-  try {
-    const page = await context.newPage();
-    ensureRequestAgent();
-    await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
-    const title = `بطاقة قياس الوارد ${randomUUID()}`;
-    await page.getByRole('button', { name: "+ New card" }).click();
-    await page.getByLabel('Message', { exact: true }).fill(title);
-    await page.getByRole('button', { name: "Create card" }).click();
-    await expect(page.locator('.modal h2').first()).toHaveText(title);
-    const path = new URL(page.url()).pathname;
-    expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
-    inboxFixture = { title, path };
-    await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
-    await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
-  } finally { await context.close(); }
+  engine = await laneHermes();
+  engine.settings.kanban.task({ id: measuredCard, title: 'Measured card', status: 'ready', body: '- [ ] Open it' });
+  engine.settings.kanban.task({ title: `بطاقة قياس الوارد ${randomUUID()}`, status: 'review' });
 });
-test.afterAll(async ({ browser }) => {
-  const created = inboxFixture;
-  if (!created) return;
-  const context = await browser.newContext({ baseURL: appOrigin });
-  try {
-    const page = await context.newPage();
-    await signIn(page, 'omar@example.com', '/c/rs-learning/approvals');
-    await expect(page.locator('.approvals')).toBeVisible();
-    const card = page.locator('.approval-card')
-      .filter({ has: page.locator(`a[href="${created.path}"]`) })
-      .filter({ hasText: created.title });
-    // A setup that failed before the move left no approval to clean; otherwise exactly this card is approved, once,
-    // as the seed's single step needs (the same flow as "own comments, moves and approvals ...").
-    if (await card.count()) {
-      expect(await card.count(), 'only the card this run created').toBe(1);
-      // The waiting column lists the card; its decision is taken inside the card (#16).
-      await card.getByRole('link', { name: created.title }).click();
-      await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-      await expect(page.locator('.card-stage-line')).toContainText('معتمد');
-      await page.goto('/c/rs-learning/approvals');
-      await expect(card).toHaveCount(0);
-    }
-    inboxFixture = undefined;
-  } finally { await context.close(); }
-});
+test.afterAll(async () => { await engine?.close(); engine = undefined; });
 
 test('prepared navigation (production, warm-up + 3 runs)', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
-  // The measured Inbox step opens a non-empty Inbox from the sidebar's approvals entry.
-  expect(Number(await page.locator('.sidebar .sb-count[href$="/approvals"]').textContent())).toBeGreaterThan(0);
+  // The measured Inbox step opens a non-empty Inbox from the sidebar's approvals entry. The Company layout streams the
+  // count beside the page, and the pill stays empty until it comes (app/approvals-count.tsx, #789); the board's frame is
+  // drawn before it since the board reads the Engine (#834). So the count is read once it has come, and it is not 0.
+  const waiting = page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
+  await expect(waiting).not.toBeEmpty();
+  expect(Number(await waiting.textContent())).toBeGreaterThan(0);
   const runs: Record<string, Timing[]> = Object.fromEntries(clickPath.map(step => [step.name, []]));
   for (let run = 0; run < 4; run++) {
     await page.goto('/c/rs-learning/work/board');
@@ -155,7 +122,8 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
 });
 
 // #771, #739: a link loads its page only on intent. Loading the board renders no other page in the background; pointing
-// at a link prefetches its whole page, which the press then opens; closing the sheet reuses the visited board.
+// at a link prefetches its whole page, which the press then opens; opening and closing a Card's window over the visited
+// board (#835) asks the server for no page.
 test('links prefetch only on intent: nothing in the background, a pointed link\'s whole page, and closing reuses the visited board', async ({ page: sessionPage }) => {
   await signIn(sessionPage, 'manager@example.com', '/c/rs-learning/work/board');
   const page = await sessionPage.context().newPage();
@@ -181,17 +149,17 @@ test('links prefetch only on intent: nothing in the background, a pointed link\'
   expect(prepared.get('/c/rs-learning/numbers'), 'page data, not a partial layout/loading shell').toContain('"content"');
   expect([...prepared.keys()], 'and only that one').toEqual(['/c/rs-learning/numbers']);
   await closeNavigation(page);
-  await page.locator('.card a[href$="/board?card=1"]').click();
-  await expect(page.locator('.sheet[open]')).toBeVisible();
-  await idle(page);
   const requests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/c/')) requests.push(request.url());
   });
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.locator('.sheet')).toHaveCount(0);
+  await page.locator(`#board-cols .kcard[data-card="${measuredCard}"] a`).click();
+  await expect(page.locator('.cw[open]')).toBeVisible();
   await idle(page);
-  expect(requests, 'return to the board must make no company server request').toEqual([]);
+  await page.getByRole('dialog').getByRole('button', { name: 'Close the card', exact: true }).click();
+  await expect(page.locator('.cw')).toHaveCount(0);
+  await idle(page);
+  expect(requests, 'opening a Card and returning to the board must make no company server request').toEqual([]);
 });
 
 test('reduced motion disables hover, veil and card animation', async ({ page }) => {
@@ -204,13 +172,11 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
 });
 
 test('own comments, moves and approvals invalidate prepared pages immediately', async ({ page }) => {
-  ensureRequestAgent();
-  await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
-  await idle(page); // Home, board and the inbox are prepared before any write.
-  await page.getByRole('button', { name: "+ New card" }).click();
+  // An old Card on its own page: New card makes its Cards on the Engine since #836.
+  await signIn(page, 'omar@example.com', '/c/rs-learning/home');
   const title = `بطاقة تحديث فوري ${Date.now()}`;
-  await page.getByLabel('Message',{exact:true}).fill(title);
-  await page.getByRole('button', { name: "Create card" }).click();
+  await oldCard(page, title);
+  await idle(page); // Home, the board and the inbox are prepared before any write.
   await expect(page.locator('.modal h2').first()).toHaveText(title);
   const cardPath = new URL(page.url()).pathname;
   const comment = `تعليق فوري ${Date.now()}`;
@@ -218,29 +184,38 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await page.getByRole('button', { name: "Send", exact: true }).click();
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
   await page.locator('.close-card').click();
+  // Closing the Card's page lands on the board, the Engine's own Kanban board since spec #831.
+  await expect(page).toHaveURL(/\/work\/board$/);
+  await expect(page.locator('#board-cols > .col')).toHaveCount(5);
   // Home has no sidebar entry; it opens from the account menu's "More sections" (#8).
   await openMoreSection(page, 'home');
   await expect(page.locator('.comment-body').filter({ hasText: comment })).toBeVisible();
+  // Home's "Awaiting your approval" counts the old board's approvals, which are no part of Waiting on you since #841.
+  const awaiting = page.locator('.stats .stat').first().locator('strong');
+  const approvals = Number(await awaiting.textContent());
   await page.locator(`.content a[href="${cardPath}"]`).first().click();
   await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
   await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
   await page.locator('.close-card').click();
-  await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
-  await openNavigation(page);
-  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
-  // The board draws the same Card in its own column, opening its sheet (#116): the queued Card is read on Waiting on you.
-  await expect(page).toHaveURL(/\/approvals$/);
-  const queued = page.locator('.approval-card').filter({ hasText: title });
+  await expect(page).toHaveURL(/\/work\/board$/);
+  // The Home prepared before the move counts it.
+  await openMoreSection(page, 'home');
+  await expect(awaiting).toHaveText(String(approvals + 1));
+  // The old board's own Waiting on you column, served where a chat shows a Card (?show=) until #846, holds it; its
+  // decision is on the Card's own page.
+  const oldBoard = `/c/rs-learning/work/board?show=${cardPath.split('/').pop()}`;
+  await page.goto(oldBoard);
+  const queued = page.locator('.col[data-column="waiting"] .approval-card').filter({ hasText: title });
   await expect(queued).toBeVisible();
-  await queued.getByRole('link', { name: title }).click();
+  await page.goto(cardPath);
   await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
   await expect(page.locator('.card-stage-line')).toContainText('معتمد');
-  await openNavigation(page);
-  await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
+  await page.locator('.close-card').click();
+  await expect(page).toHaveURL(/\/work\/board$/);
+  await openMoreSection(page, 'home');
+  await expect(awaiting).toHaveText(String(approvals));
+  await page.goto(oldBoard);
   await expect(queued).toHaveCount(0);
-  await openNavigation(page);
-  await page.locator('.nav a[href$="/work/board"]').click();
-  await expect(page.locator('.column[data-stage-name="معتمد"] .card').filter({ hasText: title })).toBeVisible();
 });
 
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards, statusOfColumn, moveTarget, waitsOn, waitsOnReader } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -166,4 +166,86 @@ test('an approval on a Card of an Agent hidden from the reader is not counted, n
  const shown = visibleApprovals(cards, items, new Set(['seen']));
  assert.deepEqual(shown.cards.map(card => card.id), [1, 2]);
  assert.deepEqual(shown.items, [{ kind: 'approval', id: 1 }, { kind: 'approval', id: 2 }, { kind: 'mention', id: 3 }]);
+});
+
+// Spec #831 (#834): the board is the Engine's own Kanban board, its statuses grouped into five columns in one place.
+test('the Engine board has five columns, Waiting on you first and no Live, and each Engine status lands in one of them', () => {
+ assert.deepEqual(cardColumns, ['waiting', 'ideas', 'planned', 'progress', 'done']);
+ const landed = Object.fromEntries(['blocked', 'review', 'triage', 'todo', 'scheduled', 'ready', 'running', 'done'].map(status => [status, columnOfStatus(status)]));
+ assert.deepEqual(landed, { blocked: 'waiting', review: 'waiting', triage: 'ideas', todo: 'planned', scheduled: 'planned', ready: 'planned', running: 'progress', done: 'done' });
+ assert.equal(columnOfStatus('archived'), null);
+ assert.equal(columnOfStatus('something new'), null);
+});
+
+test('a Card\'s symbol says what it is doing: working now, a question, a review, stopped after failures, stopped, waiting for other Cards', () => {
+ assert.deepEqual(cardSymbol({ status: 'running', failures: 0, parents: 0 }), { kind: 'working' });
+ // Parked where the dispatcher does not start it (#838): a person's Stop, or an Agent that set its Card aside.
+ assert.deepEqual(cardSymbol({ status: 'scheduled', failures: 0, parents: 0 }), { kind: 'stopped' });
+ assert.deepEqual(cardSymbol({ status: 'blocked', failures: 0, parents: 0 }), { kind: 'question' });
+ assert.deepEqual(cardSymbol({ status: 'blocked', failures: 1, parents: 0 }), { kind: 'question' });
+ assert.deepEqual(cardSymbol({ status: 'blocked', failures: 2, parents: 0 }), { kind: 'failed' });
+ assert.deepEqual(cardSymbol({ status: 'review', failures: 0, parents: 0 }), { kind: 'review' });
+ assert.deepEqual(cardSymbol({ status: 'todo', failures: 0, parents: 1 }), { kind: 'waits', count: 1 });
+ assert.deepEqual(cardSymbol({ status: 'todo', failures: 0, parents: 3 }), { kind: 'waits', count: 3 });
+ for (const status of ['triage', 'todo', 'ready', 'done']) assert.equal(cardSymbol({ status, failures: 0, parents: 0 }), null, status);
+ // A Card that already started is no longer waiting for its parents, whatever links it keeps.
+ assert.deepEqual(cardSymbol({ status: 'running', failures: 0, parents: 2 }), { kind: 'working' });
+});
+
+test('Waiting on you lists the newest Card first; every other column keeps the Engine\'s own order', () => {
+ const cards = [
+  { id: 't_1', column: 'waiting', createdAt: 100 }, { id: 't_2', column: 'planned', createdAt: 300 }, { id: 't_3', column: 'waiting', createdAt: 300 },
+  { id: 't_4', column: 'planned', createdAt: 100 }, { id: 't_5', column: 'waiting', createdAt: 200 },
+ ];
+ assert.deepEqual(orderCards(cards).map(card => card.id), ['t_3', 't_5', 't_1', 't_2', 't_4']);
+});
+
+// Spec #831 (#841): what waits on whom is worked out from the board read. A question waits on the Card's Member
+// Assignee, else the person who made it, else every Administrator and Manager; a review only on those who may decide it;
+// a Card given to a Member waits on them until it is done. A person who is no longer a Member is waited on by nobody.
+test('a waiting Card waits on its Member, else its maker, else the Administrators and Managers; a review on those who decide it', () => {
+ const members = new Set(['mona', 'omar', 'sara', 'vic']);
+ const blocked = { status: 'blocked', person: null, maker: null };
+ assert.deepEqual(waitsOn({ ...blocked, person: 'mona', maker: 'omar' }, members), { person: 'mona' });
+ assert.deepEqual(waitsOn({ ...blocked, maker: 'mona' }, members), { person: 'mona' });
+ assert.deepEqual(waitsOn(blocked, members), { leads: true });
+ // A former Member is waited on by nobody: the question goes to the next in line.
+ assert.deepEqual(waitsOn({ ...blocked, person: 'gone', maker: 'mona' }, members), { person: 'mona' });
+ assert.deepEqual(waitsOn({ ...blocked, maker: 'gone' }, members), { leads: true });
+ for (const card of [{ status: 'review', person: 'mona', maker: 'mona' }, { status: 'review', person: null, maker: null }])
+  assert.deepEqual(waitsOn(card, members), { leads: true });
+ for (const status of ['triage', 'todo', 'scheduled', 'ready', 'running'])
+  assert.deepEqual(waitsOn({ status, person: 'mona', maker: 'omar' }, members), { person: 'mona' }, status);
+ for (const status of ['triage', 'todo', 'ready', 'running']) assert.equal(waitsOn({ status, person: null, maker: 'omar' }, members), null, status);
+ assert.equal(waitsOn({ status: 'done', person: 'mona', maker: 'omar' }, members), null);
+ assert.equal(waitsOn({ status: 'ready', person: 'gone', maker: 'omar' }, members), null);
+});
+
+test('a Card waits on the reader when it waits on them by name, or on the Administrators and Managers and they are one', () => {
+ assert.equal(waitsOnReader({ person: 'mona' }, { me: 'mona', role: 'contributor' }), true);
+ assert.equal(waitsOnReader({ person: 'mona' }, { me: 'omar', role: 'owner' }), false);
+ for (const [role, mine] of [['owner', true], ['manager', true], ['contributor', false], ['viewer', false], [null, false]])
+  assert.equal(waitsOnReader({ leads: true }, { me: 'x', role }), mine, String(role));
+ assert.equal(waitsOnReader(null, { me: 'mona', role: 'owner' }), false);
+});
+
+// #837: a person moves a Card into Ideas, Planned or Done, each asking the Engine for one status; In progress and Waiting
+// on you are the work's own, and Shift with an arrow passes over them to the next column a person moves a Card into.
+test('a person\'s move asks the Engine for the status its column means, and In progress and Waiting on you for none', () => {
+  assert.equal(statusOfColumn('ideas', false), 'triage');
+  assert.equal(statusOfColumn('planned', false), 'ready');
+  assert.equal(statusOfColumn('planned', true), 'todo');
+  assert.equal(statusOfColumn('done', true), 'done');
+  assert.equal(statusOfColumn('progress', false), null);
+  assert.equal(statusOfColumn('waiting', false), null);
+  // Left to right in English: Waiting on you, Ideas, Planned, In progress, Done.
+  assert.equal(moveTarget('ideas', 'ArrowRight', false), 'planned');
+  assert.equal(moveTarget('planned', 'ArrowRight', false), 'done');
+  assert.equal(moveTarget('done', 'ArrowRight', false), null);
+  assert.equal(moveTarget('ideas', 'ArrowLeft', false), null);
+  assert.equal(moveTarget('progress', 'ArrowLeft', false), 'planned');
+  assert.equal(moveTarget('waiting', 'ArrowRight', false), 'ideas');
+  // In Arabic the columns run right to left.
+  assert.equal(moveTarget('ideas', 'ArrowLeft', true), 'planned');
+  assert.equal(moveTarget('planned', 'ArrowUp', false), null);
 });

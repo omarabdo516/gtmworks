@@ -1,7 +1,8 @@
-# The Engine's managed configuration (ADR 0018, #393): the work sandbox's `ssh` backend, pinned. The managed scope is
-# applied after a profile's own config and after both settings routes (hermes_cli/managed_scope.py,
-# tools/terminal_scope.py), so no profile write and no Settings write can move an Agent's terminal, files or code back
-# onto the Engine's own disk. The path is the one scripts/engine-template.yml mounts it at.
+# The Engine's managed configuration (ADR 0018, #393): the work sandbox's `ssh` backend, pinned, and a board worker's
+# approval of a dangerous command (spec #831). The managed scope is applied after a profile's own config and after both
+# settings routes (hermes_cli/managed_scope.py, tools/terminal_scope.py), so no profile write and no Settings write can
+# move an Agent's terminal, files or code back onto the Engine's own disk. The path is the one
+# scripts/engine-template.yml mounts it at.
 #
 # It is pinned to the values the sandbox image builds (sandbox/Dockerfile, sandbox/sshd_config) and the probe measured
 # (docs/engine-probes/work-sandbox-ssh.md, section 5): user pn, port 2222, the Engine's own key in its data volume.
@@ -17,11 +18,21 @@ terminal:
   # scripts/engine-ssh-sync-files.sh adds `terminal.ssh_sync_files` and passes it there (default true, so an install that
   # sets nothing behaves as the release does). With it false nothing is copied in and nothing back; Agents see /work only.
   ssh_sync_files: false
+# A board worker's dangerous command runs (spec #831, ADR 0033 item 2, ADR 0020). The dispatcher runs a Card's worker as a
+# single-query Run (gateway/session_kanban.py), and a single-query Run refuses a command Hermes flags as dangerous
+# (tools/approval_detection.py) with no person present to approve it, unless this says approve
+# (docs/engine-probes/kanban-board.md, section 3). The command runs in the Company's work sandbox, which holds no key.
+# The managed scope merges per leaf, so a profile's own approvals (unattended_mode, lib/agent-toolsets.mjs) stay its
+# own, and no profile write changes this one. The dispatcher and the review dispatch are not named here: they stay as
+# Hermes ships them, on.
+approvals:
+  single_query_mode: approve
 # The tools no Agent gets (ADR 0018, lib/agent-toolsets.mjs noAgentGets), pinned so a write from the Owner's Hermes
 # dashboard (#871) cannot turn one on: the dashboard's toolset switch takes a toolset it turns on out of the profile's
 # disabled list (hermes_cli/tools_config.py _save_platform_tools), and its config pages write any key. This list is
 # applied after everything else (tools_config.py _get_platform_tools), and a managed key is never saved into a profile,
 # so it is every profile's whole list: each Agent's own tools stay its own in its platform list
 # (platform_toolsets.api_server), which gtmworks writes and the dashboard changes.
+# The board's tools (kanban) are not here: every Agent gets them, a board worker included (spec #831).
 agent:
-  disabled_toolsets: [browser, tts, video, video_gen, project, desktop_ui, catalog, onboarding, kanban, connections]
+  disabled_toolsets: [browser, tts, video, video_gen, project, desktop_ui, catalog, onboarding, connections]

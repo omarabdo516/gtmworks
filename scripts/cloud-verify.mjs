@@ -2,11 +2,12 @@
 // app `npm run cloud:up` started: Chromium, driven by Playwright, clicks, types and submits, and every step is checked
 // on the page and in the local database. Screenshots of each step land in the output folder.
 //   node scripts/cloud-verify.mjs            the whole journey: first run on an empty install, sign-in, a message to
-//                                            Lead, Numbers; then, on the seed put back, a Card made and moved on the board
+//                                            Lead, Numbers; then, on the seed put back, the Engine's Card on the board
 //   node scripts/cloud-verify.mjs --sign-in  only: the seeded Owner signs in and reaches a signed-in page
 //   --out DIR                                where the screenshots go (default $TMPDIR/gtmworks-cloud/screens)
 // It refuses any app or database but the local stack's (scripts/first-run-db.mjs assertLocalTarget).
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -79,14 +80,49 @@ function putSeedBack() {
  }
 }
 
+// `next dev` compiles a page the first time it is asked for, and that compile rebuilds the client code the Company layout
+// shares: the page the browser is on reloads itself and the press that asked for the new page is lost (the first-run
+// answer stayed on Home while its Conversation was made). So the seeded Owner opens every page the journey walks, in a
+// browser of its own, and waits on each until the dev server has stopped rebuilding (its hot reload says so in the
+// console); next.config.mjs keeps them compiled while the server runs. A Conversation nobody has is enough to compile
+// its page.
+const journeyPages=slug=>[`/c/${slug}/home`,`/c/${slug}/conversations/${randomUUID()}`,`/c/${slug}/numbers`,`/c/${slug}/work/board`];
+async function compileJourneyPages(browser) {
+ const context=await browser.newContext();
+ try {
+  const page=await context.newPage();
+  let building=false, last=Date.now();
+  page.on('console',message=>{
+   const text=message.text();
+   if(text.startsWith('[Fast Refresh] rebuilding')) { building=true; last=Date.now(); }
+   else if(/^\[Fast Refresh\] (done|performing full reload)/.test(text)) { building=false; last=Date.now(); }
+  });
+  page.on('load',()=>{ building=false; last=Date.now(); });
+  await signIn(page,seeded.email,seeded.password);
+  for(const path of journeyPages(seeded.company)) {
+   // The compile this asks for can reload the page under the navigation; the page is asked for again until it answers.
+   await expect(async()=>{
+    const response=await page.goto(`${origin}${path}`);
+    if(!response||response.status()>=500) throw new Error(`${path} answered ${response?.status()}`);
+   }).toPass({timeout:120000});
+   await expect.poll(()=>!building&&Date.now()-last>3000,{message:`the dev server kept rebuilding after ${path}`,timeout:120000}).toBe(true);
+  }
+ } finally { await context.close(); }
+}
+
 async function signInOnly(page) {
  await signIn(page,seeded.email,seeded.password);
  await expect(page.locator('.sidebar')).toBeVisible({timeout:60000});
  const file=join(out,'cloud-verify-signed-in.png'); await page.screenshot({path:file});
- return `Signed in as ${seeded.email} at ${page.url()} (screenshot ${file})`;
+ const reached=page.url();
+ // The pages a session walks are compiled now, so its first press on one is not lost to a reload.
+ await compileJourneyPages(page.context().browser());
+ return `Signed in as ${seeded.email} at ${reached} (screenshot ${file})`;
 }
 
 async function journey(page) {
+ await compileJourneyPages(page.context().browser());
+ step('the dev server has compiled every page the journey opens');
  const owner={name:'Cloud owner',email:'cloud-owner@example.test',password:'cloud-owner-password',company:'Cloud Company'};
  const code=readFileSync(join(state,'setup-code'),'utf8').trim();
  // In a process of its own, so the truncate's notices stay out of the journey's lines unless it fails.
@@ -146,42 +182,22 @@ async function journey(page) {
  await expect(page.getByText('Leads per day',{exact:true})).toBeVisible();
  await screenshot(page,'numbers');
  step('opened Numbers from the sidebar');
- // 5. The board, on the seed put back. A new Card is asked of one of the Company's own Agents (spec #695); the seed gives
- // RS Learning none, so the journey gives it its main Agent, which the seed put back at the end takes away again. The
- // seeded Owner makes a Card in RS Learning and carries it by mouse from Ideas to Planned; the move is in the database.
+ // 5. The board, on the seed put back: the Company's Engine's own Kanban board (spec #831). The fake Engine cloud:up
+ // started holds one Card being worked (scripts/cloud-hermes.mjs), and the seeded Owner finds it in In progress, read
+ // through gtmworks, with its symbol.
  putSeedBack();
  step('the seeded data is back');
- query(`insert into public.hermes_agents(company_id,name,speciality,profile,is_default) select id,'Lead','General','cloud-verify-lead',true from public.companies where slug='${seeded.company}' returning id`);
  await page.context().clearCookies();
  await signIn(page,seeded.email,seeded.password);
- // The seeded Owner lands in another of their Companies; RS Learning is the one whose Agents take Cards.
  await page.goto(`${origin}/c/${seeded.company}/home`);
  await page.locator('.sidebar').getByRole('link',{name:'Marketing board',exact:true}).click();
  await expect(page).toHaveURL(`${origin}/c/${seeded.company}/work/board`);
- await expect(page.locator('#board-cols > .col')).toHaveCount(6);
- await page.goto(`${origin}/c/${seeded.company}/work/new`);
- const title=`Cloud card ${Date.now()}`;
- const create=page.getByRole('button',{name:'Create card'});
- await hydrated(page.getByLabel('Message',{exact:true}),title,create);
- await create.click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/,{timeout:30000});
- const card=Number(new URL(page.url()).pathname.split('/').pop());
- await page.goto(`${origin}/c/${seeded.company}/work/board`);
- const source=page.locator(`.kcard[data-card-id="${card}"]`);
- await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
- await screenshot(page,'board-before-move');
- const from=await source.boundingBox(),to=await page.locator('.col[data-column="planned"] .col__body').boundingBox();
- await page.mouse.move(from.x+from.width/2,from.y+20);
- await page.mouse.down();
- await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
- await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
- await page.mouse.up();
- await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
- await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card}"]`)).toBeVisible();
- await screenshot(page,'board-after-move');
- await expect.poll(()=>query(`select c.title,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.id=${card}`))
-  .toEqual([{title,board_column:'planned'}]);
- step(`made the Card "${title}" and dragged it from Ideas to Planned; work_cards has it in the planned column`);
+ await expect(page.locator('#board-cols > .col .col__name')).toHaveText(['Waiting on you','Ideas','Planned','In progress','Done']);
+ const engineCard=page.locator('.col[data-column="progress"]').getByRole('article',{name:/^Weekly report for the team/});
+ await expect(engineCard).toBeVisible({timeout:15000});
+ await expect(engineCard.getByRole('img',{name:'Working on it now'})).toBeVisible();
+ await screenshot(page,'board');
+ step('the board reads the Engine: its Card "Weekly report for the team" is in In progress, working now');
 }
 
 const browser=await chromium.launch();
@@ -189,8 +205,15 @@ try {
  const page=await (await browser.newContext({viewport:{width:1440,height:900}})).newPage();
  if(mode==='sign-in') console.log(await signInOnly(page));
  else {
+  // A reload the dev server forces on the page drops what was being done there; the journey names it when it fails.
+  const reloads=[];
+  page.on('console',message=>{ if(message.text().startsWith('[Fast Refresh] performing full reload')) reloads.push(page.url()); });
   try { await journey(page); }
-  catch(error) { await screenshot(page,'failed').catch(()=>{}); throw error; }
+  catch(error) {
+   await screenshot(page,'failed').catch(()=>{});
+   if(reloads.length) error.message+=`\nThe dev server reloaded the page while it compiled (on ${reloads.join(', ')}): is a page the journey opens missing from journeyPages?`;
+   throw error;
+  }
   // Passed or not, the journey ends on the seed as local-db.sh left it: no journey Owner, Company or Card stays behind.
   finally { putSeedBack(); }
   console.log(`Journey passed; screenshots in ${out}`);

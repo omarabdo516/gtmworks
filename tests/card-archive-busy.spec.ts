@@ -20,10 +20,16 @@ const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','stat
 const company='10000000-0000-0000-0000-000000000001';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const board='/c/rs-learning/work/board';
+// The old board's columns stay on the board opened on Waiting on you until the old board is switched off (#846); its
+// archive returns on the Engine's board with #842.
+const columns='/c/rs-learning/approvals';
 const sheetOf=(page:Page)=>page.getByRole('dialog').filter({has:page.locator('#sheet-title')});
 const confirmOf=(page:Page)=>page.getByRole('dialog',{name:/^Archive/});
 const waitingCount=(page:Page)=>page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
-const count=async(page:Page)=>Number((await waitingCount(page).textContent({timeout:2000}).catch(()=>'0'))||'0');
+// The Company layout streams the count beside the page, and the pill stays empty until it comes (app/approvals-count.tsx,
+// #789); the Engine's board draws its frame before it (#834). So the count is read once it has come: an empty pill read
+// as 0 made the Owner's count before the archive 0 when the page was slow.
+const count=async(page:Page)=>{ await expect(waitingCount(page)).not.toBeEmpty(); return Number(await waitingCount(page).textContent()); };
 
 async function memberClient(email:string) {
  const value=status();
@@ -73,7 +79,7 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   await confirmOf(page).getByRole('button',{name:'Archive and stop'}).click();
   await expect(sheetOf(page).getByRole('region',{name:'Archived'})).toBeVisible();
   await expect(page.locator('.toast')).toContainText('Archived');
-  await page.goto(board);
+  await page.goto(columns);
   await expect(page.locator(`#board-cols .kcard[data-card-id="${card}"]`)).toHaveCount(0);
   await expect.poll(()=>count(page)).toBe(before-1);
   expect(rows(`select state from public.reply_cards where conversation_id='${conversation}' and kind='question'`)).toEqual([{state:'closed'}]);
@@ -94,16 +100,19 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   await withEngineContract(fake.engineFor,()=>driveHandovers(service,{}));
   await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
   expect(fake.runs.length).toBe(runs);
-  await page.goto(board);
+  await page.goto(columns);
   await expect(page.locator(`#board-cols [data-column="progress"] .kcard[data-card-id="${card}"]`)).toBeVisible();
   await expect.poll(()=>count(page)).toBe(before-1);
  } finally { query(`delete from public.hermes_agents where id='${agent}'`); }
 });
 
 test('a Card waiting for an approval asks once; archived, the approval ends with no decision and leaves the approver\'s list, and restored it is back where it was sent from',async({page,browser})=>{
- // The seed's card 5 waits in review for the Owner's approval.
- await signIn(page,'omar@example.com',board);
- const before=await count(page);
+ // The seed's card 5 waits in review for the Owner's approval, in the old board's Waiting on you column: since #841 the
+ // old board's approvals are no part of the list itself, and the old board is opened where a chat shows a Card (?show=).
+ const approverList='/c/rs-learning/work/board?show=1';
+ const waiting=()=>page.locator('#board-cols .col[data-column="waiting"] .kcard[data-card-id="5"]');
+ await signIn(page,'omar@example.com',approverList);
+ await expect(waiting()).toHaveCount(1);
  const title=String(rows('select title from public.work_cards where id=5')[0].title);
  const reviewerPage=await (await browser.newContext()).newPage();
  await signIn(reviewerPage,'reviewer@example.com',board);
@@ -112,14 +121,15 @@ test('a Card waiting for an approval asks once; archived, the approval ends with
  await expect(confirm.getByRole('listitem')).toHaveText([`The approval of “${title}” ends with no decision`]);
  await confirm.getByRole('button',{name:'Archive and stop'}).click();
  await expect(sheetOf(reviewerPage).getByRole('region',{name:'Archived'})).toBeVisible();
- await page.reload();
- await expect.poll(()=>count(page)).toBe(before-1);
+ await page.goto(approverList);
+ await expect(waiting()).toHaveCount(0);
  expect(rows(`select count(*)::int as decided from public.work_activity where card_id=5 and action in ('approval_rejected','approval_approved')`)).toEqual([{decided:0}]);
  await sheetOf(reviewerPage).getByRole('region',{name:'Archived'}).getByRole('button',{name:'Restore'}).click();
  await expect(reviewerPage.locator('.toast')).toContainText('Restored');
- await reviewerPage.goto(board);
+ await reviewerPage.goto(columns);
  await expect(reviewerPage.locator('#board-cols [data-column="progress"] .kcard[data-card-id="5"]')).toBeVisible();
- await page.reload();
- await expect.poll(()=>count(page)).toBe(before-1);
+ await page.goto(approverList);
+ await expect(page.locator('#board-cols [data-column="progress"] .kcard[data-card-id="5"]')).toBeVisible();
+ await expect(waiting()).toHaveCount(0);
  await reviewerPage.context().close();
 });

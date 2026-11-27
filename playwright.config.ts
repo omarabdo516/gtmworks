@@ -7,6 +7,9 @@ import { freshLog, nodeOptionsBefore, ownsLog } from './tests/offline.mjs';
 // The runner owns its log, unless it inherited one from the process that started it.
 if (!process.env.TEST_WORKER_INDEX && !ownsLog()) freshLog();
 import { appOrigin, lanes, originOf, serverLogOf } from './tests/lane.mjs';
+// One log of the routes every fake Engine of the run was asked for (#842), which the teardown reads for a Card deleted.
+import { routesLog } from './tests/engine-routes.mjs';
+routesLog();
 // First run opens only with the install's setup code (issue #50). The web server and the test workers inherit this one.
 process.env.SETUP_CODE ||= randomBytes(32).toString('hex');
 // Each run's spec files restore the seed before they start (tests/fresh-seed.ts); the workers inherit this run's name.

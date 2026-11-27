@@ -3,6 +3,7 @@ import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
 import { execFileSync } from 'node:child_process';
+import { oldCard } from './old-card';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -29,7 +30,7 @@ async function shoot(page:Page,name:string) {
  await page.setViewportSize({width:1280,height:720});
 }
 
-test('a project is created, a card is filed into it, and the board and list show only that card',async({page})=>{
+test('a project is created, a card is filed into it, and the project page counts it',async({page})=>{
  await mkdir('test-results/screenshots',{recursive:true});
  await signIn(page,'omar@example.com','/c/rs-consultations/projects');
  // A company without projects shows the empty state.
@@ -57,14 +58,9 @@ test('a project is created, a card is filed into it, and the board and list show
  await expect(page.getByRole('form',{name,exact:true}).getByLabel('Project status')).toHaveValue('paused');
  await expect(page.getByRole('form',{name,exact:true}).getByLabel('Goal')).toHaveValue('Sell the spring course to returning students');
 
- // File one card into it from the card.
- await page.goto('/c/rs-learning/work/board');
- const total=await page.locator('.card').count();
- expect(total).toBeGreaterThan(1);
- const title=(await page.locator('.card strong').first().innerText()).trim();
- await page.locator('.card a').first().click();
- await page.getByRole('dialog').getByRole('link',{name:'Card details'}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+ // File one old card into it from its own page. The board, the list and the calendar read the Engine's own Kanban
+ // board since spec #831, whose Cards take a Project name (the Engine's tenant) and filter by it (#837, #845).
+ const {path}=await oldCard(page,`Filed card ${Date.now()}`);
  const section=page.locator('[data-card-section=project]');
  await section.getByLabel('Project',{exact:true}).selectOption({label:name});
  await save(page,section.getByRole('button',{name:'Save'}));
@@ -76,36 +72,18 @@ test('a project is created, a card is filed into it, and the board and list show
  await expect(page.locator('.card-stage-line')).toContainText(name);
  await expect(page.locator('.detail-row').filter({hasText:`Filed the card in ${name}`})).toHaveCount(1);
 
- // The board and the list filter by project.
- await page.goto('/c/rs-learning/work/board');
- await page.getByLabel('Project',{exact:true}).selectOption({label:name});
- await expect(page.locator('.card')).toHaveCount(1);
- await expect(page.locator('.card').first()).toContainText(title);
- await page.getByLabel('Project',{exact:true}).selectOption({label:'All projects'});
- await expect(page.locator('.card')).toHaveCount(total);
- await page.goto('/c/rs-learning/work/list');
- await page.getByLabel('Project',{exact:true}).selectOption({label:name});
- await expect(page.locator('tbody tr')).toHaveCount(1);
- await expect(page.locator('tbody tr').first()).toContainText(title);
-
  // The project page counts it.
  await page.goto('/c/rs-learning/projects');
  await expect(page.getByRole('form',{name,exact:true})).toContainText('Cards: 1');
  await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
- // The same three pages in both languages, phone and desktop.
+ // The same two pages in both languages, phone and desktop.
  try {
   for(const language of ['en','ar'] as const) {
    await chooseLanguage(page,language);
    await page.goto('/c/rs-learning/projects');
    await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
    await shoot(page,`projects-page-${language}`);
-   await page.goto('/c/rs-learning/work/board');
-   await page.locator('.work-filters').getByLabel({en:'Project',ar:'المشروع'}[language],{exact:true}).selectOption({label:name});
-   await expect(page.locator('.card')).toHaveCount(1);
-   await shoot(page,`projects-board-${language}`);
-   await page.locator('.card a').first().click();
-   await page.getByRole('dialog').getByRole('link',{name:{en:'Card details',ar:'تفاصيل البطاقة'}[language]}).click();
-   await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+   await page.goto(path);
    await expect(page.locator('[data-card-section=project] select')).toBeVisible();
    await shoot(page,`projects-card-${language}`);
   }

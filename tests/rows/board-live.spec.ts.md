@@ -1,0 +1,8 @@
+| `board-live.spec.ts` | An open board follows its Company's Engine live on the fake Engine (spec #831, #840): a Card moved on the Engine moves on the open board within a second and a comment shows on it, with no reload, through gtmworks's own `/api/board/events` and never the Engine, no frame holding the Engine's key, its address, a profile or a comment's text; a board of Company A receives no change of Company B's Engine; with the Engine's stream cut the board updates on its slow timer and takes the stream up again when it returns; a person whose membership ended stops receiving changes without reloading | 30 s | board-stream.test.mjs (the relay), kanban-board.spec.ts (the board's read) | new (#840) |
+
+## Cases
+
+| `board-live.spec.ts` "a Card moved on the Engine moves on an open board within a second, and a comment shows on it, with no reload" | stays | Added with #840. The Engine's change, the relay, the board's read and its drawing together, in under a second, and nothing of the Engine in what the browser got. |
+| `board-live.spec.ts` "a board of Company A receives no change of Company B" | stays | Added with #840. Company isolation of the live stream: two fake Engines, each a Company's record (ADR 0018). |
+| `board-live.spec.ts` "with the Engine's stream cut the board still updates on its slow timer, and takes the stream up again when it returns" | stays | Added with #840. The slow timer under the test's clock while the stream is down, and the relay following the Engine again on its own. |
+| `board-live.spec.ts` "a person whose membership ended stops receiving the board's changes without reloading" | stays | Added with #840. Membership read again by the relay before a change is sent, through the database. |

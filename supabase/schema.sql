@@ -5577,6 +5577,19 @@ end $$;
 ALTER FUNCTION public.forget_company_profile(engine_profile text) OWNER TO postgres;
 
 --
+-- Name: forget_kanban_cards(uuid, text[]); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.forget_kanban_cards(c uuid, tasks text[]) RETURNS integer
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ with gone as (delete from public.kanban_cards k where k.company_id=c and k.task_id=any(tasks) returning 1) select count(*)::integer from gone;
+$$;
+
+ALTER FUNCTION public.forget_kanban_cards(c uuid, tasks text[]) OWNER TO postgres;
+
+--
 -- Name: forget_permission_revoked(uuid, uuid, text, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -6408,6 +6421,19 @@ CREATE FUNCTION public.is_profile_keeper(c uuid, agent uuid) RETURNS boolean
 $$;
 
 ALTER FUNCTION public.is_profile_keeper(c uuid, agent uuid) OWNER TO postgres;
+
+--
+-- Name: kanban_card_tasks(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.kanban_card_tasks() RETURNS TABLE(company_id uuid, tasks text[])
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select k.company_id,array_agg(k.task_id order by k.task_id) from public.kanban_cards k group by k.company_id order by k.company_id;
+$$;
+
+ALTER FUNCTION public.kanban_card_tasks() OWNER TO postgres;
 
 --
 -- Name: keep_agent_profile_leftover(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -8304,6 +8330,47 @@ begin
 end $$;
 
 ALTER FUNCTION public.pin_run(conversation uuid, message_key uuid, specs jsonb) OWNER TO postgres;
+
+--
+-- Name: pin_run_brief(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.pin_run_brief(conversation uuid, message_key uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare held public.conversation_run_reservations; kept public.conversation_run_notes; main boolean;
+begin
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key for update;
+ select * into kept from public.conversation_run_notes n where n.conversation_id=conversation and n.send_key=message_key for update;
+ if kept.conversation_id is null then return null; end if;
+ select a.is_default into main from public.hermes_agents a where a.id=held.agent_id and a.company_id=held.company_id;
+ if kept.lead_brief is null and held.conversation_id is not null and held.start_attempts=0 and held.start_unknown_at is null and main is not null then
+  update public.conversation_run_notes n set lead_brief=jsonb_build_object(
+   'main',main,
+   'self',held.profile,
+   'role',(select m.role from public.members m where m.company_id=held.company_id and m.person_id=held.person_id and m.removed_at is null),
+   'owner',(select split_part(p.name,' ',1) from public.members m join public.people p on p.id=m.person_id
+     where m.company_id=held.company_id and m.role='owner' and m.removed_at is null order by p.name limit 1),
+   'agents',coalesce((select jsonb_agg(jsonb_build_object('name',a.name,'job',a.speciality,'role',a.template,
+      'board',case when a.profile is not null and (a.is_default or a.profile=public.agent_engine_profile(a.id)) then a.profile end) order by a.name,a.id)
+     from public.hermes_agents a
+     where a.company_id=held.company_id and a.id<>held.agent_id and public.agent_visible_to(held.company_id,held.person_id,a.id)),'[]'::jsonb),
+   'opening',case when main then (select m.body from public.conversation_messages m where m.conversation_id=conversation and m.author='agent' and m.run_id='lead-opening'
+     and not exists(select 1 from public.conversation_messages p where p.conversation_id=conversation and p.author='person' and public.written_message(p))) end,
+   'hidden',case when main and public.may_ask_to_open_agents(held.company_id,held.agent_id,held.person_id) then coalesce((
+     select jsonb_agg(jsonb_build_object('job',h.job,'asks',split_part(p.name,' ',1),'role',m.role) order by h.job)
+      from (select distinct on (lower(btrim(a.speciality))) btrim(a.speciality) job, public.agent_access_named(held.company_id,held.person_id,a.id) named
+        from public.agents_hidden_from(held.company_id,held.person_id) a where length(btrim(a.speciality))>0
+        order by lower(btrim(a.speciality)),a.id) h
+      join public.people p on p.id=h.named
+      join public.members m on m.company_id=held.company_id and m.person_id=h.named),'[]'::jsonb) else '[]'::jsonb end)
+   where n.conversation_id=conversation and n.send_key=message_key returning * into kept;
+ end if;
+ return kept.lead_brief;
+end $$;
+
+ALTER FUNCTION public.pin_run_brief(conversation uuid, message_key uuid) OWNER TO postgres;
 
 --
 -- Name: pin_run_history(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -13229,6 +13296,22 @@ CREATE TABLE public.invitation_agent_access (
 ALTER TABLE public.invitation_agent_access OWNER TO postgres;
 
 --
+-- Name: kanban_cards; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kanban_cards (
+    company_id uuid NOT NULL,
+    task_id text NOT NULL,
+    assignee uuid,
+    publish_on date,
+    made_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT kanban_cards_task_id_check CHECK ((task_id ~ '^[A-Za-z0-9_-]{1,64}$'::text))
+);
+
+ALTER TABLE public.kanban_cards OWNER TO postgres;
+
+--
 -- Name: lead_agent_requests; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -14633,6 +14716,13 @@ ALTER TABLE ONLY public.install_updates
 
 ALTER TABLE ONLY public.invitation_agent_access
     ADD CONSTRAINT invitation_agent_access_pkey PRIMARY KEY (invitation_id, agent_id);
+
+--
+-- Name: kanban_cards kanban_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kanban_cards
+    ADD CONSTRAINT kanban_cards_pkey PRIMARY KEY (company_id, task_id);
 
 --
 -- Name: lead_agent_requests lead_agent_requests_conversation_id_run_id_call_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
@@ -16766,6 +16856,27 @@ ALTER TABLE ONLY public.invitation_agent_access
     ADD CONSTRAINT invitation_agent_access_invitation_id_fkey FOREIGN KEY (invitation_id) REFERENCES public.member_invitations(id) ON DELETE CASCADE;
 
 --
+-- Name: kanban_cards kanban_cards_assignee_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kanban_cards
+    ADD CONSTRAINT kanban_cards_assignee_fkey FOREIGN KEY (assignee) REFERENCES public.people(id) ON DELETE SET NULL;
+
+--
+-- Name: kanban_cards kanban_cards_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kanban_cards
+    ADD CONSTRAINT kanban_cards_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+--
+-- Name: kanban_cards kanban_cards_made_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kanban_cards
+    ADD CONSTRAINT kanban_cards_made_by_fkey FOREIGN KEY (made_by) REFERENCES public.people(id) ON DELETE SET NULL;
+
+--
 -- Name: lead_agent_requests lead_agent_requests_answered_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -18095,6 +18206,34 @@ CREATE POLICY invitation_read ON public.member_invitations FOR SELECT TO authent
 --
 
 CREATE POLICY invitation_update ON public.member_invitations FOR UPDATE TO authenticated USING (public.is_company_owner(company_id)) WITH CHECK (public.is_company_owner(company_id));
+
+--
+-- Name: kanban_cards; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.kanban_cards ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: kanban_cards kanban_cards_insert; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY kanban_cards_insert ON public.kanban_cards FOR INSERT TO authenticated WITH CHECK ((public.work_can_edit(company_id) AND ((made_by IS NULL) OR (made_by = auth.uid())) AND ((assignee IS NULL) OR (EXISTS ( SELECT 1
+   FROM public.members m
+  WHERE ((m.company_id = kanban_cards.company_id) AND (m.person_id = kanban_cards.assignee) AND (m.removed_at IS NULL)))))));
+
+--
+-- Name: kanban_cards kanban_cards_read; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY kanban_cards_read ON public.kanban_cards FOR SELECT TO authenticated USING (public.is_member(company_id));
+
+--
+-- Name: kanban_cards kanban_cards_update; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY kanban_cards_update ON public.kanban_cards FOR UPDATE TO authenticated USING (public.work_can_edit(company_id)) WITH CHECK ((public.work_can_edit(company_id) AND ((assignee IS NULL) OR (EXISTS ( SELECT 1
+   FROM public.members m
+  WHERE ((m.company_id = kanban_cards.company_id) AND (m.person_id = kanban_cards.assignee) AND (m.removed_at IS NULL)))))));
 
 --
 -- Name: lead_agent_requests; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -20130,6 +20269,13 @@ REVOKE ALL ON FUNCTION public.forget_company_profile(engine_profile text) FROM P
 GRANT ALL ON FUNCTION public.forget_company_profile(engine_profile text) TO service_role;
 
 --
+-- Name: FUNCTION forget_kanban_cards(c uuid, tasks text[]); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.forget_kanban_cards(c uuid, tasks text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.forget_kanban_cards(c uuid, tasks text[]) TO service_role;
+
+--
 -- Name: FUNCTION forget_permission_revoked(c uuid, agent uuid, entry text, kept timestamp with time zone); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20479,6 +20625,13 @@ GRANT ALL ON FUNCTION public.is_member(target_company uuid) TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.is_profile_keeper(c uuid, agent uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION kanban_card_tasks(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.kanban_card_tasks() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.kanban_card_tasks() TO service_role;
 
 --
 -- Name: FUNCTION keep_agent_profile_leftover(); Type: ACL; Schema: public; Owner: postgres
@@ -21067,6 +21220,13 @@ GRANT ALL ON FUNCTION public.pin_lead_brief(conversation uuid, message_key uuid)
 
 REVOKE ALL ON FUNCTION public.pin_run(conversation uuid, message_key uuid, specs jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.pin_run(conversation uuid, message_key uuid, specs jsonb) TO service_role;
+
+--
+-- Name: FUNCTION pin_run_brief(conversation uuid, message_key uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.pin_run_brief(conversation uuid, message_key uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pin_run_brief(conversation uuid, message_key uuid) TO service_role;
 
 --
 -- Name: FUNCTION pin_run_history(conversation uuid, message_key uuid); Type: ACL; Schema: public; Owner: postgres
@@ -22581,6 +22741,24 @@ GRANT SELECT ON TABLE public.good_mornings TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.invitation_agent_access TO authenticated;
+
+--
+-- Name: TABLE kanban_cards; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT ON TABLE public.kanban_cards TO authenticated;
+
+--
+-- Name: COLUMN kanban_cards.assignee; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT UPDATE(assignee) ON TABLE public.kanban_cards TO authenticated;
+
+--
+-- Name: COLUMN kanban_cards.publish_on; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT UPDATE(publish_on) ON TABLE public.kanban_cards TO authenticated;
 
 --
 -- Name: TABLE lead_agent_requests; Type: ACL; Schema: public; Owner: postgres

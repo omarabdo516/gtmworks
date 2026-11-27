@@ -113,7 +113,10 @@ export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,nam
 // The tool calls the Engine made for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length in
 // seconds, read from the Agent's session when the chat opens (#346). A call whose result never came is `started`; one
 // the Engine could not run because the Company's work sandbox is down is `failed` with `sandbox` (#398).
-export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true,routine?:{name:string,schedule:string}};
+// A step that made a Card (#844) names it: its task id, its title, and the Agent it was given to as the reader sees it
+// (null when the Card went to no Agent of the Company), never the profile.
+export type RunStepCard={id:string,title:string,agent:{id:string,name:string,face:string}|null};
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true,routine?:{name:string,schedule:string},card?:RunStepCard};
 export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:RunStep[],seconds:number|null};
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};

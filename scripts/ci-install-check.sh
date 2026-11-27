@@ -1058,7 +1058,9 @@ scan_engines
 
 # open-design: the Open Design app (#544, ADR 0025), an area of its own beside agents and agents-sandbox, which it would
 # take past their time limits (#553). The install, its first run and the second Company are made as the agents area makes them; the first Company's
-# main Agent then gets Open Design and makes a design from a Conversation.
+# main Agent then gets Open Design and makes a design from a Conversation. Then an Agent works a Card on the Engine's own
+# Kanban board in the work sandbox (spec #831, #833), moved here from agents-sandbox, which it took past its 12 minutes:
+# the area makes the first Company's second Agent for it as agents-sandbox does.
 open_design() {
 cd "$root"
 area_setup
@@ -1148,6 +1150,47 @@ sandbox_files=$(grep -vx /tmp/gtmworks-scan <<< "$sandbox_files" | sort -u) || t
 [[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
 sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
 [[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
+# The Engine's own Kanban board (spec #831, #833, ADR 0033 item 2), with settings alone and the image unmodified: every
+# Engine of the install, the new Company's included, holds the board worker's setting in its managed scope and the short
+# temp folder its ssh control socket needs (engine_board_settings). On the first
+# Company's Engine, once the area has made its second Agent as agents-sandbox does, a Card given to that Agent is started
+# by the dispatcher after one tick the check asks for, runs a command that writes in the work sandbox and a command the
+# Engine marks dangerous, stops on a question, goes on after a person's comment and a move to ready, is sent for review,
+# returned to the same Agent and passed; the main Agent, in a Run started through the Run API, makes a Card for the
+# second Agent with the Engine's own tool; and a Card in triage is watched for two dispatcher ticks. The job reads the
+# host's Docker for where the worker's files landed. The step prints a line as each phase ends and holds a deadline of
+# its own inside the area's minutes, so a slow Engine fails here with how far it got and the Engine's board log, never at
+# the job's limit with nothing said.
+engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail "the first Company's second Agent moves to a profile of its own"
+for folder in .engines/*/; do
+  name=$(engine_value "$folder" NAME)
+  engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+  sandbox_card_files "$name" || fail "the work sandbox of the Engine $name holds its Kanban attachments folder read-only at the Engine's path"
+done
+kanban_marker="kanban-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - kanban "$kanban_marker" < scripts/check-install-profiles.mjs | tee kanban-proof.log \
+  || { docker exec "$engine_id" sh -c 'grep -hiE "kanban|dispatch" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 40' >&2 || true
+       fail "an Agent works a Card on the Engine's own board in the Company's work sandbox"; }
+kanban_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
+[[ -n $kanban_host && $kanban_host == "$(docker exec "$sandbox" hostname)" ]] || fail "a board worker's command runs in the Company's work sandbox"
+[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-card.txt") == "$kanban_marker-card" ]] || fail "a board worker's command wrote in the Company's work folder"
+docker exec "$sandbox" test -d "/tmp/$kanban_marker-danger" -a ! -e "/tmp/$kanban_marker-danger/gone" \
+  || fail "a board worker's dangerous command ran in the work sandbox"
+# A person's file on Card A (#843): the worker opened it in the sandbox at the path the Engine named and copied it into the
+# work folder, and its write beside it failed, so neither the sandbox nor the Engine holds the file it tried to plant.
+kanban_file=$(sed -n 's/.*"attachment_path":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
+[[ $kanban_file == /opt/data/kanban/attachments/* ]] || fail "the Engine named a person's file on a Card by its path in its attachments folder"
+[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt") == "$kanban_marker-attachment" ]] \
+  || { docker exec "$sandbox" ls -ln "$(dirname "$kanban_file")" >&2 || true; fail "a board worker opened a person's file on its Card from inside the work sandbox"; }
+grep -q '"attachment_write":"refused"' kanban-proof.log || fail "a board worker's write to the Kanban attachments folder fails from the sandbox"
+for container in "$sandbox" "$engine_id"; do
+  if docker exec "$container" test -e "$(dirname "$kanban_file")/$kanban_marker-planted"; then fail "a board worker planted a file in the Kanban attachments folder"; fi
+done
+# Nothing of the worker's is on the Engine's own disk outside its Kanban folders; the work folder the Engine reads, read
+# only, is the sandbox's own.
+engine_left=$(docker exec "$engine_id" sh -c 'find / \( -path /proc -o -path /sys -o -path /dev -o -path /opt/data/kanban -o -path /opt/data/work \) -prune -o -name "$1*" -print 2> /dev/null; true' sh "$kanban_marker") \
+  || fail "read the Engine's disk for the board worker's files"
+[[ -z $engine_left ]] || fail "a board worker left a file on the Engine's own disk: $engine_left"
 }
 
 # backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data, refused onto an occupied install
@@ -1692,6 +1735,10 @@ engine=$(first_engine_id)
 [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
 hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
+# The Engine the update brought up holds the board worker's setting in its managed scope (spec #831, #833), which the
+# previous release never wrote.
+engine_board_settings "$engine" || fail "the updated Engine approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+sandbox_card_files "$engine" || fail "the updated Engine's work sandbox holds its Kanban attachments folder read-only at the Engine's path"
 ! publishes_host_port "$engine" || fail 'the Engine publishes no host port'
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | grep . | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
@@ -2217,6 +2264,8 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
+  engine_board_settings "$engine" || fail "the updated Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+  sandbox_card_files "$engine" || fail "the updated Engine $name's work sandbox holds its Kanban attachments folder read-only at the Engine's path"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
