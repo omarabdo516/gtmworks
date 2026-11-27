@@ -1,1 +1,0 @@
-| `old-card.ts` | browser helper: makes an old Card in RS Learning's Ideas and opens its page, for the specs that test what the old tables still serve until spec #831 replaces each, since New card makes its Cards on the Engine (#836) | — | — | helper, new (#836, in place of request-agent.ts) |
