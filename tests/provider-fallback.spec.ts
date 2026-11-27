@@ -201,7 +201,7 @@ test('a Manager reads the Fallback model with no control, and the server refuses
  const section=page.locator('#md-fallback');
  await expect(section).toContainText('claude-sonnet-4-6',{timeout:30000});
  await expect(section.getByRole('radio')).toHaveCount(0);
- await expect(section).toContainText('Only the Owner changes a model.');
+ await expect(section).toContainText('Only an Administrator changes a model.');
  const refused=await page.evaluate(async company=>(await fetch('/api/fallback-model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,value:null})})).status,company);
  expect(refused).toBe(403);
  expect(rows(`select provider,model from public.company_fallback_models where company_id='${company}'`)).toEqual([sonnet]);

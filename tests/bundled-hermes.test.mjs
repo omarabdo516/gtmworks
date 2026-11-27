@@ -10,6 +10,7 @@ import { hermesVersion } from '../lib/engine/version.mjs';
 import { isHermesAddressAllowed } from '../lib/engine/transport.mjs';
 import { selfHosted } from '../lib/company-engine.mjs';
 import { companyEngine } from '../lib/engine/handle.mjs';
+import { noAgentGets } from '../lib/agent-toolsets.mjs';
 import { engineRecord } from './engine-records.mjs';
 import { installJob } from './install-job.mjs';
 
@@ -60,6 +61,13 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.equal(engine.environment.HERMES_DASHBOARD_PUBLIC_URL,'http://${ENGINE_NAME:?Run scripts/install.sh}:9119');
  // The file tools write only under the work folder, which is the sandbox's (#390).
  assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
+ // And it holds (#871, #893): a profile's .env, which the Owner's Engine dashboard writes, is loaded over the Engine's own
+ // environment, so the write root is pinned in the managed .env too, which the Engine loads last and never lets a write
+ // save (hermes_cli/env_loader.py _apply_managed_env, hermes_cli/config.py env_write_refusal).
+ assert.ok(engine.volumes.includes('./engine-managed.env:/etc/hermes/.env:ro'),'the managed .env is where the Engine reads it');
+ assert.deepEqual(Object.fromEntries(readFileSync('scripts/engine-managed.env','utf8').split('\n').filter(line=>line&&!line.startsWith('#')).map(line=>line.split('='))),{HERMES_WRITE_SAFE_ROOT:'/work'});
+ assert.ok(readFileSync('scripts/release-assets.mjs','utf8').includes("'scripts/engine-managed.env'"),'a release carries it');
+ assert.equal((readFileSync('Dockerfile','utf8').match(/\/app\/scripts\/engine-managed\.env /g)??[]).length,2,'the image carries it for the install and the release');
  // A start hook that fails stops the Engine (s6-overlay's own switch): the file-sync patch and the listener address
  // either hold or the Engine does not serve, never an Engine that started without them.
  assert.equal(engine.environment.S6_BEHAVIOUR_IF_STAGE2_FAILS,2);
@@ -110,8 +118,13 @@ test('an Engine publishes no host port, joins its install network and its work n
  // worker's dangerous command runs (spec #831, ADR 0033 item 2): a worker's Run is single-query, which refuses one by
  // default. The dispatcher and the review dispatch are not named, so they stay as Hermes ships them, on.
  const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
+ // And the tools ADR 0018 keeps out of the Engine's own container (#871): a write from the Owner's Hermes dashboard turns
+ // none of them on. Only that list is pinned, so each Agent's own tools stay the Owner's to change. The board (kanban)
+ // is not among them: every Agent gets it (spec #831).
  assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false},
-  approvals:{single_query_mode:'approve'}});
+  approvals:{single_query_mode:'approve'},
+  agent:{disabled_toolsets:['browser','tts','video','video_gen','project','desktop_ui','catalog','onboarding','connections']}});
+ assert.deepEqual(managed.agent.disabled_toolsets,[...noAgentGets],'the managed list is the tools no Agent gets');
  // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
  // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
  // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is
@@ -133,6 +146,43 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');
  // Only the address the browser reaches (the gateway) and the mail viewer are published, on loopback.
  for(const [name,service] of Object.entries(compose.services)) for(const port of service.ports||[]) assert.match(port,/^127\.0\.0\.1:/,name);
+});
+
+// #872 (spec #866): the Engine's own dashboard is in gtmworks's colours with no choice made by the person. Every Engine,
+// new or brought up by an update, carries gtmworks's theme (read from <home>/dashboard-themes/, as Hermes reads a user
+// theme) and a hook that, at each start, makes it the dashboard's default only where none is set, so an Owner's own pick
+// in the dashboard is kept. A Hermes theme has one palette: each colour is DESIGN.md's light and dark value of one token
+// together, and the person's own scheme picks one (the gate marks the page with it). The install proof's proxy and
+// update areas prove it on the pinned Engine.
+test('every Engine carries gtmworks\'s dashboard theme in DESIGN.md\'s light and dark values, and a hook that makes it the default only where none is set', () => {
+ const engine=template.services.engine;
+ assert.ok(engine.volumes.includes('./engine-dashboard-theme.yaml:/opt/data/dashboard-themes/gtmworks.yaml:ro'),'the theme is where Hermes reads a user theme');
+ assert.ok(engine.volumes.includes('./engine-dashboard-theme.sh:/etc/cont-init.d/09-engine-dashboard-theme:ro'),'the default is set at every start');
+ assert.ok(statSync('scripts/engine-dashboard-theme.sh').mode&0o111,'the theme hook is executable as s6 runs it');
+ const colors=load(/** @type {string[]} */(readFileSync('DESIGN.md','utf8').match(/^---\n([\s\S]*?)\n---\n/))[1]).colors;
+ const both=token=>`light-dark(${colors[token]}, ${colors[`${token}-dark`]})`;
+ const theme=load(readFileSync('scripts/engine-dashboard-theme.yaml','utf8'));
+ assert.equal(theme.name,'gtmworks');
+ assert.equal(theme.palette.background,both('canvas'));
+ assert.equal(theme.palette.midground,both('ink'));
+ assert.deepEqual(theme.colorOverrides,{
+  card:both('surface'),cardForeground:both('ink'),popover:both('surface'),popoverForeground:both('ink'),
+  primary:both('primary'),primaryForeground:both('primary-foreground'),
+  secondary:both('muted-fill'),secondaryForeground:both('ink'),muted:both('muted-fill'),mutedForeground:both('muted-ink'),
+  accent:both('hover-fill'),accentForeground:both('ink'),destructive:both('destructive'),destructiveForeground:both('primary-foreground'),
+  border:both('hairline'),input:both('hairline'),ring:both('focus-ring'),
+ });
+ // Where Hermes shows its wordmark, the theme's own CSS shows gtmworks's name instead (Omar on #866): the sidebar's and
+ // the narrow screen's header's, named by the pinned dashboard's markup.
+ assert.match(theme.customCSS,/#app-sidebar span\.uppercase\.text-\\\[1\\\.125rem\\\]::before/);
+ assert.match(theme.customCSS,/header\.lg\\:hidden > span\.text-\\\[0\\\.95rem\\\]::before/);
+ assert.match(theme.customCSS,/content: "gtmworks";/);
+ // The hook sets the default through Hermes's own `config set`, only when the Engine's own config names no theme.
+ const hook=readFileSync('scripts/engine-dashboard-theme.sh','utf8');
+ assert.match(hook,/config set dashboard\.theme gtmworks/);
+ // It ships with the release beside the Engine's other files.
+ assert.ok(readFileSync('scripts/release-assets.mjs','utf8').includes("'scripts/engine-dashboard-theme.yaml', 'scripts/engine-dashboard-theme.sh'"));
+ for(const name of ['engine-dashboard-theme.yaml','engine-dashboard-theme.sh']) assert.equal((readFileSync('Dockerfile','utf8').match(new RegExp(`/app/scripts/${name.replace('.','\\.')} `,'g'))??[]).length,2,`the image carries ${name} for the install and the release`);
 });
 
 test('every Company\'s work sandbox is the least container its Agents\' work needs, on a network with no way out', () => {
@@ -453,9 +503,9 @@ test('the Engine management listener is on for web and worker with the Engine ke
  assert.equal(isHermesAddressAllowed('http://gtmworks-engine-first:9119'),true);
  // The public gateway proxies to the app, auth, rest and storage only.
  const gateway=readFileSync('scripts/install-nginx.conf','utf8');
- // The app takes two: its pages, and the WebSockets it carries itself, the Screen's live stream and the board's live
- // changes (ADR 0029, #840).
- assert.deepEqual([...gateway.matchAll(/set \$\w+ ([\w-]+):\d+;/g)].map(match=>match[1]),['auth','rest','storage','web','web']);
+ // The app takes three: its pages, the WebSockets it carries itself, the Screen's live stream and the board's live
+ // changes (ADR 0029, #840), and a Company's Hermes dashboard it gates (#869).
+ assert.deepEqual([...gateway.matchAll(/set \$\w+ ([\w-]+):\d+;/g)].map(match=>match[1]),['auth','rest','storage','web','web','web']);
  assert.match(gateway,/location ~ \^\/api\/\(display\/ws\|board\/events\)\$ \{\s+set \$web web:3000;/);
  assert.doesNotMatch(gateway,/gtmworks-engine-first|9119|8642/);
  // The install job proves it on the real release: an Agent made through the contract, refused from outside.

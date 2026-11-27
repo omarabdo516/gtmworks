@@ -4,8 +4,8 @@
   "askForIt": "Ask {0} for it?",
   "askForItChoice": "Ask {0} for it",
   "notNow": "Not now",
-  "ownerFallback": "the Owner",
+  "ownerFallback": "an Administrator",
   "hiddenAsk": "That job belongs to another agent in the company, and that agent isn't available to you. Should I ask {0} ({1}) to open it for you?",
-  "roleOwner": "Owner",
+  "roleOwner": "Administrator",
   "roleManager": "Manager"
 }

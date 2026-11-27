@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
+import { readFileSync } from 'node:fs';
+import { load } from 'js-yaml';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
@@ -176,6 +178,87 @@ function kanbanBoard() {
  };
 }
 
+// The Engine's own dashboard, small (#869; hermes_cli/web_server_dashboard.py mount_spa): its first page at `/` and at any
+// page's path, with the absolute code addresses rewritten under the prefix a reverse proxy names (X-Forwarded-Prefix) and
+// that prefix given to the page as __HERMES_BASE_PATH__; its code at /assets/, where the second page's code is asked
+// for at the root, as the dashboard's lazily loaded pages ask (Probe B, docs/engine-probes/engine-dashboard.md); an API
+// route, /api/status; and its live parts (#870), each a socket opened with a single-use ticket from
+// POST /api/auth/ws-ticket: the chat, /api/ws, which says gateway.ready; its terminal, /api/pty, which writes a prompt;
+// and the Kanban board's event stream, /api/plugins/kanban/events, which reports each Card made with
+// POST /api/plugins/kanban/tasks by the Card's id, as Hermes does. The ticket, the board's routes and its stream are the
+// Engine's one board (kanbanBoard above, served by the management listener below, spec #831): a request of theirs that
+// came through the dashboard's gate (it names the prefix the gate serves the dashboard under) is kept with the
+// dashboard's and then answered as any other. Every request needs the Engine's key, as the gated dashboard does.
+// Answers whether the request was the dashboard's alone.
+// #872: its themes, as Hermes keeps them (hermes_cli/web_routers/dashboard_ui.py): a built-in one and gtmworks's own file
+// (scripts/engine-dashboard-theme.yaml, which every Engine reads), the active one in `settings.dashboardTheme` (gtmworks's,
+// as scripts/engine-dashboard-theme.sh leaves a new Engine), GET /api/dashboard/themes and PUT /api/dashboard/theme. The
+// page applies the active theme's palette to the root's custom properties and paints with them, as Hermes's
+// ThemeProvider does, and reads its language only from localStorage['hermes-locale'], as Hermes's i18n does, Arabic right
+// to left, with one word translated and the rest in English.
+// From the repository root: Playwright compiles this file to CommonJS, where import.meta does not exist.
+const gtmworksTheme=load(readFileSync('scripts/engine-dashboard-theme.yaml','utf8'));
+const layer=value=>typeof value==='string'?{hex:value,alpha:1}:value;
+const dashboardThemes=[
+ {name:'default',label:'Hermes Teal',description:'Classic dark teal',definition:{palette:{background:layer('#041c1c'),midground:layer('#ffe6cb')}}},
+ {name:gtmworksTheme.name,label:gtmworksTheme.label,description:gtmworksTheme.description,definition:{...gtmworksTheme,palette:{...gtmworksTheme.palette,background:layer(gtmworksTheme.palette.background),midground:layer(gtmworksTheme.palette.midground)}}},
+];
+const dashboardPage=prefix=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Hermes Agent - Dashboard</title><style>html,body{background-color:var(--background-base,#041c1c);color:var(--midground-base,#ffe6cb)}</style><script>window.__HERMES_BASE_PATH__=${JSON.stringify(prefix)};</script><script type="module" src="${prefix}/assets/index.js"></script></head><body><div id="root"></div></body></html>`;
+const dashboardCode=`const base=window.__HERMES_BASE_PATH__||'';
+const root=document.getElementById('root');
+let locale='en'; try { if(localStorage.getItem('hermes-locale')==='ar') locale='ar'; } catch {}
+document.documentElement.lang=locale; document.documentElement.dir=locale==='ar'?'rtl':'ltr';
+async function dress(){
+ const {themes,active}=await (await fetch(base+'/api/dashboard/themes')).json();
+ const palette=(themes.find(theme=>theme.name===active)||themes[0]).definition.palette;
+ document.documentElement.style.setProperty('--background-base',palette.background.hex);
+ document.documentElement.style.setProperty('--midground-base',palette.midground.hex);
+ const line=root.querySelector('#engine-theme'); if(line) line.textContent=active;
+ const pick=root.querySelector('#pick-theme');
+ if(pick&&!pick.options.length) { for(const theme of themes) pick.add(new Option(theme.label,theme.name)); pick.value=active; pick.addEventListener('change',async()=>{ await fetch(base+'/api/dashboard/theme',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:pick.value})}); dress(); }); }
+}
+async function draw(){
+ const path=location.pathname.slice(base.length)||'/';
+ if(path.startsWith('/sessions')){ const {render}=await import('/assets/sessions.js'); render(root); return; }
+ root.innerHTML='<h1>Hermes dashboard</h1><nav><a id="to-sessions" href="'+base+'/sessions">'+(locale==='ar'?'الجلسات':'Sessions')+'</a></nav><p id="engine-status">Reading…</p><p id="engine-socket">Connecting…</p><p id="engine-theme">…</p><select id="pick-theme"></select>';
+ dress();
+ root.querySelector('#to-sessions').addEventListener('click',event=>{ event.preventDefault(); history.pushState(null,'',base+'/sessions'); draw(); });
+ fetch(base+'/api/status').then(answer=>answer.json()).then(status=>{ root.querySelector('#engine-status').textContent='Engine '+status.version; });
+ const ticket=await (await fetch(base+'/api/auth/ws-ticket',{method:'POST'})).json();
+ const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+base+'/api/ws?ticket='+ticket.ticket);
+ socket.addEventListener('message',event=>{ const line=root.querySelector('#engine-socket'); if(line) line.textContent=JSON.parse(event.data).type; });
+ socket.addEventListener('close',()=>{ const line=root.querySelector('#engine-socket'); if(line) line.textContent='closed'; });
+}
+addEventListener('popstate',draw);
+draw();
+`;
+const dashboardSessions='export function render(root){ root.innerHTML=\'<h1>Sessions</h1><p id="sessions-page">Every session of every Agent</p>\'; }\n';
+function dashboardAnswer(settings,request,response) {
+ const url=new URL(request.url||'/','http://management');
+ const path=url.pathname;
+ const page=path==='/'||path==='/sessions'||path.startsWith('/sessions/');
+ const shared=(path==='/api/auth/ws-ticket'||path==='/api/plugins/kanban/tasks')&&request.headers['x-forwarded-prefix']!==undefined;
+ if(!page&&!shared&&!path.startsWith('/assets/')&&path!=='/api/status'&&path!=='/api/dashboard/themes'&&path!=='/api/dashboard/theme') return false;
+ const prefix=String(request.headers['x-forwarded-prefix']??'').replace(/\/$/,'');
+ settings.dashboardRequests.push({method:request.method||'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix});
+ const answer=(status,type,body)=>{ response.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'}); response.end(body); };
+ if(request.headers.authorization!==`Bearer ${settings.key}`) { answer(401,'application/json','{"detail":"Unauthorized"}'); return true; }
+ if(shared) return false;
+ if(page) answer(200,'text/html; charset=utf-8',dashboardPage(prefix));
+ else if(path==='/assets/index.js') answer(200,'text/javascript',dashboardCode);
+ else if(path==='/assets/sessions.js') answer(200,'text/javascript',dashboardSessions);
+ else if(path==='/api/status') answer(200,'application/json',JSON.stringify({version:settings.version,gateway_running:true,gateway_busy:settings.gatewayBusy,active_agents:settings.gatewayBusy?1:0}));
+ else if(path==='/api/dashboard/themes') answer(200,'application/json',JSON.stringify({themes:dashboardThemes,active:settings.dashboardTheme}));
+ else if(path==='/api/dashboard/theme'&&request.method==='PUT') {
+  const chunks=[]; request.on('data',chunk=>chunks.push(chunk)); request.on('end',()=>{
+   const name=String(JSON.parse(Buffer.concat(chunks).toString()||'{}').name??'');
+   if(!dashboardThemes.some(theme=>theme.name===name)) { answer(400,'application/json','{"detail":"Unknown theme"}'); return; }
+   settings.dashboardTheme=name; answer(200,'application/json',JSON.stringify({ok:true,theme:name}));
+  });
+ }
+ else answer(404,'application/json','{"error":"not found"}');
+ return true;
+}
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -200,7 +283,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
   // The most rows a cron job's run history lists (#535: the pinned Engine lists 100 at most).
   cronRunsAtMost:100,startDelay:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
@@ -233,6 +316,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
   managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>,display_name?:string|null,description?:string,description_auto?:boolean,bot_title?:string|null,env?:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),modelWriteDelay:0,
   managementRequests:/** @type {{method?:string,path?:string,authorization?:string,range?:string,body:any}[]} */([]),
+  // gtmworks's plugin of the main Agent's profile (#884): a file `/api/files/upload` writes lands in `files` and
+  // `fileBytes` as the Engine's managed files routes write it (web_routers/files.py upload_managed_file); `/api/status`
+  // (the dashboard's one status route, below in dashboardAnswer)
+  // says whether the gateway works a turn now (`gatewayBusy`); `/api/gateway/restart` counts in `restarts` and loads the
+  // plugin of every profile that holds its plugin.yaml and names it in `plugins.enabled` (`pluginsLoaded`), whose Run
+  // API then offers the toolset `gtmworks` with that plugin.yaml's description; the plugin's own route keeps each profile's Owner sessions in `ownerSessions`
+  // and answers 404 Plugin not found on a profile that holds no plugin, as the dashboard does.
+  gatewayBusy:false,restarts:0,pluginsLoaded:/** @type {Map<string,string>} */(new Map()),
+  ownerSessions:/** @type {Map<string,Map<string,{person:string,until:number}>>} */(new Map()),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
   // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser. The Engine's own
   // config defaults and schema are what its config routes serve (#125); configWriteFail is a profile whose next config
@@ -275,6 +367,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // display, so a start fails while another profile's Screen runs (sandbox_host.py: display :20). `screenCalls` keeps
   // every /api/ws request with the token it came with; `screenStartDelay` holds a start as the Engine's does while the
   // desktop comes up; `screenPictureUrl` replaces what a grab sends.
+  // The Engine's own dashboard (#869): every request to its pages, code and API, with the key and the cookies it came with
+  // and the prefix it was served under, and every socket it opened. See dashboardAnswer.
+  dashboardRequests:/** @type {{method:string,path:string,authorization?:string,cookie?:string,prefix?:string,extensions?:string}[]} */([]),
+  dashboardTheme:'gtmworks',dashboardSockets:/** @type {Set<import('ws').WebSocket&{path:string}>} */(new Set()),
+  // What an Owner changed on the dashboard's other pages (#871): each messaging platform's switch and keys, the plugins
+  // installed, whether webhooks are on and each webhook, and the main model.
+  platforms:/** @type {Map<string,{enabled:boolean,env:Record<string,string>}>} */(new Map()),plugins:/** @type {Set<string>} */(new Set()),
+  webhooksOn:false,webhooks:/** @type {Map<string,{name:string,prompt:string,deliver:string}>} */(new Map()),
+  mainModel:/** @type {{provider:string,model:string}} */({provider:'auto',model:'default-model'}),
   screens:/** @type {Map<string,{running?:boolean,supported?:boolean,missing?:string[],holder?:'agent'|'human',viewer?:string|null}>} */(new Map()),
   screenCalls:/** @type {{method:string,params:any,token:string|null}[]} */([]),screenStartDelay:0,screenPictureUrl:/** @type {string|null} */(null),screenGrabs:0,
   // #713: the live stream (/api/display/ws, hermes_cli/web_routers/display.py): every ticket display.observe minted, and
@@ -534,7 +635,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(status!==200) return send(response,status,{error:{message:request.headers.authorization}});
    const toolsetsPath=request.url.match(/^\/p\/([^/]+)\/v1\/toolsets$/);
    if(toolsetsPath&&!profileOf(decodeURIComponent(toolsetsPath[1]))&&settings.unknownProfiles.includes(decodeURIComponent(toolsetsPath[1]))) return send(response,404,{error:'Unknown or unconfigured profile'});
-   if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:[...configurable.map(name=>({name,enabled:enabled.includes(name)})),...appToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config)]}); }
+   if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:[...configurable.map(name=>({name,enabled:enabled.includes(name)})),...appToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config),...(settings.pluginsLoaded.has(decodeURIComponent(toolsetsPath[1]))?[{name:'gtmworks',label:'🔌 Gtmworks',description:settings.pluginsLoaded.get(decodeURIComponent(toolsetsPath[1])),enabled:true,tools:['gtmworks_make_agent']}]:[])]}); }
    // A session's sidebar flag (#674; api_server.py _handle_patch_session): archived on the profile's own sessions, a
    // session the profile does not keep is 404 session_not_found, and a field it does not take is refused.
    const sessionPatch=request.method==='PATCH'&&request.url.match(/^\/p\/([^/]+)\/api\/sessions\/([^/?]+)$/);
@@ -607,6 +708,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    if(runPath&&request.method==='GET') {
     const run=settings.runs.find(run=>run.id===runPath[1]);
+    // A Run a spec's in-process fake engine started on this profile (`heldElsewhere`) is this Engine's too: the lane's
+    // worker reads it here as still running, never as lost, and the spec's own reader closes it (#889).
+    if(!run&&settings.heldElsewhere?.(runPath[1])) return send(response,200,{object:'hermes.run',run_id:runPath[1],status:'running',pending_controls:[]});
     if(!run) return send(response,404,{error:{message:`Run not found: ${runPath[1]}`,code:'run_not_found'}});
     // As measured on the pinned release (#141, the install check): a Run's record has when it was made and nothing of when
     // it ended; its end is in its events.
@@ -716,6 +820,48 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    // _remote_fs_backend): a /work path is the work folder, and any other path is not a file the sandbox holds (404).
    if(url.pathname.startsWith('/api/fs/')&&settings.sandboxDown) return send(response,503,{detail:'SSH workspace unavailable'});
    if(/^\/api\/(fs\/(read-text|download)|files\/download)$/.test(url.pathname)&&settings.filesRefused.has(url.searchParams.get('path')||'')) return send(response,403,{detail:'Access denied'});
+   if(url.pathname==='/api/files/upload'&&request.method==='POST') {
+    const path=typeof body?.path==='string'?body.path:'';
+    if(!path.startsWith('/opt/data/')||path.split('/').includes('..')) return send(response,403,{detail:'Path outside managed files root'});
+    const data=/^data:[^;,]*;base64,(.*)$/.exec(typeof body?.data_url==='string'?body.data_url:'');
+    if(!data) return send(response,400,{detail:'Invalid data URL'});
+    const cut=path.lastIndexOf('/'), name=path.slice(cut+1);
+    // Every folder above the file is made, as target.parent.mkdir(parents=True) does.
+    for(let at=path.slice(0,cut);at.length>'/opt/data'.length;at=at.slice(0,at.lastIndexOf('/'))) {
+     const parent=at.slice(0,at.lastIndexOf('/')), folder=at.slice(at.lastIndexOf('/')+1);
+     const held=settings.files.get(parent)??[];
+     if(!held.some(entry=>entry.name===folder)) settings.files.set(parent,[...held,{name:folder,isFolder:true}]);
+     if(!settings.files.has(at)) settings.files.set(at,[]);
+    }
+    const bytes=Buffer.from(data[1],'base64');
+    const entries=(settings.files.get(path.slice(0,cut))??[]).filter(entry=>entry.name!==name);
+    settings.files.set(path.slice(0,cut),[...entries,{name,size:bytes.length}]);
+    settings.fileBytes.set(path,{body:bytes});
+    return send(response,200,{ok:true,entry:{name,path,is_directory:false,size:bytes.length},path});
+   }
+   if(url.pathname==='/api/gateway/restart'&&request.method==='POST') {
+    settings.restarts++;
+    // Each loaded plugin's toolset carries the description its plugin.yaml held at the restart, as the Engine reports it.
+    settings.pluginsLoaded=new Map([...settings.profiles].filter(([name,held])=>settings.fileBytes.has(`/opt/data/profiles/${name}/plugins/gtmworks/plugin.yaml`)
+     &&Array.isArray(held.config?.plugins?.enabled)&&held.config.plugins.enabled.includes('gtmworks'))
+     .map(([name])=>[name,/^description: "(.*)"$/m.exec(Buffer.from(settings.fileBytes.get(`/opt/data/profiles/${name}/plugins/gtmworks/plugin.yaml`).body).toString())?.[1]??'']));
+    return send(response,200,{ok:true,pid:4242,name:'gateway-restart'});
+   }
+   const pluginRoute=url.pathname.match(/^\/api\/plugins\/gtmworks\/(owner-sessions)$/);
+   if(pluginRoute) {
+    const named=url.searchParams.get('profile')||'default';
+    if(!settings.fileBytes.has(`/opt/data/profiles/${named}/plugins/gtmworks/dashboard/plugin_api.py`)) return send(response,404,{detail:'Plugin not found'});
+    const held=settings.ownerSessions.get(named)??new Map(); settings.ownerSessions.set(named,held);
+    const now=Date.now()/1000;
+    if(request.method==='GET') return send(response,200,{sessions:[...held].filter(([,mark])=>mark.until>now).map(([session_id,mark])=>({session_id,...mark}))});
+    if(request.method==='POST') {
+     if(typeof body?.session_id!=='string'||!body.session_id||typeof body?.person!=='string'||!body.person) return send(response,422,{detail:'session_id, person'});
+     const until=now+Math.min(Math.max(Number.isInteger(body.seconds)?body.seconds:900,1),3600);
+     held.set(body.session_id,{person:body.person,until});
+     return send(response,200,{ok:true,session_id:body.session_id,until});
+    }
+    return send(response,405,{detail:'Method Not Allowed'});
+   }
    if(url.pathname==='/api/files'&&request.method==='GET') {
     const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
@@ -887,9 +1033,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(settings.envDropped.has(named)) { request.socket.destroy(); return; }
     if(request.method==='PUT') {
      if(settings.envHang.has(named)) return;
-     if(settings.failStep==='env'||settings.envFail.has(named)||!target) return send(response,500,{detail:'Internal Server Error'});
+     if(settings.failStep==='env'||settings.envFail.has(named)||(named!=='default'&&!target)) return send(response,500,{detail:'Internal Server Error'});
      if(typeof body?.value==='string'&&(body.value.includes('...')||body.value.includes('***'))) return send(response,400,{detail:'Refusing to save a redacted credential preview'});
-     if(body?.key==='API_SERVER_KEY') target.key=body.value;
+     if(body?.key==='API_SERVER_KEY'&&target) target.key=body.value;
      else envOf()[body?.key]=body?.value;
      return send(response,200,{ok:true,key:body?.key,config_updates:[]});
     }
@@ -1119,6 +1265,55 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`${settings.appAuthScheme}://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
     }
    }
+   // The dashboard's other pages an Owner changes things on (#871, spec #866), small: Channels (messaging.py 974-1033: a
+   // platform's switch and its keys), MCP's list (mcp.py 94), Plugins (dashboard_ui.py 111, 202: an install from Hermes's
+   // catalogue), Webhooks (ops.py 158-194: the platform switched on, then a route), the Models page's main model
+   // (models.py 90, 376), a file read whole as a data URL (files.py 673), and a diagnostics dump (status.py 857), which
+   // here prints the profile's env as it is: the stand-in for any answer of the Engine's that would hold its key.
+   if(url.pathname==='/api/messaging/platforms'&&request.method==='GET') return send(response,200,{platforms:['telegram','whatsapp','slack'].map(id=>({id,enabled:settings.platforms.get(id)?.enabled===true,configured:Object.keys(settings.platforms.get(id)?.env??{}).length>0}))});
+   const platform=url.pathname.match(/^\/api\/messaging\/platforms\/([^/]+)$/);
+   if(platform&&request.method==='PUT') {
+    const id=decodeURIComponent(platform[1]);
+    if(!['telegram','whatsapp','slack'].includes(id)) return send(response,404,{detail:`Unknown platform '${id}'`});
+    settings.platforms.set(id,{enabled:body?.enabled===true,env:{...settings.platforms.get(id)?.env,...body?.env}});
+    return send(response,200,{ok:true,platform:id,enabled:body?.enabled===true});
+   }
+   if(url.pathname==='/api/mcp/servers'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    return send(response,200,{servers:Object.entries(servers).map(([name,cfg])=>({name,transport:cfg.command?'stdio':'http',url:cfg.url??null,enabled:cfg.enabled!==false}))});
+   }
+   if(url.pathname==='/api/dashboard/plugins'&&request.method==='GET') return send(response,200,[...settings.plugins].map(name=>({name,enabled:true})));
+   if(url.pathname==='/api/dashboard/agent-plugins/install'&&request.method==='POST') {
+    if(!body?.identifier) return send(response,400,{detail:'Provide an identifier or a catalog_name.'});
+    settings.plugins.add(body.identifier);
+    return send(response,200,{ok:true,name:body.identifier});
+   }
+   if(url.pathname==='/api/webhooks/enable'&&request.method==='POST') { settings.webhooksOn=true; return send(response,200,{ok:true}); }
+   if(url.pathname==='/api/webhooks'&&request.method==='GET') return send(response,200,{enabled:settings.webhooksOn,webhooks:[...settings.webhooks.values()]});
+   if(url.pathname==='/api/webhooks'&&request.method==='POST') {
+    if(!settings.webhooksOn) return send(response,400,{detail:'Webhook platform is not enabled. Enable it from the Webhooks page first.'});
+    const name=String(body?.name??'').trim().toLowerCase();
+    if(!/^[a-z0-9][a-z0-9_-]*$/.test(name)) return send(response,400,{detail:'Invalid name. Use lowercase alphanumeric with hyphens/underscores.'});
+    settings.webhooks.set(name,{name,prompt:body.prompt??'',deliver:body.deliver??'log'});
+    return send(response,200,{ok:true,name});
+   }
+   if(url.pathname==='/api/model/set'&&request.method==='POST') {
+    if(body?.scope!=='main') return send(response,400,{detail:"scope must be 'main' or 'auxiliary'"});
+    settings.mainModel={provider:body.provider,model:body.model};
+    return send(response,200,{ok:true,...settings.mainModel});
+   }
+   if(url.pathname==='/api/model/info'&&request.method==='GET') return send(response,200,settings.mainModel);
+   if(url.pathname==='/api/files/read'&&request.method==='GET') {
+    const path=url.searchParams.get('path')||'';
+    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    const found=fileAt(path,path); if(!found) return;
+    const type=found.file.type??mimeOf(found.entry.name); const bytes=Buffer.from(found.file.body);
+    return send(response,200,{name:found.entry.name,path,size:bytes.length,mime_type:type,data_url:`data:${type};base64,${bytes.toString('base64')}`});
+   }
+   if(url.pathname==='/api/ops/dump'&&request.method==='POST') {
+    const env={...settings.defaultEnv,API_SERVER_KEY:settings.key};
+    return send(response,200,{ok:true,output:Object.entries(env).map(([name,value])=>`${name}=${value}`).join('\n')});
+   }
    // Model sign-in (hermes_cli/web_routers/oauth.py): ChatGPT through a device code, Claude from the command line only.
    const cancel=url.pathname.match(/^\/api\/providers\/oauth\/sessions\/([^/]+)$/);
    if(cancel&&request.method==='DELETE') {
@@ -1319,6 +1514,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  };
  // `sessionDelay` holds a session's read that long (#766), and Infinity never answers it, as a busy Engine does.
  const management=createServer((request,response)=>{
+  if(dashboardAnswer(settings,request,response)) return;
   // What the management listener was asked (#782), as `requests` keeps the API listener's.
   settings.managed.push({method:request.method,path:request.url});
   // `managedFail` answers a request it names with that status (#782): one profile's read failing while the rest answer.
@@ -1343,8 +1539,26 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  const sockets=new WebSocketServer({noServer:true});
  management.on('upgrade',(request,socket,head)=>{
   const url=new URL(request.url||'/','http://management');
+  // The dashboard's sockets (#869, #870), each opened with a ticket POST /api/auth/ws-ticket minted, used once. The
+  // board's event stream is the Engine's one (boardEvents), whether the dashboard's gate or gtmworks's own board asks.
+  const viaGate=request.headers['x-forwarded-prefix']!==undefined;
+  const dashboardSocket=(/** @type {import('ws').WebSocket} */ ws)=>{
+   const live=Object.assign(ws,{path:url.pathname});
+   settings.dashboardSockets.add(live); ws.on('close',()=>settings.dashboardSockets.delete(live));
+  };
+  if(viaGate&&['/api/ws','/api/pty','/api/plugins/kanban/events'].includes(url.pathname)) settings.dashboardRequests.push({method:'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix:String(request.headers['x-forwarded-prefix']??''),extensions:request.headers['sec-websocket-extensions']});
+  if(['/api/ws','/api/pty'].includes(url.pathname)&&url.searchParams.has('ticket')) {
+   const ticket=url.searchParams.get('ticket')??''; const expires=settings.socketTickets.get(ticket); settings.socketTickets.delete(ticket);
+   if(!expires||expires<Date.now()) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
+   sockets.handleUpgrade(request,socket,head,ws=>{
+    dashboardSocket(ws);
+    if(url.pathname==='/api/ws') ws.send(JSON.stringify({type:'gateway.ready'}));
+    else ws.send('\x1b[1mHermes\x1b[0m > ');
+   });
+   return;
+  }
   if(url.pathname==='/api/display/ws') { sockets.handleUpgrade(request,socket,head,ws=>displayStream(ws,url.searchParams.get('display_ticket')??'')); return; }
-  if(url.pathname==='/api/plugins/kanban/events') { boardEvents(request,socket,head,url); return; }
+  if(url.pathname==='/api/plugins/kanban/events') { boardEvents(request,socket,head,url,viaGate?dashboardSocket:null); return; }
   if(url.pathname!=='/api/ws'||url.searchParams.get('token')!==settings.key) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
   sockets.handleUpgrade(request,socket,head,ws=>{
    // The viewer ids display.observe minted on this connection: acquire and release take only those (methods_display.py
@@ -1411,11 +1625,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // POST /api/auth/ws-ticket, refused otherwise (the gate closes before accepting, which the client reads as a refused
  // upgrade). It starts at `since`, or at the board's tail when none is sent, and every 300 ms sends the rows after its
  // cursor, at most 200, as {events, cursor}; messages from the client are ignored.
- function boardEvents(request,socket,head,url) {
+ /** @param {((ws:import('ws').WebSocket)=>void)|null} [opened] a socket the dashboard's gate opened is kept with the dashboard's */
+ function boardEvents(request,socket,head,url,opened=null) {
   const ticket=url.searchParams.get('ticket')??''; const expires=settings.socketTickets.get(ticket); settings.socketTickets.delete(ticket);
   if(settings.kanbanStreamDown) { socket.destroy(); return; }
   if(!expires||expires<Date.now()) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return; }
   sockets.handleUpgrade(request,socket,head,ws=>{
+   opened?.(ws);
    settings.kanbanSockets.push(url.pathname+url.search); settings.kanbanStreams++;
    const since=url.searchParams.get('since');
    let cursor=since!==null&&/^\d+$/.test(since)?Number(since):settings.kanban.events.length;

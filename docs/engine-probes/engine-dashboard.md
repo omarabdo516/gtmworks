@@ -18,6 +18,12 @@ Run it again with `sh docs/engine-probes/engine-dashboard/run.sh` (a few minutes
 sandbox image), with the local gtmworks stack up (`bash scripts/local-db.sh`). A step that gets another answer than the
 one below exits non-zero with what it got. Screenshots go to `$TMPDIR/engine-dashboard-shots/`.
 
+**Run it again at each Engine pin bump** (the image in `scripts/engine-template.yml` and `hermesVersion` in
+`lib/engine/version.mjs`), before the bump is released (spec #866, ADR 0033 Consequences), so a new dashboard is proven
+behind the gate. At the same bump, check that the theme's wordmark selectors in `scripts/engine-dashboard-theme.yaml`
+(`customCSS`) still match the new dashboard's sidebar and narrow-screen header and that "gtmworks" shows there: they name
+the pinned dashboard's own markup, and a changed markup brings the Engine's wordmark back without any error.
+
 # 1. How it was measured
 
 - **The Engine** is the throwaway Engine of `docs/engine-probes/engine-stack/` (#823) started as the install starts a

@@ -10,9 +10,9 @@ web
 
 ## Users
 
-Company members (Owner, Manager, Contributor, Viewer) direct, approve and read the numbers for their own Company. One person may be a member of several companies and run the marketing of each. They talk to agents, starting with the Company's main Agent, follow the agents' work and approve it. They work mostly on desktop and on mobile for quick approvals.
+Company members (Administrator, Manager, Contributor, Viewer) direct, approve and read the numbers for their own Company. One person may be a member of several companies and run the marketing of each. They talk to agents, starting with the Company's main Agent, follow the agents' work and approve it. They work mostly on desktop and on mobile for quick approvals.
 
-Each person installs gtmworks, and Hermes comes inside it (ADR 0010). The first person to set it up is the Owner of its first Company. Members use that installation according to their role in each Company; nobody outside a Company's members enters it (ADR 0012).
+Each person installs gtmworks, and Hermes comes inside it (ADR 0010). The first person to set it up is the Administrator of its first Company. Members use that installation according to their role in each Company; nobody outside a Company's members enters it (ADR 0012).
 
 ## Product Purpose
 
@@ -22,7 +22,7 @@ A Company uses its Hermes agents for marketing, sales analysis and strategy. gtm
 
 gtmworks is open source and self-hosted. It is built on Hermes only and runs no model itself. Hermes, shipped inside the install, is the agent engine (ADR 0010); gtmworks supplies the Company's marketing workflow and the record people use to follow it.
 
-Agents take on ongoing work, keep working when a person steps away and bring back what needs attention. Each Company gets its main Agent on the bundled Hermes with no connection step; the Company's Owner may connect another Hermes profile instead and choose which existing agents work in each Company. Agent settings, skills and memory stay in Hermes.
+Agents take on ongoing work, keep working when a person steps away and bring back what needs attention. Each Company gets its main Agent on the bundled Hermes with no connection step; the Company's Administrator may connect another Hermes profile instead and choose which existing agents work in each Company. Agent settings, skills and memory stay in Hermes.
 
 ## Operating Context
 
@@ -37,7 +37,7 @@ There are two layers of work. The marketing board, stages, dates and named appro
 - The dashboard and its worker run no model and hold no model credentials. Hermes executes agent work; gtmworks starts Hermes runs and relays their events. The older agent API remains transitional (ADR 0006, 0007, 0008).
 - A Hermes profile key is a connection credential, not a model credential. gtmworks stores it encrypted and calls Hermes directly; the saved key is never shown again (ADR 0008).
 - Agents get Hermes's full power first, publishing and spending included when a Member asks; a limit is added only after a real problem (ADR 0020). Agents never approve or reject. Approval belongs to an authorized person and applies to one exact Version. A changed Version needs a new Approval. No answer is never yes.
-- Terms follow `GLOSSARY.md`: Company, Person, Member, Agent, main Agent, Card, Version and Approval. The permission roles are Owner, Manager, Contributor and Viewer.
+- Terms follow `GLOSSARY.md`: Company, Person, Member, Agent, main Agent, Card, Version and Approval. The permission roles are Administrator, Manager, Contributor and Viewer.
 
 ### One owner for each kind of data
 

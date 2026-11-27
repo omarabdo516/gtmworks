@@ -124,7 +124,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(tab(details,'Log')).toBeFocused();
  await expect(panel.locator('.dp-label > span')).toHaveText('Log 2');
  await expect(panel.locator('.lg-row .lg-line')).toHaveText(['عمر (you) added the agent “Meta Ads”','عمر (you) changed the agent “Meta Ads”']);
- await expect(panel.locator('.lg-forever')).toHaveText('Nothing in the log is ever deleted, not even by the Owner.');
+ await expect(panel.locator('.lg-forever')).toHaveText('Nothing in the log is ever deleted, not even by an Administrator.');
  await page.keyboard.press('ArrowLeft');
  await expect(tab(details,'Memory')).toHaveAttribute('aria-selected','true');
  await tab(details,'Log').click();
@@ -294,7 +294,7 @@ for(const [who,email,reads] of [['the Owner','omar@example.com',false],['a Manag
  await expect(page).toHaveURL(agentPage(lead));
  await expect(page.locator('#sov-tab-settings')).toBeFocused();
  await expect(page.locator('.sov-agent-id .dp-id__name')).toHaveText('LeadMain');
- await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by the Owner and Managers only.']:[]);
+ await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by Administrators and Managers only.']:[]);
 });
 
 for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${conversation}`],['the Agent\'s empty chat',`/c/rs-learning/chat/${ads}`]] as const) test(`closing the Agent's settings opened from ${where} returns there with the focus on the gear, by the button and by Escape`,async({page})=>{

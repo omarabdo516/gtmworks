@@ -33,7 +33,7 @@ test('the Owner shows an Agent to a Member, who then sees it while a hidden one 
  await expect(row.getByText('Shown to all')).toBeVisible();
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await expect(row.getByRole('switch',{name:'مراجع · SEO'})).toHaveAttribute('aria-checked','false');
- await expect(page.locator('.ta-table tbody tr').filter({hasText:'Owner'}).getByText('The Owner sees every agent')).toBeVisible();
+ await expect(page.locator('.ta-table tbody tr').filter({hasText:'Administrator'}).getByText('Administrators see every agent')).toBeVisible();
  await toggle.click();
  await expect(toggle).toHaveAttribute('aria-checked','true');
  await expect(toggle).toBeEnabled();

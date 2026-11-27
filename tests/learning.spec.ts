@@ -186,7 +186,7 @@ test('a Manager reads the mode and forgets a rule; a Contributor reads both with
  await expect(ruleRow(page,otherRule).getByRole('button',{name:/^Forget the rule:/})).toBeVisible();
  await page.context().clearCookies();
  await learning('reviewer@example.com',page);
- await expect(page.getByText('This is changed by the Owner only. You see it read only.')).toBeVisible();
+ await expect(page.getByText('This is changed by an Administrator only. You see it read only.')).toBeVisible();
  await expect(page.getByRole('button',{name:/Forget the rule:|Bring back the rule:/})).toHaveCount(0);
  await expect(page.getByRole('button',{name:/Restore|previous version/})).toHaveCount(0);
  await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-disabled','true');

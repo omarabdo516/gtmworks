@@ -132,7 +132,7 @@ test('a Manager saves About; a Contributor reads it and the server refuses their
  // A Contributor reads the same page read only: the line on who changes an Agent's settings, no field and no bar.
  await page.context().clearCookies();
  await agentPage('reviewer@example.com',page);
- await expect(overlay.locator('.ro-note')).toHaveText('Agent settings are changed by the Owner and Managers only.');
+ await expect(overlay.locator('.ro-note')).toHaveText('Agent settings are changed by Administrators and Managers only.');
  await expect(overlay.locator('#set-about')).toHaveText('Plans and runs the Meta and Google ads.');
  await expect(overlay.locator('#set-desc')).toHaveCount(0);
  await expect(overlay.locator('#dp-savebar')).toHaveCount(0);

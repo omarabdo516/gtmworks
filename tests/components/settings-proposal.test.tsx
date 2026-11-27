@@ -45,7 +45,7 @@ test('another Member reads it waiting for the Owner by name, in Arabic with the 
 test('a switch or a setting is named with its new value; a Company with no Owner named waits for the Owner', async () => {
  const subagents = await inSettings(<ProposalNote change={{ ...model, change: 'toolset', setting: 'delegation', value: true }} owner={false} owners={[]} href={null}/>);
  await expect.element(subagents.getByRole('note')).toBeVisible();
- expect(said(subagents.getByRole('note'))).toBe('Lead proposed New value for Sub-agents: On · waiting for the Owner. Nothing changes here before that.');
+ expect(said(subagents.getByRole('note'))).toBe('Lead proposed New value for Sub-agents: On · waiting for an Administrator. Nothing changes here before that.');
  expect(subagents.getByRole('link').elements()).toHaveLength(0);
  await subagents.unmount();
  const zone = await inSettings(<ProposalNote change={{ ...model, change: 'setting', setting: 'timezone', value: 'Africa/Cairo' }} owner owners={[]} href="/c/rs/approvals#change-7"/>);

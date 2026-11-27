@@ -165,5 +165,5 @@ test('an Agent with nothing yet shows the reference\'s empty line on every tab',
  await details.getByRole('tab', { name: 'Log', exact: true }).click();
  await expect.element(panel.getByRole('heading', { name: /^Log 0/ })).toBeVisible();
  await expect.element(panel.getByText('Nothing in this agent’s log yet.')).toBeVisible();
- await expect.element(panel.getByText('Nothing in the log is ever deleted, not even by the Owner.')).toBeVisible();
+ await expect.element(panel.getByText('Nothing in the log is ever deleted, not even by an Administrator.')).toBeVisible();
 });

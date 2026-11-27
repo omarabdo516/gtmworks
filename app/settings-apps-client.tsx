@@ -51,6 +51,8 @@ function Close({place}:{place:AppsPlace}) {
 const titled=(place:AppsPlace)=>place.kind==='sheet'?{className:'sheet__title',id:'apps-title'}:{className:'sheet__title sov-h',id:'sov-h'};
 
 function State({app,say}:{app:CompanyApp,say:Say}) {
+ // An app that is on reads "checking…" until its own test answers (#898): the list never waits for it.
+ if(app.state==='checking') return <span className="app__state app__state--off" role="status">{say('stateChecking')}</span>;
  if(app.state==='connected') return <span className="app__state"><SettingsIcon name="check"/><span>{say('stateConnected')}</span>{faces(app.agents.filter(agent=>agent.state==='connected'))}</span>;
  return <span className={`app__state ${app.state==='attention'?'app__state--warn':'app__state--off'}`}>{say(app.state==='attention'?'stateAttention':'stateOff')}</span>;
 }
@@ -63,7 +65,7 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
  const needle=searchFold(query);
  const shown=items.filter(item=>(category==='all'||item.category===category)&&searchFold(item.words).includes(needle));
  const card=(item:AppItem)=>{
-  const action=item.state==='connected'||item.source==='custom'?'manage':item.state==='attention'?'reconnect':'connect';
+  const action=item.state==='connected'||item.state==='checking'||item.source==='custom'?'manage':item.state==='attention'?'reconnect':'connect';
   return <article key={item.key} className="app-card" aria-labelledby={`app-t-${item.key}`}>
    <div className="app__top"><AppTile app={item} size="lg"/><div className="app__titles"><h5 className="app__name" id={`app-t-${item.key}`}><bdi>{item.name}</bdi></h5><span className="app__cat">{say(`category.${item.category}`)}</span></div></div>
    <p className="app__use od-clamp-2">{item.use}</p>
@@ -83,7 +85,7 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
    {read!==undefined&&<div className="tpl-cats" role="group" aria-label={say('categories')}>{(['all',...order.filter(kind=>items.some(item=>item.category===kind))] as const).map(kind=>
     <button key={kind} type="button" className="chip" id={`apps-cat-${kind}`} aria-pressed={category===kind} onClick={()=>setCategory(kind)}>{say(`category.${kind}`)}<span className="chip__n num">{items.filter(item=>kind==='all'||item.category===kind).length}</span></button>)}</div>}
   </header>
-  <div className="apps-body" id="apps-body" aria-live="polite">{read===undefined?null
+  <div className="apps-body" id="apps-body" aria-live="polite">{read===undefined?<div className="panel-card"><p className="panel-empty" role="status">{say('reading')}</p></div>
    :read===null?<div className="panel-card"><p className="panel-empty">{say('unreadable')}</p></div>
    :!read.length?<div className="panel-card"><p className="panel-empty">{say('noneOffered')}</p></div>
    :shown.length?<>{group(say('groupOn'),shown.filter(item=>item.state!=='off'),'apps-h-on')}{group(say('groupOff'),shown.filter(item=>item.state==='off'),'apps-h-off')}</>
@@ -241,10 +243,10 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
  // The picks are fixed once a sign-in starts, so the Agents still waiting are the ones ticked.
  const pick=(id:string)=>{ if(busy||run.queue.length) return; const next=picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]; setPicks(next); if(next.length) setPickError(false); };
  // The Agents that lose it on Disconnect: with the app on, at least one.
- const having=own.filter(agent=>agent.state==='connected'||agent.state==='attention');
+ const having=own.filter(agent=>agent.state==='connected'||agent.state==='attention'||agent.state==='checking');
  const sharedWith=(agent:AppAgent)=>(item.agents.find(other=>other.own&&other.connection===agent.connection)??item.agents.find(other=>other.main))?.name??'';
  const line=(agent:AppAgent)=>!agent.own?named(say('agentShares'),sharedWith(agent)):agent.state===null?say('agentUnread')
-  :say(agent.state==='connected'?'agentOn':agent.state==='attention'?'stateAttention':'agentOff');
+  :say(agent.state==='connected'?'agentOn':agent.state==='attention'?'stateAttention':agent.state==='checking'?'stateChecking':'agentOff');
  const back=<To place={place} step={{back:item.key}} stay={busy} className="btn btn--secondary" id="app-cancel">{say(owner&&state==='off'?'cancel':'done')}</To>;
  const next=run.queue[0];
  return <>
@@ -253,7 +255,8 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
     <h3 {...titled(place)} tabIndex={-1}>{on?<bdi>{item.name}</bdi>:named(say('connectTitle'),item.name)}</h3><Close place={place}/></div>
    <div className="sheet__meta"><span>{say(`category.${item.category}`)}</span><span aria-hidden="true">·</span><span>{say('allTools')}</span>
     {state==='connected'&&<span className="badge"><SettingsIcon name="check"/>{say('stateConnected')}</span>}
-    {state==='attention'&&<span className="badge badge--warn">{say('stateAttention')}</span>}</div>
+    {state==='attention'&&<span className="badge badge--warn">{say('stateAttention')}</span>}
+    {state==='checking'&&<span className="badge" role="status">{say('stateChecking')}</span>}</div>
   </header>
   <div className="apps-body apps-detail">
    <div className="app-hero"><AppTile app={item} size="lg"/><p>{item.use}</p></div>
@@ -292,7 +295,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
     :<div><button type="button" className="link-btn" id="app-off" onClick={()=>setAsking(true)}>{say(custom?'remove':'disconnect')} <bdi>{item.name}</bdi></button></div>)}
   </div>
   <footer className="modal__foot modal__foot--end">
-   {owner&&(state!=='connected'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
+   {owner&&(state!=='connected'&&state!=='checking'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
     <button type="button" className="btn btn--primary" id="app-connect" aria-disabled={busy} onClick={()=>{
      if(busy) return;
      if(next) connect(run.queue,run.one,run.done);

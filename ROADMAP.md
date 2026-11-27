@@ -15,7 +15,7 @@ The order Omar set on 2026-11-21 (rs 0082, rounds 3 and 4):
    - Knowledge: deep, read from every source, one section per line [rs 0082 Q3, Q12].
    - First Agents: Lead, customer problems first, then training manager, leads and follow-up, content and ads as two Agents [rs 0082 round 2].
    - Connections: the platform's MCP server already works as a remote server (`rspaac.com/api/mcp`); Google Drive (one folder), GitHub and Odoo come next [rs 0082 Q11, Q13, Q14].
-2. **A key for a command MCP server.** An Owner gives a command server running in the work sandbox its key or token file, which opens Google Drive (one folder) and Odoo through ready-made servers [rs 0082 Q33].
+2. **A key for a command MCP server.** An Administrator gives a command server running in the work sandbox its key or token file, which opens Google Drive (one folder) and Odoo through ready-made servers [rs 0082 Q33].
 3. **Triggers and efficiency.** The event door, the routine check that runs before the model wakes, and a cheaper model for routine work [rs 0082 Q16, Q20, Q21].
 4. **The rest**, in the order the team's real work asks for it: publishing, presenter videos, ad campaigns, results, the monthly plan.
 5. **Building from gtmworks, last.** After everything is stable [rs 0082 Q18, Q19].
@@ -30,7 +30,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 
 - ✅ **One-line install.** One `curl` line installs a ready, tested release into `~/gtmworks`; nothing is built on the server. [#51, #60, tag v0.1.0, decision 0015]
 - ✅ **`gtmworks update` from release to release.** Backs up first, refuses to go older than the data, and rolls back a failed migration. [#52, #60, ADR 0023]
-- ✅ **Update ready.** Owners see when a newer gtmworks exists and what it brings, and only versions that have an image. [#442, #444, #468, #481, decision 0051]
+- ✅ **Update ready.** Administrators see when a newer gtmworks exists and what it brings, and only versions that have an image. [#442, #444, #468, #481, decision 0051]
 - ✅ **Update now.** One click updates the install through a small updater on the host, never from the web app. [#443, #445, ADR 0020 "update now"]
 - 🟡 **A failed update leaves no half-made sandbox.** The previous release keeps serving and what the update made is removed. Merged; waiting for the release (#572). [#479, #549]
 - ✅ **Every release is tested.** Releases publish the newest commit whose CI passed, and a release is immutable. [#49, #448, decision 0019]
@@ -45,19 +45,19 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 ## 2. Team and Agents
 
 - ✅ **Lead runs the team.** The main Agent hands a job to the Agent that does it, offers to make an Agent for recurring work, and opens a new Company's first Conversation. [#434, #441, decision 0050]
-- ✅ **Lead makes an Agent from a plain request.** The Owner says what is needed and Lead creates it in the Engine. [#12, #13, #89, #91]
+- ✅ **Lead makes an Agent from a plain request.** The Administrator says what is needed and Lead creates it in the Engine. [#12, #13, #89, #91]
 - ✅ **Ready-made roles.** Lead starts from a proven role (ads, ad reviewer, article writer, numbers, coder) and the gallery sits beside its composer. [#14, #102, #104, #189]
 - ✅ **One Engine profile per Agent.** An Agent is its own profile with its own memory, Skills and settings, and the main Agent keeps the Company's first profile. [#119, #120, #121, ADR 0016, decision 0035]
 - ✅ **Agent settings are the Engine's real settings.** Name, About, How it works, thinking level, model, Skill switches, saved with a bar, in five groups with Advanced last. [#125, #161, #175, #176, #179, #180, #352, #615]
 - ✅ **The main Agent is configurable like any Agent.** [#425, #431]
-- 🟡 **Agents propose changes to themselves.** An Agent proposes a change to its model, instructions or settings; the Owner edits, then approves, and the Agents list shows "Proposal waiting". Merged; waiting for the release (#572). [#19, #178, #482, #484]
+- 🟡 **Agents propose changes to themselves.** An Agent proposes a change to its model, instructions or settings; the Administrator edits, then approves, and the Agents list shows "Proposal waiting". Merged; waiting for the release (#572). [#19, #178, #482, #484]
 - 🟡 **Every Agent asks any other Agent (Handover).** In a Conversation or a channel, any Agent hands a job to any other, even one the person cannot see, and the asked Agent may hand on in turn. Merged; waiting for the release (#572). [#475, #476, #477, decision 0057]
-- 🟡 **A Member asks for an Agent hidden from them.** The main Agent says so without naming it, and an Owner or Manager opens it. Merged; waiting for the release (#572). [#17, #167, #500]
-- ✅ **Per-Member Agent visibility.** The Owner chooses which Agents each Member sees. [#15, #190]
+- 🟡 **A Member asks for an Agent hidden from them.** The main Agent says so without naming it, and an Administrator or Manager opens it. Merged; waiting for the release (#572). [#17, #167, #500]
+- ✅ **Per-Member Agent visibility.** The Administrator chooses which Agents each Member sees. [#15, #190]
 - 🟡 **Agent faces and status.** Faces look, blink and hop, a dot shows state, and the sidebar tile flashes when Lead makes an Agent. Merged; waiting for the release (#572). [#133, #134, #184]
-- ✅ **Agent faces as living orbs.** Every Agent is an animated gradient orb in its own look, kept on the Agent from the moment it is made: a shape, a colour and a temperament, given automatically, a ready-made role's face in the gallery the face it gets (#696, #697). It breathes, blinks, glances and looks toward the pointer, and stays still with reduced motion (#697). The Owner changes any Agent's look in a small window from its face, its card or Settings, or resets it to automatic, each change in the Activity log (#698). Its face tells its state for the reader, waiting on them, working, stuck, asleep or idle, in the sidebar within 5 seconds (#699); in the open chat it listens while the person writes, thinks, works and is done, the reply being worked on 24px and moving (#700); a made Agent is born once for whoever asked for it, greets, and perks up when named (#701); a removed Agent keeps its face and name in its Conversations, channels, Handovers, Cards and the log (#702). The look is approved in `design-reference-orb/`. [#694, #696, #697, #698, #699, #700, #701, #702, decision 0067, ADR 0027]
+- ✅ **Agent faces as living orbs.** Every Agent is an animated gradient orb in its own look, kept on the Agent from the moment it is made: a shape, a colour and a temperament, given automatically, a ready-made role's face in the gallery the face it gets (#696, #697). It breathes, blinks, glances and looks toward the pointer, and stays still with reduced motion (#697). The Administrator changes any Agent's look in a small window from its face, its card or Settings, or resets it to automatic, each change in the Activity log (#698). Its face tells its state for the reader, waiting on them, working, stuck, asleep or idle, in the sidebar within 5 seconds (#699); in the open chat it listens while the person writes, thinks, works and is done, the reply being worked on 24px and moving (#700); a made Agent is born once for whoever asked for it, greets, and perks up when named (#701); a removed Agent keeps its face and name in its Conversations, channels, Handovers, Cards and the log (#702). The look is approved in `design-reference-orb/`. [#694, #696, #697, #698, #699, #700, #701, #702, decision 0067, ADR 0027]
 - 🟡 **Full power first.** An Agent gets the Engine's whole power, publishing and spending included when a Member asks; a limit is added only after a real problem. Agent levels were removed. Merged; waiting for the release (#572). [#391, ADR 0020 "full power", decision 0053]
-- 🟡 **Standing permissions with Revoke.** "Always allow" answers are listed with who and when, and an Owner or Manager can revoke one. Merged; waiting for the release (#572). [#163, #164, #165, #166, #499]
+- 🟡 **Standing permissions with Revoke.** "Always allow" answers are listed with who and when, and an Administrator or Manager can revoke one. Merged; waiting for the release (#572). [#163, #164, #165, #166, #499]
 - ✅ **The Agent's details show its files and its screen.** [#21, #194, #195, #208]
 - 🟡 **Stop ends the whole Handover chain.** Stop in a chat, or on a channel message's Run, also stops every Handover started from it down the whole chain, each shown as stopped, and nothing more starts after it. Merged; waiting for the release (#572). [#474, #478, PR #571]
 - 🟡 **Add a file for the Agent to work from.** The files tab is disabled today; needs a proof on the pinned Engine first. [#196]
@@ -75,9 +75,9 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 - ✅ **Each step live while an Agent works.** The line under the transcript names the Agent and the tool it runs now, and the turn's steps list fills in before the reply, in a Conversation and a channel alike, read from the Run's own event stream in the Engine. [#646]
 - ✅ **Permission requests in the chat.** "Allow once / Always allow / Don't allow", also waiting in "Waiting on you" and in channels. [#163, #165, #321]
 - ✅ **Composer.** "+" menu, `@` and `/` suggestions, image attach, commands such as /campaign, /report, /review, /article. [#153, #154, #155, #156, #158, #159]
-- ✅ **Dictation in Egyptian Arabic.** The Owner picks a speech-to-text provider; Deepgram Nova-3 first. [#160, #430, #435]
+- ✅ **Dictation in Egyptian Arabic.** The Administrator picks a speech-to-text provider; Deepgram Nova-3 first. [#160, #430, #435]
 - ✅ **An Agent's voice settings.** Voice, speed and "Listen". [#162]
-- ✅ **Voice settings for the whole Company.** The Owner sets Hermes's own speech-to-text options once: provider, model, language (Automatic included), vocabulary and silence trim, for every Agent. [#863]
+- ✅ **Voice settings for the whole Company.** The Administrator sets Hermes's own speech-to-text options once: provider, model, language (Automatic included), vocabulary and silence trim, for every Agent. [#863]
 - ✅ **Channels.** A general channel, team channels with chosen Members and Agents, unread counts, and an Agent answers only when called by name. [#23, #24, #109, #118, #152]
 - ✅ **Channel replies carry cards and steps; mentions reach the right person.** [#148, #149, #150, #151, #200]
 - ✅ **An Agent sends a file in its reply.** Any file it made in its own work folder (a PDF, a spreadsheet, an image) comes as a file to open and download, images as thumbnails, in a Conversation and a channel; one it cannot send is named, never shown as a path. [#708, ADR 0028]
@@ -117,7 +117,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 - ✅ **Company knowledge.** What every Agent's Run is given, kept as the shared Skill `company-knowledge`. [#27, #111, #344]
 - ✅ **The Company's shared Skills folder.** One folder every Agent reads; approved lessons land there. [#122, #222]
 - ✅ **Skills per Agent.** Switch a Skill on or off, write one into an Agent's profile, "See before and after". [#180, #181, #343]
-- ✅ **Lessons.** An Agent saves a lasting rule it is told; a Contributor's rule is suggested to the team and waits for an Owner or Manager. [#18, #25, #106, #110]
+- ✅ **Lessons.** An Agent saves a lasting rule it is told; a Contributor's rule is suggested to the team and waits for an Administrator or Manager. [#18, #25, #106, #110]
 - 🟡 **Learning mode, "Forget this", "Restore the previous version".** Merged; waiting for the release (#572). [#28, #436]
 - 🟡 **Agent memory.** The Memory tab: read, edit in place, search, forget with undo, reset; a change the Engine holds always gets its log row. Merged; waiting for the release (#572). [#191, #192, #193, #350, #353, #370]
 - ✅ **Usage.** Token use read from Hermes. [#32, #347]
@@ -136,10 +136,11 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 - 🟡 **Command MCP servers run in the work sandbox.** Merged; waiting for the release (#572). [#550, #459 (the issue stays open for Open Design), ADR 0024]
 - ✅ **Model connection per Company.** A ChatGPT or Claude subscription signed in once on the Company's own Engine, or an API key written to every profile. [#3, #123, #124, #251, #384, #438]
 - 🟡 **A work sandbox per Company.** Terminal, files, code, fonts and a Screen, reaching the internet only, with the Library showing its work folder. Merged; waiting for the release (#572). [#389, #390 to #400, ADR 0018, ADR 0020 "work sandbox image"]
-- ✅ **Each Company runs on its own Engine.** `gtmworks company add` makes one, with a first-Owner link. [#378, #379 to #387]
-- ⚪ **A key for a command MCP server.** A command server in the work sandbox gets its key or token file from the Owner, never from an Agent; it is what Google Drive and Odoo need. [rs 0082 Q33]
+- ✅ **Each Company runs on its own Engine.** `gtmworks company add` makes one, with a first-Administrator link. [#378, #379 to #387]
+- ✅ **The Administrator's Hermes dashboard.** An Administrator opens their Company's own Hermes dashboard from Settings, behind gtmworks's sign-in, in gtmworks's colours and their language, with every Hermes page and setting; showing a key, updating Hermes, importing a backup and making or removing a profile are refused, and an open page closes within five seconds of losing the Administrator Role. [#866, #869 to #874, ADR 0033]
+- ⚪ **A key for a command MCP server.** A command server in the work sandbox gets its key or token file from the Administrator, never from an Agent; it is what Google Drive and Odoo need. [rs 0082 Q33]
 - 🟡 **The app list follows the person.** The browser's copy of a Company's apps is the signed-in person's alone, and is dropped when someone else signs in without the tab reloading. Merged; waiting for the release (#572). [#552, #599]
-- ⚪ **Google Drive, one folder only.** Agents read, write and organise inside one folder, "RS Academy", through a separate Google account the Owner shares that folder with (a Google sign-in cannot be limited to one folder), on a ready-made Drive MCP server in the sandbox. [rs 0082 Q11, Q13, Q31]
+- ⚪ **Google Drive, one folder only.** Agents read, write and organise inside one folder, "RS Academy", through a separate Google account the Administrator shares that folder with (a Google sign-in cannot be limited to one folder), on a ready-made Drive MCP server in the sandbox. [rs 0082 Q11, Q13, Q31]
 - ⚪ **GitHub, read and issues.** GitHub's own remote MCP server with fine-grained tokens on the chosen repos: Agents open issues labelled `from-agent`, Lead reads pull requests, checks and issues. Works with today's remote MCP support. [rs 0082 Q14]
 - ⚪ **Odoo.** A ready-made Odoo MCP server, read-only first with its own Odoo user; later the Agents read the whole ERP, find problems and propose fixes. gtmworks is not a CRM and leaves leads in Odoo. [rs 0082 Q5, Q32]
 - ✅ **Several model accounts with failover.** Add more than one Claude or ChatGPT account and an API key; the Engine already switches, gtmworks needs the screen to add and order them. Adding and naming each one is built (#618), and so are ordering them and switching one off without signing out (#619); so is a request going on on the next account of its kind in that order when one runs out (#621), and moving to the Company's Fallback model only once every one of them ran out (#622), each such move logged in Activity (#644). [decision 0055, spec #611]
@@ -181,7 +182,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 
 ## 10. People, roles and access
 
-- ✅ **Roles.** Owner, Manager, Contributor, Viewer, and no agency layer. [#7, ADR 0012, GLOSSARY.md Role]
+- ✅ **Roles.** Administrator, Manager, Contributor, Viewer, and no agency layer. [#7, ADR 0012, GLOSSARY.md Role]
 - ✅ **Sign in with email and password.** [#41]
 - ✅ **Invite links without email.** One use, seven days, with the role and the Agents the person will see. [#185, #187, ADR 0019]
 - ✅ **Several Companies in one install.** Each with its own data, Engine and work sandbox; a role in one grants nothing in another; proven by database tests. [#378, #382, #383, #337, ADR 0004, ADR 0018]

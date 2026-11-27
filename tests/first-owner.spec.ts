@@ -73,7 +73,7 @@ test('a first-owner link makes the Company with its sender as Owner, signed in; 
  // The fragment is never sent to the server: no request address holds the secret.
  expect(requests.filter(url=>url.includes(secret))).toEqual([]);
  // Opening the used link again says so in the page's own words, in both languages, and shows no form.
- for(const [language,message] of [['en','This first-Owner link has been used, or a newer one replaced it. Ask the install owner to print a new one.'],['ar','هذا الرابط الخاص بأول مالك مستخدم بالفعل، أو حلّ محله رابط أحدث. اطلب من صاحب التثبيت طباعة رابط جديد.']]) {
+ for(const [language,message] of [['en','This first-Administrator link has been used, or a newer one replaced it. Ask the install owner to print a new one.'],['ar','هذا الرابط الخاص بأول أدمن مستخدم بالفعل، أو حلّ محله رابط أحدث. اطلب من صاحب التثبيت طباعة رابط جديد.']]) {
   await page.goto(`/first-owner?language=${language}#code=${secret}`);
   await expect(page.getByRole('main').getByRole('alert')).toHaveText(message);
   await expect(page.getByLabel('Your name')).toHaveCount(0);
@@ -81,7 +81,7 @@ test('a first-owner link makes the Company with its sender as Owner, signed in; 
  // A second send of the same link is refused and creates no second account, person or Company.
  const again=await page.request.post('/first-owner/submit',{form:{...input,email:'late@example.test',code:secret},maxRedirects:0});
  expect(again.status()).toBe(410);
- expect(await again.text()).toBe('This first-Owner link has been used, or a newer one replaced it. Ask the install owner to print a new one.');
+ expect(await again.text()).toBe('This first-Administrator link has been used, or a newer one replaced it. Ask the install owner to print a new one.');
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});
 });
 
@@ -95,7 +95,7 @@ test('an email that already has an account is refused, points to naming the Owne
  await page.getByRole('button',{name:'Create and sign in'}).click();
  // Back on the form, keeping the link's secret in the fragment, with a message that names the command to use instead.
  await expect(page).toHaveURL(new RegExp(`/first-owner\\?invalid=emailTaken&language=en#code=${secret}$`));
- await expect(page.getByRole('main').getByRole('alert')).toHaveText('This email already has an account. Ask the install owner to name it as the Owner with gtmworks company add --owner <email>.');
+ await expect(page.getByRole('main').getByRole('alert')).toHaveText('This email already has an account. Ask the install owner to name it as the Administrator with gtmworks company add --owner <email>.');
  await expect(page.getByLabel('Your name')).toBeVisible();
  // Nothing was made and the link is still open: the same link works once, for someone else.
  expect(counts(baseURL!)).toEqual({accounts:1,people:1,companies:1,owners:1});

@@ -38,9 +38,9 @@ test.beforeAll(async({browser},testInfo)=>{
    insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${managerTalk}','${company}','${manager}','${lead}','Lead'),('${reviewerTalk}','${company}','${reviewer}','${lead}','Lead');
    insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
     ('${company}','${managerTalk}','person','${manager}',null,'مدير','${whatsapp}',gen_random_uuid(),'ask-1',now()-interval '10 minutes'),
-    ('${company}','${managerTalk}','agent',null,'${lead}','Lead','I prepared your request and sent it to the Owner. No agent exists yet; their answer will show here.',null,'ask-1',now()-interval '9 minutes'),
+    ('${company}','${managerTalk}','agent',null,'${lead}','Lead','I prepared your request and sent it to an Administrator. No agent exists yet; their answer will show here.',null,'ask-1',now()-interval '9 minutes'),
     ('${company}','${reviewerTalk}','person','${reviewer}',null,'مراجع','${blog}',gen_random_uuid(),'ask-2',now()-interval '8 minutes'),
-    ('${company}','${reviewerTalk}','agent',null,'${lead}','Lead','I prepared your request and sent it to the Owner. No agent exists yet; their answer will show here.',null,'ask-2',now()-interval '7 minutes');
+    ('${company}','${reviewerTalk}','agent',null,'${lead}','Lead','I prepared your request and sent it to an Administrator. No agent exists yet; their answer will show here.',null,'ask-2',now()-interval '7 minutes');
   end $$;`);
   query(`select public.lead_request_agent('${managerTalk}','ask-1','call-0','WhatsApp Leads','Follows up the WhatsApp leads.',array['WhatsApp Business'])`);
   query(`select public.lead_request_agent('${reviewerTalk}','ask-2','call-0','Blog Writer','Writes the blog every week.',array['WordPress'])`);
@@ -55,7 +55,7 @@ test('a Member\'s request waits in the Owner\'s "Waiting on you" only, and in th
  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const asked=requestCard(page,'WhatsApp Leads');
  await expect(asked.locator('.badge--req')).toHaveText('Agent request from مدير');
- for(const text of ['Follows up the WhatsApp leads.','WhatsApp Business','Publish anything',`«${whatsapp}»`,'مدير and the Owner']) await expect(asked).toContainText(text);
+ for(const text of ['Follows up the WhatsApp leads.','WhatsApp Business','Publish anything',`«${whatsapp}»`,'مدير and the Administrators']) await expect(asked).toContainText(text);
  await expect(asked.getByRole('button')).toHaveText(['No','Make it']);
  await expect(requestCard(page,'Blog Writer').locator('.badge--req')).toHaveText('Agent request from مراجع');
 

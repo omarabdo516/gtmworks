@@ -10,16 +10,16 @@ test('an Owner is told to ask "Make it?", with "Not now", and the same words in 
  const text=leadInstructions({role:'owner',owner:'Omar',agents});
  assert.match(text,/"Make it\?" with the choices "Make it" and "Not now"/);
  assert.match(text,/«أعمله؟» with «اعمله» and «مش دلوقتي»/);
- assert.doesNotMatch(text,/Ask Omar for it\?/,'an Owner is not asked to ask the Owner');
+ assert.doesNotMatch(text,/Ask Omar for it\?/,'an Owner is not asked to ask an Administrator');
  assert.match(text,/call create_agent in the same run/);
 });
 
-test('a Manager and a Contributor are told to ask the Owner by first name, and to request the Agent, in both languages',()=>{
+test('a Manager and a Contributor are told to ask an Administrator by first name, and to request the Agent, in both languages',()=>{
  for(const role of ['manager','contributor']) {
   const text=leadInstructions({role,owner:'Omar',agents});
   assert.match(text,/"Ask Omar for it\?" with the choices "Ask Omar for it" and "Not now"/,role);
   assert.match(text,/«أطلبه من Omar؟» with «اطلبه من Omar» and «مش دلوقتي»/,role);
-  assert.doesNotMatch(text,/"Make it\?" with the choices "Make it"/,`${role}: the Owner's question is not theirs`);
+  assert.doesNotMatch(text,/"Make it\?" with the choices "Make it"/,`${role}: an Administrator's question is not theirs`);
   assert.match(text,/call request_agent in the same run/,role);
  }
 });
@@ -41,12 +41,12 @@ test('the Agents the person sees are listed by name and job, and no one else is 
 test('a person with no place in the Company is told nothing, and a missing Owner name leaves the offer readable',()=>{
  assert.equal(leadInstructions({role:null,owner:null,agents}),'');
  const text=leadInstructions({role:'manager',owner:null,agents:[]});
- assert.match(text,/"Ask the Owner for it\?"/);
- assert.match(text,/«أطلبه من المالك؟»/);
+ assert.match(text,/"Ask an Administrator for it\?"/);
+ assert.match(text,/«أطلبه من الأدمن؟»/);
 });
 
-// #434: in the Conversation Lead opened, its Run is given the opening it wrote, and once the Owner has answered it Lead
-// proposes the first two or three Agents, each with its name and job, with the Owner's "Make it?" for each in turn.
+// #434: in the Conversation Lead opened, its Run is given the opening it wrote, and once an Administrator has answered it Lead
+// proposes the first two or three Agents, each with its name and job, with an Administrator's "Make it?" for each in turn.
 test('the Run of the Conversation Lead opened carries its opening and the first Agents to propose; any other carries neither',()=>{
  const opening='Hi Omar, I manage the team.\n\n1. What does RS Learning sell?';
  const text=leadInstructions({role:'owner',owner:'Omar',agents:[],opening});
@@ -54,7 +54,7 @@ test('the Run of the Conversation Lead opened carries its opening and the first 
  assert.match(text,/propose the first two or three agents to make for this company[^.]*, each with its name and its job/);
  assert.match(text,/"Make it\?" with the choices "Make it" and "Not now"/);
  for(const brief of [{role:'owner',owner:'Omar',agents:[],opening:null},{role:'owner',owner:'Omar',agents:[]}]) assert.doesNotMatch(leadInstructions(brief),/You opened this conversation/);
- // Only the Owner the opening was written for is asked to make Agents from it.
+ // Only an Administrator the opening was written for is asked to make Agents from it.
  assert.doesNotMatch(leadInstructions({role:'manager',owner:'Omar',agents:[],opening}),/You opened this conversation/);
 });
 
@@ -65,7 +65,7 @@ test('a Contributor is told the hidden jobs with the words naming who opens each
  const text=leadInstructions({role:'contributor',owner:'Omar',agents,hidden});
  assert.match(text,/- "Campaigns and ads": say "That job belongs to another agent in the company, and that agent isn't available to you\. Should I ask Sara \(Manager\) to open it for you\?"/);
  assert.match(text,/«الشغلانة دي عند وكيل تاني في الشركة، والوكيل ده مش متاح ليك\. تحب أبعت لـSara \(مدير\) طلب إنه يتفتح ليك؟»/);
- assert.match(text,/- "Articles": say ".*Should I ask Omar \(Owner\) to open it for you\?" \(in Arabic: «.*لـOmar \(مالك\).*»\)/);
+ assert.match(text,/- "Articles": say ".*Should I ask Omar \(Administrator\) to open it for you\?" \(in Arabic: «.*لـOmar \(أدمن\).*»\)/);
  assert.match(text,/call ask_to_open_agent in the same run with the job exactly as written above/);
  assert.match(text,/Never name those agents/);
  assert.match(text,/none of those agents does and that is none of the jobs listed above/,'the offer to make one is for other work only');

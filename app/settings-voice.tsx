@@ -1,4 +1,5 @@
 'use client';
+import { settingsReads } from '@/lib/settings-part-queue.mjs';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import type { CompanyVoice } from '@/lib/company-speech.mjs';
@@ -29,7 +30,8 @@ export function VoiceSettings({company,slug,owner}:{company:string,slug:string,o
  useEffect(()=>{
   const controller=new AbortController();
   const fail=()=>setRead(was=>({...was,state:'failed'}));
-  fetch(`/api/voice-settings?company=${encodeURIComponent(company)}`,{cache:'no-store',signal:controller.signal})
+  // One of the page's Engine reads, in Settings' queue of four (#898).
+  settingsReads(()=>fetch(`/api/voice-settings?company=${encodeURIComponent(company)}`,{cache:'no-store',signal:controller.signal}),controller.signal)
    .then(async response=>{ const body=response.ok?await response.json() as {data:CompanyVoice,readAt:number}:null;
     if(body&&body.data.keys!==null) setRead({data:body.data,readAt:body.readAt,state:'read'}); else fail(); },
    ()=>{ if(!controller.signal.aborted) fail(); });

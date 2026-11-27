@@ -204,7 +204,8 @@ test('a company on the old default profile moves once its Engine holds a sign-in
   // The worker found the tools changing: it writes the fixed set again and records the read-back.
   db.rows[0].tools_confirmed=true; db.rows[0].tools_pending=true;
   assert.deepEqual(await keepCompanyProfiles(db,options),{provided:0,configured:1,attached:0,moved:0});
-  assert.deepEqual([...fake.settings.profiles.get(name).config.platform_toolsets.api_server].sort(),[...fixedToolsets()].sort());
+  // The main Agent's profile names its plugin's toolset beside the fixed set (#884).
+  assert.deepEqual([...fake.settings.profiles.get(name).config.platform_toolsets.api_server].sort(),[...fixedToolsets(),'gtmworks'].sort());
   assert.equal(db.rows[0].tools_pending,false);
   // A Hermes that refuses keeps the change waiting, recorded nowhere.
   db.rows[0].tools_pending=true;

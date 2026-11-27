@@ -4,8 +4,8 @@
   "askForIt": "أطلبه من {0}؟",
   "askForItChoice": "اطلبه من {0}",
   "notNow": "مش دلوقتي",
-  "ownerFallback": "المالك",
+  "ownerFallback": "الأدمن",
   "hiddenAsk": "الشغلانة دي عند وكيل تاني في الشركة، والوكيل ده مش متاح ليك. تحب أبعت لـ{0} ({1}) طلب إنه يتفتح ليك؟",
-  "roleOwner": "مالك",
+  "roleOwner": "أدمن",
   "roleManager": "مدير"
 }

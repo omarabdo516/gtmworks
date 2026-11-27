@@ -8,6 +8,7 @@ import { Label } from './settings-overlay-parts';
 import { AppTile } from '@/components/app-tile';
 import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
 import { holdSaved, savedAt, send, useSave, useSaved, type Answer } from './settings-saved';
+import { settingsReads } from '@/lib/settings-part-queue.mjs';
 
 // The "Subscription and models" section's defaults and speech-to-text (#29; its Providers are settings-providers.tsx) and an Agent's "Thinks with" rows: the Engine's model options for the
 // Company's space and for each Agent's own profile, the model written to that profile and read back, and the Owner's
@@ -281,7 +282,8 @@ export function EachAgent({company,owner,models,readAt}:{company:string,owner:bo
 // `readAt` is the server's time that read started, so it stands over the fields' saves held from before it.
 async function subagentSettings(company:string,agent:string):Promise<{settings:ModelSetting[],readAt:number}|null> {
  try {
-  const response=await fetch(`/api/agent-settings?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`);
+  // One of the page's Engine reads, in Settings' queue of four (#898).
+  const response=await settingsReads(()=>fetch(`/api/agent-settings?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`));
   const read=response.ok?await response.json() as {agents?:{settings?:unknown}[],readAt?:unknown}:null;
   return Array.isArray(read?.agents?.[0]?.settings)&&typeof read.readAt==='number'?{settings:read.agents[0].settings as ModelSetting[],readAt:read.readAt}:null;
  } catch { return null; }
