@@ -240,7 +240,11 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
     if(readNow.state!=='found'||!pageRef.current) { setMoreFailed(true); return false; }
     setMoreFailed(false);
     const seen=new Set(pageRef.current.messages.map(message=>message.id));
-    const carried=readNow.messages.filter(message=>!seen.has(message.id));
+    // New messages can shift the newest-relative offset while the tab is open: only messages older than the oldest
+    // drawn, and of a turn not already drawn, are prepended; a newer one waits for the refresh that shows it.
+    const oldest=pageRef.current.messages[0]?.created_at;
+    const turns=new Set(pageRef.current.messages.flatMap(message=>message.turn?[message.turn]:[]));
+    const carried=readNow.messages.filter(message=>!seen.has(message.id)&&(!oldest||message.created_at<=oldest)&&!(message.author==='agent'&&message.turn&&turns.has(message.turn)));
     if(carried.length) {
      current={messages:[...carried,...pageRef.current.messages],nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
      pageRef.current=current; setPage(current); return true;

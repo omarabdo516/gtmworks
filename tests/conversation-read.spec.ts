@@ -220,6 +220,11 @@ test('a tab that comes back after more than a page replaces the window, never le
  // Sixty raw messages arrive while the tab is away: the newest page no longer overlaps what was drawn, so that page is
  // replaced rather than joined to it with a gap (ADR 0030's last read still holds when the Engine does not answer).
  for(let n=0;n<30;n++) fake.settings.sessions.get(session)!.messages.push(user(5000+n*2,`New ${n*2}`),replied(5001+n*2,`New ${n*2+1}`));
+ // Scrolling back first reads a window shifted by the new messages: the newer tail is not prepended, the older page
+ // before the drawn one is.
+ await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
+ await expect(page.getByText('Message 112',{exact:true})).toBeVisible({timeout:20000});
+ await expect(page.getByText('New 10',{exact:true})).toHaveCount(0);
  await page.waitForTimeout(1100);
  await page.evaluate(()=>{ window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
  await expect(page.getByText('New 10',{exact:true})).toBeVisible({timeout:15000});

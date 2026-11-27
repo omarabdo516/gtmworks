@@ -25,9 +25,10 @@ function atOf(message?:SessionMessage) {
  const seconds=Number(message?.timestamp);
  return Number.isFinite(seconds)?new Date(seconds*1000).toISOString():new Date(0).toISOString();
 }
-/** A message's own key, short enough for the record's numeric id and stable across pages and refreshes. */
-function idOf(message:SessionMessage,index:number,offset:number) {
- const key=message?.message_uid??message?.id??`${offset}:${index}`;
+/** A message's own key, short enough for the record's numeric id and stable across pages and refreshes: the Engine's own
+ * uid or id, else the message itself (the wire fake keeps no id), so the same message is the same row on every read. */
+function idOf(message:SessionMessage) {
+ const key=message?.message_uid??message?.id??`${message?.role}:${Number(message?.timestamp)||0}:${textOf(message?.content)}:${JSON.stringify(message?.tool_calls??message?.tool_call_id??message?.display_kind??'')}`;
  return Number.parseInt(createHash('sha1').update(String(key)).digest('hex').slice(0,10),16);
 }
 /** The Engine's summary without its own marker, which names the Engine's rule rather than anything a person wrote. */
@@ -50,12 +51,12 @@ function replyText(message?:SessionMessage):string {
 // last assistant message with words, the interim narration dropped — with the tool calls that turn made beside it (never
 // matched by time), and the Engine's compaction summary as the Engine's. Tool results are read for their step's end and
 // drawn under the reply. `prefix` is the page before, when the page starts in the middle of a turn.
-/** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {SessionMessage[]} suffix @param {string} agentName @param {number} offset */
-function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:SessionMessage[],agentName:string,offset=0):PageMessage[] {
+/** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {SessionMessage[]} suffix @param {string} agentName */
+function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:SessionMessage[],agentName:string):PageMessage[] {
  const all=[...prefix,...page,...suffix];
  const shown:PageMessage[]=[];
  // The turn a message belongs to, by its first message's own key, so a page read later names the same turn.
- const turnKey=(at:number)=>String(all[at]?.message_uid??all[at]?.id??idOf(all[at],at,offset));
+ const turnKey=(at:number)=>String(all[at]?.message_uid??all[at]?.id??idOf(all[at]));
  // The last message of each turn that has words is its reply: Hermes keeps the interim narration ("Let me check…")
  // beside the call it made, and the old record showed the Run's final output alone.
  const lastText=new Map<number,number>();
@@ -71,14 +72,14 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:Sessi
   if(startsTurn(message)) turn=index;
   const body=replyText(message);
   if(message?.role==='user') {
-   if(summary.test(body)) { shown.push({id:idOf(message,index,offset),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary',turn:turnKey(turn)}); continue; }
+   if(summary.test(body)) { shown.push({id:idOf(message),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary',turn:turnKey(turn)}); continue; }
    if(message.display_kind==='hidden') continue;
-   if(body.trim()) shown.push({id:idOf(message,index,offset),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn)});
+   if(body.trim()) shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn)});
    continue;
   }
   if(message?.role==='assistant'&&lastText.get(turn)===index&&body.trim()) {
    const steps=stepsBetween(all,turn,index);
-   shown.push({id:idOf(message,index,offset),author:'agent',author_name:agentName,body,created_at:atOf(message),turn:turnKey(turn),steps:{list:steps?.list??[],seconds:steps?.seconds??null}});
+   shown.push({id:idOf(message),author:'agent',author_name:agentName,body,created_at:atOf(message),turn:turnKey(turn),steps:{list:steps?.list??[],seconds:steps?.seconds??null}});
   }
  }
  return shown;
@@ -117,7 +118,7 @@ export async function conversationMessagesPage(db:Database,company:string,found:
  if(target.state!=='found') return {state:'unreachable'};
  const read=await target.engine.sessions.messages(found.hermes_session_id,{offset,limit});
  if(read.state!=='found') return {state:read.state};
- const messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name,offset);
+ const messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name);
  const made=messages.some(message=>message.steps?.list.some(step=>step.card));
  let named=messages as ConversationMessage[];
  if(made) {
