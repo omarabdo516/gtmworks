@@ -371,13 +371,13 @@ test('--channel main installs the main image by its digest, with the two files w
 test('the main image holds what --channel main runs, and release-assets.mjs writes the two files from it', t => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/docker-compose\.install\.yml \.\/release-source\/$/m);
- assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/get\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \/app\/scripts\/engine-managed\.yml \/app\/scripts\/engine-listener-address\.py \/app\/scripts\/engine-listener-address\.sh \/app\/scripts\/engine-ssh-sync-files\.sh \/app\/scripts\/engine-codex-accounts\.sh \/app\/scripts\/engine-pool-order\.sh \.\/release-source\/scripts\/$/m);
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/get\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \/app\/scripts\/engine-managed\.yml \/app\/scripts\/engine-managed\.env \/app\/scripts\/engine-listener-address\.py \/app\/scripts\/engine-listener-address\.sh \/app\/scripts\/engine-ssh-sync-files\.sh \/app\/scripts\/engine-codex-accounts\.sh \/app\/scripts\/engine-pool-order\.sh \/app\/scripts\/engine-dashboard-theme\.yaml \/app\/scripts\/engine-dashboard-theme\.sh \.\/release-source\/scripts\/$/m);
  // /app/release-source laid out as the image holds it, run as get.sh runs it there.
  const source=mkdtempSync(join(tmpdir(),'gtmworks-release-source-'));
  t.after(()=>rmSync(source,{recursive:true,force:true}));
  mkdirSync(join(source,'scripts'));
  cpSync('docker-compose.install.yml',join(source,'docker-compose.install.yml'));
- for(const file of ['install.sh','release-assets.mjs','engine-template.yml','engine-managed.yml','engine-listener-address.py','engine-listener-address.sh','engine-ssh-sync-files.sh','engine-codex-accounts.sh','engine-pool-order.sh']) cpSync(join('scripts',file),join(source,'scripts',file));
+ for(const file of ['install.sh','release-assets.mjs','engine-template.yml','engine-managed.yml','engine-managed.env','engine-listener-address.py','engine-listener-address.sh','engine-ssh-sync-files.sh','engine-codex-accounts.sh','engine-pool-order.sh','engine-dashboard-theme.yaml','engine-dashboard-theme.sh']) cpSync(join('scripts',file),join(source,'scripts',file));
  // The release workflow builds the sandbox image first and the main image records it (Dockerfile, sandbox-image), so the
  // two arguments get.sh passes, also the command of an install from before the work sandbox, pin that sandbox (#392).
  assert.match(dockerfile,/^RUN if \[ -n "\$GTMWORKS_SANDBOX_IMAGE" \]; then printf '%s\\n' "\$GTMWORKS_SANDBOX_IMAGE" > \.\/release-source\/sandbox-image; fi$/m);
@@ -1315,7 +1315,7 @@ test('gtmworks updater: an Owner\'s request runs gtmworks update to the newest o
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
  assert.deepEqual(m.installer(),[]);
- // Asked while already on the newest: nothing to update, and the Owner is told so (#468).
+ // Asked while already on the newest: nothing to update, and an Administrator is told so (#468).
  m.setRow('button=t auto=f state=requested due=f');
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
@@ -1377,7 +1377,7 @@ test('with the button off a request is ignored; with automatic updates on the up
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
  assert.deepEqual(m.updates(),['read ']);
- // Due again with nothing newer: the update finds nothing and the state the Owners read stays as it was.
+ // Due again with nothing newer: the update finds nothing and the state an Administrators read stays as it was.
  m.setRow('button=t auto=t state=updated due=t');
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
@@ -1430,7 +1430,7 @@ test('gtmworks update-button and auto-update write the switch, gtmworks status s
  ok(m.line(['--version','v1.2.3']));
  const off=m.gtmworks(['update-button','off']);
  ok(off);
- assert.match(off.stdout,/^Update now is off: Owners see no button/m);
+ assert.match(off.stdout,/^Update now is off: Administrators see no button/m);
  const on=m.gtmworks(['auto-update','on']);
  ok(on);
  assert.match(on.stdout,/^Automatic updates are on:/m);

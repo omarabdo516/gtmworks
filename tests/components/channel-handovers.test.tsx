@@ -224,8 +224,8 @@ test('the details mark a handover that did not finish, and leave a finished one 
 // a Conversation uses (#422): the Owner gets the way to Providers, a Member is told to ask the Owner. A
 // handover that ended otherwise draws no such line.
 const noModelWords = {
- en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask the company’s Owner to connect one in Settings.' },
- ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.' },
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask an Administrator of the company to connect one in Settings.' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من أدمن الشركة يوصّل واحد من الإعدادات.' },
 } as const;
 for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a handover that ended for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'} under its row`, async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
@@ -265,7 +265,7 @@ for (const owner of [true, false]) test(`a handover whose leg ran out of credit 
  expect(line.getAttribute('data-outcome')).toBe('no-credit');
  expect(line.textContent).toContain('Ads could not reply: the company’s model key has no credit left.');
  if (owner) expect(line.querySelector('a')?.getAttribute('href')).toBe('/c/rs-learning/settings?section=models');
- else { expect(line.textContent).toContain('Ask the company’s Owner to check it in Settings.'); expect(line.querySelector('a')).toBeNull(); }
+ else { expect(line.textContent).toContain('Ask an Administrator of the company to check it in Settings.'); expect(line.querySelector('a')).toBeNull(); }
 });
 
 // #476: any Agent of the channel asks any Agent of the Company. In a channel whose one Agent is Writer, Writer asks Ads,

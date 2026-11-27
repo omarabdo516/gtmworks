@@ -48,7 +48,7 @@
   "channelShownHereMany": "{0} are shown to you in this channel only, and you can call them here. Outside the channel they stay hidden.",
   "channelSeesAgents": "Every member of the channel sees its agents and can call them here, even an agent hidden from them elsewhere. Outside the channel nothing changes.",
   "channelManagedBy": "Members and agents are added and removed by {0}.",
-  "channelByOwner": "{0} (Owner)",
+  "channelByOwner": "{0} (Administrator)",
   "channelByManager": "{0} (Manager)",
   "channelNamesLast": " and ",
   "channelChangeFailed": "Couldn’t change who is in the channel. Try again.",

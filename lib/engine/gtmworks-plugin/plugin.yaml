@@ -1,0 +1,6 @@
+name: gtmworks
+version: 1.0.0
+description: "gtmworks: the main Agent's tool that makes an Agent when an Administrator of the Company asks. Revision 6416ce035138."
+author: gtmworks
+provides_tools:
+  - gtmworks_make_agent

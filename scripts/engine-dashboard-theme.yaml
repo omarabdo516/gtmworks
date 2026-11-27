@@ -1,0 +1,55 @@
+# gtmworks's colour tokens as the Engine's own dashboard theme (#872, spec #866). Every Engine reads it from
+# <home>/dashboard-themes/gtmworks.yaml (hermes_cli/web_server_dashboard.py, _discover_user_themes), mounted read-only by
+# scripts/engine-template.yml, and scripts/engine-dashboard-theme.sh makes it the dashboard's default where none is set.
+#
+# A Hermes theme has one palette and no dark variant, so each colour holds DESIGN.md's light and dark value of one token
+# together, `light-dark(<light>, <dark>)`, and the page's colour scheme picks one: gtmworks's gate marks the dashboard's
+# page with the person's own (light, dark, or the device's: lib/engine-dashboard.mjs). Neutral greys only, as DESIGN.md's
+# Neutral Canvas Rule asks. tests/bundled-hermes.test.mjs holds every value to DESIGN.md's front matter.
+name: gtmworks
+label: gtmworks
+description: gtmworks's neutral canvas, ink and graphite, light and dark.
+palette:
+  background: "light-dark(#fafafa, oklch(0.185 0 0))"
+  midground: "light-dark(#262626, oklch(0.96 0 0))"
+  foreground: { hex: "#ffffff", alpha: 0 }
+  warmGlow: "rgba(0, 0, 0, 0)"
+  noiseOpacity: 0
+typography:
+  fontSans: '"InterVariable", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+layout:
+  radius: 8px
+colorOverrides:
+  card: "light-dark(#ffffff, oklch(0.235 0 0))"
+  cardForeground: "light-dark(#262626, oklch(0.96 0 0))"
+  popover: "light-dark(#ffffff, oklch(0.235 0 0))"
+  popoverForeground: "light-dark(#262626, oklch(0.96 0 0))"
+  primary: "light-dark(oklch(0.205 0 0), oklch(0.922 0 0))"
+  primaryForeground: "light-dark(oklch(0.985 0 0), oklch(0.205 0 0))"
+  secondary: "light-dark(#eeeeee, oklch(0.29 0 0))"
+  secondaryForeground: "light-dark(#262626, oklch(0.96 0 0))"
+  muted: "light-dark(#eeeeee, oklch(0.29 0 0))"
+  mutedForeground: "light-dark(#5c5c5c, oklch(0.74 0 0))"
+  accent: "light-dark(#ebebeb, oklch(0.29 0 0))"
+  accentForeground: "light-dark(#262626, oklch(0.96 0 0))"
+  destructive: "light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216))"
+  destructiveForeground: "light-dark(oklch(0.985 0 0), oklch(0.205 0 0))"
+  border: "light-dark(#dedede, oklch(1 0 0 / 11%))"
+  input: "light-dark(#dedede, oklch(1 0 0 / 11%))"
+  ring: "light-dark(oklch(0.708 0 0), oklch(0.556 0 0))"
+# The dashboard shows gtmworks's name where Hermes shows its own wordmark: in the sidebar and in the narrow screen's header
+# (Omar on #866, 2026-11-26). A theme can do it with its own CSS alone, which Hermes adds while the theme is active:
+# Hermes's text there is hidden and "gtmworks" drawn in its place. Hermes's other mentions of itself (the page title, its
+# sharing question, its credit) are its own text, which a theme does not reach. The selectors are the pinned dashboard's
+# own markup (hermes_cli/web_dist), checked again by Probe B at each pin bump.
+customCSS: |
+  #app-sidebar span.uppercase.text-\[1\.125rem\],
+  #root header.lg\:hidden > span.text-\[0\.95rem\] { font-size: 0 !important; }
+  #app-sidebar span.uppercase.text-\[1\.125rem\]::before,
+  #root header.lg\:hidden > span.text-\[0\.95rem\]::before {
+    content: "gtmworks";
+    font-size: 1.125rem;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  #root header.lg\:hidden > span.text-\[0\.95rem\]::before { font-size: 0.95rem; }

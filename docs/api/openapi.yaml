@@ -217,7 +217,7 @@ paths:
       summary: Revoke run keys for this card before they expire
       description: >-
         A run key calling this ends itself. A company key of the agent ends all of its live run keys for the card. Revoking the
-        agent's company grant, or an Owner revoking its company key, also ends them.
+        agent's company grant, or an Administrator revoking its company key, also ends them.
       responses:
         '200':
           description: How many run keys were revoked

@@ -108,7 +108,7 @@ async function journey(page) {
   join public.members m on m.company_id=c.id join auth.users u on u.id=m.person_id where c.slug=${quote(slug)}`);
  expect(company).toMatchObject({name:owner.company,role:'owner',email:owner.email});
  await screenshot(page,'first-run-done');
- step(`first run created the Owner ${owner.email} and the Company "${owner.company}" (/c/${slug}); the database has them as owner`);
+ step(`first run created the Administrator ${owner.email} and the Company "${owner.company}" (/c/${slug}); the database has them as owner (the Administrator Role)`);
 
  // The worker's step on an install with the bundled Engine: the Company's own profile, and Lead on it. The fake Engine
  // answers every profile with its one key, so the step is the database function the worker calls.
@@ -127,7 +127,7 @@ async function journey(page) {
  await open.click();
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}$`),{timeout:30000});
  const conversation=new URL(page.url()).pathname.split('/').pop();
- step('signed out, the Owner signed in with the password and opened the workspace on a Conversation with Lead');
+ step('signed out, the Administrator signed in with the password and opened the workspace on a Conversation with Lead');
 
  // 3. A message to Lead gets the Engine's reply in the same Conversation, and both are in the database.
  const message=`Plan the launch ${Date.now()}`;

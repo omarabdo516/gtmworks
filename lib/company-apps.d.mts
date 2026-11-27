@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AppState, CompanyApp } from './app-catalogue.mjs';
-export function readCompanyApps(db:SupabaseClient,request:{company:string}):Promise<CompanyApp[]|null>;
+export function readCompanyApps(db:SupabaseClient,request:{company:string,test?:boolean}):Promise<CompanyApp[]|null>;
+export function testCompanyApp(db:SupabaseClient,request:{company:string,app:string}):Promise<{state:AppState,agents:{id:string,state:AppState|null}[]}|null>;
 export function readAgentApps(db:SupabaseClient,request:{company:string,agent:string}):Promise<Record<string,AppState>|null>;
 export function readAgentSession(db:SupabaseClient,request:{company:string,agent:string,session:string}):Promise<{turns:import('./engine.mjs').SessionTurn[],usage:import('./engine.mjs').SessionUsage|null}|'notSeen'|null>;
 export function readChannelAgentSession(db:SupabaseClient,request:{company:string,session:string,profile:string}):Promise<{turns:import('./engine.mjs').SessionTurn[],usage:import('./engine.mjs').SessionUsage|null}|null>;

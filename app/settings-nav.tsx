@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
-import { findGroups, overlayHref, type OverlaySection, type OverlaySectionEntry } from '@/lib/settings-overlay.mjs';
+import { findGroups, leavingSections, overlayHref, type OverlaySection, type OverlaySectionEntry } from '@/lib/settings-overlay.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { SettingsIcon } from './settings-icons';
 import { GuardedSectionLink } from './settings-guard-link';
+import { holdLeave } from './settings-draft';
 
 // A key typed here belongs to the field it is typed in: a slash in a name, a note or a search is never taken from it.
 const editable = (target: EventTarget | null) => target instanceof HTMLElement && (target.isContentEditable || !!target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"], [role="combobox"], [role="searchbox"]'));
@@ -41,7 +42,11 @@ export function SettingsNav({slug,role,section,learningWaiting,agentsWaiting}:{s
  // The number beside a section: learning suggestions for an Owner or a Manager (#25), and the Agents' proposed changes
  // for an Owner (#178; design-reference: sovNavHTML's cnt), each read out as waiting for the reader's OK.
  const count=(n:number,said:string)=>n>0&&<span className="sov-count"><span aria-hidden="true">{n}</span><span className="sr-only">{t(said,n)}</span></span>;
- const item=([key,label,icon]:OverlaySectionEntry)=><GuardedSectionLink key={key} className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} current={key===section}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span>{key==='learning'?count(learningWaiting,'settingsLearningWaiting'):key==='agents'?count(agentsWaiting,'settingsAgentsWaiting'):null}</GuardedSectionLink>;
+ // A row that leaves Settings (the Company's Hermes dashboard, #869) is a plain link: the page it opens is not one of the
+ // app's, so it loads in this tab as a whole page, held like every other way out while an Agent's draft differs.
+ const item=([key,label,icon]:OverlaySectionEntry)=>leavingSections.has(key)
+  ?<a key={key} className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} onClick={event=>{ if(holdLeave(t('settingsSaveFirst'))) event.preventDefault(); }}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span></a>
+  :<GuardedSectionLink key={key} className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} current={key===section}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span>{key==='learning'?count(learningWaiting,'settingsLearningWaiting'):key==='agents'?count(agentsWaiting,'settingsAgentsWaiting'):null}</GuardedSectionLink>;
  return <div className="sov-side">
   <div className="sov-find" role="search">
    <label className="tpl-search"><ShellIcon name="search"/><span className="sr-only">{t('settingsFind')}</span>

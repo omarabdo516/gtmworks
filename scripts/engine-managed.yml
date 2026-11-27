@@ -27,3 +27,12 @@ terminal:
 # Hermes ships them, on.
 approvals:
   single_query_mode: approve
+# The tools no Agent gets (ADR 0018, lib/agent-toolsets.mjs noAgentGets), pinned so a write from the Owner's Hermes
+# dashboard (#871) cannot turn one on: the dashboard's toolset switch takes a toolset it turns on out of the profile's
+# disabled list (hermes_cli/tools_config.py _save_platform_tools), and its config pages write any key. This list is
+# applied after everything else (tools_config.py _get_platform_tools), and a managed key is never saved into a profile,
+# so it is every profile's whole list: each Agent's own tools stay its own in its platform list
+# (platform_toolsets.api_server), which gtmworks writes and the dashboard changes.
+# The board's tools (kanban) are not here: every Agent gets them, a board worker included (spec #831).
+agent:
+  disabled_toolsets: [browser, tts, video, video_gen, project, desktop_ui, catalog, onboarding, connections]

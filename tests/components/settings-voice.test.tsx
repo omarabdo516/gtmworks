@@ -90,7 +90,7 @@ test('on Deepgram there is no model row, Arabic is Egyptian and the other Arabic
 test('a Manager reads every option with no control, and the line says only the Owner changes them', async () => {
  const sent = engine(voice({ language: '', prompt: 'gtmworks', trimSilence: false }));
  const screen = await voicePage(false);
- await expect.element(screen.getByText('Only the Owner changes these.')).toBeVisible();
+ await expect.element(screen.getByText('Only an Administrator changes these.')).toBeVisible();
  await expect.element(screen.getByText('Automatic')).toBeVisible();
  await expect.element(screen.getByText('gtmworks')).toBeVisible();
  expect(screen.getByRole('combobox').query()).toBeNull();

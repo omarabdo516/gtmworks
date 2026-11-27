@@ -932,6 +932,8 @@ async function ownProfiles(profile:string) {
  hermes.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'};
  hermes.settings.defaultCredentials['openai-codex']='root-codex-token';
  const fake=fakeEngine();
+ // The Runs are the in-process fake's; the lane's worker reads them from the lane's Engine, which holds them too (#889).
+ hermes.settings.heldElsewhere=run=>fake.runs.some(each=>each.id===run);
  const engineFor=(connection:{address:string,profile:string,key:string})=>{
   const driver=driverFor({...connection,address:hermes.address,managementAddress:hermes.managementAddress});
   return {...fake.engineFor(connection),readAgent:driver.readAgent,provideAgent:driver.provideAgent,removeAgent:driver.removeAgent};
