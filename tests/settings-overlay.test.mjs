@@ -9,7 +9,7 @@ import { messages } from '../lib/i18n.mjs';
 // account and About stand on their own at the end.
 test('the overlay lists its sections in groups, Backups, Your account and About on their own at the end', () => {
   assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'voice', 'usage', 'hermes', 'backup', 'account', 'about']);
-  assert.deepEqual(overlayGroups('owner').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [
+  assert.deepEqual(overlayGroups('owner', true).map(({ group, sections }) => [group, sections.map(([key]) => key)]), [
     ['company', ['company', 'members', 'knowledge']],
     ['agents', ['agents', 'learning', 'routines', 'apps']],
     ['engine', ['models', 'voice', 'usage', 'hermes']],
@@ -24,7 +24,7 @@ test('a Viewer sees only the Agents, their account and About; Usage is the Owner
   assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account', 'about']);
   assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'account', 'about']);
   assert.deepEqual(visibleSections('manager').map(([key]) => key), overlaySections.map(([key]) => key).filter(key => key !== 'backup' && key !== 'hermes'));
-  assert.deepEqual(visibleSections('owner').map(([key]) => key), overlaySections.map(([key]) => key));
+  assert.deepEqual(visibleSections('owner', true).map(([key]) => key), overlaySections.map(([key]) => key));
   // A group none of whose pages the person may open is not drawn at all.
   assert.deepEqual(overlayGroups('viewer').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [['agents', ['agents']], [null, ['account', 'about']]]);
   assert.deepEqual(overlayGroups('contributor').find(({ group }) => group === 'engine').sections.map(([key]) => key), ['models']);
@@ -38,7 +38,8 @@ test('the breadcrumb names the group of the open page, and nothing for a page on
 });
 
 test('the Owner alone sees Backup (#33)', () => {
-  assert.equal(visibleSections('owner').length, 14);
+  assert.equal(visibleSections('owner', true).length, 14);
+  assert.equal(visibleSections('owner').length, 13);
   for (const role of ['manager', 'contributor', 'viewer']) {
     assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
     assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
@@ -46,15 +47,15 @@ test('the Owner alone sees Backup (#33)', () => {
   assert.equal(pickSection('backup', 'owner'), 'backup');
 });
 
-// #869: the Company's Hermes dashboard is one row in the Engine group, the Owner's alone, and leaves Settings for the
-// dashboard's own path instead of opening a section; a request for it opens no section.
-test('the Hermes row is the Owner\'s alone and leaves Settings for the Company\'s dashboard', () => {
-  for (const role of ['manager', 'contributor', 'viewer']) assert.ok(!visibleSections(role).some(([key]) => key === 'hermes'), role);
-  assert.ok(visibleSections('owner').some(([key]) => key === 'hermes'));
+// #869: the Company's Hermes dashboard is one row in the Engine group, the install owner's alone (#915), and leaves
+// Settings for the dashboard's own path instead of opening a section; a request for it opens no section.
+test('the Hermes row leaves Settings for the Company\'s dashboard', () => {
+  for (const role of ['manager', 'contributor', 'viewer']) assert.ok(!visibleSections(role, true).some(([key]) => key === 'hermes'), role);
+  assert.ok(visibleSections('owner', true).some(([key]) => key === 'hermes'));
   assert.equal(overlayHref('rs-learning', 'hermes'), '/c/rs-learning/hermes');
   for (const role of ['owner', 'manager', 'viewer']) assert.notEqual(pickSection('hermes', role), 'hermes', role);
-  assert.deepEqual(findSections('gtmworks', 'owner', key => messages.en[key]).map(([key]) => key), ['hermes']);
-  assert.deepEqual(findSections('hermes', 'manager', key => messages.en[key]), []);
+  assert.deepEqual(findSections('advanced', 'owner', key => messages.en[key], true).map(([key]) => key), ['hermes']);
+  assert.deepEqual(findSections('advanced', 'manager', key => messages.en[key], true), []);
 });
 
 test('a request opens the section asked for only when the person may see it, else their first one', () => {
@@ -209,9 +210,27 @@ test('a search keeps the sidebar\'s groups (#612): a group named by the search k
   const en = key => messages.en[key];
   const shape = groups => groups.map(({ group, sections }) => [group, sections.map(([key]) => key)]);
   assert.deepEqual(shape(findGroups('', 'owner', en)), shape(overlayGroups('owner')));
-  assert.deepEqual(shape(findGroups('engine', 'owner', en)), [['engine', ['models', 'voice', 'usage', 'hermes']]]);
+  assert.deepEqual(shape(findGroups('engine', 'owner', en, true)), [['engine', ['models', 'voice', 'usage', 'hermes']]]);
+  assert.deepEqual(shape(findGroups('engine', 'owner', en)), [['engine', ['models', 'voice', 'usage']]]);
   assert.deepEqual(shape(findGroups('engine', 'contributor', en)), [['engine', ['models']]]);
   assert.deepEqual(shape(findGroups('engine', 'viewer', en)), []);
   assert.deepEqual(shape(findGroups('knowledge', 'owner', en)), [['company', ['knowledge']]]);
   assert.deepEqual(shape(findGroups('a', 'viewer', en)), shape(overlayGroups('viewer')).filter(([, keys]) => keys.length));
+});
+
+// #915 (decision 0081): the row that opens the Engine's own dashboard is the install owner's alone, and only where they
+// are an Administrator. Every other Administrator sees gtmworks's own settings and no such row, in the list or a search.
+test('the Engine dashboard row is shown only to an Administrator who is the install owner', () => {
+  const t = key => messages.en[key] ?? key;
+  assert.ok(visibleSections('owner', true).some(([key]) => key === 'hermes'));
+  for (const [role, installOwner] of [['owner', false], ['owner', undefined], ['manager', true], ['contributor', true], ['viewer', true]]) {
+    assert.ok(!visibleSections(role, installOwner).some(([key]) => key === 'hermes'), `${role} ${installOwner}`);
+    assert.ok(!findSections('logs', role, t, installOwner).some(([key]) => key === 'hermes'), `${role} ${installOwner} search`);
+  }
+  assert.deepEqual(findSections('logs', 'owner', t, true).map(([key]) => key), ['hermes']);
+  // Backup stays every Administrator's (#33).
+  assert.ok(visibleSections('owner', false).some(([key]) => key === 'backup'));
+  // It reads as a technical tool, in both languages, and never names the Engine (#286).
+  assert.equal(messages.en.settingsEngineDashboard, 'Engine logs and system (advanced)');
+  assert.equal(messages.ar.settingsEngineDashboard, 'سجلات المحرك والنظام (متقدم)');
 });

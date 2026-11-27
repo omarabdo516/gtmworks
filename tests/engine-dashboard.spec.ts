@@ -5,7 +5,7 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
-// #869 (spec #866): an Owner opens "gtmworks" from Settings and is in their Company's own Hermes dashboard, served by the
+// #869 (spec #866): the install owner (#915, decision 0081), an Owner, opens the dashboard from Settings and is in their Company's own Hermes dashboard, served by the
 // fake Engine's small dashboard (tests/fake-hermes.mjs dashboardAnswer) under /c/<slug>/hermes through gtmworks's gate:
 // its first page, a page whose code is loaded lazily from the root /assets/, an API route and a socket. A Manager, a
 // Contributor, a Viewer, an Owner of another Company only and a signed-out person each get the missing page there, on a
@@ -16,6 +16,8 @@ const aleem='10000000-0000-0000-0000-000000000003';
 const multi='20000000-0000-0000-0000-000000000005';
 const key='test-only-key';
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
+// The Settings row that opens it (#915): named as a technical tool, the install owner's alone.
+const row='Engine logs and system (advanced)';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 
 test.describe.configure({mode:'serial'});
@@ -48,13 +50,13 @@ test('an Owner opens Hermes from Settings, its inner page and its live socket lo
  const answers:{url:string,headers:Record<string,string>,body:string}[]=[];
  page.on('response',async response=>{ try { answers.push({url:response.url(),headers:response.headers(),body:(await response.body()).toString('latin1')}); } catch { /* a redirect or a socket has no body */ } });
  await signIn(page,'omar@example.com','/c/rs-learning/settings');
- const row=page.locator('#sov-nav').getByRole('link',{name:'gtmworks',exact:true});
- await expect(row).toBeVisible();
+ const link=page.locator('#sov-nav').getByRole('link',{name:row,exact:true});
+ await expect(link).toBeVisible();
  // In the existing row style, in the Engine group.
- await expect(row).toHaveClass(/sb-item sov-nav__i/);
- await expect(page.locator('#sov-nav-l-engine').locator('..').getByRole('link',{name:'gtmworks',exact:true})).toBeVisible();
+ await expect(link).toHaveClass(/sb-item sov-nav__i/);
+ await expect(page.locator('#sov-nav-l-engine').locator('..').getByRole('link',{name:row,exact:true})).toBeVisible();
  const pages=page.context().pages().length;
- await row.click();
+ await link.click();
  // The same tab.
  await expect(page).toHaveURL(/\/c\/rs-learning\/hermes\/?$/);
  expect(page.context().pages().length).toBe(pages);
@@ -160,7 +162,7 @@ for(const [who,email] of [['a Manager','manager@example.com'],['a Contributor','
   if(email) {
    await signIn(page,email,'/c/rs-learning/settings');
    await expect(page.locator('#sov-nav')).toBeVisible();
-   await expect(page.locator('#sov-nav').getByRole('link',{name:'gtmworks',exact:true})).toHaveCount(0);
+   await expect(page.locator('#sov-nav').getByRole('link',{name:row,exact:true})).toHaveCount(0);
   } else await page.goto('/sign-in');
   const missing=await missingAnswer(page.request,'/c/no-such-company/hermes');
   expect(missing.status).toBe(404);
@@ -176,12 +178,36 @@ for(const [who,email] of [['a Manager','manager@example.com'],['a Contributor','
 }
 
 test('an Owner\'s own Company only: a code file asked for from another Company\'s dashboard page is the missing page',async({page})=>{
+ // multi is made the install owner here, so the one thing refused is the Company they are no Administrator of.
+ query(`update public.install_owner set person_id='${multi}'`);
+ try {
+  await signIn(page,'multi@example.com','/c/aleem/settings');
+  // multi owns Aleem: its dashboard opens for them.
+  await page.goto('/c/aleem/hermes/');
+  await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
+  const missing=await missingAnswer(page.request,'/c/no-such-company/hermes');
+  expect(await missingAnswer(page.request,'/assets/sessions.js',{referer:new URL('/c/rs-learning/hermes/',page.url()).href})).toEqual(missing);
+  expect(await missingAnswer(page.request,'/assets/sessions.js')).toEqual(missing);
+  expect(await socketOpens(page,'/c/rs-learning/hermes/api/ws?ticket=any')).toBe(false);
+ } finally { query(`update public.install_owner set person_id='${owner}'`); }
+});
+
+// #915 (decision 0081): every setting is drawn in gtmworks, and the Engine's own dashboard is the install owner's alone.
+// An Administrator who is not the install owner sees gtmworks's own settings and no row, and their own Company's
+// dashboard is the missing page to them, on its page, its code, its API and its socket.
+test('an Administrator who is not the install owner has no row and gets the missing page on their own Company\'s dashboard',async({page})=>{
  await signIn(page,'multi@example.com','/c/aleem/settings');
- // multi owns Aleem: its dashboard opens for them.
- await page.goto('/c/aleem/hermes/');
- await expect(page.getByRole('heading',{name:'Hermes dashboard'})).toBeVisible();
+ await expect(page.locator('#sov-nav')).toBeVisible();
+ await expect(page.locator('#sov-nav').getByRole('link',{name:'Backup'})).toBeVisible();
+ await expect(page.locator('#sov-nav').getByRole('link',{name:row,exact:true})).toHaveCount(0);
+ await page.locator('#sov-find').fill('advanced');
+ await expect(page.locator('#sov-nav').getByRole('link',{name:row,exact:true})).toHaveCount(0);
  const missing=await missingAnswer(page.request,'/c/no-such-company/hermes');
- expect(await missingAnswer(page.request,'/assets/sessions.js',{referer:new URL('/c/rs-learning/hermes/',page.url()).href})).toEqual(missing);
- expect(await missingAnswer(page.request,'/assets/sessions.js')).toEqual(missing);
- expect(await socketOpens(page,'/c/rs-learning/hermes/api/ws?ticket=any')).toBe(false);
+ expect(missing.status).toBe(404);
+ const before=fake.settings.dashboardRequests.length;
+ for(const path of ['/c/aleem/hermes','/c/aleem/hermes/sessions','/c/aleem/hermes/api/status'])
+  expect(await missingAnswer(page.request,path),path).toEqual(missing);
+ expect(await missingAnswer(page.request,'/assets/sessions.js',{referer:new URL('/c/aleem/hermes/sessions',page.url()).href})).toEqual(missing);
+ expect(await socketOpens(page,'/c/aleem/hermes/api/ws?ticket=any')).toBe(false);
+ expect(fake.settings.dashboardRequests.length).toBe(before);
 });

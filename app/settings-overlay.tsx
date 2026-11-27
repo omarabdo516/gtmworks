@@ -59,6 +59,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // ?agent=<id> alone opens that Agent's page.
  const section=pickSection(query.section??(query.agent?'agents':undefined),role);
  const owner=role==='owner', canManage=owner||role==='manager', canWrite=role!=='viewer';
+ // The Engine dashboard's row is the install owner's alone (#915): asked only of an Administrator, and a failed read is no.
+ const installOwner=owner&&(await db.rpc('is_install_owner')).data===true;
  const needAgents=['members','agents'].includes(section);
  const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id).order('name')).data||[]):[];
  const members:Member[]=section==='members'?orderMembers(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]):[];
@@ -130,7 +132,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsParts company={company.id} companyName={company.name} owner={owner} names={names} order={order} fallback={fallback} asked={readAt}/>}/>;
  // Nothing is left to wait for: the page's first bytes leave next.
  markSettingsOpen('firstByte');
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}><PartsReader person={userId}/>{page}</OverlayChrome>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} installOwner={installOwner} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}><PartsReader person={userId}/>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".

@@ -8,7 +8,7 @@ import { SettingsNav } from './settings-nav';
 // The overlay's bar, its section list with its search (settings-nav.tsx) and the place of the open section (reference:
 // dialog#sov), around the section the server drew. It imports no server code, so a component test renders the overlay
 // as the server does (#218).
-export function OverlayChrome({t,slug,companyName,role,readOnly,section,learningWaiting,agentsWaiting=0,initialFocus,children}:{t:I18n['t'],slug:string,companyName:string,role:string,readOnly:boolean,section:OverlaySection,learningWaiting:number,agentsWaiting?:number,initialFocus?:string,children:ReactNode}) {
+export function OverlayChrome({t,slug,companyName,role,installOwner=false,readOnly,section,learningWaiting,agentsWaiting=0,initialFocus,children}:{t:I18n['t'],slug:string,companyName:string,role:string,installOwner?:boolean,readOnly:boolean,section:OverlaySection,learningWaiting:number,agentsWaiting?:number,initialFocus?:string,children:ReactNode}) {
  // The breadcrumb (#612): Settings › the open page's group › the page, the last crumb the page itself.
  const page=overlaySections.find(([key])=>key===section)?.[1];
  // A page named as its group (Company, Agents) is one crumb, not the same word twice.
@@ -25,7 +25,7 @@ export function OverlayChrome({t,slug,companyName,role,readOnly,section,learning
    <CloseButton/>
   </header>
   <div className="sov__body">
-   <SettingsNav slug={slug} role={role} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting}/>
+   <SettingsNav slug={slug} role={role} installOwner={installOwner} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting}/>
    <div className="sov-main" id="sov-main"><div className={`sov-page sov-page--${section}`}>{children}</div></div>
   </div>
  </OverlayFrame>;

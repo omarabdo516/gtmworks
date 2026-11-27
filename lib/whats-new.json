@@ -1,5 +1,11 @@
 [
  {
+  "issue": 915,
+  "date": "2026-11-27",
+  "en": { "title": "Settings stay in gtmworks", "body": "Every setting is in gtmworks's own Settings; the row that opened the Engine's own dashboard is now «Engine logs and system (advanced)», for the install owner alone." },
+  "ar": { "title": "الإعدادات كلها جوه gtmworks", "body": "كل الإعدادات بقت في إعدادات gtmworks نفسها؛ والسطر اللي كان بيفتح لوحة المحرّك بقى اسمه «سجلات المحرك والنظام (متقدم)»، ولصاحب التثبيت بس." }
+ },
+ {
   "issue": 834,
   "date": "2026-11-27",
   "en": { "title": "The board is your Engine's own Kanban board", "body": "The board now shows the Cards your Agents work on the Company's Engine, and it updates live as they move; make a Card and give it to an Agent, a Member or nobody, open it to see everything the Engine keeps about it, comment, answer its Agent or stop its work, and Waiting on you and the bell show the Cards that wait on you; the list and the calendar show the same Cards." },

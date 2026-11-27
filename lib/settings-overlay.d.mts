@@ -1,12 +1,12 @@
 export type OverlayIcon = 'building' | 'team' | 'bot' | 'book' | 'bulb' | 'cpu' | 'plug' | 'repeat' | 'gauge' | 'archive' | 'user' | 'info' | 'mic' | 'monitor';
 export type OverlaySection = 'company' | 'members' | 'knowledge' | 'agents' | 'learning' | 'routines' | 'apps' | 'models' | 'voice' | 'usage' | 'hermes' | 'backup' | 'account' | 'about';
 export type OverlayGroup = 'company' | 'agents' | 'engine';
-export type OverlaySectionEntry = readonly [OverlaySection, string, OverlayIcon, boolean, OverlayGroup | null, boolean?];
+export type OverlaySectionEntry = readonly [OverlaySection, string, OverlayIcon, boolean, OverlayGroup | null, ('owner' | 'installOwner')?];
 export const overlaySections: readonly OverlaySectionEntry[];
-export function visibleSections(role: string): OverlaySectionEntry[];
-export function overlayGroups(role: string): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
-export function findGroups(query: unknown, role: string, t: (key: string) => string): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
-export function findSections(query: unknown, role: string, t: (key: string) => string): OverlaySectionEntry[];
+export function visibleSections(role: string, installOwner?: boolean): OverlaySectionEntry[];
+export function overlayGroups(role: string, installOwner?: boolean): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
+export function findGroups(query: unknown, role: string, t: (key: string) => string, installOwner?: boolean): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
+export function findSections(query: unknown, role: string, t: (key: string) => string, installOwner?: boolean): OverlaySectionEntry[];
 export function sectionGroup(key: OverlaySection): { group: OverlayGroup, label: string } | null;
 export const leavingSections: ReadonlySet<OverlaySection>;
 export function pickSection(requested: unknown, role: string): OverlaySection;

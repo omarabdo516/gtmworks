@@ -22,7 +22,7 @@ beforeEach(() => document.addEventListener('click', keep));
 afterEach(() => { document.removeEventListener('click', keep); opened.length = 0; push.mockReset(); });
 
 const settings = (language: Language, role = 'owner') => render(<LanguageProvider language={language}>
- <OverlayChrome t={i18n(language).t} slug="rs-learning" companyName="RS Learning" role={role} readOnly={role !== 'owner'} section="account" learningWaiting={0}>
+ <OverlayChrome t={i18n(language).t} slug="rs-learning" companyName="RS Learning" role={role} installOwner readOnly={role !== 'owner'} section="account" learningWaiting={0}>
   <label>{language === 'ar' ? 'ملاحظة' : 'Note'}<input/></label>
  </OverlayChrome>
 </LanguageProvider>);

@@ -1,0 +1,1 @@
+| `install-owner-migration.mjs` | replays the #915 migration's statement that records the install owner of an install set up before it: the install's first account, the one first-run made, is the install owner, and an Administrator who came later is not (tests/db.sh) | — | supabase/tests/install_owner.sql (first-run records it; who may read it) | helper, new |

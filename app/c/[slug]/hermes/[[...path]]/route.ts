@@ -4,7 +4,7 @@ import { routePermission } from '@/lib/route-permissions.mjs';
 import { dashboardAnswer } from '@/lib/engine-dashboard.mjs';
 
 // The Company's own Hermes dashboard (#869): every page, API route and code file under /c/<slug>/hermes, for an active
-// Owner of that Company only, and the missing page for everyone else (lib/engine-dashboard.mjs, the gate). Its sockets
+// Owner of that Company who is the install owner only (#915), and the missing page for everyone else (lib/engine-dashboard.mjs, the gate). Its sockets
 // are the web server's (scripts/web-server.mjs).
 export const dynamic='force-dynamic';
 async function answer(request:NextRequest,{params}:{params:Promise<{slug:string}>}) {
