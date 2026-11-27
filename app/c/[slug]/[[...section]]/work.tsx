@@ -100,7 +100,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const items=(p.waiting||[]).filter(item=>!asCard(item));
  // On "Waiting on you" (/approvals) the column is the reader's own list (the same source as the count): the Cards of the
  // Company's Engine board that wait on them, worked out from the board read in the browser and following it live (#841),
- // then their items, exactly as waiting_list returns them, newest first. The old board's Cards are no part of it: its
+ // and their items, exactly as waiting_list returns them, newest first. The old board's Cards are no part of it: its
  // approvals are left out, and a chat's question, hand or permission request is drawn on its own row.
  const ownList=p.focus==='waiting';
  const engineWaiting=useWaitingCards(ownList?p.company:'');
@@ -409,7 +409,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     if(column==='waiting'&&ownList) {
      // The reader's own list: everything the mentions name first, under "Mentions of you" with its count, then what needs
      // their reply, as the board's column draws it (design-reference: mentionGroupHTML above the Cards).
-     // The board's Cards that wait on the reader come first, in the board's order, each opening over the board (#841).
+     // What needs a reply starts with the board's Cards that wait on the reader, in the board's order, each opening over
+     // the board (#841).
      const mentions=ownEntries.filter(entry=>entry.item.kind==='mention'||entry.item.kind==='channel_mention');
      const replies=ownEntries.filter(entry=>!mentions.includes(entry));
      const engineCards=engineWaiting??[];

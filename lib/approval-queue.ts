@@ -29,8 +29,8 @@ export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by
 // board leaves out, and how many things wait (`count`), a Card once with its approval and its chat's question or hand
 // (#146).
 // Since spec #831 the Cards that wait are the Engine's board's, worked out from the board read in the browser (#841,
-// app/board-read.ts useWaitingCards): Waiting on you and the sidebar's count take the old board's approvals out of this list and draw
-// a chat's question, hand or permission request on its own row (`rows`, how many of those wait).
+// useWaitingCards in app/board-read.ts): Waiting on you and the sidebar's count take the old board's approvals out of
+// this list and draw a chat's question, hand or permission request on its own row (`rows`, how many of those wait).
 // The role is no part of the read's key: the database reads it from the session, so a page may start the read before it
 // knows the role (the chat does) and its parts find the same read.
 export const approvalQueue=(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role?:string)=>{ void role; return queue(db,company,person); };
