@@ -1,5 +1,11 @@
 [
  {
+  "issue": 950,
+  "date": "2026-11-27",
+  "en": { "title": "Invite links", "body": "An Administrator makes an invite link on the Team page with the person's name, their Role and the Agents they will see, and sends it any way they like; the person opens it, types their name, email and password, and lands in the Company signed in. A link works once and ends after 7 days." },
+  "ar": { "title": "لينكات الدعوة", "body": "الأدمن بيعمل لينك دعوة من صفحة الفريق باسم الشخص ودوره والوكلاء اللي هيشوفهم، ويبعته بأي طريقة تعجبه؛ والشخص يفتحه ويكتب اسمه وإيميله وكلمة السر، ويدخل الشركة على طول. اللينك بيشتغل مرة واحدة وبيخلص بعد 7 أيام." }
+ },
+ {
   "issue": 846,
   "date": "2026-11-27",
   "en": { "title": "The old board is gone", "body": "Waiting on you is the board opened on its first column, holding the Cards that wait on you and your other rows; Home shows the Card each Agent works on now, what waits on you and the Cards made last, all from the board; an Agent's Tasks are its Cards on the board; the old Card pages, their notes, Work settings and the sidebar's Recent list are gone, and old links to a Card open the board." },

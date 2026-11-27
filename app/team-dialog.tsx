@@ -5,6 +5,7 @@ import { leave } from '@/lib/motion';
 import { inviteRoles } from '@/lib/member-roles.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { InviteSection } from './invite-section';
+import { InviteLinkSection, type MakeLink } from './invite-link-section';
 import { TeamTable, type SendInvite, type SaveSwitch, type TeamData } from './team-table';
 import './settings.css';
 import './team-dialog.css';
@@ -15,7 +16,7 @@ import './team-dialog.css';
 // A Company worked alone gets the narrower form: the Owner's own row, the invite form already open and the note on what
 // joining turns on. The data is read by the server for an Owner or a Manager only, so the dialog holds nothing else; a
 // refused read closes it.
-export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,saveInvitation:SaveSwitch,invite:SendInvite};
+export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,saveInvitation:SaveSwitch,invite:SendInvite,makeLink:MakeLink};
 
 const leaveMs=190;
 
@@ -64,9 +65,10 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
     <ul className="panel-card" aria-label={t('teamSoloMembers')}><li className="panel-row"><span className="me__av pp-av" aria-hidden="true">{(personName.trim().slice(0,1)||'?').toUpperCase()}</span>
      <span className="panel-row__text"><span className="panel-row__t"><bdi>{personName}</bdi> <span className="ch-you">{t('settingsYouMark')}</span></span><span className="panel-row__d">{role} · {t('teamSoloOwnerD')}</span></span></li></ul>
     {owner&&<InviteSection mode="alone" roles={inviteRoles(t)} send={invite}/>}
+    {owner&&data&&<InviteLinkSection agents={data.agents.filter(agent=>!agent.is_default)} make={actions.makeLink}/>}
     <p className="inv-note"><ShellIcon name="team"/><span>{t('settingsModeAloneD')}</span></p>
    </div>
-   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} invitations={data.invitations} agents={data.agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} save={actions.save} saveInvitation={actions.saveInvitation} send={invite}/>}</div>}
+   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} invitations={data.invitations} agents={data.agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} save={actions.save} saveInvitation={actions.saveInvitation} send={invite} makeLink={actions.makeLink}/>}</div>}
    <footer className="modal__foot modal__foot--end"><button type="button" className={alone?'btn btn--secondary':'btn btn--primary'} onClick={requestClose}>{t('teamDone')}</button></footer>
   </div>
  </dialog>;
