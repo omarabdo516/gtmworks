@@ -126,13 +126,13 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   matrix entry per area of the repo's proof, each on a fresh isolated Docker machine of its own and named for its area
   (#406): `install-first-install` (the first install and its repeat), `install-companies` (Companies and their Engines,
   #407), `install-agents` (Agents on their Engines, #408), `install-agents-sandbox` (an Agent's work in its Company's
-  sandbox, #553), `install-open-design` (the Open Design app, #544), `install-backup` (backup and restore, #409), `install-backup-engines` (every Company's Engine backed up
+  sandbox, #553), `install-backup` (backup and restore, #409), `install-backup-engines` (every Company's Engine backed up
   and restored, #553),
-  `install-proxy` (the public address behind a proxy), `install-rollback` (a failed update rolled back, #389),
+  `install-proxy` (the public address behind a proxy, and an Agent working a Card on the Engine's own Kanban board, moved there by #911), `install-rollback` (a failed update rolled back, #389),
   `install-update` (the update between releases), `install-previous-archive` (the previous release's own archive restored, #389), `install-release-update` (the latest published release, read from the releases list on every run, installed from its own two files and updated to this one, #483), `install-sandbox-update` (an install the release before the work sandbox made, with two Companies, updated to this one, #397), `install-staged-update` (the staged removal of Agent levels, ADR 0023), `install-sandbox-rollback` (a failed update of an install with two sandbox-enabled Companies rolled back, each Engine reaching its own sandbox over SSH again, #504, and the install recording the release that keeps serving, so backup runs with that release's files, #583), `install-sizes` (the measured sizes: idle memory, one short render at the default sandbox limits, and a render stopped at a low limit while the other Company's sandbox answers, #400), `install-engines-update` (a release that pins another Engine
   image, #389) and
   `install-one-line` (the one-line install). Each entry is one command of the repo, `bash scripts/ci-install-check.sh
-  <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`, `./ci.sh install agents-sandbox`, `./ci.sh install open-design`,
+  <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`, `./ci.sh install agents-sandbox`,
   `./ci.sh install backup`, `./ci.sh install backup-engines`, `./ci.sh install proxy`, `./ci.sh install rollback`, `./ci.sh install update`, `./ci.sh install previous-archive`, `./ci.sh install release-update`, `./ci.sh install sandbox-update`, `./ci.sh install staged-update`, `./ci.sh install sandbox-rollback`, `./ci.sh install sizes`, `./ci.sh install engines-update` and `./ci.sh install one-line` each run one
   area, and `./ci.sh install` runs the whole proof (`docs/agents/checks.md`) — and holds no check of its own, so a red
   entry's name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A new area is one more

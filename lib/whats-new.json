@@ -1,5 +1,11 @@
 [
  {
+  "issue": 911,
+  "date": "2026-11-27",
+  "en": { "title": "A smaller work sandbox to download", "body": "The work sandbox every Company's Agents work in no longer carries Open Design, so it is about half a gigabyte smaller and a first install or an update downloads less; Open Design is still yours to run and connect from Apps." },
+  "ar": { "title": "صندوق شغل أصغر في التنزيل", "body": "صندوق الشغل اللي وكلاء كل شركة بيشتغلوا فيه مبقاش شايل Open Design، فبقى أصغر بحوالي نص جيجا، وأول تنزيلة أو التحديث بينزّلوا أقل؛ و Open Design لسه تقدر تشغّله وتوصّله من التطبيقات." }
+ },
+ {
   "issue": 910,
   "date": "2026-11-27",
   "en": { "title": "Connect the Open Design you run", "body": "Open Design is no longer built into gtmworks: put it in your Company's work sandbox and start it as the guide on its page says, then pick Open Design in Apps, and the command form opens with its command filled in; Test lists its tools, Add turns it on for the Agents you pick, and it draws with the model you set up inside Open Design." },

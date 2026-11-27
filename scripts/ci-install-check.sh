@@ -1056,74 +1056,6 @@ engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps write
 scan_engines
 }
 
-# open-design: the area that carried the Open Design app (#544), which is no longer shipped (decision 0079, ADR 0035): an
-# Owner connects their own Open Design as a command server, which the agents area proves for any command (ADR 0024). It
-# now holds only the Engine's Kanban board proof (spec #831, #833), moved here from agents-sandbox, which it took past its
-# 12 minutes; #911 moves that proof to an area that stays and removes this one. The install, its first run and the second
-# Company are made as the agents area makes them, and the area makes the first Company's second Agent as agents-sandbox does.
-open_design() {
-cd "$root"
-area_setup
-reset_install
-install_source open-design-install.log || fail 'first install'
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
-engine_id=$(first_engine_id) || fail 'the Engine container'
-engine_key=$(first_engine_key)
-# The Engine answers a Run with no subscription through the fake model provider served from the web container (#378).
-point_engine_at_fake_model "$engine_id"
-second_company || fail 'company add makes the second Company'
-engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with the work tools on, each with one shared space'
-first=$(tail -n 1 prepare-profiles.log)
-[[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
-sandbox=gtmworks-sandbox-first
-# The Engine's own Kanban board (spec #831, #833, ADR 0033 item 2), with settings alone and the image unmodified: every
-# Engine of the install, the new Company's included, holds the board worker's setting in its managed scope and the short
-# temp folder its ssh control socket needs (engine_board_settings). On the first
-# Company's Engine, once the area has made its second Agent as agents-sandbox does, a Card given to that Agent is started
-# by the dispatcher after one tick the check asks for, runs a command that writes in the work sandbox and a command the
-# Engine marks dangerous, stops on a question, goes on after a person's comment and a move to ready, is sent for review,
-# returned to the same Agent and passed; the main Agent, in a Run started through the Run API, makes a Card for the
-# second Agent with the Engine's own tool; and a Card in triage is watched for two dispatcher ticks. The job reads the
-# host's Docker for where the worker's files landed. The step prints a line as each phase ends and holds a deadline of
-# its own inside the area's minutes, so a slow Engine fails here with how far it got and the Engine's board log, never at
-# the job's limit with nothing said.
-engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail "the first Company's second Agent moves to a profile of its own"
-for folder in .engines/*/; do
-  name=$(engine_value "$folder" NAME)
-  engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
-  sandbox_card_files "$name" || fail "the work sandbox of the Engine $name holds its Kanban attachments folder read-only at the Engine's path"
-done
-kanban_marker="kanban-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-engine_node "$engine_key" - kanban "$kanban_marker" < scripts/check-install-profiles.mjs | tee kanban-proof.log \
-  || { docker exec "$engine_id" sh -c 'grep -hiE "kanban|dispatch" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 40' >&2 || true
-       fail "an Agent works a Card on the Engine's own board in the Company's work sandbox"; }
-kanban_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
-[[ -n $kanban_host && $kanban_host == "$(docker exec "$sandbox" hostname)" ]] || fail "a board worker's command runs in the Company's work sandbox"
-[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-card.txt") == "$kanban_marker-card" ]] || fail "a board worker's command wrote in the Company's work folder"
-docker exec "$sandbox" test -d "/tmp/$kanban_marker-danger" -a ! -e "/tmp/$kanban_marker-danger/gone" \
-  || fail "a board worker's dangerous command ran in the work sandbox"
-# A person's file on Card A (#843): the worker opened it in the sandbox at the path the Engine named and copied it into the
-# work folder, and its write beside it failed, so neither the sandbox nor the Engine holds the file it tried to plant.
-kanban_file=$(sed -n 's/.*"attachment_path":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
-[[ $kanban_file == /opt/data/kanban/attachments/* ]] || fail "the Engine named a person's file on a Card by its path in its attachments folder"
-[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt") == "$kanban_marker-attachment" ]] \
-  || { docker exec "$sandbox" ls -ln "$(dirname "$kanban_file")" >&2 || true; fail "a board worker opened a person's file on its Card from inside the work sandbox"; }
-grep -q '"attachment_write":"refused"' kanban-proof.log || fail "a board worker's write to the Kanban attachments folder fails from the sandbox"
-for container in "$sandbox" "$engine_id"; do
-  if docker exec "$container" test -e "$(dirname "$kanban_file")/$kanban_marker-planted"; then fail "a board worker planted a file in the Kanban attachments folder"; fi
-done
-# Nothing of the worker's is on the Engine's own disk outside its Kanban folders; the work folder the Engine reads, read
-# only, is the sandbox's own.
-engine_left=$(docker exec "$engine_id" sh -c 'find / \( -path /proc -o -path /sys -o -path /dev -o -path /opt/data/kanban -o -path /opt/data/work \) -prune -o -name "$1*" -print 2> /dev/null; true' sh "$kanban_marker") \
-  || fail "read the Engine's disk for the board worker's files"
-[[ -z $engine_left ]] || fail "a board worker left a file on the Engine's own disk: $engine_left"
-# Restoring an archived Card (#842): in the install's Engine, on a board of its own, a Card with no Agent is never started
-# out of the archive, a stopped Card gets its Agent back and starts nothing, and the moves restoreCard avoids
-# (lib/engine/board.mjs) still do what docs/engine-probes/kanban-board.md section 10 measured.
-docker exec -i "$engine_id" sh -c 'cd /opt/hermes && exec python -' < docs/engine-probes/kanban-board/restore.py \
-  || fail "the Engine restores an archived Card stopped with its Agent and starts nothing"
-}
-
 # backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data, refused onto an occupied install
 # and restored into a fresh one with identities, keys and migration history intact. The backup of every Company's Engine
 # and the archives refused for a missing part are the backup-engines area's, on a machine of its own (#553). An archive
@@ -1448,6 +1380,72 @@ ran=$(docker exec -u hermes -e HERMES_HOME=/opt/data "$engine_id" /opt/hermes/.v
 [[ -n $ran && $ran == "$(docker exec gtmworks-sandbox-first hostname)" ]] || fail "after a write of the terminal backend from the dashboard, a command runs in the work sandbox (ran on: $ran)"
 docker exec -u 0 "$engine_id" /etc/cont-init.d/09-engine-dashboard-theme || fail 'the dashboard theme hook runs again'
 [[ $(dashboard_theme "$(first_engine_key)") == mono ]] || fail 'the theme the Owner picked in the dashboard is kept at the next start'
+# The Engine's own Kanban board, moved here from the open-design area when Open Design stopped shipping (#911, decision
+# 0079): this area's own checks leave room in its 12 minutes. It needs two Companies on the fake model and the first
+# Company's second Agent, made as the agents-sandbox area makes them, before the rate limit below locks the Owner out.
+# First run here was the proxy check's own, so the main Agent's plugin is waited for as complete_setup waits for it.
+main_agent_plugin_settled || fail "the main Agent's plugin is in place after first run"
+point_engine_at_fake_model "$engine_id"
+second_company || fail 'company add makes the second Company'
+engine_key=$(first_engine_key)
+engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with the work tools on, each with one shared space'
+first=$(tail -n 1 prepare-profiles.log)
+[[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
+sandbox=gtmworks-sandbox-first
+engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail "the first Company's second Agent moves to a profile of its own"
+# No Open Design ships (decision 0079, ADR 0035, #911): the work sandbox image holds no /opt/open-design, and no Engine,
+# with its Agents made, holds an `od-` design profile beside its Agents' own.
+docker exec "$sandbox" test ! -e /opt/open-design || fail 'the work sandbox image carries no Open Design'
+for folder in .engines/*/; do
+  name=$(engine_value "$folder" NAME)
+  profiles=$(docker exec "$name" ls /opt/data/profiles) || fail "list the profiles of the Engine $name"
+  grep -q '^co-' <<< "$profiles" || fail "the Engine $name holds its Company's profile"
+  if grep -q '^od-' <<< "$profiles"; then fail "the Engine $name holds no Open Design profile"; fi
+done
+# The Engine's own Kanban board (spec #831, #833, ADR 0033 item 2), with settings alone and the image unmodified: every
+# Engine of the install, the new Company's included, holds the board worker's setting in its managed scope and the short
+# temp folder its ssh control socket needs (engine_board_settings). On the first Company's Engine, with its second Agent, a Card given to that Agent is started
+# by the dispatcher after one tick the check asks for, runs a command that writes in the work sandbox and a command the
+# Engine marks dangerous, stops on a question, goes on after a person's comment and a move to ready, is sent for review,
+# returned to the same Agent and passed; the main Agent, in a Run started through the Run API, makes a Card for the
+# second Agent with the Engine's own tool; and a Card in triage is watched for two dispatcher ticks. The job reads the
+# host's Docker for where the worker's files landed. The step prints a line as each phase ends and holds a deadline of
+# its own inside the area's minutes, so a slow Engine fails here with how far it got and the Engine's board log, never at
+# the job's limit with nothing said.
+for folder in .engines/*/; do
+  name=$(engine_value "$folder" NAME)
+  engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+  sandbox_card_files "$name" || fail "the work sandbox of the Engine $name holds its Kanban attachments folder read-only at the Engine's path"
+done
+kanban_marker="kanban-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - kanban "$kanban_marker" < scripts/check-install-profiles.mjs | tee kanban-proof.log \
+  || { docker exec "$engine_id" sh -c 'grep -hiE "kanban|dispatch" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 40' >&2 || true
+       fail "an Agent works a Card on the Engine's own board in the Company's work sandbox"; }
+kanban_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
+[[ -n $kanban_host && $kanban_host == "$(docker exec "$sandbox" hostname)" ]] || fail "a board worker's command runs in the Company's work sandbox"
+[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-card.txt") == "$kanban_marker-card" ]] || fail "a board worker's command wrote in the Company's work folder"
+docker exec "$sandbox" test -d "/tmp/$kanban_marker-danger" -a ! -e "/tmp/$kanban_marker-danger/gone" \
+  || fail "a board worker's dangerous command ran in the work sandbox"
+# A person's file on Card A (#843): the worker opened it in the sandbox at the path the Engine named and copied it into the
+# work folder, and its write beside it failed, so neither the sandbox nor the Engine holds the file it tried to plant.
+kanban_file=$(sed -n 's/.*"attachment_path":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
+[[ $kanban_file == /opt/data/kanban/attachments/* ]] || fail "the Engine named a person's file on a Card by its path in its attachments folder"
+[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt") == "$kanban_marker-attachment" ]] \
+  || { docker exec "$sandbox" ls -ln "$(dirname "$kanban_file")" >&2 || true; fail "a board worker opened a person's file on its Card from inside the work sandbox"; }
+grep -q '"attachment_write":"refused"' kanban-proof.log || fail "a board worker's write to the Kanban attachments folder fails from the sandbox"
+for container in "$sandbox" "$engine_id"; do
+  if docker exec "$container" test -e "$(dirname "$kanban_file")/$kanban_marker-planted"; then fail "a board worker planted a file in the Kanban attachments folder"; fi
+done
+# Nothing of the worker's is on the Engine's own disk outside its Kanban folders; the work folder the Engine reads, read
+# only, is the sandbox's own.
+engine_left=$(docker exec "$engine_id" sh -c 'find / \( -path /proc -o -path /sys -o -path /dev -o -path /opt/data/kanban -o -path /opt/data/work \) -prune -o -name "$1*" -print 2> /dev/null; true' sh "$kanban_marker") \
+  || fail "read the Engine's disk for the board worker's files"
+[[ -z $engine_left ]] || fail "a board worker left a file on the Engine's own disk: $engine_left"
+# Restoring an archived Card (#842): in the install's Engine, on a board of its own, a Card with no Agent is never started
+# out of the archive, a stopped Card gets its Agent back and starts nothing, and the moves restoreCard avoids
+# (lib/engine/board.mjs) still do what docs/engine-probes/kanban-board.md section 10 measured.
+docker exec -i "$engine_id" sh -c 'cd /opt/hermes && exec python -' < docs/engine-probes/kanban-board/restore.py \
+  || fail "the Engine restores an archived Card stopped with its Agent and starts nothing"
 # Repeated wrong passwords for that Owner hit the auth service's own rate limit (issue #41), per visitor behind the
 # proxy. Caddy writes each visitor's address in X-Forwarded-For, replacing any a client sent; the gateway believes
 # it only from the install network's bridge gateway, where every connection from this machine arrives from
@@ -2754,6 +2752,10 @@ for sandbox in "$first_sandbox" "$second_sandbox"; do
   [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == "$(sandbox_memory_bytes)" ]] || fail "the sandbox $sandbox has the install's default memory"
   [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == "$(sandbox_nano_cpus)" ]] || fail "the sandbox $sandbox has the install's default CPU"
 done
+# The work sandbox image on disk, as the README states it (ADR 0020): the size Docker gives the image every Company's
+# sandbox runs, in GB, without Open Design since #911 (decision 0079; about 3.81 GB with it).
+image_bytes=$(docker image inspect -f '{{.Size}}' "$sandbox_image") || fail 'read the size of the work sandbox image'
+echo "sizes: the work sandbox image is $(awk -v b="$image_bytes" 'BEGIN { printf "%.2f", b / 1e9 }') GB on disk ($image_bytes bytes)"
 echo "sizes: the default sandbox limits are memory $(sandbox_default mem_limit) and $(sandbox_default cpus) CPUs (scripts/engine-template.yml)"
 # Idle: the worker has given each Company its main Agent; a minute lets the Engines settle before they are read.
 sleep 60
@@ -2941,12 +2943,11 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (agents_sandbox); (open_design); (backup); (backup_engines); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (agents_sandbox); (backup); (backup_engines); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
  agents-sandbox) agents_sandbox;;
- open-design) open_design;;
  backup) backup;;
  backup-engines) backup_engines;;
  proxy) proxy;;
@@ -2962,5 +2963,5 @@ case "${1:-all}" in
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | agents-sandbox | open-design | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | agents-sandbox | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac
