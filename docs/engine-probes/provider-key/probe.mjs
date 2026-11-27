@@ -94,14 +94,19 @@ await main(async()=>{
  // --- 5. a profile that still holds the key in its own environment: which answers, and after the env copy is removed --
  await must(`give ${ENVAGENT} its own env key`,manage(`/api/env${q(ENVAGENT)}`,{method:'PUT',body:{key:KEY_ENV,value:ENV_KEY}}));
  const both=await runOnce(ENVAGENT,'q5 both');
- say(`question 5: ${ENVAGENT} holds ${KEY_ENV} in its own .env and the root's pool holds one; a Run is sent with ${both.auth}`);
+ say(`question 5: ${ENVAGENT} holds ${KEY_ENV} in its own .env and the root's pool holds one; a Run ended ${both.done.status} and was sent with ${both.auth}`);
+ if(both.done.status!=='completed'||both.auth!==`Bearer ${KEY_B}`) fail('a profile holding both answers with the pool key',JSON.stringify({status:both.done.status,auth:both.auth}));
  await must(`remove ${ENVAGENT}'s env key`,manage(`/api/env${q(ENVAGENT)}`,{method:'DELETE',body:{key:KEY_ENV}}));
  const afterEnv=await runOnce(ENVAGENT,'q5 after env');
+ say(`question 5: with the env copy removed the Run ended ${afterEnv.done.status} and was sent with ${afterEnv.auth}`);
+ if(afterEnv.done.status!=='completed'||afterEnv.auth!==`Bearer ${KEY_B}`) fail('the pool key still answers after the env copy is removed',JSON.stringify({status:afterEnv.done.status,auth:afterEnv.auth}));
  await removeEntry(1); // the root's remaining entry (KEY_B)
  const afterRoot=await runOnce(ENVAGENT,'q5 after root');
- say(`question 5: with the env copy removed the Run is sent with ${afterEnv.auth}; with the root's pool entry removed too, the Run is sent with ${afterRoot.auth}`);
- const materialized=both.auth===`Bearer ${KEY_B}`&&afterEnv.auth===`Bearer ${KEY_B}`&&afterRoot.auth===`Bearer ${KEY_B}`;
- mark(5,!materialized,'which key answers: the pool key (priority 0) answers before the profile\'s own env key (seeded at priority 1). But the profile COPIES the pool key into its own auth.json on that first Run, and the copy outlives the removal of both the env key and the root\'s pool entry — so the key is not kept once');
+ say(`question 5: with the root's pool entry removed too, the Run ended ${afterRoot.done.status} and was sent with ${afterRoot.auth}`);
+ // Kept once means the key was only ever borrowed: with the root's entry gone, the next Run must fail. It answered, so the
+ // profile copied the key into its own store on an earlier Run, and that copy outlives the removal of both keys.
+ if(afterRoot.done.status==='failed') mark(5,true,'the pool key answers first, and with the env copy and then the root\'s entry removed the next Run fails: the key stayed once, borrowed and never copied');
+ else mark(5,false,`the pool key answers first, but the profile copied it into its own auth.json on an earlier Run, and the copy outlives the removal of both keys (after the root's entry was removed the Run still ended ${afterRoot.done.status}, sent with ${afterRoot.auth})`);
 
  say('');
  const failed=verdicts.filter(one=>!one.ok);
