@@ -156,8 +156,12 @@ test('a Card step of an Agent hidden from the reader names no Card',async({page}
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  await open(page,conversation);
  await expect(page.locator('.msg[data-author=agent]')).toContainText('Here is the plan.');
- // The Card was given to an Agent the Manager does not see: the step is there, its Card's title is not.
+ // The Card was given to an Agent the Manager does not see: the tool step is there, its Card's title is not.
  await expect(page.getByText('Secret card')).toHaveCount(0);
+ const toggle=page.locator('.msg[data-author=agent] .steps__toggle');
+ await expect(toggle).toHaveText(/Used 1 tool/);
+ await toggle.click();
+ await expect(page.locator('.steps__list .step')).toContainText('kanban_create');
 });
 
 test('a tab that comes back keeps the pages the person scrolled back through',async({page})=>{
@@ -186,9 +190,10 @@ test('a reply split across the page boundary is drawn once',async({page})=>{
  for(let n=0;n<30;n++) messages.push(user(n*2+1,`Older ${n*2}`),replied(n*2+2,`Older ${n*2+1}`));
  const call={id:'call_1',type:'function',function:{name:'web_search',arguments:JSON.stringify({query:'ads'})}};
  messages.push(user(1000,'Plan the ads'));
- messages.push({role:'assistant',content:'Let me check.',tool_calls:[call],finish_reason:'tool_calls',timestamp:1001});
- messages.push({role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:1002});
- messages.push({role:'assistant',content:'Here is the plan.',finish_reason:'stop',timestamp:1003});
+ messages.push({role:'assistant',content:'Let me check.',timestamp:1001});
+ messages.push({role:'assistant',content:'',tool_calls:[call],finish_reason:'tool_calls',timestamp:1002});
+ messages.push({role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:1003});
+ messages.push({role:'assistant',content:'Here is the plan.',finish_reason:'stop',timestamp:1004});
  for(let n=0;n<24;n++) messages.push(user(2000+n*2,`Newer ${n*2}`),replied(2001+n*2,`Newer ${n*2+1}`));
  messages.push(user(2100,'Newer last'));
  const {conversation}=talk(messages);
@@ -198,7 +203,7 @@ test('a reply split across the page boundary is drawn once',async({page})=>{
  // The older page holds the interim words beside the call, but its reply is in the page already drawn: the interim is
  // no reply, and the one reply is not drawn twice.
  await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
- await expect(page.getByText('Older 13',{exact:true})).toBeVisible({timeout:20000});
+ await expect(page.getByText('Older 14',{exact:true})).toBeVisible({timeout:20000});
  await expect(page.getByText('Let me check.')).toHaveCount(0);
  await expect(page.getByText('Here is the plan.')).toBeVisible();
 });

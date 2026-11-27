@@ -50,10 +50,12 @@ function replyText(message?:SessionMessage):string {
 // last assistant message with words, the interim narration dropped — with the tool calls that turn made beside it (never
 // matched by time), and the Engine's compaction summary as the Engine's. Tool results are read for their step's end and
 // drawn under the reply. `prefix` is the page before, when the page starts in the middle of a turn.
-/** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {string} agentName @param {number} offset */
-function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:string,offset=0):PageMessage[] {
- const all=[...prefix,...page];
+/** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {SessionMessage[]} suffix @param {string} agentName @param {number} offset */
+function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:SessionMessage[],agentName:string,offset=0):PageMessage[] {
+ const all=[...prefix,...page,...suffix];
  const shown:PageMessage[]=[];
+ // The turn a message belongs to, by its first message's own key, so a page read later names the same turn.
+ const turnKey=(at:number)=>String(all[at]?.message_uid??all[at]?.id??idOf(all[at],at,offset));
  // The last message of each turn that has words is its reply: Hermes keeps the interim narration ("Let me check…")
  // beside the call it made, and the old record showed the Run's final output alone.
  const lastText=new Map<number,number>();
@@ -64,19 +66,19 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],agentName:st
  }
  turn=0;
  for(let index=0;index<prefix.length;index++) if(startsTurn(all[index])) turn=index;
- for(let index=prefix.length;index<all.length;index++) {
+ for(let index=prefix.length;index<prefix.length+page.length;index++) {
   const message=all[index];
   if(startsTurn(message)) turn=index;
   const body=replyText(message);
   if(message?.role==='user') {
-   if(summary.test(body)) { shown.push({id:idOf(message,index,offset),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary'}); continue; }
+   if(summary.test(body)) { shown.push({id:idOf(message,index,offset),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary',turn:turnKey(turn)}); continue; }
    if(message.display_kind==='hidden') continue;
-   if(body.trim()) shown.push({id:idOf(message,index,offset),author:'person',author_name:'',body,created_at:atOf(message)});
+   if(body.trim()) shown.push({id:idOf(message,index,offset),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn)});
    continue;
   }
   if(message?.role==='assistant'&&lastText.get(turn)===index&&body.trim()) {
    const steps=stepsBetween(all,turn,index);
-   shown.push({id:idOf(message,index,offset),author:'agent',author_name:agentName,body,created_at:atOf(message),steps:{list:steps?.list??[],seconds:steps?.seconds??null}});
+   shown.push({id:idOf(message,index,offset),author:'agent',author_name:agentName,body,created_at:atOf(message),turn:turnKey(turn),steps:{list:steps?.list??[],seconds:steps?.seconds??null}});
   }
  }
  return shown;
@@ -95,7 +97,7 @@ function namedMessages(messages:PageMessage[],seen:SeenRow[],profiles:string[]):
    const card=step.card;
    if(!card) return [step as RunStep];
    const agent=byProfile.get(card.profile)??null;
-   if(!agent&&profiles.includes(card.profile)) return [];
+   if(!agent&&profiles.includes(card.profile)) { const {card:givenCard,...rest}=step; void givenCard; return [rest as RunStep]; }
    const {card:givenCard,...rest}=step; void givenCard;
    return [{...rest,card:{id:card.id,title:card.title,agent}}];
   });
@@ -115,7 +117,7 @@ export async function conversationMessagesPage(db:Database,company:string,found:
  if(target.state!=='found') return {state:'unreachable'};
  const read=await target.engine.sessions.messages(found.hermes_session_id,{offset,limit});
  if(read.state!=='found') return {state:read.state};
- const messages=pageMessages(read.messages,read.prefix,found.agent_name,offset);
+ const messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name,offset);
  const made=messages.some(message=>message.steps?.list.some(step=>step.card));
  let named=messages as ConversationMessage[];
  if(made) {

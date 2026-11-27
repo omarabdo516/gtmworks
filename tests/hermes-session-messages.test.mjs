@@ -62,6 +62,7 @@ test('a page that starts in the middle of a turn reads the page before it, so it
   const read=await readSessionMessages(connection(fake),'session-turn',{offset:0,limit:1});
   assert.equal(read.state,'found');
   assert.deepEqual(read.state==='found'&&read.prefix.length,4,'the page before the reply');
+  assert.deepEqual(read.state==='found'&&read.suffix.length,0,'no newer page to read');
   assert.deepEqual(read.state==='found'&&read.messages.map(message=>message.content),['Here is the plan.']);
   const steps=stepsBetween([...(read.state==='found'?read.prefix:[]),...(read.state==='found'?read.messages:[])],0,4);
   assert.deepEqual(steps,{list:[{tool:'web_search',preview:'accounting courses Cairo',state:'done'},{tool:'read_file',preview:'campaigns.csv',state:'failed'}],seconds:41});
@@ -72,8 +73,8 @@ test('a session the Engine does not know is missing, a read past its page size i
  const fake=await fakeHermes();
  try {
   fake.settings.sessions.set('elsewhere',{profile:'co-other',messages:[user(1,'hi')]});
-  assert.deepEqual(await readSessionMessages(connection(fake),'unknown'),{state:'missing',messages:null,prefix:[],more:false});
-  assert.deepEqual(await readSessionMessages(connection(fake),'elsewhere'),{state:'missing',messages:null,prefix:[],more:false},'another profile\'s session is not this one\'s');
+  assert.deepEqual(await readSessionMessages(connection(fake),'unknown'),{state:'missing',messages:null,prefix:[],suffix:[],more:false});
+  assert.deepEqual(await readSessionMessages(connection(fake),'elsewhere'),{state:'missing',messages:null,prefix:[],suffix:[],more:false},'another profile\'s session is not this one\'s');
   assert.equal((await readSessionMessages(connection(fake),'unknown',{offset:0,limit:51})).state,'unreachable');
   assert.equal((await readSessionMessages(connection(fake),'../profiles')).state,'missing');
   assert.equal((await readSessionMessages(connection(fake),'unknown',{offset:-1,limit:50})).state,'unreachable');

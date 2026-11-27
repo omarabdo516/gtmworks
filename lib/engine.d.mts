@@ -34,7 +34,7 @@ export type SessionMessage={role:string,content?:unknown,timestamp?:number,tool_
 // The last messages of a session, a page at a time (#875). `prefix` is the page before the one asked for, when that one
 // starts in the middle of a turn: only its tool calls are read, so the first reply on the page still carries its steps.
 // `usage` is the session's token use, read beside the newest page only.
-export type SessionMessagesRead={state:'found',messages:SessionMessage[],prefix:SessionMessage[],more:boolean}|{state:'missing'|'refused'|'unreachable',messages:null,prefix:[],more:false};
+export type SessionMessagesRead={state:'found',messages:SessionMessage[],prefix:SessionMessage[],suffix:SessionMessage[],more:boolean}|{state:'missing'|'refused'|'unreachable',messages:null,prefix:[],suffix:[],more:false};
 // A Run's tool calls as they happen (#646): each call starting (its id, tool and the Engine's preview) or ending (done or
 // failed, by the same id, or none when the Engine gave it none), a loss when older events are gone, and one end last.
 export type RunStepEvent={seq:number,step:{call:string|null,tool:string,preview:string|null,state:'started'|'done'|'failed'}};

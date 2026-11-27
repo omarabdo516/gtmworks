@@ -192,10 +192,13 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
     // duplicates by id dropped, and the older cursor and its history kept (#875).
     const current=pageRef.current;
     const fresh=new Set(readNow.messages.map(message=>message.id));
+    // A reply that is in the fresh page supersedes the interim reply the same turn drew before (its words are not a
+    // second answer); the turn's own person message stays.
+    const freshTurns=new Set(readNow.messages.flatMap(message=>message.turn?[message.turn]:[]));
     // More than a page can arrive while the tab is away: with nothing in common the newest page replaces what was drawn,
     // so the history stays contiguous instead of leaving a gap behind. A page that draws nothing keeps what is there.
     const overlaps=!!current&&(!readNow.messages.length||current.messages.some(message=>fresh.has(message.id)));
-    const kept=overlaps?current!.messages.filter(message=>!fresh.has(message.id)):[];
+    const kept=overlaps?current!.messages.filter(message=>!fresh.has(message.id)&&!(message.author==='agent'&&message.turn&&freshTurns.has(message.turn))):[];
     const older=overlaps&&current!.nextOffset>readNow.nextOffset;
     const next=overlaps?{messages:[...kept,...readNow.messages],nextOffset:Math.max(readNow.nextOffset,current!.nextOffset),hasMore:older?current!.hasMore:readNow.hasMore}:{messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
     pageRef.current=next; setPage(next); setMode('engine'); setFailed(false); setMoreFailed(false);
