@@ -40,6 +40,7 @@ insert into decisions
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.conversation_stamp(uuid)','exempt','the stamp of what changed in the one Conversation its own person names (#767): it reads the Card tied to it only to count its rows and answers a digest, so it shows nothing of a Card'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
+ union all select fn,'exempt','an Invite link''s (#950): it writes one log row on no Card (subject member) and answers only the link''s id or the Company''s slug, so it shows nothing of a Card' from unnest(array['public.make_invite_link(uuid,text,text,uuid[],text)','public.claim_invite_link(text,uuid,text,text)']) fn
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',

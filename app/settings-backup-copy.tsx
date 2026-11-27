@@ -6,7 +6,7 @@ import { SettingsIcon } from './settings-icons';
 // Copies one command when its button is pressed (#33; the reference copies with navigator.clipboard and swallows a
 // blocked clipboard). A browser without the async clipboard, such as an install opened over plain HTTP, gets the
 // selection fallback. The button says "Copied" for a moment and then offers the command again.
-async function writeClipboard(text:string) {
+export async function writeClipboard(text:string) {
  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through to selection */ }
  const area=document.createElement('textarea');
  area.value=text; area.setAttribute('readonly',''); area.style.position='fixed'; area.style.opacity='0';

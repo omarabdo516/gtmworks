@@ -7,6 +7,7 @@ import { inviteeName } from '@/lib/invite.mjs';
 import { inviteRoles } from '@/lib/member-roles.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InviteSection } from './invite-section';
+import { InviteLinkSection, type MakeLink } from './invite-link-section';
 import { toast } from './toast';
 
 // The Team table (#15, #185, #187; design-reference: teamTableHTML): one row per Member, the main Agent shown to all,
@@ -43,7 +44,7 @@ function AgentSwitch({company,target,agent,agentName,personName,on,label,save}:{
  })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
 }
 
-export function TeamTable({company,members,invitations,agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,hint?:boolean}) {
+export function TeamTable({company,members,invitations,agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,makeLink,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,makeLink?:MakeLink,hint?:boolean}) {
  const {t}=useI18n();
  const who=(member:TeamMember)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{t(member.role)}</span></span></span>;};
  const others=agents.filter(agent=>!agent.is_default);
@@ -60,5 +61,7 @@ export function TeamTable({company,members,invitations,agents,allowed,invitedAll
    {others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{invitation:invitation.id}} agent={agent.id} agentName={agent.name} personName={name} on={invitedAllowed.has(`${invitation.id}:${agent.id}`)} label={`${name} · ${agent.name}`} save={saveInvitation}/></td>)}
   </tr>;})}</tbody></table></div>
  {hint&&<p className="set-hint ta-hint">{t('settingsTeamHint')}</p>}
- {owner&&<InviteSection mode="table" roles={inviteRoles(t)} send={send}/>}</>;
+ {owner&&<InviteSection mode="table" roles={inviteRoles(t)} send={send}/>}
+ {/* An Invite link (#950): the Administrator's way in for a new Person, with the Agents they will see. */}
+ {owner&&makeLink&&<InviteLinkSection agents={others} make={makeLink}/>}</>;
 }

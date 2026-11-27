@@ -8,6 +8,8 @@ import { saveLanguage } from './language-actions';
 import AccountChoicesView from './account-choices-view';
 import { setAgentVisible, setInvitationAgentVisible } from './agent-visibility-actions';
 import { inviteMember } from './invite-actions';
+import { makeInviteLink } from './invite-link-actions';
+import { InviteLinkSection } from './invite-link-section';
 import { InviteSection, type InviteRole } from './invite-section';
 import { TeamTable, type TeamAgent, type TeamInvitation, type TeamMember } from './team-table';
 import { useSaidWhen } from './agent-made';
@@ -83,12 +85,17 @@ export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:s
  return <InviteSection mode={mode} roles={roles} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 
+// "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action.
+export function InviteLink({company,agents}:{company:string,agents:TeamAgent[]}) {
+ return <InviteLinkSection agents={agents.filter(agent=>!agent.is_default)} make={(label,role,chosen)=>makeInviteLink(company,label,role,chosen)}/>;
+}
+
 // The Team table (#187), with its switches and its Owner invite bound to the server actions that check the Role again.
 // The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx).
 export function SettingsTeamTable({company,slug,members,invitations,agents,allowed,invitedAllowed,userId,owner}:{company:string,slug:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean}) {
  const save=(c:string,target:{member:string}|{invitation:string},agent:string,visible:boolean)=>'member' in target?setAgentVisible(c,target.member,agent,visible):setInvitationAgentVisible(c,target.invitation,agent,visible);
  return <TeamTable company={company} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} hint={false}
-  save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
+  save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)} makeLink={(label,role,chosen)=>makeInviteLink(company,label,role,chosen)}/>;
 }
 
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the

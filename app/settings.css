@@ -187,6 +187,10 @@
 .gw :is(.sov, .modal.team-dlg) .inv-row { display: grid; grid-template-columns: minmax(0, 1fr) 148px auto; gap: var(--s2); align-items: start; }
 .gw :is(.sov, .modal.team-dlg) .inv-go { margin-top: calc(var(--gw-fs-xs) * 1.5 + 6px); min-width: 88px; }
 @media (max-width: 639px) { .gw :is(.sov, .modal.team-dlg) .inv-row { grid-template-columns: minmax(0, 1fr); } .gw :is(.sov, .modal.team-dlg) .inv-go { margin-top: 0; justify-self: start; } }
+/* An Invite link (#950): the Agents the Person will see, and the made link beside its copy button. */
+.gw :is(.sov, .modal.team-dlg) .inv-agents { display: grid; gap: var(--s2); border: 0; padding: 0; margin: 0; min-width: 0; }
+.gw :is(.sov, .modal.team-dlg) .inv-row--link { grid-template-columns: minmax(0, 1fr) auto; }
+.gw :is(.sov, .modal.team-dlg) .inv-go--flush { margin-top: 0; display: inline-flex; align-items: center; gap: 6px; --od-icon-size: 16px; }
 .gw :is(.sov, .apps-sheet) .sov-warn { padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-wait-bg); color: var(--gw-wait-text); }
 .gw :is(.sov, .apps-sheet) .sov-warn .sov-icon { color: inherit; }
 

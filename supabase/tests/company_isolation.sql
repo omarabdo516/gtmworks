@@ -8,7 +8,7 @@ insert into isolation_matrix(name) values
  ('agent_access_requests'),('agent_change_proposals'),('agent_looks'),('agent_reader_marks'),('agent_permission_revoked'),('agent_permission_revokes'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_archives'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
- ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
+ ('company_app_sign_ins'),('company_link_agents'),('company_links'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_fallback_models'),('company_profile_keepers'),('company_profiles'),('company_provider_models'),('company_shared_spaces'),
  ('good_morning_results'),('good_mornings'),
  ('conversation_archives'),('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
@@ -26,6 +26,8 @@ insert into isolation_matrix(name) values
 update isolation_matrix m set fixed = v.fixed::jsonb from (values
  -- A handover sits in one place: a Conversation's or a channel message's (#150); this row names a Conversation.
  ('agent_handovers', $${"conversation_id": "gen_random_uuid()"}$$),
+ -- An Invite link (#950) is an invite with its label, a Role that is not Administrator, its hash and its end.
+ ('company_links', $${"kind": "'invite'", "secret_hash": "repeat('ab', 32)", "label": "'Isolation'", "role": "'viewer'", "ends_at": "now() + interval '7 days'"}$$),
  -- A Run Stop found open (#478) sits in one place too; this row names a Conversation.
  ('stopped_runs', $${"conversation_id": "gen_random_uuid()", "run_id": "'isolation'"}$$),
  -- A channel's archive or restore (#675).

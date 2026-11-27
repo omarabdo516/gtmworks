@@ -12,7 +12,7 @@ import { pickSection, pageReadAt, overlayHref, agentsMainFirst, agentTab, agentT
 import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
-import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, InviteLink, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import { LookRow } from './agent-look-window';
 import { InfoTip } from './settings-info';
@@ -170,7 +170,7 @@ function MembersSection({t,company,solo,members,invitations,agents,allowed,invit
  </div></section>;
  // Alone (#10): no members, no per-member Agents; the Owner invites the first Member here, and the Company becomes a
  // team when that Member accepts.
- const invite=owner&&<Invite mode="alone" company={company.id} slug={slug} roles={inviteRoles}/>;
+ const invite=owner&&<><Invite mode="alone" company={company.id} slug={slug} roles={inviteRoles}/><InviteLink company={company.id} agents={agents}/></>;
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('members')}/>{ro}{solo?invite:canManage?table:list}</>;
