@@ -177,11 +177,11 @@ function kanbanBoard() {
 // route, /api/status; and its live parts (#870), each a socket opened with a single-use ticket from
 // POST /api/auth/ws-ticket: the chat, /api/ws, which says gateway.ready; its terminal, /api/pty, which writes a prompt;
 // and the Kanban board's event stream, /api/plugins/kanban/events, which reports each Card made with
-// POST /api/plugins/kanban/tasks by the Card's id, as Hermes does. The ticket, the board's routes and its stream are the
-// Engine's one board (kanbanBoard above, served by the management listener below, spec #831): a request of theirs that
-// came through the dashboard's gate (it names the prefix the gate serves the dashboard under) is kept with the
-// dashboard's and then answered as any other. Every request needs the Engine's key, as the gated dashboard does.
-// Answers whether the request was the dashboard's alone.
+// POST /api/plugins/kanban/tasks by the Card's id, as Hermes does. The tickets and the board are the Engine's one store
+// and one board (socketTickets, kanbanBoard above, spec #831), which gtmworks's own board reaches on the management
+// listener's routes below: a ticket or a Card asked through the dashboard's gate (it names the prefix the gate serves
+// the dashboard under) is kept with the dashboard's requests, not the management listener's. Every request needs the
+// Engine's key, as the gated dashboard does. Answers whether the request was the dashboard's.
 // #872: its themes, as Hermes keeps them (hermes_cli/web_routers/dashboard_ui.py): a built-in one and gtmworks's own file
 // (scripts/engine-dashboard-theme.yaml, which every Engine reads), the active one in `settings.dashboardTheme` (gtmworks's,
 // as scripts/engine-dashboard-theme.sh leaves a new Engine), GET /api/dashboard/themes and PUT /api/dashboard/theme. The
@@ -235,8 +235,19 @@ function dashboardAnswer(settings,request,response) {
  settings.dashboardRequests.push({method:request.method||'GET',path:request.url||'/',authorization:request.headers.authorization,cookie:request.headers.cookie,prefix});
  const answer=(status,type,body)=>{ response.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'}); response.end(body); };
  if(request.headers.authorization!==`Bearer ${settings.key}`) { answer(401,'application/json','{"detail":"Unauthorized"}'); return true; }
- if(shared) return false;
- if(page) answer(200,'text/html; charset=utf-8',dashboardPage(prefix));
+ if(path==='/api/auth/ws-ticket'&&request.method==='POST') {
+  const ticket=randomUUID().replaceAll('-',''); settings.socketTickets.set(ticket,Date.now()+30000);
+  answer(200,'application/json',JSON.stringify({ticket,ttl_seconds:30}));
+ }
+ else if(path==='/api/plugins/kanban/tasks'&&request.method==='POST') {
+  const chunks=[]; request.on('data',chunk=>chunks.push(chunk));
+  request.on('end',()=>{
+   let body=null; try { body=JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* no body */ }
+   if(typeof body?.title!=='string'||!body.title.trim()) { answer(400,'application/json','{"detail":"title is required"}'); return; }
+   answer(200,'application/json',JSON.stringify({task:settings.kanban.create(body)}));
+  });
+ }
+ else if(page) answer(200,'text/html; charset=utf-8',dashboardPage(prefix));
  else if(path==='/assets/index.js') answer(200,'text/javascript',dashboardCode);
  else if(path==='/assets/sessions.js') answer(200,'text/javascript',dashboardSessions);
  else if(path==='/api/status') answer(200,'application/json',JSON.stringify({version:settings.version,gateway_running:true,gateway_busy:settings.gatewayBusy,active_agents:settings.gatewayBusy?1:0}));
