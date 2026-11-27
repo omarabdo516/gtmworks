@@ -25,7 +25,7 @@ afterEach(() => { vi.useRealTimers(); saveLanguage.mockReset(); saveTheme.mockCl
 
 // The Owner's Settings open on Your account, as the server draws them.
 const account = (language: Language, theme = 'light') => render(<LanguageProvider language={language}>
- <OverlayChrome t={i18n(language).t} slug="rs-learning" companyName="RS Learning" role="owner" readOnly={false} section="account" learningWaiting={0}>
+ <OverlayChrome t={i18n(language).t} slug="rs-learning" companyName="RS Learning" role="owner" installOwner readOnly={false} section="account" learningWaiting={0}>
   <AccountChoicesView theme={theme} saveTheme={saveTheme} saveLanguage={saveLanguage}/>
  </OverlayChrome>
 </LanguageProvider>);
@@ -75,7 +75,7 @@ test('the sections sit in their groups, and the breadcrumb names the group and t
  const screen = await account('en');
  const sections = screen.getByRole('navigation', { name: 'Settings sections' });
  expect(sections.getByRole('group').elements().map(group => group.getAttribute('aria-labelledby') && document.getElementById(group.getAttribute('aria-labelledby')!)?.textContent)).toEqual(['Company', 'Agents', 'Engine']);
- expect(sections.getByRole('group', { name: 'Engine' }).getByRole('link').elements().map(link => link.textContent)).toEqual(['Providers', 'Voice', 'Usage', 'gtmworks']);
+ expect(sections.getByRole('group', { name: 'Engine' }).getByRole('link').elements().map(link => link.textContent)).toEqual(['Providers', 'Voice', 'Usage', 'Engine logs and system (advanced)']);
  expect(sections.getByRole('link').elements().slice(-3).map(link => link.textContent)).toEqual(['Backups', 'Your account', 'About']);
  const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('listitem');
  expect(crumbs.elements().map(crumb => crumb.textContent)).toEqual(['Settings', 'Your account']);

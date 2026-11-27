@@ -4342,6 +4342,7 @@ begin
  insert into public.people(id,name,language) values(person,person_name,language);
  insert into public.companies(id,slug,name,work_mode,engine_id) values(company,slug,company_name,null,engine);
  insert into public.members(company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) values(company,person,'owner',true,true,true);
+ insert into public.install_owner(person_id) values(person) on conflict (singleton) do update set person_id=excluded.person_id;
  update public.setup_claim set closed=true where singleton;
  return slug;
 end $$;
@@ -6398,6 +6399,19 @@ CREATE FUNCTION public.is_company_owner(c uuid) RETURNS boolean
 $$;
 
 ALTER FUNCTION public.is_company_owner(c uuid) OWNER TO postgres;
+
+--
+-- Name: is_install_owner(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.is_install_owner() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select exists(select 1 from public.install_owner where person_id=auth.uid());
+$$;
+
+ALTER FUNCTION public.is_install_owner() OWNER TO postgres;
 
 --
 -- Name: is_member(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -13267,6 +13281,18 @@ ALTER TABLE public.good_mornings ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTIT
 );
 
 --
+-- Name: install_owner; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.install_owner (
+    singleton boolean DEFAULT true NOT NULL,
+    person_id uuid NOT NULL,
+    CONSTRAINT install_owner_singleton_check CHECK (singleton)
+);
+
+ALTER TABLE public.install_owner OWNER TO postgres;
+
+--
 -- Name: install_updates; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -14706,6 +14732,13 @@ ALTER TABLE ONLY public.hermes_agents
 
 ALTER TABLE ONLY public.hermes_agents
     ADD CONSTRAINT hermes_agents_pkey PRIMARY KEY (id);
+
+--
+-- Name: install_owner install_owner_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.install_owner
+    ADD CONSTRAINT install_owner_pkey PRIMARY KEY (singleton);
 
 --
 -- Name: install_updates install_updates_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
@@ -16839,6 +16872,13 @@ ALTER TABLE ONLY public.hermes_agents
     ADD CONSTRAINT hermes_agents_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.people(id);
 
 --
+-- Name: install_owner install_owner_person_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.install_owner
+    ADD CONSTRAINT install_owner_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.people(id) ON DELETE CASCADE;
+
+--
 -- Name: install_updates install_updates_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -18174,6 +18214,12 @@ ALTER TABLE public.hermes_agents ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY hermes_agents_read ON public.hermes_agents FOR SELECT TO authenticated USING ((public.is_member(company_id) AND public.can_see_agent(company_id, id)));
+
+--
+-- Name: install_owner; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.install_owner ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: install_updates; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -20615,6 +20661,13 @@ REVOKE ALL ON FUNCTION public.is_company_lead(c uuid, agent uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION public.is_company_owner(c uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_company_owner(c uuid) TO authenticated;
+
+--
+-- Name: FUNCTION is_install_owner(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.is_install_owner() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_install_owner() TO authenticated;
 
 --
 -- Name: FUNCTION is_member(target_company uuid); Type: ACL; Schema: public; Owner: postgres

@@ -112,7 +112,7 @@ The role that can do everything in its company; only an Administrator can make a
 _Avoid_: Owner (old name until 2026-11-26), super admin
 
 **Install owner / صاحب التثبيت**:
-The person who runs the install from its server: installs and updates it, makes Companies, and sets how people reach it. An install owner enters a Company only as one of its Members.
+The person who runs the install from its server: installs and updates it, makes Companies, and sets how people reach it. An install owner enters a Company only as one of its Members. Their account in the app is the one first-run made with the server's setup code; only they open a Company's Engine dashboard, and only in a Company they are an Administrator of (#915).
 _Avoid_: admin, super admin, agency, instance admin
 
 **Updater / المحدّث**:

@@ -21,6 +21,8 @@ insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created
 insert into auth.identities (id,user_id,identity_data,provider,provider_id,last_sign_in_at,created_at,updated_at) select id,id,jsonb_build_object('sub',id::text,'email',email),'email',email,now(),now(),now() from auth.users where id::text like '20000000-%';
 insert into public.people (id,name) values ('20000000-0000-0000-0000-000000000001','عمر'),('20000000-0000-0000-0000-000000000002','مدير'),('20000000-0000-0000-0000-000000000003','مراجع'),('20000000-0000-0000-0000-000000000004','مشاهد'),('20000000-0000-0000-0000-000000000005','عضو');
 insert into public.members (company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) select id,'20000000-0000-0000-0000-000000000001','owner',true,true,true from public.companies;
+-- Omar made the install at first-run, so he is its install owner (#915); multi@example.com is never one.
+insert into public.install_owner (person_id) values ('20000000-0000-0000-0000-000000000001');
 update public.approval_steps set person_id='20000000-0000-0000-0000-000000000001',role=null where company_id='10000000-0000-0000-0000-000000000001';
 insert into public.members (company_id,person_id,role) values
 ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','manager'),
