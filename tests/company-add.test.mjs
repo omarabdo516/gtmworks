@@ -80,7 +80,7 @@ test('company add makes one Engine from the template, joins it, then makes the C
  assert.match(env,/^ENGINE_NETWORK=gtmworks-engine-second-company-0000abcd$/m);
  assert.equal(statSync(installDir.envFile('second-company-0000abcd')).mode&0o777,0o600);
  assert.ok(!result.stdout.includes(env.match(/^ENGINE_KEY=(.*)$/m)[1]),'the command prints no key');
- assert.equal(result.stdout.trim(),'Company "Second Company" is made on its own Engine (gtmworks-engine-second-company-0000abcd). Its Owner is person@example.com.');
+ assert.equal(result.stdout.trim(),'Company "Second Company" is made on its own Engine (gtmworks-engine-second-company-0000abcd). Its Administrator is person@example.com.');
 });
 
 test('company add has one add path and the installer has one Engine name and one list of Engines (#378, T5)', () => {
@@ -151,7 +151,7 @@ test('company add with no Owner makes the Engine and holds the Company behind th
  assert.ok(add.includes('-e ENGINE_KEY')&&!add.includes('ENGINE_KEY='),'the key is passed by name, never on the command line');
  // The Engine is the same template the named-Owner path makes, and the closing line says where its link is.
  assert.ok(commands.some(line=>/^compose --project-name gtmworks-engine-second-company-0000abcd --env-file \.engines\/second-company-0000abcd\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300$/.test(line)));
- assert.deepEqual(result.stdout.trim().split('\n'),['Company "Held Company" is waiting for its Owner on its own Engine (gtmworks-engine-second-company-0000abcd). Send the first-Owner link above; it works once.']);
+ assert.deepEqual(result.stdout.trim().split('\n'),['Company "Held Company" is waiting for its first Administrator on its own Engine (gtmworks-engine-second-company-0000abcd). Send the first-Administrator link above; it works once.']);
 });
 
 test('company link asks the web container for a fresh first-Owner link for a Company still waiting, and prints only that', t => {

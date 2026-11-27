@@ -296,8 +296,8 @@ for (const [language, line] of [['en', 'The agent could not finish this reply. S
 // #422: a reply that failed because the Company has no model at all says so instead of offering a retry: the Owner
 // gets the way to Settings, Subscription and models; a Member is told to ask the Owner.
 const words = {
- en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask the company’s Owner to connect one in Settings.', retry: 'Send the message again to retry.' },
- ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', retry: 'ابعت الرسالة تاني' },
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask an Administrator of the company to connect one in Settings.', retry: 'Send the message again to retry.' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من أدمن الشركة يوصّل واحد من الإعدادات.', retry: 'ابعت الرسالة تاني' },
 } as const;
 for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a reply that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
  const said = words[language];
@@ -317,8 +317,8 @@ for (const language of ['en', 'ar'] as const) for (const owner of [true, false])
 // #457: a model error a retry cannot fix names its cause, with no retry: the Owner gets the way to the Agent's model in
 // Subscription and models, a Member is told to ask the Owner, in English and Arabic.
 const refusedWords = {
- en: { credit: 'Mona could not reply: the company’s model key has no credit left.', key: 'Mona could not reply: the model provider refused the company’s key or sign-in.', model: 'Mona could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Providers', ask: 'Ask the company’s Owner to check it in Settings.', retry: 'Send the message again to retry.' },
- ar: { credit: 'Mona مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', key: 'Mona مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', model: 'Mona مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من المزوّدين', ask: 'اطلب من مالك الشركة يتأكد منه من الإعدادات.', retry: 'ابعت الرسالة تاني' },
+ en: { credit: 'Mona could not reply: the company’s model key has no credit left.', key: 'Mona could not reply: the model provider refused the company’s key or sign-in.', model: 'Mona could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Providers', ask: 'Ask an Administrator of the company to check it in Settings.', retry: 'Send the message again to retry.' },
+ ar: { credit: 'Mona مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', key: 'Mona مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', model: 'Mona مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من المزوّدين', ask: 'اطلب من أدمن الشركة يتأكد منه من الإعدادات.', retry: 'ابعت الرسالة تاني' },
 } as const;
 const refusedOutcome = { credit: 'no-credit', key: 'key-refused', model: 'model-missing' } as const;
 for (const language of ['en', 'ar'] as const) for (const reason of ['credit', 'key', 'model'] as const) for (const owner of [true, false]) test(`in ${language} a reply that failed for ${reason === 'credit' ? 'no credit' : reason === 'key' ? 'a refused key' : 'a missing model'} tells ${owner ? 'the Owner where to check it' : 'a Member to ask the Owner'}`, async () => {

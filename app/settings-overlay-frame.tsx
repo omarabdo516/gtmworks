@@ -122,6 +122,21 @@ export function SkillBack({slug,agent,skill,rtl}:{slug:string,agent:string,skill
 
 // Drawn in a list: gives the focus back to the row whose page was just left, when that row is on this page.
 export function FocusReturn({prefix='sov-ag-'}:{prefix?:string}={}) {
- useEffect(()=>{ const id=takeReturnFocus(stored=>stored.startsWith(prefix)); if(id) document.getElementById(id)?.focus(); },[prefix]);
+ useEffect(()=>{ const id=takeReturnFocus(stored=>stored.startsWith(prefix)); return id?focusWhenDrawn(id):undefined; },[prefix]);
  return null;
+}
+
+// Focuses the element with this id now, or once it is drawn: a part the Engine backs draws its rows when its read lands
+// (#898, ADR 0030). The wait ends after `within` ms, or as soon as the person moves into a field of their own.
+export function focusWhenDrawn(id:string,{within=15000,center=false}:{within?:number,center?:boolean}={}) {
+ const focus=()=>{ const element=document.getElementById(id); if(!element) return false; element.focus(); if(center) element.scrollIntoView({block:'center'}); return true; };
+ if(focus()) return ()=>{};
+ // Entering a field ends the wait for good, even when the person then moves on to a button.
+ const entered=(event:FocusEvent)=>{ if(event.target instanceof HTMLElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) stop(); };
+ const watch=new MutationObserver(()=>{ if(focus()) stop(); });
+ const timer=setTimeout(()=>stop(),within);
+ const stop=()=>{ watch.disconnect(); clearTimeout(timer); document.removeEventListener('focusin',entered); };
+ document.addEventListener('focusin',entered);
+ watch.observe(document.body,{childList:true,subtree:true});
+ return stop;
 }

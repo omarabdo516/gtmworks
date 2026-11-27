@@ -6,6 +6,24 @@
   "ar": { "title": "ملفات على البطاقة", "body": "ضيف ملف على البطاقة والوكيل اللي شغال عليها يفتحه؛ وكل عضو بيشوف ملفات البطاقة وينزّلها، والصور بتظهر مصغّرة، والملفات اللي الوكيل عملها للبطاقة بتبان هناك كمان." }
  },
  {
+  "issue": 902,
+  "date": "2026-11-26",
+  "en": { "title": "Owner is now Administrator", "body": "The Role that can do everything in a Company is called Administrator everywhere you read it, since a Company may have several; what it may do is unchanged." },
+  "ar": { "title": "المالك بقى اسمه الأدمن", "body": "الدور اللي يقدر يعمل كل حاجة في الشركة بقى اسمه أدمن في كل مكان بتقراه، لأن الشركة ممكن يكون فيها أكتر من أدمن؛ واللي يقدر يعمله زي ما هو." }
+ },
+ {
+  "issue": 898,
+  "date": "2026-11-26",
+  "en": { "title": "Every Settings page opens at once", "body": "Moving between Settings pages no longer waits for the agent engine: each page shows straight away, every part the engine keeps (an Agent's About, skills, voice and model, usage, learning, routines, apps) fills in on its own, and each app says it is checking until its own test answers." },
+  "ar": { "title": "كل صفحات الإعدادات بتفتح على طول", "body": "التنقل بين صفحات الإعدادات مبقاش بيستنى محرك الوكلاء: كل صفحة بتظهر على طول، وكل جزء المحرك شايله (نبذة الوكيل ومهاراته وصوته والموديل بتاعه، والاستهلاك، والتعلّم، والمهام المتكررة، والتطبيقات) بيتملي لوحده، وكل تطبيق بيقول إنه بيتأكد لحد ما الاختبار بتاعه يرد." }
+ },
+ {
+  "issue": 866,
+  "date": "2026-11-26",
+  "en": { "title": "The Engine's own dashboard, for Owners", "body": "As an Owner, you open the Engine's own dashboard from Settings, in gtmworks's colours and your language, with every page and setting it has (messaging platforms, plugins, webhooks, MCP, config, logs and more); showing a key, updating the Engine, importing a backup and making or removing an Agent stay in gtmworks, and only Owners can open it." },
+  "ar": { "title": "لوحة تحكم المحرك نفسه، للمالك", "body": "لو إنت المالك، بتفتح لوحة تحكم المحرك نفسه من الإعدادات، بألوان gtmworks وبلغتك، وفيها كل صفحاته وإعداداته (منصات الرسايل والإضافات والويب هوكس والـ MCP والإعدادات والسجلات وغيرهم)؛ أما إظهار المفاتيح وتحديث المحرك واستيراد نسخة احتياطية وعمل وكيل أو شيله فبيفضلوا في gtmworks، ومحدش يقدر يفتحها غير الملاك." }
+ },
+ {
   "issue": 863,
   "date": "2026-11-26",
   "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },

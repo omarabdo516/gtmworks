@@ -21,6 +21,6 @@
   "disableSkill": "Disable",
   "enableSkillFor": "Enable {0} for {1}",
   "disableSkillFor": "Disable {0} for {1}",
-  "skillProblemNotAllowed": "only the Owner or a Manager can change skills",
+  "skillProblemNotAllowed": "only an Administrator or a Manager can change skills",
   "skillProblemSecret": "it looks like it holds a password, key or token, and every Run on this agent would read it"
 }

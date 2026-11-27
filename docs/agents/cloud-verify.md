@@ -23,12 +23,12 @@ One command, about a minute and a half on a warm VM:
 4. starts the fake Engine (`scripts/cloud-hermes.mjs`, the browser suite's fake Hermes) where the app looks for the
    bundled one, so a message to an Agent gets the reply `Reply to: <message>`;
 5. starts the app and its worker (`scripts/web.sh`, `next dev` on port 3000) in the background and waits until it answers;
-6. signs the seeded Owner in with Chromium (`node scripts/cloud-verify.mjs --sign-in`) and prints the page it reached.
+6. signs the seeded Administrator in with Chromium (`node scripts/cloud-verify.mjs --sign-in`) and prints the page it reached.
 
 It ends by printing:
 
 - the app: `http://127.0.0.1:3000`;
-- the seeded Owner: `omar@example.com` / `local-seed-password` (every seeded person in `supabase/seed.sql` has that
+- the seeded Administrator: `omar@example.com` / `local-seed-password` (every seeded person in `supabase/seed.sql` has that
   password: `manager@`, `reviewer@`, `viewer@`, `multi@example.com`);
 - the local database: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`;
 - the local inbox, where sign-in and invite emails land: `http://127.0.0.1:54324`;
@@ -47,7 +47,7 @@ makes it recompile without end.
 With the app up, this walks the product's main journey in Chromium, driven by Playwright, and checks each step on the
 page and in the local database:
 
-1. empties the install, then walks first run from the setup link: creates the Owner and the first Company, and checks
+1. empties the install, then walks first run from the setup link: creates the Administrator and the first Company, and checks
    both in `public.companies` and `public.members` (role `owner`);
 2. signs out, signs back in with that email and password, answers "Alone" and lands in a Conversation with Lead;
 3. sends Lead a message and sees the reply on the page, then reads both messages in `public.conversation_messages`;

@@ -7,7 +7,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { AgentFace } from '@/components/agent-face';
 import { agentFaceStates, faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
-import { pickSection, pageReadAt, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
+import { pickSection, pageReadAt, overlayHref, agentsMainFirst, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
@@ -16,44 +16,30 @@ import { SettingsIcon } from './settings-icons';
 import { LookRow } from './agent-look-window';
 import { InfoTip } from './settings-info';
 import PasswordSettings from './password-settings';
-import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
-import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readProviderNames } from '@/lib/provider-names.mjs';
 import { readProviderOrder } from '@/lib/provider-order.mjs';
-import { companyEngine } from '@/lib/engine/handle.mjs';
-import { readCompanyModels } from '@/lib/engine-settings.mjs';
 import { readFallbackModel } from '@/lib/fallback-model.mjs';
-import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
-import { readAgentSkills } from '@/lib/company-skills.mjs';
-import { readCompanyLearning } from '@/lib/company-learning.mjs';
-import { readCompanySkillPage } from '@/lib/company-skill-page.mjs';
-import { LearningSection } from './settings-learning';
-import { SkillPage } from './settings-skill-page';
-import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
-import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
 import { ModelsParts } from './settings-models-parts';
-import { MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, AgentModel, VoiceSettings } from './settings-lazy';
+import { MemberNote, AgentSaveBar, VoiceSettings } from './settings-lazy';
+import { AboutPart, HowPart, MorningPart, ThinkingPart, VoicePart, VoiceSpeedPart, PermissionsPart, SkillsPart } from './settings-agent-parts';
+import { SandboxNote, UsagePart, LearningPart, SkillPagePart, RoutinesPart } from './settings-section-parts';
+import { AgentMemoryPart } from './agent-details-parts';
+import { PartsReader } from './settings-part-read';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
 import { isolate } from '@/lib/bidi';
 import { inviteRoles as teamInviteRoles, roleDescription, orderMembers } from '@/lib/member-roles.mjs';
 import AppsSection from './settings-apps';
-import { CompanyKnowledge } from './company-knowledge';
-import { AgentMemory } from './agent-memory';
+import { CompanyKnowledge, readKnowledgeStored } from './company-knowledge';
 import { AgentTabs } from './settings-agent-tabs';
-import { readAgentMemory } from '@/lib/agent-memory.mjs';
-import type { MemoryNote } from '@/lib/engine.mjs';
 import { BackupSection } from './settings-backup';
 import { AboutSection } from './settings-about';
-import { StandingPermissions } from './standing-permissions';
-import { readAgentPermissions, type StandingPermission } from '@/lib/standing-permissions.mjs';
-import { RoutinesSection } from './settings-routines';
-import { readCompanyRoutines } from '@/lib/agent-routines.mjs';
-import { readAgentMorning, type MorningRead } from '@/lib/agent-morning.mjs';
 import { ProposalNote, ProposalMark } from './settings-proposal';
 import { readWaitingChange, readWaitingAgents, countWaitingChanges, waitingChangeHref } from '@/lib/agent-change-waiting.mjs';
 import { ownerNames } from '@/lib/company-owners.mjs';
+import { markSettingsOpen } from '@/lib/settings-open-timing';
+import { readStoredLearning } from '@/lib/company-learning.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -83,9 +69,6 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // Open invitations are rows of the same table (#185), with their own switches, until the person joins.
  const invitations:Invitation[]=section==='members'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
  const invitedAllowed=new Set(invitations.length?((await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`):[]);
- // Whether the Company's work sandbox answers (#398), read once from its own Engine's ssh backend for the section that
- // says what every Agent can use. The Engine itself not answering leaves this unread; the models section names that.
- const workSandbox=section==='company'?await (async()=>{ try { return await (await companyEngine(company.id))?.on('default')?.files.sandbox()??{state:'unreachable' as const}; } catch { return {state:'unreachable' as const}; } })():null;
  // Settings → Models draws what gtmworks stores here and reads each part the Engine backs from the browser (#791, ADR
  // 0030; app/settings-models-parts.tsx): the sign-ins, the model choices, the keys, each Provider's models and speech.
  // The Company's Fallback model (#622), read for every Member; undefined when unread.
@@ -93,40 +76,13 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const names=section==='models'?await readProviderNames(db,company.id):{};
  // The Owner's order of the Providers and which are switched off (#619), read for every Member; null when unread.
  const order=section==='models'?await readProviderOrder(db,company.id):null;
- // The token use of the period, read from each Company's Agents' profiles in the bundled Engine (#347, #32): the
- // Owner and the Managers see every Company they manage, the same read the database checks.
- const usageRows=section==='usage'?await managedUsage(userId,query.period==='30'?30:7):[];
- // How each Agent learns, and what it learned (#28): its mode read from its own Engine profile, its rules from the
- // database, the Skills the Engine's learning graph marks, and the Company's lessons. A read that fails leaves the
- // service's own refusal on the page, never an empty mode.
- const skillPage=section==='learning'&&query.agent&&query.skill?await readCompanySkillPage(db,{company:company.id,agent:query.agent,name:query.skill,person:userId}).catch(()=>null):null;
- const learning=section==='learning'&&!skillPage?await readCompanyLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
- // Every Routine of every Agent the reader sees (#31), read from each Agent's own Engine profile; gtmworks keeps no copy.
- const routines=section==='routines'?await readCompanyRoutines(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null})):null;
+ // Every part the Engine backs (usage, learning, Routines, the work sandbox, an Agent's About, Skills, How it works,
+ // voice, permissions, model and memory, the apps, the models) is read by the browser after the page is drawn (#898,
+ // ADR 0030: app/settings-section-parts.tsx, app/settings-agent-parts.tsx): no Settings page waits on the Engine.
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
  const tab:AgentTab=agentTab(query.tab);
- // The Settings tab reads these (the Memory tab reads only its memory, below). The Agent's own Engine profile: its name,
- // About and title, and whether the profile is its own (#161). Read only on an
- // Agent's page; another Agent on the Company's shared profile would change the main Agent too, so its About is read only.
- // Its own Skills come from that same profile, each as the Engine lists it, with what it learned on its own (#180), and
- // its standing instructions (#176) are the profile's SOUL.md outside the team's rules section, read for every Role.
- // The Agent's voice is its own profile's settings too (#162): the voice of its provider and
- // the speed, read with the Engine's own defaults. Listen is the Engine speaking with them, asked for from the page.
- // What the Agent may do without asking again (#166): its own Engine profile's standing permissions, with who allowed
- // each, for every Role that sees it. An Engine that cannot be read draws no section, as an empty list does.
- const [about,skills,how,voice,permissions]=agent&&tab==='settings'?await Promise.all([readAgentAbout(db,{company:company.id,agent:agent.id}),readAgentSkills(db,{company:company.id,agent:agent.id}),readAgentInstructions(db,{company:company.id,agent:agent.id}),readAgentVoice(db,{company:company.id,agent:agent.id}),
-  readAgentPermissions(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed',permissions:null}))]):[null,null,null,null,null];
- // The Agent's own model choices (#29), from the Engine for that Agent's profile, so its "Thinks with" rows can change it.
- const agentModel=agent&&tab==='settings'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,agent:agent.id,owner}); } catch { return {models:null}; } })():null;
- // Good morning (#182): the main Agent's daily message, read from the one job of its own Engine profile; gtmworks keeps
- // no schedule of its own. An Engine that cannot be read leaves the row unread, never drawn off.
- const morning=agent?.is_default&&tab==='settings'?await readAgentMorning(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed' as const})):null;
- // The memory tab (#193) draws the same AgentMemory as the details panel from this Agent's own Engine profile (#350); an
- // Agent the reader is not shown is not found above, so the page shows the Agents list instead. An Engine that cannot be
- // read leaves the tab unread rather than empty.
- const memory=agent&&tab==='memory'?await readAgentMemory(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed' as const,main:false,notes:null})):null;
  // Each Agent's state for this reader, read in one call as the sidebar reads it (#699).
  const stateOf=section==='agents'?(await agentFaceStates(db,company.id)).of:()=>({state:'idle' as const});
  // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
@@ -145,28 +101,36 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const owners=change&&!owner?await ownerNames(db,company.id).catch(failed<string[]>('Owners',[])):[];
  const pend=change&&<ProposalNote change={change} owner={owner} owners={owners} href={waitingChangeHref(slug,change,{person:userId,owner})}/>;
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
+ // What the database holds of Learning (#28): its Agents, their mode choices, the rules and the lessons, drawn before the
+ // Engine's modes and learned Skills arrive (#898). A read that fails leaves the section's own unread lines.
+ const storedLearning=section==='learning'?await readStoredLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
+ // Company knowledge's chosen part as gtmworks stores it: its last edit and the Agents that read it (#27).
+ const knowledge=section==='knowledge'?await readKnowledgeStored(db,company.id,query.part):null;
+ // Every read this page awaits is the database's (ADR 0030), and all of them are done here.
+ markSettingsOpen('reads',section);
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} count={memberCount} owner={owner} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
+ // A learned Skill's page (#181) at ?agent=…&skill=…; one this person has no page for opens Learning once read.
+ const skillAsked=!!(query.agent&&query.skill);
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} count={memberCount} owner={owner} ro={ro} readAt={readAt}/>
   :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id).state} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
-  :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} status={stateOf(agent.id).state} main={agents[0]} rules={rules} readAt={readAt} morningFocus={query.focus==='time'} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
+  :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} app={query.app} failed={query.signin==='failed'}/>
   // Voice is the Owner's and the Managers' (#863): pickSection opens it for no other Role, and only the Owner changes it.
   :section==='voice'&&canManage?<><Head title={t('settingsVoicePage')} info={t('settingsVoicePageSub')}/><VoiceSettings company={company.id} slug={slug} owner={owner}/></>
-  :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
-  :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning} readAt={readAt}/>)
+  :section==='usage'?<UsagePart slug={slug} company={company.id} period={query.period==='30'?30:7} asked={readAt}/>
+  :section==='learning'?(skillAsked?<SkillPagePart slug={slug} company={company.id} agent={query.agent!} skill={query.skill!} canManage={canManage} owner={owner} stored={storedLearning} asked={readAt}/>:<LearningPart slug={slug} company={company.id} canManage={canManage} owner={owner} stored={storedLearning} asked={readAt}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
-  :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
-  :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
+  :section==='routines'?<>{ro}<RoutinesPart company={company.id} canManage={canManage} asked={readAt}/></>
+  :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} stored={knowledge!} asked={readAt}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
   // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
   :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsParts company={company.id} companyName={company.name} owner={owner} names={names} order={order} fallback={fallback} asked={readAt}/>}/>;
- // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
- // switch while the message is off and Time cannot take the focus.
- const morningFocus=query.focus==='time'&&morning?.state==='found'&&canManage?(morning.routine?.on?'set-ck-time':'set-ck-on'):undefined;
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={skillPage?'sov-skill-back':agent?morningFocus??agentTabFocus(tab):undefined}>{page}</OverlayChrome>;
+ // Nothing is left to wait for: the page's first bytes leave next.
+ markSettingsOpen('firstByte');
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}><PartsReader person={userId}/>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
@@ -174,7 +138,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><SubLabel id={id}>{label}</SubLabel><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,count,owner,ro,sandbox}:{t:T,company:{id:string,name:string},solo:boolean,count:number,owner:boolean,ro:ReactNode,sandbox:boolean}) {
+function CompanySection({t,company,solo,count,owner,ro,readAt}:{t:T,company:{id:string,name:string},solo:boolean,count:number,owner:boolean,ro:ReactNode,readAt:number}) {
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
    {/* Only the Owner renames the Company (#26); the server checks it again. Other Roles read the name. */}
@@ -187,8 +151,8 @@ function CompanySection({t,company,solo,count,owner,ro,sandbox}:{t:T,company:{id
  // person, is the section's read-only value, not help (#614).
  const tools=<section className="dp-sec" aria-labelledby="co-h-tools"><Label id="co-h-tools">{t('agentToolsTitle')}</Label>
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="cpu"/></span><span className="panel-row__text"><span className="panel-row__t" id="co-tools">{t('agentToolsHint')}</span></span></div></div>
-  {/* The Company's work sandbox not answering (#398): one plain state in the existing notice style, and no control. */}
-  {sandbox&&<p className="ro-note sov-warn" role="note" id="co-sandbox"><SettingsIcon name="shield"/><span>{t('workSandboxNotRunning')}</span></p>}
+  {/* The Company's work sandbox not answering (#398), read by the browser from its own Engine (#898). */}
+  <SandboxNote company={company.id} asked={readAt}/>
  </section>;
  return <><Head title={t('settingsCompany')} info={t('settingsCompanySub')}/>{ro}{name}{mode}{tools}</>;
 }
@@ -234,29 +198,16 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiti
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,readAt,permissions,morning,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentFaceState,main?:Agent,rules:Rule[],readAt:number,agentModel:{models:{agents:{model:string|null,choice:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,permissions:StandingPermission[],morning:MorningRead|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,status,main,rules,readAt,morningFocus,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,status:AgentFaceState,main?:Agent,rules:Rule[],readAt:number,morningFocus:boolean,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
  const handle=`@${agent.name.trim().toLowerCase()}`;
- // About is editable by the Owner and Managers who see the Agent, on the Agent's own Engine profile only, and only when
- // the Engine was read: an unknown description is never drawn empty and saved over.
- const editable=canManage&&about?.state==='found'&&about.own;
- // A Skill is switchable by the same people, on that same own profile, and only once the Engine listed it (#180).
- const skillsEditable=canManage&&skills?.state==='found'&&skills.own;
- // The standing instructions are the Owner's alone (#176), on the Agent's own profile and only when the Engine was read.
- const howEditable=owner&&how?.state==='found'&&how.own;
- // The Voice section (#162) is editable on the Agent's own profile, and read-only for everyone else: its rows name the
- // speaking language and the real voice with the speed, as the reference's read-only form does.
- const voiceEditable=canManage&&voice?.state==='found'&&voice.own;
- // The thinking level is the Owner's alone (#179), on the Agent's own profile — the Company's `co-` profile is the main
- // Agent's own while it is the profile's keeper — and only once the Engine was read, so an unread level is never drawn
- // as Medium. It is `own`: the keeper's model is choosable too (#425), and an Agent another one shares a profile with has
- // neither.
- const effortEditable=owner&&agentModel?.models?.agents[0]?.own===true&&agentModel.models.agents[0].effort!==null;
- // Good morning (#182) is the Owner's and the Managers' on the main Agent's own profile, once the Engine was read.
- const morningEditable=canManage&&morning?.state==='found';
- const morningProps=morning?.state==='found'?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null;
+ // What the Agent's own Engine profile keeps (About, How it works, Good morning, its model and thinking level, its voice,
+ // standing permissions and Skills, and its memory) is read by the browser, each part on its own, after the page is drawn
+ // from what gtmworks stores (#898, ADR 0030: app/settings-agent-parts.tsx). Each part decides once read whether this
+ // reader may change it, as the page did: About, Skills, voice and Good morning are the Owner's and the Managers' on the
+ // Agent's own profile; How it works, the model and the thinking level are the Owner's.
  // The main mark is a row of Identity (#615): the Owner moves it here, and every other Role reads why only the Owner can.
  const mainRow=owner?(isMain?<li className="panel-row" id="set-main"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
    :<MakeMain company={company} agent={agent} current={main?.name||''}/>)
@@ -272,7 +223,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
   {pend}
   <div id="sov-agent-panel" role="tabpanel" aria-labelledby={`sov-tab-${tab}`}>
    {tab==='memory'
-    ?<div className="dp-sections">{memory?.state==='found'?<AgentMemory key={agent.id} company={company} agent={{id:agent.id,name:agent.name}} notes={memory.notes||[]} main={memory.main} canReset={owner} canEdit={canManage} canForget={owner} knowledgeHref={canWrite?overlayHref(slug,'knowledge'):undefined} introAsHelp/>:<section className="dp-sec"><p className="panel-empty">{t('agentMemoryUnread')}</p></section>}</div>
+    ?<div className="dp-sections"><AgentMemoryPart key={agent.id} company={company} agent={{id:agent.id,name:agent.name}} canReset={owner} canEdit={canManage} canForget={owner} knowledgeHref={canWrite?overlayHref(slug,'knowledge'):undefined} introAsHelp/></div>
     :(<>
    <TalkTip t={t} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
    {/* The page in five groups by what is being changed (#615): Identity, How it works, Thinking, Voice, and Tools and
@@ -291,8 +242,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
      </ul>
      {/* About is the Agent's profile description (#161). */}
      <section className="dp-sec" aria-labelledby="set-h-about"><SubLabel id="set-h-about" info={t('settingsAboutHint')} infoId="set-desc-hint">{t('settingsAbout')}</SubLabel>
-      {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
-       :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
+      <AboutPart company={company} agent={agent.id} name={agent.name} canManage={canManage} asked={readAt}/></section>
     </Group>
     {/* How it works is the profile SOUL.md outside the team's rules section (#176): the Owner edits it, every other Role
         reads it with its line breaks; an Engine that could not be read shows no text at all. A Manager reads it
@@ -300,40 +250,32 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
         told in its chat (#18) close the group. */}
     <Group id="set-h-how" title={t('settingsHow')} info={t('settingsHowHint',agent.name)} infoId="set-instr-hint">
      {!owner&&<p className="set-hint">{t('settingsHowRO')}</p>}
-     {howEditable?<AgentInstructionsField agent={agent.id} name={agent.name} instructions={how?.instructions??''} sectionChars={how?.sectionChars??0} limit={how?.limit??20000}/>
-      :<AgentInstructionsRead instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>}
-     {isMain&&<AgentMorning agent={agent.id} editable={morningEditable} morning={morningProps}/>}
+     <HowPart company={company} agent={agent.id} name={agent.name} owner={owner} asked={readAt}/>
+     {isMain&&<MorningPart company={company} agent={agent.id} canManage={canManage} focus={morningFocus} asked={readAt}/>}
      <AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage} info={talkText(t('settingsTalkTipAgent',agent.name),rtl)}/>
     </Group>
     {/* Thinking: the Agent's own Engine profile's model (#29), written there and read back, then its thinking level
         (#179): the eight the Engine accepts, saved with the same bar, read as text by every other Role. */}
     <Group id="set-h-thinks" title={t('settingsGroupThinking')} info={t('settingsThinksHint')}>
-     {agentModel?.models?.agents[0]?<>
-      <AgentModel key={agent.id} company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} choice={agentModel.models.agents[0].choice} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner} readAt={readAt}/>
-      <AgentEffort agent={agent.id} effort={agentModel.models.agents[0].effort} editable={effortEditable}/>
-     </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}</Group>
+     <ThinkingPart company={company} agent={agent.id} name={agent.name} owner={owner} asked={readAt}/></Group>
     {/* The Agent's voice (#162): its real voice with Listen; the speed is in Advanced. The language it listens in is the
         Company's, on Settings → Voice (#863). */}
     <Group id="set-h-voice" title={t('settingsVoice')}>
-     {voiceEditable?<AgentVoiceField company={company} agent={agent.id} personName={personName} voice={voice}/>
-      :<ul className="panel-card">
-       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoice')}</span>
-        <span className="panel-row__d ro-val" id="set-voice-val">{voice?.state==='found'?voice.voiceName??'—':'—'}</span></span></li>
-      </ul>}
+     <VoicePart company={company} agent={agent.id} personName={personName} canManage={canManage} asked={readAt}/>
     </Group>
     <Group id="set-h-tools" title={t('settingsGroupTools')}>
      <SoonSec t={t} id="set-h-settingsTools" label={t('settingsTools')}/>
      {/* design-reference: settingsHTML, permsHTML after Tools (#166). */}
-     <StandingPermissions key={agent.id} company={company} agent={agent.id} permissions={permissions} canRevoke={canManage} heading="h5"/>
+     <PermissionsPart company={company} agent={agent.id} canRevoke={canManage} asked={readAt}/>
      {/* The Agent's own Skills and their switches (#180); the Company's shared skills stay on the team's Skills page. */}
-     <AgentSkills agent={agent.id} name={agent.name} slug={slug} learning={learning} skills={skills?.state==='found'?skills.skills:null} editable={skillsEditable}/>
+     <SkillsPart company={company} agent={agent.id} name={agent.name} slug={slug} learning={learning} canManage={canManage} asked={readAt}/>
     </Group>
     {/* Advanced (#615): closed when the page opens, for every Role. The voice's speed joins the page's save bar; Pause and
         Delete are the Owner's, with Delete's typed-name confirmation as before. */}
     <details className="set-advanced" id="set-advanced" key={agent.id}>
      <summary className="set-advanced__s" id="set-g-advanced"><h4 className="set-advanced__h">{t('settingsAdvanced')}</h4><SettingsIcon name="forward" rtl={rtl}/></summary>
      <div className="set-advanced__body">
-      <AgentVoiceSpeed agent={agent.id} speed={voice?.state==='found'?voice.speed:null} editable={voiceEditable}/>
+      <VoiceSpeedPart company={company} agent={agent.id} canManage={canManage} asked={readAt}/>
       {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><SubLabel id="set-h-danger">{t('settingsDanger')}</SubLabel><ul className="panel-card">
        <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
         <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
@@ -345,8 +287,9 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
    </div>
    </>)}
   </div>
-  {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. */}
-  {(editable||skillsEditable||howEditable||voiceEditable||effortEditable||morningEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
+  {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. Only
+      the Owner and the Managers have a field it saves. */}
+  {canManage&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
  </>;
 }
 
@@ -359,26 +302,6 @@ function AgentRules({t,company,userId,rules,canManage,info}:{t:T,company:string,
    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{rule.body}</span><RuleSaid by={rule.said_by===userId?t('settingsRuleYou'):rule.teller?.name||t('member')} at={rule.said_at}/></span>
    {canManage&&<RemoveRule company={company} rule={rule.id} body={rule.body}/>}</li>)}</ul>
   :<div className="panel-card"><p className="panel-empty">{t('settingsRulesEmpty')}</p></div>}</section>;
-}
-
-function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slug:string,company:string,rows:UsageRow[],period:7|30}) {
- const totals=usageTotals(rows,company);
- const models=usageModels(rows,company);
- const heaviest=usageHeaviest(rows,company);
- const count=(value:number)=>new Intl.NumberFormat(locale).format(value);
- // A profile two Agents share is one row with both names, as the reference names each Agent on the profile.
- const heaviestName=heaviest?new Intl.ListFormat(locale,{type:'unit'}).format(heaviest.agents.map(agent=>agent.name)):'—';
- const seg=<div className="segmented use-seg" role="group" aria-label={t('settingsPeriod')}>{([[7,'settingsLast7'],[30,'settingsLast30']] as const).map(([days,label])=><Link key={days} replace href={overlayHref(slug,'usage',days===30?{period:'30'}:{})} aria-pressed={period===days} id={`use-p-${days}`}>{t(label)}</Link>)}</div>;
- const kpi=(label:string,value:ReactNode)=><div className="kpi"><span className="kpi__label">{label}</span><span className="kpi__val num">{value}</span></div>;
- return <><Head title={t('usage')} info={t('settingsUsageSub')} extra={seg}/>
-  {usageEmpty(rows)?<div className="panel-card"><p className="panel-empty">{t('usageNone')}</p></div>:<>
-   <div className="kpis use-kpis">{kpi(t('settingsTokens'),count(totals.tokens))}{kpi(t('usageSessions'),count(totals.sessions))}{kpi(t('usageHeaviest'),<bdi>{heaviestName}</bdi>)}</div>
-   <section className="dp-sec" aria-labelledby="use-h"><Label id="use-h">{t('settingsPerAgent')}</Label>
-    <div className="sov-ta"><UsageTable rows={rows}/></div></section>
-   {/* Each model's own count, apart from the totals: Hermes merges auxiliary usage into these rows (#32). */}
-   {models.length>0&&<section className="dp-sec" aria-labelledby="use-h-model"><Label id="use-h-model">{t('settingsPerModel')}</Label>
-    <div className="sov-ta"><UsageModels models={models}/></div></section>}
-  </>}</>;
 }
 
 function AccountSection({t,theme,personName,role,roleName,companyName,company,memberNote}:{t:T,theme:string,personName:string,role:string,roleName:string,companyName:string,company:string,memberNote:string}) {

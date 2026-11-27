@@ -121,7 +121,7 @@ test('Team opens over the page with the menu closed and the focus on the first s
  // The dialog's own explanation, and the table's Members with the Owner's row seeing every Agent.
  await expect.element(screen.getByText(/The company has one set of agents and one memory/)).toBeVisible();
  await expect.element(screen.getByRole('switch', { name: 'Nour · Ads' })).toBeVisible();
- await expect.element(screen.getByText('The Owner sees every agent')).toBeVisible();
+ await expect.element(screen.getByText('Administrators see every agent')).toBeVisible();
  await expect.poll(() => document.querySelector('.team-dlg .switch') === document.activeElement).toBe(true);
  await screen.getByRole('button', { name: 'Done' }).click();
  await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();

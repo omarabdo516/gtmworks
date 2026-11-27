@@ -135,7 +135,7 @@ test('a Contributor reads the knowledge with no Edit button, and the server refu
  await expect(overlay.getByRole('button',{name:'Edit',exact:true})).toHaveCount(0);
  await overlay.locator('#know-tab-banned').click();
  await expect(page).toHaveURL(/\/settings\?section=knowledge&part=banned$/);
- await expect(overlay.locator('.know-empty')).toHaveText('Nothing is written here yet. The Owner or a Manager writes it.');
+ await expect(overlay.locator('.know-empty')).toHaveText('Nothing is written here yet. An Administrator or a Manager writes it.');
 
  // The request a Manager's Save sends (here with nothing changed), sent again with the Contributor's session and new text.
  const other=await browser.newContext(); const managerPage=await other.newPage();

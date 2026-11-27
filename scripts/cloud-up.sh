@@ -93,13 +93,13 @@ gtmworks is running at $origin
 EOF
 if [[ $mode == up ]]; then
  cat << EOF
-  Sign in as the seeded Owner: $seeded_email / $seeded_password
+  Sign in as the seeded Administrator: $seeded_email / $seeded_password
   (every seeded person in supabase/seed.sql has that password; manager@, reviewer@ and viewer@example.com too)
   $signed_in
 EOF
 else
  cat << EOF
-  Fresh install: open the setup link to create the Owner and the first Company:
+  Fresh install: open the setup link to create the Administrator and the first Company:
   $origin/first-run#code=$setup_code
 EOF
 fi

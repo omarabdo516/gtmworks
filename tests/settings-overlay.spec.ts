@@ -10,9 +10,9 @@ const company='10000000-0000-0000-0000-000000000003';
 const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // The sections in their groups (#612): Company, Agents and Engine, then Backups, Your account and About on their own.
-// Backup is the Owner's alone (#33).
-const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Voice','Usage','Backups','Your account','About'];
-const staffSections=sections.filter(section=>section!=='Backups');
+// Backup and the Hermes dashboard's row are the Owner's alone (#33, #869).
+const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Voice','Usage','gtmworks','Backups','Your account','About'];
+const staffSections=sections.filter(section=>section!=='Backups'&&section!=='gtmworks');
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
@@ -137,9 +137,9 @@ test('Settings offer no way to connect an outside Hermes, in any section, the ac
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(sections);
  // Each section is drawn before the next click (#630): the breadcrumb's last crumb names it, so no click lands on a page
- // being replaced.
+ // being replaced. The gtmworks row leaves Settings for the Company's own Engine's dashboard (#869), which connects nothing.
  const lastCrumb=overlay.getByRole('navigation',{name:'Breadcrumb'}).getByRole('listitem').last();
- for(const item of await overlay.locator('.sov-nav .sb-item').all()) {
+ for(const item of await overlay.locator('.sov-nav .sb-item:not(#sov-nav-hermes)').all()) {
   const name=(await item.textContent())!.trim();
   await item.click();
   await expect(item).toHaveAttribute('aria-current','page');

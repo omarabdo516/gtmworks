@@ -66,7 +66,7 @@ test('a Manager reads the same words with no field, and the server refuses their
  await expect(overlay.locator('#set-how')).toContainText('Never promise a date.');
  await expect(overlay.locator('#set-instr')).toHaveCount(0);
  await expect(overlay.locator('#dp-savebar')).toBeHidden();
- await expect(overlay.getByText('Standing instructions are changed by the Owner only.')).toBeVisible();
+ await expect(overlay.getByText('Standing instructions are changed by an Administrator only.')).toBeVisible();
  const refused=await page.request.post('/api/agent-page',{data:{company,agent:lead,changes:{instructions:'Changed by a Manager.'}}});
  expect(refused.status()).toBe(403);
  expect(fake.settings.profiles.get(profile)?.soul).toBe(saved);

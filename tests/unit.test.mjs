@@ -34,7 +34,7 @@ test('app motion contains no broad transitions or the old page entrances', () =>
 test('the four roles and independent grants are documented', () => {
  const glossary=readFileSync('GLOSSARY.md','utf8');
  assert.ok(!/reviewer/i.test(glossary),'the reviewer Role is gone');
- for(const value of ['Owner, Manager, Contributor, or Viewer','publishing, money figures, or customer data']) assert.ok(glossary.includes(value));
+ for(const value of ['Administrator, Manager, Contributor, or Viewer','publishing, money figures, or customer data']) assert.ok(glossary.includes(value));
 });
 test('schema prevents contributor and viewer approval', () => {
  const sql=readFileSync('supabase/migrations/20261104000000_foundation.sql','utf8');
@@ -180,6 +180,11 @@ test('catalogues reject missing keys, empty messages and mismatched interpolatio
  assert.ok(catalogueProblems({hello:'Hello'},{hello:''}).length);
  assert.ok(catalogueProblems({hello:'Hello {0}'},{hello:'مرحبًا {1}'}).length);
 });
+test('catalogues never name the Administrator Role by its old name, Owner or مالك (#902)', async()=>{
+ const {catalogueProblems}=await import('../scripts/check-i18n.mjs');
+ for(const [en,ar] of [[{a:'Ask the Owner'},{a:'اطلب من الأدمن'}],[{a:'The last owner stays'},{a:'الأدمن'}],[{a:'Owners see it'},{a:'الأدمنز'}],[{a:'Administrator'},{a:'اطلب من المالك'}],[{a:'Administrator'},{a:'بصفتك مالكًا'}],[{a:'Administrator'},{a:'المالكون'}],[{a:'Administrator'},{a:'اسأل مالكها'}],[{a:'Administrator'},{a:'صاحب الشركة بس'}],[{a:'The OWNER'},{a:'أدمن'}]]) assert.ok(catalogueProblems(en,ar).length,JSON.stringify([en,ar]));
+ assert.deepEqual(catalogueProblems({a:'Ask the install owner to run gtmworks company add --owner <email>. Install owner only.'},{a:'اطلب من صاحب التثبيت، مالكش دعوة'}),[],'the install owner, a command flag and other Arabic words stay');
+});
 test('UI literal guard parses JSX text, expressions and user-facing attributes', async()=>{
  const {literalProblems}=await import('../scripts/check-i18n.mjs');
  for(const source of ['<p>Hello</p>','<p>مرحبًا</p>','<p>{"Hello"}</p>','<p>{ok?"Yes":"No"}</p>','<p>{`Welcome ${name}`}</p>','<input placeholder="Email"/>','<img alt={ok?"One":"Two"}/>','<button aria-label={`Open ${name}`}/>','<p title={"Details"}/>']) assert.ok(literalProblems('app/example.tsx',source).length,source);
@@ -282,6 +287,22 @@ test('a chat open writes one line of each step\'s whole milliseconds, with ids o
  assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'prefetch'})).render,'prefetch');
  assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'refresh'})).render,'refresh');
  assert.equal(JSON.parse(chatOpenLine({company:'x',conversation:'y',steps:{},render:'<script>'})).render,'open');
+});
+
+test('a Settings open writes one line in the chat_opened shape, with its section and its kind of render (#898)',async()=>{
+ const {settingsOpenLine,settingsRenderKind}=await import('../lib/diagnostics.mjs');
+ const entry=JSON.parse(settingsOpenLine({company:'0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90',section:'agents',steps:{frame:20.4,reads:61.5,firstByte:63.2,done:140,body:7}},{now:new Date('2026-11-26T19:00:00Z')}));
+ assert.deepEqual(entry,{event:'settings_opened',at:'2026-11-26T19:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',section:'agents',render:'open',ms:{frame:20,reads:62,firstByte:63,done:140}});
+ // A section that is no Settings section is no value of the line.
+ assert.equal(JSON.parse(settingsOpenLine({company:'x',section:'<script>',steps:{}})).section,null);
+ const headers=values=>({get:name=>values[name]??null});
+ const query={section:'agents',agent:'a'};
+ assert.equal(settingsRenderKind(headers({'next-router-prefetch':'1'}),'rs',query),'prefetch');
+ // Moving to another section is an open; the same section and Agent drawn again, in any order of the address, a refresh.
+ assert.equal(settingsRenderKind(headers({rsc:'1',referer:'http://x/c/rs/settings?section=models'}),'rs',query),'open');
+ assert.equal(settingsRenderKind(headers({rsc:'1',referer:'http://x/c/rs/settings?agent=a&section=agents'}),'rs',query),'refresh');
+ assert.equal(settingsRenderKind(headers({rsc:'1',referer:'http://x/c/rs/home'}),'rs',query),'open');
+ assert.equal(settingsRenderKind(headers({}),'rs',query),'open');
 });
 
 test('an Engine\'s change of state is one line with its cause, and a failed call names why (#772)',async()=>{

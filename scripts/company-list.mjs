@@ -36,7 +36,7 @@ if(mode==='engines') {
   if(found!=='healthy') unhealthy++;
   const company=companies.find(one=>one.engine_id===engine.id)?.name;
   const waiting=waitingName.get(engine.id);
-  const holds=company?`Company "${company}"`:waiting?`Company "${waiting}" waiting for its Owner`:'waiting for a Company';
+  const holds=company?`Company "${company}"`:waiting?`Company "${waiting}" waiting for its first Administrator`:'waiting for a Company';
   console.log(`Engine ${engine.address}: ${found} (${holds})`);
  }
 } else {
@@ -47,7 +47,7 @@ if(mode==='engines') {
  }
  for(const engine of engines.filter(engine=>!named.has(engine.id))) {
   const waiting=waitingName.get(engine.id);
-  console.log(waiting?`Company "${waiting}": waiting for its Owner (Engine ${engine.address} (${await state(engine.address)}))`
+  console.log(waiting?`Company "${waiting}": waiting for its first Administrator (Engine ${engine.address} (${await state(engine.address)}))`
    :`Engine ${engine.address}: waiting for a Company`);
  }
 }
