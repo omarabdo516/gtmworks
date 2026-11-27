@@ -1,5 +1,11 @@
 [
  {
+  "issue": 843,
+  "date": "2026-11-26",
+  "en": { "title": "Files on a Card", "body": "Add a file to a Card and the Agent working it opens it; every Member sees the Card's files and downloads them, pictures as thumbnails, and the files the Agent made for the Card are listed there too." },
+  "ar": { "title": "ملفات على البطاقة", "body": "ضيف ملف على البطاقة والوكيل اللي شغال عليها يفتحه؛ وكل عضو بيشوف ملفات البطاقة وينزّلها، والصور بتظهر مصغّرة، والملفات اللي الوكيل عملها للبطاقة بتبان هناك كمان." }
+ },
+ {
   "issue": 863,
   "date": "2026-11-26",
   "en": { "title": "Voice settings, once for the whole company", "body": "Settings → Voice sets how every Agent writes down what you dictate: the provider, its model, the language (Automatic detects Arabic or English), the names it should spell right and the silence trim; each Agent's page no longer has its own language." },

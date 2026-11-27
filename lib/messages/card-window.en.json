@@ -88,5 +88,18 @@
   "cwStart": "Start {0}",
   "cwStartTip": "Start",
   "cwStopFailed": "It wasn’t stopped. Try again.",
-  "cwNotRunning": "It isn’t working on the card now. The card was read again."
+  "cwNotRunning": "It isn’t working on the card now. The card was read again.",
+  "cwFiles": "Files",
+  "cwAdd": "Add",
+  "cwAddFiles": "Add files",
+  "cwFileOpen": "Download {0}",
+  "cwFileNotNow": "Can’t be read now: the work sandbox is stopped.",
+  "cwFileUnservable": "This file isn’t in the Agent’s own folder, so it can’t be downloaded.",
+  "cwFileTooLarge": "“{0}” wasn’t added: a card’s file can be at most {1} MB.",
+  "cwFileAdding": "Adding “{0}”…",
+  "cwFilesAdding": "Adding {0} files…",
+  "cwFileAdded": "File added",
+  "cwFilesAdded": "{0} files added",
+  "cwFileFailed": "“{0}” wasn’t added. Try again.",
+  "cwFileNotAllowed": "You can read this card, not add to it."
 }
