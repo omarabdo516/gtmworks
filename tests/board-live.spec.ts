@@ -86,7 +86,9 @@ test('a board of Company A receives no change of Company B',async({page})=>{
  other.settings.kanban.move(theirs.id,'running');
  const mine=fake.settings.kanban.task({title:'Weekly report',status:'ready',assignee:adsProfile});
  await expect(inColumn(page,'planned',mine.id)).toBeVisible({timeout:1000});
- expect(said(seen.frames(),message=>message.changed?.includes(mine.id)===true)).toBe(true);
+ // The board's first read can still be on its way when the Card is made and show it before the change does; the
+ // change for the reader's own Company comes all the same.
+ await expect.poll(()=>said(seen.frames(),message=>message.changed?.includes(mine.id)===true),{timeout:1000}).toBe(true);
  expect(seen.frames().some(frame=>frame.includes(theirs.id))).toBe(false);
  await expect(board(page).getByText('Aleem’s own launch plan')).toHaveCount(0);
 });
