@@ -20,6 +20,7 @@ import Skills from './skills';
 import { companySkillAgents } from '@/lib/company-skill-items';
 import Work, { type Card } from './work';
 import Board from './board';
+import BoardViews from './board-views';
 import { addIdea, archiveCards, archivedCardList, placeMove, workAction, undoMove } from './work-actions';
 import { archivedCardCount, archivedCardPage } from '@/lib/archived-cards';
 import Projects from './projects';
@@ -49,6 +50,8 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // (/work/new) is the board with its New card open (#836); a Viewer gets the board alone.
  const opened=await searchParams;
  if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} creating={section==='work/new'}/></main></Page>;
+ // The list and the calendar read the same board (#845): their frame is drawn here and their Cards are the board's read.
+ if(section==='work/list'||section==='work/calendar') return <Page title={title}><main className="content"><BoardViews key={`${company.id}:${section}`} company={company.id} slug={slug} view={section==='work/list'?'list':'calendar'} writer={canCreate}/></main></Page>;
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
  const {data:companyHermesAgents}=section==='agents'?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]};
  const skillAgents=section==='skills'?await companySkillAgents(company.id):null;

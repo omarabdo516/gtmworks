@@ -8,6 +8,7 @@ import { sections } from '../lib/navigation';
 import { i18n, type Language } from '../lib/i18n.mjs';
 import { appOrigin } from './lane.mjs';
 import { oldCard } from './old-card';
+import { laneHermes } from './lane-hermes';
 
 async function chooseLanguage(page:Page,language:Language) {
  await chooseLanguageInSettings(page,language);
@@ -79,19 +80,20 @@ test('English default, account language across sessions/devices, automatic conte
  const suffix=Date.now();
  const titles=[`بطاقة من الإعدادات 1440 ${suffix}`,`Settings card 1440 ${suffix}`];
  const calendarTitles=[`ع 1440 ${suffix.toString(36)}`,`A 1440 ${suffix.toString(36)}`];
- const goLive=`${new Date().toISOString().slice(0,10)}T12:00`;
  const paths:string[]=[];
- for(const title of [...titles,...calendarTitles]) {
-  // An old Card on its own page, for the old calendar (#845): New card makes its Cards on the Engine since #836.
+ for(const title of titles) {
+  // An old Card on its own page, for the old Card page, Waiting on you and Home, until #835 and #846 replace them.
   paths.push((await oldCard(page,title)).path);
   await expect(page.locator('.modal h2').first()).toHaveText(title);
-  await page.locator('input[name=go_live]').fill(goLive);
-  await Promise.all([
-   page.waitForResponse(response=>response.request().method()==='POST' && new URL(response.url()).pathname===paths.at(-1)),
-   page.getByRole('button',{name:'Save changes',exact:true}).click()
-  ]);
-  await page.reload();
-  await expect(page.locator('input[name=go_live]')).toHaveValue(goLive);
+ }
+ // The calendar reads the Company's Engine's board (#845): each title is a Card on the fake Engine, dated today through
+ // the board's own route.
+ const fake=await laneHermes();
+ try {
+ for(const title of [...titles,...calendarTitles]) {
+  const card=fake.settings.kanban.task({title,status:'ready'}).id;
+  const dated=await page.request.patch('/api/board/cards',{data:{company:'10000000-0000-0000-0000-000000000001',card,publishOn:new Date().toISOString().slice(0,10)}});
+  expect(dated.status()).toBe(200);
  }
  try {
   for(const language of ['en','ar'] as const) {
@@ -198,6 +200,7 @@ test('English default, account language across sessions/devices, automatic conte
    await expect(other.getByRole('heading',{level:1})).toHaveText('لا توجد شركة بعد');
   } finally {await second.close();}
  } finally {await chooseLanguage(page,'en');}
+ } finally {await fake.close();}
 });
 
 test('anonymous sign-in defaults to English and can render Arabic including its confirmation message',async({page})=>{
