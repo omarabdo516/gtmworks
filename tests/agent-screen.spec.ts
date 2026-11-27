@@ -1,4 +1,5 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
+import type { WebSocketRoute } from '@playwright/test';
 import WebSocket from 'ws';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -308,9 +309,15 @@ test('a Member takes control of the Screen for this session, works it with their
 test('a page that loses its connection while in control has it again on reconnecting, and says control went back only once it did',async({page})=>{
  fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
  // The page's own socket passes through as it is, until the connection is cut: on the page's side only, as a network
- // that drops before the server knows, or on both sides, as the server finding the dead socket.
- const sockets:{page:{close:(options?:{code?:number,reason?:string})=>Promise<void>},server:{close:(options?:{code?:number,reason?:string})=>Promise<void>}}[]=[];
- await page.routeWebSocket(/\/api\/display\/ws/,socket=>{ sockets.push({page:socket,server:socket.connectToServer()}); });
+ // that drops before the server knows, or on both sides, as the server finding the dead socket. A side the test cuts is
+ // cut alone: Playwright otherwise hands a close on to the other side, so the page would read the server's close at once
+ // and reconnect before the test cuts its side, and the toast it then shows could be gone before the test looks.
+ const sockets:{page:WebSocketRoute,server:ReturnType<WebSocketRoute['connectToServer']>}[]=[];
+ await page.routeWebSocket(/\/api\/display\/ws/,socket=>{
+  const server=socket.connectToServer();
+  socket.onClose(()=>{}); server.onClose(()=>{});
+  sockets.push({page:socket,server});
+ });
  const taken=controlRows('agent_screen_taken').length, given=controlRows('agent_screen_given_back').length;
  const {card}=await openScreen(page,'omar@example.com');
  await card.getByRole('button',{name:'Watch',exact:true}).click();
@@ -344,6 +351,8 @@ test('a page that loses its connection while in control has it again on reconnec
  await last?.server.close();
  await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
  await expect.poll(()=>controlRows('agent_screen_given_back').length).toBe(given+1);
+ // The page has not reconnected yet: it learns the connection is gone only now.
+ expect(sockets.at(-1)).toBe(last);
  await last?.page.close({code:1011,reason:'lost'});
  await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
  await expect(view.getByRole('button',{name:'Take control'})).toBeVisible();
