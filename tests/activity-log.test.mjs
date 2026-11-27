@@ -25,6 +25,11 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([cardRestored.act, cardRestored.from, cardRestored.to], [['logActRestored'], { key: 'logArchive' }, { key: 'boardColDone' }]);
  assert.deepEqual(['en', 'ar'].map(language => ['logActArchived', 'logActRestored', 'logArchive'].map(key => i18n(language).t(key))),
   [['archived the card', 'restored the card', 'Archived'], ['أرشف البطاقة', 'رجّع البطاقة', 'الأرشيف']]);
+ // An old row that names the old board's Live column keeps its name, in both languages, though the Engine's board has
+ // no Live column (ADR 0033, #846).
+ const fromLive = describeEntry({ subject: 'card', action: 'card_archived', details: { column: 'live' } });
+ assert.deepEqual(fromLive.from, { key: 'boardColLive' });
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('boardColLive')), ['Live', 'شغال لايف']);
  // Archiving and restoring a team channel (#675) name the channel, to the archive and back.
  const channelArchived = describeEntry({ subject: 'company', action: 'channel_archived', details: { channel_id: 'x', channel: 'Spring launch' } });
  assert.deepEqual([channelArchived.act, channelArchived.obj, channelArchived.from, channelArchived.to], [['logActChannelArchived'], '#Spring launch', undefined, { key: 'logArchive' }]);

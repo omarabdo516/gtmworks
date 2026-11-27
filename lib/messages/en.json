@@ -1780,5 +1780,6 @@
   "viewThisMonth": "This month",
   "viewUndated": "No publishing date",
   "viewUndatedNone": "Every card has a date.",
-  "viewDateFailed": "The date wasn’t saved. Try again."
+  "viewDateFailed": "The date wasn’t saved. Try again.",
+  "boardColLive": "Live"
 }
