@@ -184,7 +184,7 @@ export default function Board({company,slug,writer,creating=false}:{company:stri
     </section>;
    })}
   </div>}
-  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} cardHref={cardHref} showCard={showCard} onBoard={accept}
+  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={accept}
    archive={writer?(id,done)=>void archiving.archive([id],{done}):undefined} restore={writer?id=>archiving.restore([id]):undefined} onClose={closeCard}/>}
   {archiving.confirm}
  {making&&<Suspense fallback={null}><NewCard company={company} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}
