@@ -1,4 +1,5 @@
 'use client';
+import { appByKey } from '@/lib/app-catalogue.mjs';
 // The Owner's sign-in to an app for one Agent, as Settings, Apps runs it (#30): the vendor's window opens at the press
 // (before the answer, so the browser lets it open) and is pointed at the vendor's page once gtmworks has it, never
 // knowing this page; the sign-in is then followed through /api/company-apps until it connects, fails or is stopped,
@@ -30,6 +31,9 @@ async function ask(body:Record<string,unknown>,signal?:AbortSignal,within=askFor
 const pollEvery=2000, pollFor=15*60*1000;
 
 export async function signInToApp({company,agent,app,signal,openApp}:{company:string,agent:string,app:string,signal?:AbortSignal,openApp?:(app:string)=>void}):Promise<SignInOutcome> {
+ // A vendor that refuses dynamic registration signs in only with the install's own client (#914), which only the server
+ // knows is there: its own page says whether it can connect, so no window opens here that could close by itself.
+ if(appByKey(app)?.oauthClient) { if(!openApp) return {error:'connectFailed'}; openApp(app); return {state:'manual'}; }
  const opened=window.open('about:blank','_blank');
  if(!opened) return {error:'connectBlocked'};
  // Every outcome but connected cancels the sign-in, in case one was made, and closes its window, once.
