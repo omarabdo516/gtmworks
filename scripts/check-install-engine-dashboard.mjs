@@ -161,6 +161,7 @@ for(const role of ['manager','contributor','viewer']) {
  people.push([`a ${role}`,await cookieOf(address,secret)]);
 }
 // An Owner of another Company only: an Owner, but not of this Company.
+let otherOwner=null;
 {
  const address='dashboard-other-owner@example.com', secret='dashboard-other-owner-password';
  const made=await json('/auth/v1/admin/users',{method:'POST',headers:asService,body:JSON.stringify({email:address,password:secret,email_confirm:true})});
@@ -170,6 +171,7 @@ for(const role of ['manager','contributor','viewer']) {
  const [other]=await json('/rest/v1/companies',{method:'POST',headers:{...asService,Prefer:'return=representation'},body:JSON.stringify({id:randomUUID(),slug:'dashboard-other-company',name:'Another Company',engine_id:engine.id})});
  await json('/rest/v1/members',{method:'POST',headers:asService,body:JSON.stringify({company_id:other.id,person_id:made.id,role:'owner'})});
  people.push(['an Owner of another Company only',await cookieOf(address,secret)]);
+ otherOwner={company:other.id,person:made.id};
 }
 people.push(['a signed-out person','']);
 for(const [who,cookie] of people) {
@@ -183,6 +185,10 @@ for(const [who,cookie] of people) {
  assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,cookie),404,`${who} opens no socket`);
 }
 console.log('A Manager, a Contributor, a Viewer, an Owner of another Company only and a signed-out person each got the missing page and no socket');
+// That Company's Engine record is never reachable, so its Owner is removed once refused: a Company with an active Owner
+// is waited for by the checks that follow (scripts/ci-install-lib.sh main_agent_plugin_settled, #911), and this one
+// would never get its main Agent's profile.
+await json(`/rest/v1/members?company_id=eq.${otherOwner.company}&person_id=eq.${otherOwner.person}`,{method:'PATCH',headers:asService,body:JSON.stringify({removed_at:new Date().toISOString()})});
 
 // The live parts close with the Role (#870): the chat, its terminal and the board's event stream of a second Owner.
 const second=await (async()=>{

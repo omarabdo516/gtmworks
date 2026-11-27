@@ -1357,6 +1357,9 @@ docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PW
   --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
   -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
   node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
+# First run here was the proxy check's own, so the main Agent's plugin is waited for as complete_setup waits for it, and
+# no check below meets the Engine mid-restart.
+main_agent_plugin_settled || fail "the main Agent's plugin is in place after first run"
 # The Owner's Hermes dashboard on the pinned Engine (#869): the Owner just made opens its first page, an inner page, its
 # code at both addresses, an API route and a socket through the proxy and gtmworks's gate; a Manager, a Contributor, a
 # Viewer and a signed-out person get the missing page and no socket; no answer holds the Engine's key, given by name;
@@ -1383,8 +1386,6 @@ docker exec -u 0 "$engine_id" /etc/cont-init.d/09-engine-dashboard-theme || fail
 # The Engine's own Kanban board, moved here from the open-design area when Open Design stopped shipping (#911, decision
 # 0079): this area's own checks leave room in its 12 minutes. It needs two Companies on the fake model and the first
 # Company's second Agent, made as the agents-sandbox area makes them, before the rate limit below locks the Owner out.
-# First run here was the proxy check's own, so the main Agent's plugin is waited for as complete_setup waits for it.
-main_agent_plugin_settled || fail "the main Agent's plugin is in place after first run"
 point_engine_at_fake_model "$engine_id"
 second_company || fail 'company add makes the second Company'
 engine_key=$(first_engine_key)
