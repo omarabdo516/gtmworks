@@ -13,7 +13,6 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const rs='10000000-0000-0000-0000-000000000001';
 const rsProfile=`co-${rs.replaceAll('-','')}`;
 const ads=randomUUID(), adsProfile=`ag-${ads.replaceAll('-','')}`;
-const viewer='20000000-0000-0000-0000-000000000004';
 const board='/c/rs-learning/work/board';
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 const cards:Record<string,string>={};
@@ -27,7 +26,8 @@ test.beforeAll(async({},testInfo)=>{
    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${ads}','${rs}','Ads','Runs the ads.',false,'${adsProfile}');
    insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${rs}','${rsProfile}',true)
     on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
-   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rs}','${viewer}','${ads}');
+   insert into public.member_agent_access(company_id,person_id,agent_id) select m.company_id,m.person_id,a.id from public.members m join public.hermes_agents a on a.company_id=m.company_id
+    where m.company_id='${rs}' and m.removed_at is null and m.role<>'owner' on conflict do nothing;
   end $$;`);
  const kanban=fake.settings.kanban;
  cards.idea=kanban.task({title:'Reel: a day in an accountant\'s life',status:'triage'}).id;

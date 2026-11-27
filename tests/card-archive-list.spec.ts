@@ -26,6 +26,8 @@ test.beforeAll(async({},testInfo)=>{
    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${ads}','${rs}','Ads','Runs the ads.',false,'${adsProfile}');
    insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${rs}','${rsProfile}',true)
     on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+   insert into public.member_agent_access(company_id,person_id,agent_id) select m.company_id,m.person_id,a.id from public.members m join public.hermes_agents a on a.company_id=m.company_id
+    where m.company_id='${rs}' and m.removed_at is null and m.role<>'owner' on conflict do nothing;
   end $$;`);
  cards.copy=fake.settings.kanban.task({title:'December ad copy',status:'todo',assignee:adsProfile}).id;
 });
