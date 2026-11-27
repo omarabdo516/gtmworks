@@ -35,7 +35,7 @@ test.beforeAll(async({},testInfo)=>{
  cards.ramadan=kanban.task({title:'Ideas for Ramadan',status:'ready'}).id;
  cards.meta=kanban.task({title:'Meta campaign',status:'running',assignee:adsProfile}).id;
  kanban.run(cards.meta,{profile:adsProfile});
- cards.numbers=kanban.task({title:'Google Ads numbers',status:'blocked',assignee:rsProfile}).id;
+ cards.numbers=kanban.task({title:'Google Ads numbers',status:'blocked',assignee:adsProfile}).id;
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
@@ -71,10 +71,10 @@ test('with the keyboard: select mode, a Card, "Select all shown", Escape on the 
  await expect(bar(page)).toContainText(`${shown} selected`);
  const archive=bar(page).getByRole('button',{name:'Archive'});
  await expect(archive).toBeFocused();
- // Ads works on one of them and a question waits on another: archiving them all asks first.
+ // Ads works on one of them and a question waits on another: archiving them all asks first, in the board's order.
  await page.keyboard.press('Enter');
  await expect(confirmOf(page).getByRole('heading')).toHaveText(`Archive ${shown} cards?`);
- await expect(confirmOf(page).getByRole('listitem')).toHaveText(['Ads stops working on “Meta campaign”',/^The question from .+ on “Google Ads numbers” closes unanswered$/]);
+ await expect(confirmOf(page).getByRole('listitem')).toHaveText(['The question from Ads on “Google Ads numbers” closes unanswered','Ads stops working on “Meta campaign”']);
  await page.keyboard.press('Escape');
  await expect(confirmOf(page)).toHaveCount(0);
  await expect(onBoard(page,cards.idea)).toBeVisible();
@@ -143,23 +143,25 @@ test('"Archive everything in Done" archives exactly the Cards shown in Done, and
  const made=['Spring post','Summer post'].map(title=>{ const id=kanban.task({title,status:'done'}).id; kanban.run(id,{status:'done',outcome:'completed',summary:`${title} is out.`,ended_at:Math.floor(Date.now()/1000)}); return id; });
  await signIn(page,'reviewer@example.com',board);
  for(const id of made) await expect(inColumn(page,'done',id)).toBeVisible();
- // A Card finished on the Engine after the board last read it is not shown, so it is not archived: the live stream is
- // cut first, so the board does not read again.
- fake.settings.kanbanStreamDown=true;
+ // A Card finished on the Engine after the board last read it is not shown, so it is not archived: the board's own
+ // reads fail from here on, so it keeps showing what it last read.
+ await page.route(/\/api\/board\?company=/,route=>route.abort());
  const late=kanban.task({title:'Autumn post',status:'done'}).id;
  kanban.run(late,{status:'done',outcome:'completed',summary:'Autumn post is out.',ended_at:Math.floor(Date.now()/1000)});
- try {
+ await expect(page.getByText('Couldn’t refresh the board. Showing what it last read.')).toBeVisible();
+ {
   await hydrated(page,'button.col__act[aria-label="Archive everything in Done"]');
   await page.getByRole('button',{name:'Archive everything in Done'}).click();
   await expect(toast(page)).toContainText('2 archived');
   expect([status(made[0]),status(made[1]),status(late)]).toEqual(['archived','archived','done']);
   for(const id of made) await expect(onBoard(page,id)).toHaveCount(0);
+  // The archive's answer is the board as it now reads, the late Card in it.
   await expect(inColumn(page,'done',late)).toBeVisible();
   await toast(page).getByRole('button',{name:'Undo'}).click();
   await expect(toast(page)).toContainText('2 restored');
   for(const id of made) await expect(inColumn(page,'done',id)).toBeVisible();
   expect([status(made[0]),status(made[1])]).toEqual(['done','done']);
- } finally { fake.settings.kanbanStreamDown=false; }
+ }
 
  const reader=await (await browser.newContext()).newPage();
  await signIn(reader,'viewer@example.com',board);
