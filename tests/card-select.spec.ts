@@ -36,6 +36,8 @@ test.beforeAll(async({},testInfo)=>{
  cards.meta=kanban.task({title:'Meta campaign',status:'running',assignee:adsProfile}).id;
  kanban.run(cards.meta,{profile:adsProfile});
  cards.numbers=kanban.task({title:'Google Ads numbers',status:'blocked',assignee:adsProfile}).id;
+ // A Card with no Agent shows only where gtmworks's row beside it is (fail closed, ADR 0033): these were made from the board.
+ query(`insert into public.kanban_cards(company_id,task_id) values ${[cards.idea,cards.email,cards.ramadan].map(id=>`('${rs}','${id}')`).join(',')} on conflict do nothing`);
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
@@ -141,12 +143,16 @@ test('by touch: a tap selects a Card and a tap on Archive archives it, with Undo
 test('"Archive everything in Done" archives exactly the Cards shown in Done, and Undo puts them back; a Viewer has neither control',async({page,browser})=>{
  const kanban=fake.settings.kanban;
  const made=['Spring post','Summer post'].map(title=>{ const id=kanban.task({title,status:'done'}).id; kanban.run(id,{status:'done',outcome:'completed',summary:`${title} is out.`,ended_at:Math.floor(Date.now()/1000)}); return id; });
+ // With no Agent, a Card shows where gtmworks's row beside it is (fail closed, ADR 0033).
+ const rows=(ids:string[])=>query(`insert into public.kanban_cards(company_id,task_id) values ${ids.map(id=>`('${rs}','${id}')`).join(',')} on conflict do nothing`);
+ rows(made);
  await signIn(page,'reviewer@example.com',board);
  for(const id of made) await expect(inColumn(page,'done',id)).toBeVisible();
  // A Card finished on the Engine after the board last read it is not shown, so it is not archived: the board's own
  // reads fail from here on, so it keeps showing what it last read.
  await page.route(/\/api\/board\?company=/,route=>route.abort());
  const late=kanban.task({title:'Autumn post',status:'done'}).id;
+ rows([late]);
  kanban.run(late,{status:'done',outcome:'completed',summary:'Autumn post is out.',ended_at:Math.floor(Date.now()/1000)});
  await expect(page.getByText('Couldn’t refresh the board. Showing what it last read.')).toBeVisible();
  {
