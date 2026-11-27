@@ -11,9 +11,11 @@ import type { BoardCard } from '@/app/board-read';
 type SymbolKind=CardSymbol['kind']|'onYou';
 const symbols:{[kind in SymbolKind]:{icon?:ShellIconName,tone:'ok'|'wait'|'bad'|'mute'}}={
  working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},stopped:{icon:'stop',tone:'mute'},waits:{icon:'hourglass',tone:'mute'},
+ // A review's outcome, which only the Card's own read knows (#839): no board Card carries one.
+ sentBack:{icon:'sendBack',tone:'mute'},passed:{icon:'passed',tone:'ok'},
  onYou:{icon:'hand',tone:'wait'},
 };
-const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits',onYou:'symOnYou'} as const;
+const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits',sentBack:'symSentBack',passed:'symPassed',onYou:'symOnYou'} as const;
 
 /**
  * A Card of the Engine's board as a tile (spec #831, #834; design-reference-card: kcardHTML): its title, which opens it,

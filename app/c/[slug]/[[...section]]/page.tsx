@@ -49,7 +49,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // old board's Card, a number (?card=, ?show=), still opens on the old board until it is switched off (#846). New card
  // (/work/new) is the board with its New card open (#836); a Viewer gets the board alone.
  const opened=await searchParams;
- if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} creating={section==='work/new'}/></main></Page>;
+ if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} reviewer={manage} creating={section==='work/new'}/></main></Page>;
  // The list and the calendar read the same board (#845): their frame is drawn here and their Cards are the board's read.
  if(section==='work/list'||section==='work/calendar') return <Page title={title}><main className="content"><BoardViews key={`${company.id}:${section}`} company={company.id} slug={slug} view={section==='work/list'?'list':'calendar'} writer={canCreate}/></main></Page>;
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};

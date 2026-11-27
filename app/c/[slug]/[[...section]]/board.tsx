@@ -37,7 +37,7 @@ type Agent={id:string,name:string};
 
 const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],done:['boardEmptyDone','']};
 
-export default function Board({company,slug,writer,creating=false}:{company:string,slug:string,writer:boolean,creating?:boolean}) {
+export default function Board({company,slug,writer,reviewer=false,creating=false}:{company:string,slug:string,writer:boolean,reviewer?:boolean,creating?:boolean}) {
  const {t}=useI18n();
  const read=useBoard(company);
  // New card is open (#836): at /work/new it opens with the page, and closing it leaves the board at its own address.
@@ -117,7 +117,7 @@ export default function Board({company,slug,writer,creating=false}:{company:stri
     </section>;
    })}
   </div>}
-  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={accept}
+  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} reviewer={reviewer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={accept}
    archive={writer?(id,done)=>void archiving.archive([id],{done}):undefined} restore={writer?id=>archiving.restore([id]):undefined} onClose={closeCard}/>}
   {archiving.confirm}
  {making&&<Suspense fallback={null}><NewCard company={company} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}

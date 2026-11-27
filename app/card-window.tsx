@@ -8,6 +8,7 @@ import { columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-colum
 import type { CompanyCard } from '@/lib/company-card.mjs';
 import { CardDescription } from './card-description';
 import { CardCallout, CommentField, RunControl } from './card-talk';
+import { PassedLine, ReviewCallout } from './card-review';
 import { CardFileChips, CardFilesRow } from './card-files';
 import { useCardChanges } from './board-live';
 import { ArchivedCallout, CardMore } from './board-archive';
@@ -80,11 +81,12 @@ function useCard(company:string,id:string):Read&{reread:()=>void} {
 
 const symbols:{[kind in CardSymbol['kind']]:{icon?:ShellIconName,tone:'ok'|'wait'|'bad'|'mute'}}={
  working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},stopped:{icon:'stop',tone:'mute'},waits:{icon:'hourglass',tone:'mute'},
+ sentBack:{icon:'sendBack',tone:'mute'},passed:{icon:'passed',tone:'ok'},
 };
-const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits'} as const;
-const runKey={running:'runRunning',done:'runDone',question:'runQuestion',review:'runReview',sentBack:'runSentBack',failed:'runFailed',stopped:'runStopped',moved:'runMoved'} as const;
+const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits',sentBack:'symSentBack',passed:'symPassed'} as const;
+const runKey={running:'runRunning',done:'runDone',question:'runQuestion',review:'runReview',sentBack:'runSentBack',passed:'runPassed',failed:'runFailed',stopped:'runStopped',moved:'runMoved'} as const;
 const eventKey:Record<string,string>={created:'evCreated',claimed:'evClaimed',completed:'evCompleted',blocked:'evBlocked',unblocked:'evUnblocked',commented:'evCommented',
- review_requested:'evReviewRequested',changes_requested:'evChangesRequested',review_reopened:'evReviewReopened',archived:'evArchived',reclaimed:'evReclaimed',crashed:'evCrashed',
+ review_requested:'evReviewRequested',passed:'evPassed',changes_requested:'evChangesRequested',review_reopened:'evReviewReopened',archived:'evArchived',reclaimed:'evReclaimed',crashed:'evCrashed',
  timed_out:'evTimedOut',gave_up:'evGaveUp',promoted:'evPromoted',promoted_manual:'evPromoted',edited:'evEdited',reprioritized:'evReprioritized',linked:'evLinked',unlinked:'evUnlinked',
  attached:'evAttached',attachment_removed:'evAttachmentRemoved',scheduled:'evScheduled',decomposed:'evDecomposed',status:'evStatus'};
 // The window's leave (card-window.css, gw-modal-out).
@@ -172,7 +174,7 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned,control}:{company:
 
 // `archive` and `restore` are the board's (#842, app/board-archive.tsx), for a Member who may write: the window stays on
 // the Card, archived and read only, and reads it again once the archive or the restore is done.
-export function CardWindow({company,id,seen,writer,cardHref,fileHref,showCard,onBoard,archive,restore,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,cardHref:(id:string)=>string,
+export function CardWindow({company,id,seen,writer,reviewer=false,cardHref,fileHref,showCard,onBoard,archive,restore,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,reviewer?:boolean,cardHref:(id:string)=>string,
  fileHref:(card:string,file:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,
  archive?:(id:string,done:()=>void)=>void,restore?:(id:string)=>Promise<unknown>,onClose:()=>void}) {
  const {t,language,locale}=useI18n();
@@ -207,7 +209,7 @@ export function CardWindow({company,id,seen,writer,cardHref,fileHref,showCard,on
  const columnName=column?t(columnLabel(column,writer)):'';
  const symbolName=(kind:CardSymbol)=>kind.kind==='waits'&&kind.count>1?t('symWaitsN',kind.count):t(symbolKey[kind.kind]);
  const sym=(kind:CardSymbol)=>{ const look=symbols[kind.kind]; const name=symbolName(kind);
-  return <span className={`sym sym--${look.tone}`} data-sym={kind.kind} role="img" aria-label={name} title={name}>{look.icon?<ShellIcon name={look.icon}/>:<span className="sym__dot"/>}</span>; };
+  return <span className={`sym sym--${look.tone}`} data-sym={kind.kind} role="img" aria-label={name} title={name}>{look.icon?<ShellIcon name={look.icon==='sendBack'&&ui==='ltr'?'sendBackLtr':look.icon}/>:<span className="sym__dot"/>}</span>; };
  const at=(epoch:number|null,more:Intl.DateTimeFormatOptions={hour:'numeric',minute:'2-digit'})=>epoch==null?'':new Date(epoch*1000).toLocaleString(locale,{day:'numeric',month:'short',...more});
  const day=(epoch:number|null)=>epoch==null?'':new Date(epoch*1000).toLocaleDateString(locale,{weekday:'long',day:'numeric',month:'long'});
  const time=(epoch:number|null)=>epoch==null?'':new Date(epoch*1000).toLocaleTimeString(locale,{hour:'numeric',minute:'2-digit'});
@@ -260,8 +262,8 @@ export function CardWindow({company,id,seen,writer,cardHref,fileHref,showCard,on
   return <li key={event.id} className="lg-row lg-row--quiet" data-event={event.kind}>{event.agent?<AgentFace agent={event.agent.id} size={20}/>:event.by?<Letter name={event.by} size={20}/>:<NoOne size={20}/>}
    <div className="lg-body"><p className="lg-line">{phrase}</p><p className="lg-meta">{actor&&<><bdi>{actor}</bdi><span aria-hidden="true">·</span></>}<span className="lg-time num">{time(event.at)}</span></p></div></li>;
  }):empty('cwNoActivity');
- const runs=(list:CompanyCard['runs'])=>list.length?<ol className="cw-runs">{[...list].reverse().map(run=><li key={run.id} className="cw-run">{run.agent?<AgentFace agent={run.agent.id} size={28}/>:<NoOne size={28}/>}<div className="od-field">
-   <span className="cw-run__t"><span className="num">#{run.n}</span> · <bdi>{run.agent?.name??c('cwAnAgent')}</bdi> · <span className={`cw-run__o${run.state==='failed'?' is-fail':run.state==='running'?' is-run':''}`}>{run.state==='running'&&<span className="dot dot--working" aria-hidden="true"/>}{c(runKey[run.state])}</span></span>
+ const runs=(list:CompanyCard['runs'])=>list.length?<ol className="cw-runs">{[...list].reverse().map(run=><li key={run.id} className="cw-run">{run.by?<Letter name={run.by.person} size={28}/>:run.agent?<AgentFace agent={run.agent.id} size={28}/>:<NoOne size={28}/>}<div className="od-field">
+   <span className="cw-run__t"><span className="num">#{run.n}</span> · <bdi>{run.by?.person??run.agent?.name??c('cwAnAgent')}</bdi> · <span className={`cw-run__o${run.state==='failed'?' is-fail':run.state==='running'?' is-run':''}`}>{run.state==='running'&&<span className="dot dot--working" aria-hidden="true"/>}{c(runKey[run.state])}</span></span>
    <span className="cw-run__d num">{at(run.startedAt)}{run.endedAt!=null&&<> {ui==='rtl'?'←':'→'} {at(run.endedAt)}</>}</span>{run.summary&&<span className="cw-run__n" dir="auto">{run.summary}</span>}</div></li>)}</ol>:empty('cwNoRuns');
  // A tab the Engine has not answered for yet says so; one it answered before keeps that read and says it is not fresh.
  const panel=!card?<p className="cw-said" role={read.state==='failed'?'alert':'status'}>{read.state==='failed'?c('cwReadFailed'):read.state==='missing'?'':c('cwReading')}</p>
@@ -283,9 +285,10 @@ export function CardWindow({company,id,seen,writer,cardHref,fileHref,showCard,on
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
      {card?.archived&&<ArchivedCallout restore={restore&&(()=>void restore(card.id).then(read.reread))}/>}
      {card&&card.symbol&&<CardCallout key={card.id} company={company} card={card} writer={writer} c={c} sym={sym(card.symbol)} onDone={talked}/>}
+     {card&&<ReviewCallout key={`review-${card.id}`} company={company} card={card} reviewer={reviewer} ui={ui} c={c} sym={kind=>sym({kind})} label={t('symReview')} onDone={talked}/>}
      {card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
-     {card&&card.column==='done'&&(card.summary||card.files.some(file=>file.from==='summary'))&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result">
-      {card.summary&&<p className="cw-sum" dir="auto">{card.summary}</p>}<CardFileChips files={card.files.filter(file=>file.from==='summary')} href={file=>fileHref(card.id,file.key)} c={c}/></div></section>}
+     {card&&card.column==='done'&&(card.summary||card.files.some(file=>file.from==='summary')||card.review?.state==='passed')&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result">
+      {card.summary&&<p className="cw-sum" dir="auto">{card.summary}</p>}<CardFileChips files={card.files.filter(file=>file.from==='summary')} href={file=>fileHref(card.id,file.key)} c={c}/><PassedLine card={card} c={c} sym={sym({kind:'passed'})}/></div></section>}
     </div>
     {read.state!=='missing'&&side}
     {read.state!=='missing'&&<section className="cw-feed" aria-label={c('cwFeed')}>

@@ -1,0 +1,17 @@
+/* A review on a Card (spec #831, #839), ported from the approved look (design-reference-card/index.html: .btn--secondary,
+   .cw-ver__st). The callout itself is the shared .cw-call of app/card-talk.css; colours come from the shell's gw tokens. */
+
+/* Send back and Cancel beside the primary button; the reference's 1px inset ring is drawn as an outline inside the edge,
+   in its colour token */
+.gw .cw .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); outline: 1px solid var(--gw-btn2-ring); outline-offset: -1px; }
+.gw .cw .btn--secondary:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .cw .btn--secondary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); outline: none; }
+@media (hover: hover) { .gw .cw .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); } }
+
+/* who sent it back, and why */
+.gw .cw .cw-review__by { margin: 1px 0 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .cw .cw-review .me__av { --av: 28px; }
+
+/* who passed it, under the summary (the reference's version state: the tick and a name) */
+.gw .cw .cw-review--passed { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--gw-fs-xs); color: var(--gw-text-2); }
+.gw .cw .cw-review--passed .sym { height: 18px; }
