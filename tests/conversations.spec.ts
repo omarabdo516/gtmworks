@@ -149,6 +149,9 @@ test('isolation: another member and another company get not found, and a company
   await ownerSignIn(page); agents=attachAgents();
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Private plan',sendKey:randomUUID()})).status()).toBe(200);
+  const messages=`intent=read&offset=0&limit=50`;
+  expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}&${messages}`)).status(),'its own person reads its messages').toBe(200);
+  expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}&${messages}`)).status()).toBe(404);
   expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}`)).status()).toBe(404);
   expect((await page.goto(`/c/rs-consultations/conversations/${conversation}`))!.status()).toBe(404);
   expect((await send(page,{company:other,conversation,message:'Elsewhere',sendKey:randomUUID()})).status()).toBe(404);
@@ -156,6 +159,7 @@ test('isolation: another member and another company get not found, and a company
   const context=await browser.newContext(); const owner=await context.newPage();
   try {
    await signIn(owner,'manager@example.com','/c/rs-learning/home');
+   expect((await owner.request.get(`/api/conversations?company=${company}&conversation=${conversation}&${messages}`)).status()).toBe(404);
    expect((await owner.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
    expect((await owner.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
    const refused=await send(owner,{conversation,message:'Hello',sendKey:randomUUID()});

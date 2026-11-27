@@ -3,6 +3,8 @@
   "conversationQueued": "It’ll read this after the current reply",
   "conversationNotSent": "Not sent",
   "conversationUnread": "This Conversation couldn’t be read.",
+  "conversationNoRefresh": "Couldn’t refresh. Showing what was last read.",
+  "conversationEngineSummary": "The Engine’s summary of earlier messages",
   "conversationTryAgain": "Try again",
   "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.",
   "conversationAddressed": "To {0} · the agent wasn’t asked",

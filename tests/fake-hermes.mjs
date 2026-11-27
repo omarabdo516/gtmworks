@@ -1115,7 +1115,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const found=fileAt(path,engine); if(!found) return;
     return attachment(found.entry.name,found.file.type??mimeOf(found.entry.name),Buffer.from(found.file.body));
    }
-   // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
+   // A session answers only under its own profile; a page holds at most 500 messages, from `offset`. `order=latest`
+   // pages back from the newest, `offset` many skipped (#875). A compacted session returns its older words only when
+   // asked for them (`include_compacted=true`, the probe's answer), else the read starts at the Engine's summary.
    // One recording as text (#160; hermes_cli/web_routers/audio.py 89-149): the body is a data URL and its MIME type,
    // the answer the transcript and the provider. Only its size and type are kept here, never the recording.
    if(url.pathname==='/api/audio/transcribe'&&request.method==='POST') {
@@ -1130,8 +1132,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const id=decodeURIComponent(sessionMessages[1]); const found=settings.sessions.get(id);
     if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
     const limit=Math.min(Number(url.searchParams.get('limit')??500),500); const offset=Number(url.searchParams.get('offset')??0);
-    const page=url.searchParams.get('order')==='latest'?found.messages.slice(Math.max(0,found.messages.length-limit)):found.messages.slice(offset,offset+limit);
-    return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:url.searchParams.get('order')||'oldest',returned:page.length}});
+    let messages=found.messages;
+    if(url.searchParams.get('include_compacted')!=='true') {
+     const summary=messages.findIndex(message=>message.role==='user'&&String(message.content).startsWith('[CONTEXT COMPACTION'));
+     messages=summary>=0?messages.slice(summary):messages.filter(message=>!message.compacted);
+    }
+    const latest=url.searchParams.get('order')==='latest';
+    const end=latest?Math.max(0,messages.length-offset):0;
+    const page=latest?messages.slice(Math.max(0,end-limit),end):messages.slice(offset,offset+limit);
+    return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:latest?'latest':'oldest',returned:page.length}});
    }
    // A profile's usage over the last `days` (#347): the sums of its sessions started since then, null with none, as
    // the pinned release's SQL sums are. #32: by_model groups the sessions that named a model, tokens descending, with
