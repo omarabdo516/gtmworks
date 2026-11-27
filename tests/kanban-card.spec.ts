@@ -213,7 +213,8 @@ test('a tab the Engine stops answering for keeps what it last read, and the rest
  await expect(panel.locator('.lg-row')).toHaveCount(2);
  fake.settings.managedFail=(method,path)=>path.startsWith('/api/plugins/kanban/tasks/')?500:null;
  try {
-  const again=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/board/card');
+  // The refused read itself: a read the live stream started before the Engine stopped answering may still come back 200.
+  const again=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/board/card'&&response.status()===503);
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   expect((await again).status()).toBe(503);
   await expect(sheet.getByRole('status').filter({hasText:'Couldn’t refresh the card. Showing what it last read.'})).toBeVisible();

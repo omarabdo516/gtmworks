@@ -10,6 +10,7 @@ import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { cardColumns, columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-columns.mjs';
 import { CardWindow } from '@/app/card-window';
 import { followBoard } from '@/app/board-live';
+import { ArchivedList, useArchive } from '@/app/board-archive';
 import '@/app/board.css';
 import type { MadeBoard } from './new-card';
 
@@ -25,6 +26,10 @@ const NewCard=lazy(()=>import('./new-card'));
 //
 // The board follows the Engine live (#840): a change the Engine reports, through gtmworks's own web server
 // (app/board-live.ts), reads the board again at once. While the stream is down the board reads again on a slow timer.
+//
+// Archive (#842, app/board-archive.tsx): a Member who may write selects several Cards (select mode) or everything shown
+// in Done and archives them, with Undo; the archive icon shows the archived Cards in place of the columns, with their
+// search, and Restore.
 
 export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,comments:number,project?:string|null,publishOn?:string|null};
 type Agent={id:string,name:string};
@@ -91,6 +96,21 @@ export default function Board({company,slug,writer,reviewer=false,creating=false
  // New card is open (#836): at /work/new it opens with the page, and closing it leaves the board at its own address.
  const [making,setMaking]=useState(creating&&writer); const opener=useRef<HTMLButtonElement>(null); const [made,setMade]=useState<string|null>(null);
  const cards=read.board?.cards??null; const main=read.board?.main??null;
+ const accept=(answer:{cards?:unknown,main?:Agent|null})=>{ if(Array.isArray(answer.cards)) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); };
+ // Archive (#842): select mode's chosen Cards, the archived list in place of the columns with its search, and how many
+ // Cards are archived once the list has said. `version` reads the list again after a change.
+ const [selected,setSelected]=useState<Set<string>|null>(null); const [focusTo,setFocusTo]=useState<'toggle'|'all'|'act'|null>(null);
+ const selectToggle=useRef<HTMLButtonElement>(null); const selectAll=useRef<HTMLButtonElement>(null); const selectAct=useRef<HTMLButtonElement>(null);
+ const [showArchived,setShowArchived]=useState(false); const [query,setQuery]=useState(''); const [searching,setSearching]=useState(false);
+ const [archivedTotal,setArchivedTotal]=useState<number|null>(null); const [version,setVersion]=useState(0); const searchField=useRef<HTMLInputElement>(null);
+ const archiving=useArchive({company,cards:cards??[],onBoard:accept,onChange:()=>setVersion(now=>now+1)});
+ useEffect(()=>{ const to=focusTo==='toggle'?selectToggle:focusTo==='all'?selectAll:focusTo==='act'?selectAct:null; to?.current?.focus(); },[focusTo,selected]);
+ useEffect(()=>{ if(searching) searchField.current?.focus(); },[searching]);
+ const startSelecting=()=>{ archiving.clearLeft(); setSelected(new Set()); setFocusTo('all'); };
+ const endSelecting=()=>{ setSelected(null); setFocusTo('toggle'); };
+ const flip=(id:string)=>setSelected(now=>{ if(!now) return now; const next=new Set(now); if(next.has(id)) next.delete(id); else next.add(id); return next; });
+ const archiveChosen=()=>{ if(!selected?.size) return; void archiving.archive([...selected],{done:()=>setSelected(null)}); };
+ const toggleArchived=()=>{ setShowArchived(!showArchived); setQuery(''); setSearching(false); setSelected(null); archiving.clearLeft(); };
  const base=`/c/${slug}/work`;
  // A Card opens over the board at its own address (#835), which reloads, survives sign-in and is a link to share; opening
  // and closing it only change the address, so the board stays as it was read. A history entry it adds carries no state of
@@ -111,18 +131,21 @@ export default function Board({company,slug,writer,reviewer=false,creating=false
  const columnName=(column:string)=>t(columnLabel(column,writer));
  const symbolName=(symbol:CardSymbol)=>symbol.kind==='waits'&&symbol.count>1?t('symWaitsN',symbol.count):t(symbolKey[symbol.kind]);
  const cardView=(card:BoardCard)=>{
+  const chosen=!!selected?.has(card.id);
   const who=card.agent?.name||card.person?.name||t('boardCardNoOne');
   const comments=card.comments===1?t('boardCardComment'):t('boardCardComments',card.comments);
   const label=[card.title,columnName(card.column),card.symbol?symbolName(card.symbol):'',t('boardCardAssignee',who),card.comments?comments:''].filter(Boolean).join(' · ');
   const symbol=card.symbol&&symbols[card.symbol.kind];
-  return <article key={card.id} className={`kcard card${made===card.id?' is-flash':''}`} data-card={card.id} aria-label={label}>
-   <span className="kt-head"><a className="kcard__title authored-title" dir="auto" href={cardHref(card.id)} onClick={event=>openCard(event,card.id)}><strong>{card.title}</strong></a>
+  return <article key={card.id} className={`kcard card${made===card.id?' is-flash':''}${selected?' is-sel':''}`} data-card={card.id} aria-label={label}>
+   <span className="kt-head">{selected?<button type="button" className="authored-title kcard__title kcard__pick" dir="auto" aria-pressed={chosen} onClick={()=>flip(card.id)}><strong>{card.title}</strong></button>
+    :<a className="kcard__title authored-title" dir="auto" href={cardHref(card.id)} onClick={event=>openCard(event,card.id)}><strong>{card.title}</strong></a>}
     {card.symbol&&symbol&&<span className="kt-syms"><span className={`sym sym--${symbol.tone}`} data-sym={card.symbol.kind} role="img" aria-label={symbolName(card.symbol)} title={symbolName(card.symbol)}>
      {symbol.icon?<ShellIcon name={symbol.icon}/>:<span className="sym__dot"/>}{card.symbol.kind==='waits'&&card.symbol.count>1&&<span className="sym__n num" aria-hidden="true">{card.symbol.count}</span>}</span></span>}</span>
    <span className="kcard__foot">
     <span className="kt-face" title={who}>{card.agent?<AgentFace agent={card.agent.id} size={20}/>:card.person?<span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(card.person.name.trim())[0]||'?'}</span>:<span className="cw-noone" style={{'--av':'20px'} as CSSProperties} aria-hidden="true"/>}</span>
     {card.comments>0&&<span className="kt-metas"><span className="kt-m" title={comments}><ShellIcon name="chat"/><span className="num">{card.comments}</span></span></span>}
    </span>
+   {selected&&<span className="kt-check" aria-hidden="true">{chosen&&<ShellIcon name="check"/>}</span>}
   </article>;
  };
  const views=<nav className="tabs segmented" aria-label={t('boardViews')}>{[['board',t('board')],['calendar',t('calendar')],['list',t('list')]].map(([path,name])=>
@@ -131,23 +154,42 @@ export default function Board({company,slug,writer,reviewer=false,creating=false
   <header className="page-head"><div className="od-field"><h1 className="page-title">{t('marketingBoard')}</h1><p className="page-sub">{t('boardSubtitle')}</p></div><div className="work-toolbar" data-canonical-toolbar="work">{views}</div></header>
   <div className="board-tools">
    {!writer&&<span className="board-tools__summary" role="note"><BoardIcon name="eye"/>{t('boardReadOnly')}</span>}
+   {showArchived&&(searching||query?<div className="bt-search is-open"><ShellIcon name="search"/><label className="sr-only" htmlFor="bf-q">{t('boardSearchArchived')}</label>
+    <input ref={searchField} type="search" id="bf-q" autoComplete="off" dir="auto" placeholder={t('boardSearchArchived')} value={query} maxLength={200} onChange={event=>setQuery(event.target.value)}
+     onBlur={()=>{ if(!query) setSearching(false); }} onKeyDown={event=>{ if(event.key==='Escape'&&!query) { event.preventDefault(); setSearching(false); } }}/></div>
+    :<button type="button" className="ib" aria-label={t('boardSearchArchived')} title={t('boardSearchArchived')} onClick={()=>setSearching(true)}><ShellIcon name="search"/></button>)}
+   <button type="button" className="ib" aria-pressed={showArchived} aria-label={archivedTotal==null?t('boardArchived'):t('boardArchivedCount',archivedTotal)} title={t('boardArchived')} onClick={toggleArchived}>
+    <ShellIcon name="archive"/>{showArchived&&archivedTotal!=null&&<span className="num">{archivedTotal}</span>}</button>
+   {writer&&!showArchived&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
    <BoardPager/>
    {writer&&<button ref={opener} type="button" className="btn btn--primary btn--sm bt-new" aria-haspopup="dialog" onClick={()=>setMaking(true)}><ShellIcon name="plus"/><span className="bt-new__t">{t('newCard')}</span></button>}
   </div>
-  {read.state==='reading'&&!cards&&<p role="status" className="board-status">{t('boardReading')}</p>}
-  {read.state==='failed'&&(cards?<p role="status" className="board-status">{t('boardRefreshFailed')}</p>:<p role="alert" className="work-error">{t('boardReadFailed')}</p>)}
-  {cards&&!cards.length&&main&&<div className="board-bare" role="note"><span aria-hidden="true"><AgentFace agent={main.id} size={32}/></span><p>{t('boardEmpty',main.name)}</p>{writer&&<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',main.name)}</span></Link>}</div>}
-  <div className="board board-cols" id="board-cols" aria-label={t('workBoard')} aria-busy={read.state==='reading'}>
+  {selected&&<div className="bsel" role="region" aria-label={t('boardSelecting')}>
+   <span className="bsel__n" aria-live="polite">{t('boardSelectedCount','\u0000').split('\u0000')[0]}<b className="num">{selected.size}</b>{t('boardSelectedCount','\u0000').split('\u0000')[1]}</span>
+   <button ref={selectAll} type="button" className="link-btn" onClick={()=>{ setSelected(new Set((cards??[]).map(card=>card.id))); setFocusTo('act'); }}>{t('boardSelectAllShown')}</button>
+   <span className="od-fill"/>
+   <button type="button" className="btn btn--secondary btn--sm" onClick={endSelecting}>{t('cancel')}</button>
+   <button ref={selectAct} type="button" className="btn btn--primary btn--sm" disabled={!selected.size} onClick={archiveChosen}><ShellIcon name="archive"/><span>{t('boardArchiveSelected')}</span></button>
+  </div>}
+  {archiving.left}
+  {!showArchived&&read.state==='reading'&&!cards&&<p role="status" className="board-status">{t('boardReading')}</p>}
+  {!showArchived&&read.state==='failed'&&(cards?<p role="status" className="board-status">{t('boardRefreshFailed')}</p>:<p role="alert" className="work-error">{t('boardReadFailed')}</p>)}
+  {showArchived&&<ArchivedList company={company} writer={writer} query={query} version={version} cardHref={cardHref} openCard={openCard} restore={ids=>void archiving.restore(ids)} total={setArchivedTotal}/>}
+  {!showArchived&&cards&&!cards.length&&main&&<div className="board-bare" role="note"><span aria-hidden="true"><AgentFace agent={main.id} size={32}/></span><p>{t('boardEmpty',main.name)}</p>{writer&&<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',main.name)}</span></Link>}</div>}
+  {!showArchived&&<div className="board board-cols" id="board-cols" aria-label={t('workBoard')} aria-busy={read.state==='reading'}>
    {cardColumns.map(column=>{
     const list=cards?.filter(card=>card.column===column)??[];
     const waiting=column==='waiting';
     return <section key={column} className={`col${waiting?' col--waiting':''}`} data-column={column} aria-labelledby={`col-${column}`}>
-     <div className="col__head">{waiting&&<span className="dot dot--waiting" aria-hidden="true"/>}<h2 className="col__name" id={`col-${column}`}>{columnName(column)}</h2><span className="col__count num">{cards?list.length:''}</span></div>
+     <div className="col__head">{waiting&&<span className="dot dot--waiting" aria-hidden="true"/>}<h2 className="col__name" id={`col-${column}`}>{columnName(column)}</h2><span className="col__count num">{cards?list.length:''}</span>
+      {column==='done'&&writer&&!selected&&list.length>0&&<button type="button" className="ib ib--sm col__act" aria-label={t('boardArchiveDone',columnName(column))} title={t('boardArchiveAll')} onClick={()=>void archiving.archive(list.map(card=>card.id))}><ShellIcon name="archive"/></button>}</div>
      <div className="col__body">{list.map(cardView)}{cards&&!list.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}</div>
     </section>;
    })}
-  </div>
-  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} reviewer={reviewer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={answer=>{ if(answer.cards) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); }} onClose={closeCard}/>}
+  </div>}
+  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} reviewer={reviewer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={accept}
+   archive={writer?(id,done)=>void archiving.archive([id],{done}):undefined} restore={writer?id=>archiving.restore([id]):undefined} onClose={closeCard}/>}
+  {archiving.confirm}
  {making&&<Suspense fallback={null}><NewCard company={company} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}
   onClose={()=>{ setMaking(false); if(creating&&window.location.pathname.endsWith('/work/new')) window.history.replaceState(window.history.state,'',`${base}/board`); opener.current?.focus(); }}/></Suspense>}
  </div></div>;
