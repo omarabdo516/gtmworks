@@ -407,8 +407,6 @@ function rawValueExceptions() {
     ['app/board.css', '.gw .board-view .board-nav .circle-btn:disabled', 'box-shadow', 'var(--gw-border-3) 0 0 0 0.5px inset'],
     ['app/board.css', '.gw .board-view .col.is-over', 'box-shadow', 'inset 0 0 0 1.5px var(--gw-text-1)'],
     ['app/board.css', '.gw .board-view .col.is-blocked', 'box-shadow', 'inset 0 0 0 1.5px var(--gw-border-1)'],
-    ['app/board.css', '.gw .board-view .add-idea', 'box-shadow', 'var(--gw-border-1) 0 0 0 1px inset'],
-    ['app/board.css', '.gw .board-view .add-idea input:focus, .gw .board-view .add-idea select:focus', 'box-shadow', '0 0 0 3px var(--gw-bg-active)'],
     ['app/board.css', '.gw .board-view .kcard, .gw .kcard--ghost', 'box-shadow', 'var(--b-shadow-card, #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px)'],
     ['app/board.css', '@media (hover: hover) .gw .board-view .kcard:hover', 'box-shadow', 'var(--gw-border-2) 0 0 0 0.5px, var(--gw-shadow-popover)'],
     ['app/board.css', '.gw .board-view .kcard.is-drag-src', 'box-shadow', 'inset 0 0 0 1px var(--gw-border-1)'],
