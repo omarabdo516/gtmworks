@@ -22,7 +22,7 @@ The order Omar set on 2026-11-21 (rs 0082, rounds 3 and 4):
 
 Blocked now: no release since 2026-11-21 07:28 UTC (#572), so lines marked "waiting for the release" are merged but not yet on a running install.
 
-In flight now: Open Design installed by the Owner and connected as a command app (spec #909). Next: the Agent's screen, one awake Screen per Company shared by its Agents (spec #710, decision 0068).
+In flight now: the Agent's screen, one awake Screen per Company shared by its Agents (spec #710, decision 0068).
 
 ---
 
@@ -153,7 +153,7 @@ In flight now: Open Design installed by the Owner and connected as a command app
 - ✅ **Ready-made roles for content.** An article writer (leaves drafts in WordPress), an ad reviewer, a numbers reader. [#14, `ready-made.en.json`]
 - ✅ **A Card carries its publishing date.** Kept beside the Engine's Card, set in New card, the Card window and the calendar; the old board's caption fields and design Versions left with it (#846). [#116, #836, #845]
 - ✅ **Buffer and Hootsuite as connected apps.** An Agent can schedule through them today. [#458, `lib/app-catalogue.mjs`]
-- 🟡 **Designs made by Agents with an Open Design the Owner runs.** The Owner puts Open Design in the Company's work folder and starts its daemon (`docs/open-design.md`); the apps sheet's Open Design card is the command card filled in, so an Agent with it on makes designs with the model set up inside Open Design. gtmworks ships none of it. The app side is built (#910); the sandbox image and CI drop it in #911. [spec #909, ADR 0035, decision 0079]
+- 🟡 **Designs made by Agents with an Open Design the Owner runs.** The Owner puts Open Design in the Company's work folder and starts its daemon (`docs/open-design.md`); the apps sheet's Open Design card is the command card filled in, so an Agent with it on makes designs with the model set up inside Open Design. gtmworks ships none of it: neither the app (#910) nor the work sandbox image (#911), which is smaller for it. Merged; waiting for the release (#572). [spec #909, ADR 0035, decision 0079]
 - ⚪ **Publishing to Meta, Instagram and TikTok.** gtmworks publishes at the approved time; no key enters a sandbox. No ticket yet. [decision 0045, decision 0046, GLOSSARY.md Post]
 - ⚪ **Presenter videos made from a Card.** The ad presenters (Mariam, Mansour) move from Omar's Hermes into gtmworks; the sandbox already offers the machine for rendering. [decision 0045, ADR 0018]
 - ⚪ **Company Voice.** Tone, dialect, examples, calls to action, hashtags; every change is a new version. [GLOSSARY.md Voice; no code]

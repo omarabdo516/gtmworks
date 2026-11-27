@@ -231,8 +231,7 @@ case "${1:-check}" in
   # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the
   # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's. It is built through
-  # scripts/docker-build.sh too: its Open Design stage fetches a source and packages (#544), which a cloud session's CA
-  # must reach (#562).
+  # scripts/docker-build.sh too, as the app image is, so a step that fetches over TLS trusts a cloud session's CA (#562).
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
   bash scripts/docker-build.sh -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   # The app image the same way, as CI's install jobs load the image job's build under the compose file's tag and set
@@ -258,5 +257,5 @@ case "${1:-check}" in
   export INSTALL_LANE_FOREIGN_OWNER=1
   DOCKER_HOST=$machine bash scripts/ci-install-check.sh "$@"
   ;;
-  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | budgets | install [first-install | companies | agents | agents-sandbox | open-design | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | budgets | install [first-install | companies | agents | agents-sandbox | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

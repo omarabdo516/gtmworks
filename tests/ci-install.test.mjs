@@ -24,13 +24,13 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
-  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'agents-sandbox', 'open-design', 'backup', 'backup-engines', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sandbox-rollback', 'sizes', 'engines-update', 'one-line', 'updater'] } });
+  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'agents-sandbox', 'backup', 'backup-engines', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sandbox-rollback', 'sizes', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(job.permissions.contents, 'read');
   // Its time limit is tests/ci-budgets.test.mjs's, one table for every job of the full check (#410).
 });
 
-const areaFns = ['first_install', 'companies', 'agents', 'agents_sandbox', 'open_design', 'backup', 'backup_engines', 'proxy', 'rollback', 'update', 'previous_archive', 'release_update', 'sandbox_update', 'staged_update', 'sandbox_rollback', 'sizes', 'engines_update', 'one_line', 'updater'];
-// The proof's nineteen areas (#553's agents-sandbox and backup-engines, #544's open-design, #389's rollback, previous-archive, engines-update and staged-update, #483's release-update, #397's sandbox-update, #504's sandbox-rollback, #400's sizes, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
+const areaFns = ['first_install', 'companies', 'agents', 'agents_sandbox', 'backup', 'backup_engines', 'proxy', 'rollback', 'update', 'previous_archive', 'release_update', 'sandbox_update', 'staged_update', 'sandbox_rollback', 'sizes', 'engines_update', 'one_line', 'updater'];
+// The proof's eighteen areas (#553's agents-sandbox and backup-engines, #389's rollback, previous-archive, engines-update and staged-update, #483's release-update, #397's sandbox-update, #504's sandbox-rollback, #400's sizes, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
 // area is named, one area when one is (#406, #411).
 const allAreas = [...areaFns, 'measure'];
 
@@ -50,7 +50,6 @@ test('the dispatch names every area once, in the matrix, the measurement and all
   assert.equal(dispatches.companies, 'companies');
   assert.equal(dispatches.agents, 'agents');
   assert.equal(dispatches['agents-sandbox'], 'agents_sandbox');
-  assert.equal(dispatches['open-design'], 'open_design');
   assert.equal(dispatches.backup, 'backup');
   assert.equal(dispatches['backup-engines'], 'backup_engines');
   assert.equal(dispatches.proxy, 'proxy');
@@ -258,7 +257,7 @@ test('every ./ci.sh install area the checks document names is a case of the disp
   const doc = readFileSync('docs/agents/checks.md', 'utf8');
   const dispatches = new Set([...script.matchAll(/^ ([\w-]+)\)/gm)].map(([, name]) => name));
   const areas = new Set([...doc.matchAll(/\.\/ci\.sh install ([a-z][a-z-]*)/g)].map(([, area]) => area));
-  assert.deepEqual([...areas].sort(), ['agents', 'agents-sandbox', 'backup', 'backup-engines', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'open-design', 'previous-archive', 'proxy', 'release-update', 'rollback', 'sandbox-rollback', 'sandbox-update', 'sizes', 'staged-update', 'update', 'updater']);
+  assert.deepEqual([...areas].sort(), ['agents', 'agents-sandbox', 'backup', 'backup-engines', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'previous-archive', 'proxy', 'release-update', 'rollback', 'sandbox-rollback', 'sandbox-update', 'sizes', 'staged-update', 'update', 'updater']);
   for (const area of areas) assert.ok(dispatches.has(area), `./ci.sh install ${area}`);
 });
 
@@ -269,7 +268,7 @@ test('backup and restore is an area of its own and the first-install job no long
   assert.doesNotMatch(first, /backup/, 'the first-install area runs no backup check');
   assert.match(script, /^ backup\) backup;;$/m, 'the proof has a backup area of its own');
   // The area is one command of the repo, and its sentence names it on a failure.
-  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| agents-sandbox \| open-design \| backup \| backup-engines \| proxy \| rollback \| update \| previous-archive \| release-update \| sandbox-update \| staged-update \| sandbox-rollback \| sizes \| engines-update \| one-line \| updater \| measure\]/);
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| agents-sandbox \| backup \| backup-engines \| proxy \| rollback \| update \| previous-archive \| release-update \| sandbox-update \| staged-update \| sandbox-rollback \| sizes \| engines-update \| one-line \| updater \| measure\]/);
 });
 
 // #553: the two areas that held the install job longest are each split in two, every check kept and run once: the agents
@@ -280,7 +279,7 @@ test('the agents and backup areas are each split in two, each half making the in
   const text = readFileSync(proof[0], 'utf8');
   const area = (name, next) => text.slice(text.indexOf(`\n${name}() {`), text.indexOf(next, text.indexOf(`\n${name}() {`)));
   const agents = area('agents', '\n# agents-sandbox:');
-  const sandbox = area('agents_sandbox', '\n# open-design:');
+  const sandbox = area('agents_sandbox', '\n# backup:');
   const backup = area('backup', '\n# backup-engines:');
   const engines = area('backup_engines', '\n# proxy:');
   for (const [name, body] of [['agents', agents], ['agents-sandbox', sandbox], ['backup', backup], ['backup-engines', engines]]) {
@@ -599,35 +598,55 @@ test('sandbox_card_files holds only for a sandbox that mounts its Engine\'s atta
 });
 
 // Spec #831 (#833): the board's proof on the real Engine is one step of an area the proof already runs, never a job of
-// its own. It ran in agents-sandbox until that area reached its 12 minutes with the step still waiting (run 45841934073);
-// the open-design area, which used 5 of its 12 and holds no Open Design check since Open Design stopped shipping
-// (decision 0079; #911 moves the proof on), runs it once it has made the first Company's second Agent as agents-sandbox does, and reads where the worker's file landed from the host's Docker; every Engine it made, the
-// new Company's included, and every Engine an update brings up holds the board worker's setting.
-test('the Kanban check runs inside the open-design area, and every Engine made or updated holds the board setting', () => {
+// its own. It ran in agents-sandbox until that area reached its 12 minutes with the step still waiting (run 45841934073),
+// then in the open-design area; when that area went with Open Design (decision 0079, #911) it moved to the proxy area,
+// the install proof's shortest (5.2 to 6.1 of its 12 minutes on runs 46017590820, 46015520768 and 45984865346). The
+// proxy area makes the second Company and the first Company's second Agent as agents-sandbox does, before its rate limit
+// locks the Owner out, and reads where the worker's file landed from the host's Docker; every Engine it made, the new
+// Company's included, and every Engine an update brings up holds the board worker's setting.
+test('the Kanban check runs inside the proxy area, and every Engine made or updated holds the board setting', () => {
   const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
-  const design = area('open_design', '\n# backup:');
-  const sandbox = area('agents_sandbox', '\n# open-design:');
-  const kanban = design.indexOf(' - kanban "$kanban_marker" <');
-  assert.ok(kanban > 0, 'open-design runs the Kanban check');
+  const proxyArea = area('proxy', '\n# update:');
+  const sandbox = area('agents_sandbox', '\n# backup:');
+  const kanban = proxyArea.indexOf(' - kanban "$kanban_marker" <');
+  assert.ok(kanban > 0, 'the proxy area runs the Kanban check');
   assert.equal(sandbox.includes(' - kanban '), false, 'agents-sandbox no longer runs it');
-  assert.ok(design.indexOf(' - prepare <') < design.indexOf(' - second <') && design.indexOf(' - second <') < kanban, 'the Card is worked by the second Agent, which exists by then');
-  assert.equal(/open-design-add|lib\/open-design|open-design-mcp/.test(design), false, 'no Open Design check is left in the area (decision 0079)');
+  assert.ok(proxyArea.indexOf('second_company ||') < proxyArea.indexOf(' - prepare <'), 'two Companies before their profiles are read');
+  assert.ok(proxyArea.indexOf(' - prepare <') < proxyArea.indexOf(' - second <') && proxyArea.indexOf(' - second <') < kanban, 'the Card is worked by the second Agent, which exists by then');
+  assert.ok(proxyArea.indexOf('point_engine_at_fake_model') < proxyArea.indexOf(' - prepare <'), 'the Engine answers Runs with the fake model');
+  assert.ok(proxyArea.indexOf('kanban-board/restore.py') > kanban && proxyArea.indexOf('kanban-board/restore.py') < proxyArea.indexOf('check-install-rate-limit.mjs'), 'the board is worked before the rate limit locks the Owner out');
+  assert.ok(proxyArea.indexOf('dashboard_theme') < proxyArea.indexOf('point_engine_at_fake_model'), 'the dashboard\'s theme is read before the fake model rewrites the Engine\'s config');
   assert.equal(script.split(' - kanban ').length - 1, 1, 'the Kanban check runs once in the whole proof');
   assert.ok(!matrix.includes('kanban') && !cases.some(({ name }) => /kanban|board/.test(name)), 'no area of its own');
   // Where the worker's file and its dangerous command landed is read from the host's Docker, which a tool's answer
   // cannot fake: in the Company's sandbox, and nowhere on the Engine outside its Kanban folders.
   for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-card.txt"', '/opt/data/kanban']) {
-    assert.ok(design.includes(read), read);
+    assert.ok(proxyArea.includes(read), read);
     assert.equal(sandbox.includes(read), false, `agents-sandbox no longer reads ${read}`);
   }
-  assert.match(design, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
-  assert.match(design, /for folder in \.engines\/\*\/; do[\s\S]*?sandbox_card_files "\$name"/, 'every Company\'s sandbox of the area holds the Engine\'s attachments folder (#843)');
+  assert.match(proxyArea, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
+  assert.match(proxyArea, /for folder in \.engines\/\*\/; do[\s\S]*?sandbox_card_files "\$name"/, 'every Company\'s sandbox of the area holds the Engine\'s attachments folder (#843)');
   // The worker opened the person's file in the sandbox and could not write beside it, read from the host's Docker (#843).
-  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt"', '"attachment_write":"refused"', '$kanban_marker-planted']) assert.ok(design.includes(read), read);
+  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt"', '"attachment_write":"refused"', '$kanban_marker-planted']) assert.ok(proxyArea.includes(read), read);
   for (const [name, update] of [['update', "sh install.sh update || fail 'release update'"], ['engines_update', "sh install.sh update || fail 'update every Company Engine'"]]) {
     const body = area(name, '\n}\n');
     const updated = body.indexOf(update);
     assert.ok(updated > 0 && body.indexOf('engine_board_settings', updated) > updated, `${name}: an Engine the update brought up holds the setting`);
     assert.ok(body.indexOf('sandbox_card_files', updated) > updated, `${name}: a sandbox the update brought up holds the Engine's attachments folder`);
   }
+});
+
+// #911 (decision 0079): no Open Design ships, and an area that stays proves it on the real install: the running work
+// sandbox has no /opt/open-design, and no Engine of the area, once its Agents are made, holds an `od-` design profile.
+// The check reads each Engine's own profiles, and fails when it cannot read its Company's own, so it is never vacuous.
+test('the proxy area checks the work sandbox carries no Open Design and no Engine holds a design profile', () => {
+  const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
+  const proxyArea = area('proxy', '\n# update:');
+  const image = proxyArea.indexOf('docker exec "$sandbox" test ! -e /opt/open-design');
+  assert.ok(image > 0, 'the running sandbox has no /opt/open-design');
+  assert.ok(proxyArea.indexOf(' - second <') < proxyArea.indexOf("grep -q '^od-'"), 'the profiles are read once every Agent is made');
+  assert.match(proxyArea, /for folder in \.engines\/\*\/; do\n  name=\$\(engine_value "\$folder" NAME\)\n  profiles=\$\(docker exec "\$name" ls \/opt\/data\/profiles\)[^\n]*\n  grep -q '\^co-'[^\n]*\n  if grep -q '\^od-'/, 'every Engine of the area');
+  assert.doesNotMatch(script, /\nopen_design\(\) \{/, 'the open-design area is gone');
+  assert.doesNotMatch(readFileSync(resolve('sandbox/Dockerfile'), 'utf8'), /open-design|OPEN_DESIGN/, 'the image builds no Open Design');
+  assert.doesNotMatch(readFileSync(resolve('sandbox/sshd_config'), 'utf8'), /StreamLocal/, 'sshd forwards no socket: only the Open Design runtime used one');
 });

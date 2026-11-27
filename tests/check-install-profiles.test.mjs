@@ -137,7 +137,7 @@ test('the Kanban step\'s proof keeps every field it names, the attachment\'s pat
 });
 
 // Spec #831 (#833): the step ran past its area's 12 minutes on run 45841934073 having printed nothing. Its time is now its
-// clock's: a budget that fits the open-design area beside what it ran before, a line as each phase ends, every wait
+// clock's: a budget that fits its area (open-design then, the proxy area since #911) beside what it runs before, a line as each phase ends, every wait
 // held inside the budget (the waits it makes itself and the fake model's hold on a reviewer alike), and no fixed wait for
 // the triage Card, which is read once the decomposer was called twice or its two ticks are past. A failure prints the
 // Cards as the board reads them, through the proof's named field, before the step ends.

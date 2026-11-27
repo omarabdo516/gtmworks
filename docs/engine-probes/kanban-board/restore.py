@@ -1,7 +1,7 @@
 # The restore check of ../kanban-board.md, section 10 (#842). It runs inside the pinned Engine image, on an empty board
 # of its own (HERMES_HOME in a temporary folder), and goes through the Kanban plugin's own routes
 # (plugins/kanban/dashboard/plugin_api.py). A dry-run dispatcher tick says whether a Card would start. The install
-# proof's open-design area runs it in the install's Engine (scripts/ci-install-check.sh). By hand, from the repository root:
+# proof's proxy area runs it (#911) in the install's Engine (scripts/ci-install-check.sh). By hand, from the repository root:
 #   docker run --rm -i --entrypoint /bin/sh "$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)" \
 #     -c 'cd /opt/hermes && python -' < docs/engine-probes/kanban-board/restore.py
 # It prints one line per Card and exits 1 when the Engine no longer does what lib/engine/board.mjs restoreCard counts on.
