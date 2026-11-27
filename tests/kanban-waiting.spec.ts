@@ -49,7 +49,10 @@ test.beforeAll(async({},testInfo)=>{
  put('given',{status:'blocked'});
  put('agentAsks',{status:'blocked',assignee:adsProfile});
  put('makerAsks',{status:'blocked',assignee:adsProfile});
- put('review',{status:'review',assignee:adsProfile});
+ // A review its Agent handed in (#839), which an Administrator or a Manager passes in the Card's window.
+ put('review',{status:'ready',assignee:adsProfile});
+ kanban.dispatch();
+ kanban.requestReview(cards.review,'Wrote the article, 1,850 words.');
  put('hiddenReview',{status:'review',assignee:seoProfile});
  put('planned',{status:'todo'});
  // The rows gtmworks keeps beside the Cards (#836): the Member a Card is given to and the person who made it.
@@ -169,8 +172,10 @@ test('answering, finishing and passing take the row away for everyone it was sho
   fake.settings.kanban.move(cards.planned,'done');
   await expect(mona.locator(`.col[data-column="waiting"] .kcard[data-card="${cards.planned}"]`)).toHaveCount(0);
   await expect(bell(mona).locator('.sb-count__n')).toHaveText(String(counts[2]-1));
-  // The review is passed on the Engine: it leaves the Owner's and the Manager's lists.
-  fake.settings.kanban.move(cards.review,'done');
+  // The Manager passes the review in the Card's window, opened from their list: it leaves the Owner's list and bell too.
+  await lead.locator(`.col[data-column="waiting"] .kcard[data-card="${cards.review}"] a`).click();
+  await lead.getByRole('dialog').getByRole('region',{name:'Needs review'}).getByRole('button',{name:'Pass'}).click();
+  await expect(lead.getByRole('dialog').locator('.cw-status')).toContainText('Done');
   for(const [page,was] of [[owner,counts[0]-1],[lead,counts[1]-1]] as const) {
    await expect(page.locator(`.col[data-column="waiting"] .kcard[data-card="${cards.review}"]`)).toHaveCount(0);
    await expect(bell(page).locator('.sb-count__n')).toHaveText(String(was-1));

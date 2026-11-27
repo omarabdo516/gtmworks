@@ -102,7 +102,9 @@ test('a Contributor gives a Card to themselves: it has no Agent on the Engine, t
  expect(task('Shoot the reel at the office')?.status).toBe('ready');
  await page.reload();
  await expect(column(page,'planned').getByRole('article',{name:/^Shoot the reel at the office/})).toBeVisible();
- await expect(theirs.getByRole('img')).toHaveCount(0);
+ // No Agent works it: its one symbol is the hand, for the Card waits on its Member (#841).
+ await expect(theirs.getByRole('img')).toHaveCount(1);
+ await expect(theirs.getByRole('img')).toHaveAccessibleName('On you');
 });
 
 test('a Manager makes a Card for nobody: it waits in Planned, worked by nobody',async({page})=>{

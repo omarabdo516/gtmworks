@@ -16,7 +16,7 @@ export async function POST(request:NextRequest) {
   if(action!=='pass'&&action!=='sendBack') return reply({error:'cardInvalid'},400);
   const done=action==='pass'?await passCard(who.db,{company:who.company,person:who.person,card})
    :await sendBackCard(who.db,{company:who.company,person:who.person,card,reason});
-  if(done.state==='passed'||done.state==='sentBack') return await withBoard(who.db,who.company,{[done.state]:card});
+  if(done.state==='passed'||done.state==='sentBack') return await withBoard(who,{[done.state]:card});
   const [error,status]=done.state==='notInReview'?['cardNotInReview',409]:refusals[done.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
 }
