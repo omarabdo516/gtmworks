@@ -606,28 +606,28 @@ test('sandbox_card_files holds only for a sandbox that mounts its Engine\'s atta
 // Company's included, and every Engine an update brings up holds the board worker's setting.
 test('the Kanban check runs inside the proxy area, and every Engine made or updated holds the board setting', () => {
   const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
-  const held = area('proxy', '\n# update:');
+  const proxyArea = area('proxy', '\n# update:');
   const sandbox = area('agents_sandbox', '\n# backup:');
-  const kanban = held.indexOf(' - kanban "$kanban_marker" <');
+  const kanban = proxyArea.indexOf(' - kanban "$kanban_marker" <');
   assert.ok(kanban > 0, 'the proxy area runs the Kanban check');
   assert.equal(sandbox.includes(' - kanban '), false, 'agents-sandbox no longer runs it');
-  assert.ok(held.indexOf('second_company ||') < held.indexOf(' - prepare <'), 'two Companies before their profiles are read');
-  assert.ok(held.indexOf(' - prepare <') < held.indexOf(' - second <') && held.indexOf(' - second <') < kanban, 'the Card is worked by the second Agent, which exists by then');
-  assert.ok(held.indexOf('point_engine_at_fake_model') < held.indexOf(' - prepare <'), 'the Engine answers Runs with the fake model');
-  assert.ok(held.indexOf('kanban-board/restore.py') > kanban && held.indexOf('kanban-board/restore.py') < held.indexOf('check-install-rate-limit.mjs'), 'the board is worked before the rate limit locks the Owner out');
-  assert.ok(held.indexOf('dashboard_theme') < held.indexOf('point_engine_at_fake_model'), 'the dashboard\'s theme is read before the fake model rewrites the Engine\'s config');
+  assert.ok(proxyArea.indexOf('second_company ||') < proxyArea.indexOf(' - prepare <'), 'two Companies before their profiles are read');
+  assert.ok(proxyArea.indexOf(' - prepare <') < proxyArea.indexOf(' - second <') && proxyArea.indexOf(' - second <') < kanban, 'the Card is worked by the second Agent, which exists by then');
+  assert.ok(proxyArea.indexOf('point_engine_at_fake_model') < proxyArea.indexOf(' - prepare <'), 'the Engine answers Runs with the fake model');
+  assert.ok(proxyArea.indexOf('kanban-board/restore.py') > kanban && proxyArea.indexOf('kanban-board/restore.py') < proxyArea.indexOf('check-install-rate-limit.mjs'), 'the board is worked before the rate limit locks the Owner out');
+  assert.ok(proxyArea.indexOf('dashboard_theme') < proxyArea.indexOf('point_engine_at_fake_model'), 'the dashboard\'s theme is read before the fake model rewrites the Engine\'s config');
   assert.equal(script.split(' - kanban ').length - 1, 1, 'the Kanban check runs once in the whole proof');
   assert.ok(!matrix.includes('kanban') && !cases.some(({ name }) => /kanban|board/.test(name)), 'no area of its own');
   // Where the worker's file and its dangerous command landed is read from the host's Docker, which a tool's answer
   // cannot fake: in the Company's sandbox, and nowhere on the Engine outside its Kanban folders.
   for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-card.txt"', '/opt/data/kanban']) {
-    assert.ok(held.includes(read), read);
+    assert.ok(proxyArea.includes(read), read);
     assert.equal(sandbox.includes(read), false, `agents-sandbox no longer reads ${read}`);
   }
-  assert.match(held, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
-  assert.match(held, /for folder in \.engines\/\*\/; do[\s\S]*?sandbox_card_files "\$name"/, 'every Company\'s sandbox of the area holds the Engine\'s attachments folder (#843)');
+  assert.match(proxyArea, /for folder in \.engines\/\*\/; do[\s\S]*?engine_board_settings "\$name"/, 'every Company\'s Engine of the area holds the setting');
+  assert.match(proxyArea, /for folder in \.engines\/\*\/; do[\s\S]*?sandbox_card_files "\$name"/, 'every Company\'s sandbox of the area holds the Engine\'s attachments folder (#843)');
   // The worker opened the person's file in the sandbox and could not write beside it, read from the host's Docker (#843).
-  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt"', '"attachment_write":"refused"', '$kanban_marker-planted']) assert.ok(held.includes(read), read);
+  for (const read of ['docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt"', '"attachment_write":"refused"', '$kanban_marker-planted']) assert.ok(proxyArea.includes(read), read);
   for (const [name, update] of [['update', "sh install.sh update || fail 'release update'"], ['engines_update', "sh install.sh update || fail 'update every Company Engine'"]]) {
     const body = area(name, '\n}\n');
     const updated = body.indexOf(update);
@@ -641,11 +641,11 @@ test('the Kanban check runs inside the proxy area, and every Engine made or upda
 // The check reads each Engine's own profiles, and fails when it cannot read its Company's own, so it is never vacuous.
 test('the proxy area checks the work sandbox carries no Open Design and no Engine holds a design profile', () => {
   const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
-  const held = area('proxy', '\n# update:');
-  const image = held.indexOf('docker exec "$sandbox" test ! -e /opt/open-design');
+  const proxyArea = area('proxy', '\n# update:');
+  const image = proxyArea.indexOf('docker exec "$sandbox" test ! -e /opt/open-design');
   assert.ok(image > 0, 'the running sandbox has no /opt/open-design');
-  assert.ok(held.indexOf(' - second <') < held.indexOf("grep -q '^od-'"), 'the profiles are read once every Agent is made');
-  assert.match(held, /for folder in \.engines\/\*\/; do\n  name=\$\(engine_value "\$folder" NAME\)\n  profiles=\$\(docker exec "\$name" ls \/opt\/data\/profiles\)[^\n]*\n  grep -q '\^co-'[^\n]*\n  if grep -q '\^od-'/, 'every Engine of the area');
+  assert.ok(proxyArea.indexOf(' - second <') < proxyArea.indexOf("grep -q '^od-'"), 'the profiles are read once every Agent is made');
+  assert.match(proxyArea, /for folder in \.engines\/\*\/; do\n  name=\$\(engine_value "\$folder" NAME\)\n  profiles=\$\(docker exec "\$name" ls \/opt\/data\/profiles\)[^\n]*\n  grep -q '\^co-'[^\n]*\n  if grep -q '\^od-'/, 'every Engine of the area');
   assert.doesNotMatch(script, /\nopen_design\(\) \{/, 'the open-design area is gone');
   assert.doesNotMatch(readFileSync(resolve('sandbox/Dockerfile'), 'utf8'), /open-design|OPEN_DESIGN/, 'the image builds no Open Design');
   assert.doesNotMatch(readFileSync(resolve('sandbox/sshd_config'), 'utf8'), /StreamLocal/, 'sshd forwards no socket: only the Open Design runtime used one');

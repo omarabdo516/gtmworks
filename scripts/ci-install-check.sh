@@ -1394,7 +1394,9 @@ first=$(tail -n 1 prepare-profiles.log)
 sandbox=gtmworks-sandbox-first
 engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail "the first Company's second Agent moves to a profile of its own"
 # No Open Design ships (decision 0079, ADR 0035, #911): the work sandbox image holds no /opt/open-design, and no Engine,
-# with its Agents made, holds an `od-` design profile beside its Agents' own.
+# with its Agents made, holds an `od-` design profile beside its Agents' own. Since #910 nothing in gtmworks makes one,
+# so this guards against one coming back with an Agent, not against a connected Open Design (no area connects it). It
+# runs here because this area already makes the Companies and the second Agent the Kanban proof needs.
 docker exec "$sandbox" test ! -e /opt/open-design || fail 'the work sandbox image carries no Open Design'
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)

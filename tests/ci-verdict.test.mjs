@@ -140,7 +140,7 @@ test('the install proof is red when one area failed or was cancelled, green when
   for (const run of [undefined, '', 'true']) assert.equal(verdict({ INSTALL_RUN: run, INSTALL_RESULT: 'skipped' }), 1, String(run));
 });
 
-test('the install job runs as one matrix of nine areas on a fresh Docker machine each, and check reads its one result (#406)', async () => {
+test('the install job runs as one matrix of one entry per area on a fresh Docker machine each, and check reads its one result (#406)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
