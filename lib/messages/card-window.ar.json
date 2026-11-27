@@ -66,5 +66,22 @@
   "evDecomposed": "اتقسمت لبطاقات",
   "evStatus": "اتنقلت",
   "cwAssignBusy": "فيه وكيل شغال على البطاقة دي دلوقتي. وقّفه الأول، وبعدين اديها لحد تاني.",
-  "cwAssignFailed": "المسؤول ما اتغيّرش. جرّب تاني."
+  "cwAssignFailed": "المسؤول ما اتغيّرش. جرّب تاني.",
+  "cwRename": "غيّر الاسم",
+  "cwTitleLabel": "اسم البطاقة",
+  "cwTitleMissing": "البطاقة محتاجة اسم، ولو كلمتين.",
+  "cwSave": "احفظ",
+  "cwCancel": "إلغاء",
+  "cwDone": "تمام",
+  "cwEdit": "عدّل",
+  "cwEditDescription": "عدّل الوصف",
+  "cwAddDescription": "ضيف وصف",
+  "cwDescriptionHint": "Markdown: «- [ ]» بتعمل مهمة. Ctrl+Enter تحفظ، وEsc تلغي.",
+  "cwChanged": "حد غيّر ده وانت بتعدّل. كلامك لسه هنا: بص على البطاقة وبعدين احفظ تاني.",
+  "cwSaveFailed": "متحفظش. جرّب تاني.",
+  "cwWaitFor": "مستنية بطاقة تانية",
+  "cwAdd": "ضيف",
+  "cwNoWaitChoice": "مفيش بطاقات تانية ينفع تستناها",
+  "cwStopWaiting": "مش مستنية {0}",
+  "cwRemove": "شيل"
 }

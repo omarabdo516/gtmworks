@@ -48,7 +48,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // old board's Card, a number (?card=, ?show=), still opens on the old board until it is switched off (#846). New card
  // (/work/new) is the board with its New card open (#836); a Viewer gets the board alone.
  const opened=await searchParams;
- if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} creating={section==='work/new'}/></main></Page>;
+ if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} me={user.id} creating={section==='work/new'}/></main></Page>;
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
  const {data:companyHermesAgents}=section==='agents'?await db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]};
  const skillAgents=section==='skills'?await companySkillAgents(company.id):null;

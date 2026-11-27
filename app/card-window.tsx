@@ -8,6 +8,7 @@ import { columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-colum
 import type { CompanyCard } from '@/lib/company-card.mjs';
 import { CardDescription } from './card-description';
 import { useCardChanges } from './board-live';
+import { DateRow, DescriptionEdit, StatusMenu, TitleEdit, WaitsFor } from './card-window-edit';
 import en from '@/lib/messages/card-window.en.json';
 import ar from '@/lib/messages/card-window.ar.json';
 import './log.css';
@@ -21,9 +22,11 @@ import './card-window.css';
 // it), and the Comments, Activity and Runs tabs. The last good read stays while the window reads again, and when the
 // Engine does not answer, which the window says in one line; it lives in this browser's memory only.
 //
-// This ticket's window writes nothing: a Viewer reads the Read only line where a Member who may write will find the
-// comment field (#838), and the status, the details and the description become controls with #837. Closing lets it
-// leave first; then the board's own address comes back and the keyboard is on the Card.
+// A Viewer reads the Read only line where a Member who may write will find the comment field (#838). For a Member who
+// may write, the status, the title, the description with its to-do items, the publishing date and the Cards it waits for
+// are controls (#837, app/card-window-edit.tsx); a Card's Project is named when it is made, as the Engine takes no other,
+// so here it is read only. Closing lets it leave first; then the board's own address comes back and the keyboard is on
+// the Card.
 
 type Read={card:CompanyCard|null,state:'reading'|'read'|'failed'|'missing'};
 export type BoardCardSeen={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null};
@@ -165,7 +168,7 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned}:{company:string,c
  </>;
 }
 
-export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,cardHref:(id:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,onClose:()=>void}) {
+export function CardWindow({company,id,seen,writer,board=[],cardHref,showCard,onBoard,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,board?:{id:string,title:string,column:string}[],cardHref:(id:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,onClose:()=>void}) {
  const {t,language,locale}=useI18n();
  const text:Record<string,string>=language==='ar'?ar:en;
  const c=(key:string,...values:unknown[])=>(text[key]??key).replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)]??''));
@@ -191,6 +194,9 @@ export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onC
  const agent=card?card.agent:seen?.agent??null;
  const person=card?card.person:seen?.person??null;
  const waiting=column==='waiting';
+ // A change saved from here (#837): the board takes its answer and the Card is read again.
+ const editable=writer&&!!card&&!card.archived;
+ const saved=(answer:{cards?:unknown[],main?:{id:string,name:string}|null})=>{ onBoard(answer as BoardAnswer); read.reread(); };
  const columnName=column?t(columnLabel(column,writer)):'';
  const symbolName=(kind:CardSymbol)=>kind.kind==='waits'&&kind.count>1?t('symWaitsN',kind.count):t(symbolKey[kind.kind]);
  const sym=(kind:CardSymbol)=>{ const look=symbols[kind.kind]; const name=symbolName(kind);
@@ -201,17 +207,23 @@ export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onC
  // ---- the details ----
  const icon=(name:ShellIconName,label:string)=><span className="cwp__ic" title={label} aria-hidden="true"><ShellIcon name={name}/></span>;
  const row=(lead:ReactNode,label:string,value:ReactNode)=><div className="cwp"><span className="cwp__s"><span className="cwp__ic" title={label} aria-hidden="true">{lead}</span><span className="sr-only">{label}:</span>{value}</span></div>;
- const chip=(other:CompanyCard['waitsFor'][number],index:number)=><li key={other.id??`hidden-${index}`} className="cw-chip">{other.id==null||other.title==null
+ const chipOpen=(other:CompanyCard['waitsFor'][number])=>other.id==null||other.title==null
   ?<span className="cw-chip__open is-hidden"><ShellIcon name="lock"/><span>{c('cwHiddenCard')}</span></span>
   :<a className="cw-chip__open" href={cardHref(other.id)} onClick={event=>{ if(event.metaKey||event.ctrlKey||event.shiftKey||event.button!==0) return; event.preventDefault(); showCard(other.id!); }}
     aria-label={`${other.title} · ${other.column?t(columnLabel(other.column,writer)):''}`} title={other.column?t(columnLabel(other.column,writer)):undefined}>
-   {other.done?<ShellIcon name="check"/>:<span className="dot" aria-hidden="true"/>}<bdi className="od-truncate" dir="auto">{other.title}</bdi></a>}</li>;
+   {other.done?<ShellIcon name="check"/>:<span className="dot" aria-hidden="true"/>}<bdi className="od-truncate" dir="auto">{other.title}</bdi></a>;
+ const chip=(other:CompanyCard['waitsFor'][number],index:number)=><li key={other.id??`hidden-${index}`} className="cw-chip">{chipOpen(other)}</li>;
+ // The Cards this one may wait for (design-reference-card: popHTML 'waits'): the board's other Cards not done, not already
+ // waited for and not waiting for it; the Engine refuses any longer loop itself.
+ const waitChoices=card?board.filter(other=>other.id!==card.id&&other.column!=='done'&&!card.waitsFor.some(link=>link.id===other.id)&&!card.waitedBy.some(link=>link.id===other.id)):[];
  const side=<aside className="cw-side" aria-label={c('cwDetails')}><div className="cwp-list">
   {writer&&card&&!card.archived?<AssigneeMenu company={company} card={card.id} agent={agent} person={person} c={c} onAssigned={answer=>{ onBoard(answer); read.reread(); }}/>
    :row(agent?<AgentFace agent={agent.id} size={20}/>:person?<Letter name={person.name} size={20}/>:<NoOne size={20}/>,c('cwAssignee'),<bdi className="od-truncate">{agent?.name||person?.name||c('cwNoOne')}</bdi>)}
-  {card?.publishOn&&row(<ShellIcon name="calendar"/>,t('publishingDate'),<span className="num">{new Date(`${card.publishOn}T12:00:00Z`).toLocaleDateString(locale,{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}</span>)}
+  {editable&&card&&<DateRow company={company} card={card.id} publishOn={card.publishOn} c={c} label={t('publishingDate')} onSaved={saved}/>}
+  {!editable&&card?.publishOn&&row(<ShellIcon name="calendar"/>,t('publishingDate'),<span className="num">{new Date(`${card.publishOn}T12:00:00Z`).toLocaleDateString(locale,{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}</span>)}
   {card?.project&&row(<ShellIcon name="folder"/>,c('cwProject'),<bdi className="od-truncate" dir="auto">{card.project}</bdi>)}
-  {card&&card.waitsFor.length>0&&<div className="cwp cwp--chips">{icon('hourglass',c('cwWaitsFor'))}<span className="sr-only">{c('cwWaitsFor')}:</span><ul className="cw-chips">{card.waitsFor.map(chip)}</ul></div>}
+  {editable&&card&&<WaitsFor company={company} card={card.id} chips={card.waitsFor.map(other=>({id:other.id,title:other.title,node:chipOpen(other)}))} choices={waitChoices} c={c} onSaved={saved}/>}
+  {!editable&&card&&card.waitsFor.length>0&&<div className="cwp cwp--chips">{icon('hourglass',c('cwWaitsFor'))}<span className="sr-only">{c('cwWaitsFor')}:</span><ul className="cw-chips">{card.waitsFor.map(chip)}</ul></div>}
   {card&&card.waitedBy.length>0&&<div className="cwp cwp--chips">{icon('link',c('cwWaitedBy'))}<span className="sr-only">{c('cwWaitedBy')}:</span><ul className="cw-chips">{card.waitedBy.map(chip)}</ul></div>}
   {card&&<div className="cwp cwp--made"><span className="cwp__s"><span className="cwp__ic" title={c('cwMadeBy')} aria-hidden="true">{card.madeBy?'agent' in card.madeBy?<AgentFace agent={card.madeBy.agent.id} size={20}/>:<Letter name={card.madeBy.person.name} size={20}/>:null}</span>
    <span className="od-truncate"><span className="sr-only">{c('cwMadeBy')}: </span>{card.madeBy?<bdi>{'agent' in card.madeBy?card.madeBy.agent.name:card.madeBy.person.name}</bdi>:'—'}{card.createdAt!=null&&<> · <span className="num">{at(card.createdAt,{})}</span></>}</span></span>
@@ -252,17 +264,19 @@ export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onC
  return <dialog ref={box} className={`cw${leaving?' is-closing':''}`} aria-labelledby="cw-title" data-card={id} onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="cw__inner">
    <header className="cw-head"><div className="cw-head__row">
-    {column&&<span className={`cw-status is-static${waiting?' is-wait':''}`}>{symbol&&sym(symbol)}<span>{columnName}</span></span>}
+    {column&&editable&&card?<StatusMenu company={company} card={card.id} column={column} lead={symbol&&sym(symbol)} writer={writer} onBoard={saved}/>
+     :column&&<span className={`cw-status is-static${waiting?' is-wait':''}`}>{symbol&&sym(symbol)}<span>{columnName}</span></span>}
     {!writer&&<span className="sym sym--mute" role="img" aria-label={c('cwReadOnly')} title={c('cwReadOnly')}><ShellIcon name="eye"/></span>}
     <span className="od-fill"/>
     <button type="button" className="circle-btn" aria-label={c('cwClose')} title={c('cwCloseTip')} onClick={close}><ShellIcon name="x"/></button>
    </div></header>
    <div className="cw-body">
     <div className="cw-top">
-     <h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{title}</h2>
+     {editable&&card?<TitleEdit key={card.id} company={company} card={card.id} title={card.title} c={c} onSaved={saved}/>:<h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{title}</h2>}
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
-     {card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
+     {editable&&card&&<DescriptionEdit key={card.id} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
+     {!editable&&card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
      {card?.summary&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result"><p className="cw-sum" dir="auto">{card.summary}</p></div></section>}
     </div>
     {read.state!=='missing'&&side}

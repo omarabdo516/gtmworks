@@ -18,13 +18,15 @@ const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
 const NoOne=({size}:{size:number})=><span className="cw-noone" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true"/>;
 
-export default function NewCard({company,onClose,onMade}:{company:string,onClose:()=>void,onMade:(answer:MadeBoard)=>void}) {
+// A Card's Project is named here (#837), the Engine's tenant: the Engine takes a Card's Project only when it is made. It
+// starts as the Project the board is filtered by (design-reference-card: ncSave), and offers the board's Project names.
+export default function NewCard({company,project:filteredBy='',projects=[],onClose,onMade}:{company:string,project?:string,projects?:string[],onClose:()=>void,onMade:(answer:MadeBoard)=>void}) {
  const {t}=useI18n();
  const box=useRef<HTMLDialogElement>(null); const titleField=useRef<HTMLInputElement>(null); const pick=useRef<HTMLButtonElement>(null); const menu=useRef<HTMLDivElement>(null);
  const menuId=useId();
  const [key]=useState(()=>crypto.randomUUID());
  const [choices,setChoices]=useState<Choices|null>(null);
- const [title,setTitle]=useState(''); const [description,setDescription]=useState(''); const [assignee,setAssignee]=useState(''); const [publishOn,setPublishOn]=useState('');
+ const [title,setTitle]=useState(''); const [description,setDescription]=useState(''); const [assignee,setAssignee]=useState(''); const [publishOn,setPublishOn]=useState(''); const [project,setProject]=useState(filteredBy);
  const [missing,setMissing]=useState(false); const [failed,setFailed]=useState(''); const [saving,setSaving]=useState(false); const [open,setOpen]=useState(false);
  useLayoutEffect(()=>{ const dialog=box.current; if(dialog&&!dialog.open) dialog.showModal(); titleField.current?.focus(); },[]);
  useEffect(()=>{
@@ -64,7 +66,7 @@ export default function NewCard({company,onClose,onMade}:{company:string,onClose
   if(!title.trim()) { setMissing(true); titleField.current?.focus(); return; }
   setSaving(true); setFailed('');
   let answer:Response|null=null;
-  try { answer=await fetch('/api/board/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,key,title,description,assignee,publishOn})}); } catch { answer=null; }
+  try { answer=await fetch('/api/board/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,key,title,description,assignee,publishOn,...project.trim()?{project}:{}})}); } catch { answer=null; }
   const body=await answer?.json().catch(()=>null) as (MadeBoard&{error?:string})|null;
   if(answer?.ok&&body?.made) { onMade(body); close(); return; }
   setSaving(false);
@@ -91,6 +93,10 @@ export default function NewCard({company,onClose,onMade}:{company:string,onClose
      <span className="od-fill"/>
      <label className="sr-only" htmlFor="nc-date">{t('publishingDate')}</label>
      <input type="date" className="set-input nc-date" id="nc-date" title={t('publishingDate')} value={publishOn} onChange={event=>setPublishOn(event.target.value)}/>
+     <label className="sr-only" htmlFor="nc-proj">{t('project')}</label>
+     <input type="text" className="set-input nc-proj" id="nc-proj" dir="auto" autoComplete="off" list={projects.length?'nc-projects':undefined} placeholder={t('project')} title={t('project')}
+      value={project} maxLength={80} onChange={event=>setProject(event.target.value)}/>
+     {projects.length>0&&<datalist id="nc-projects">{projects.map(name=><option key={name} value={name}/>)}</datalist>}
      {open&&<div ref={menu} className="menu nc-menu" id={menuId} role="menu" aria-label={t('ncAssignee')} onKeyDown={keys}>
       {choices&&item(`member:${choices.me}`,t('assignToMe'),<Initial name={choices.people.find(person=>person.id===choices.me)?.name??''} size={22}/>,false)}
       {choices&&<div className="menu__sep" role="separator"/>}

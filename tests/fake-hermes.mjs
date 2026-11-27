@@ -106,6 +106,59 @@ function kanbanBoard() {
   },
   /** @param {string} parent @param {string} child */
   link(parent,child) { links.push({parent_id:parent,child_id:child}); },
+  // #837: a person's move, rename and link through the routes, as the pinned release answers them
+  // (plugins/kanban/dashboard/plugin_api.py _patch_status, _drag_to, _set_status_direct; hermes_cli/kanban_db.py
+  // complete_task, block_task, request_review, unblock_task, reopen_review_task, link_tasks, unlink_tasks,
+  // recompute_ready). `status(id,s)` answers null when the move is taken, else the Engine's refusal [code, detail].
+  /** @param {string} id @param {string} s @returns {[number,string]|null} */
+  status(id,s) {
+   const task=tasks.find(found=>found.id===id); if(!task) return [404,`task ${id} not found`];
+   const open=links.filter(link=>link.child_id===id).map(link=>tasks.find(found=>found.id===link.parent_id)).filter(parent=>parent&&!['done','archived'].includes(parent.status));
+   const landing=open.length?'todo':'ready';
+   const stopRun=()=>{ if(task.status!=='running') return; const run=runs.find(found=>found.task_id===id&&!found.ended_at); if(run) Object.assign(run,{status:'reclaimed',outcome:'reclaimed',ended_at:++clock}); Object.assign(task,{claim_lock:null,current_run_id:null}); };
+   const set=(next,kind='status',payload={status:next})=>{ stopRun(); task.status=next; if(next==='done') task.completed_at=++clock; event(id,kind,payload); };
+   if(s==='running') return [400,"Cannot set status to 'running' directly; use the dispatcher/claim path"];
+   if(s==='archived') { set('archived','archived',null); return null; }
+   if(s==='done') { if(open.length) return [409,`cannot move ${id} to 'done': unsatisfied parent dependencies: ${open.map(parent=>`${parent.id} (${parent.status})`).join(', ')}; complete the parents first (done or archived)`];
+    set('done','completed',{summary:null}); this.recompute(); return null; }
+   if(s==='blocked'||s==='review') { if(!['ready','running'].includes(task.status)||s==='review'&&open.length) return [409,`status transition to '${s}' not valid from current state`];
+    set(s,s==='blocked'?'blocked':'review_requested',null); this.recompute(); return null; }
+   if(s==='ready'||s==='todo') {
+    if(task.status==='review') { set(landing,'review_reopened',{status:landing}); this.recompute(); return null; }
+    if(s==='ready'&&['blocked','scheduled'].includes(task.status)) { set(landing,'unblocked',{status:landing}); this.recompute(); return null; }
+    if(s==='ready'&&open.length) return [409,`Cannot move to 'ready': blocked by parent(s) not done — ${open.map(parent=>`'${parent.title}' (${parent.id}, status=${parent.status})`).join(', ')}`];
+    set(s); if(s==='ready') this.recompute(); return null;
+   }
+   if(s==='triage'||s==='scheduled') { set(s); return null; }
+   return [400,`unknown status: ${s}`];
+  },
+  // recompute_ready: a `todo` Card whose parents are all done or archived is `ready`.
+  recompute() {
+   for(const task of tasks.filter(found=>found.status==='todo')) {
+    const parents=links.filter(link=>link.child_id===task.id).map(link=>tasks.find(found=>found.id===link.parent_id));
+    if(parents.every(parent=>parent&&['done','archived'].includes(parent.status))) { task.status='ready'; event(task.id,'promoted',null); }
+   }
+  },
+  /** POST /links: a Card waits for another; a running Card, itself or a cycle is a 400. @param {string} parent @param {string} child @returns {[number,any]} */
+  addLink(parent,child) {
+   if(parent===child) return [400,{detail:'a task cannot depend on itself'}];
+   const [up,down]=[tasks.find(found=>found.id===parent),tasks.find(found=>found.id===child)];
+   if(!up||!down) return [400,{detail:`unknown task(s): ${[up?null:parent,down?null:child].filter(Boolean).join(', ')}`}];
+   if(down.status==='running') return [400,{detail:`cannot link ${parent} -> ${child}: child is already running`}];
+   const above=(/** @type {string} */ id,/** @type {Set<string>} */ seen=new Set())=>{ for(const link of links.filter(found=>found.child_id===id)) { if(seen.has(link.parent_id)) continue; seen.add(link.parent_id); above(link.parent_id,seen); } return seen; };
+   if(above(parent).has(child)) return [400,{detail:`linking ${parent} -> ${child} would create a cycle`}];
+   if(!links.some(link=>link.parent_id===parent&&link.child_id===child)) { links.push({parent_id:parent,child_id:child}); event(child,'linked',{parent,child}); }
+   const gated=!['done','archived'].includes(up.status)&&down.status==='ready';
+   if(gated) down.status='todo';
+   return [200,{ok:true,gated}];
+  },
+  /** DELETE /links @param {string} parent @param {string} child */
+  removeLink(parent,child) {
+   const at=links.findIndex(link=>link.parent_id===parent&&link.child_id===child);
+   if(at<0) return {ok:false};
+   links.splice(at,1); event(child,'unlinked',{parent,child}); this.recompute();
+   return {ok:true};
+  },
   /** @param {string} task @param {string} author @param {string} body */
   comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
   // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
@@ -130,6 +183,8 @@ function kanbanBoard() {
   ticks:0,
   dispatch() {
    this.ticks++;
+   // A tick first promotes every Card whose parents are done (dispatch_once's recompute_ready).
+   this.recompute();
    const spawned=tasks.filter(task=>task.status==='ready'&&task.assignee);
    for(const task of spawned) { Object.assign(task,{status:'running',started_at:++clock,claim_lock:`fake:${task.id}`,current_run_id:clock}); event(task.id,'claimed',{assignee:task.assignee}); }
    return {reclaimed:0,crashed:[],timed_out:[],auto_blocked:[],promoted:0,spawned:spawned.map(task=>[task.id,task.assignee,`/opt/data/kanban/workspaces/${task.id}`]),skipped_unassigned:[],skipped_nonspawnable:[]};
@@ -1226,7 +1281,21 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      task.assignee=body.assignee||null;
      settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
     }
+    // #837: the status, then the title and body (update_task's order); a refused move is the Engine's 400 or 409.
+    if(typeof body?.status==='string') { const refused=settings.kanban.status(task.id,body.status); if(refused) return send(response,refused[0],{detail:refused[1]}); }
+    if(typeof body?.title==='string'||typeof body?.body==='string') {
+     if(typeof body.title==='string'&&!body.title.trim()) return send(response,400,{detail:'title cannot be empty'});
+     if(typeof body.title==='string') task.title=body.title.trim();
+     if(typeof body.body==='string') task.body=body.body;
+     settings.kanban.event(task.id,'edited',null);
+    }
     return send(response,200,{task});
+   }
+   if(url.pathname==='/api/plugins/kanban/links'&&request.method==='POST') { const [code,answer]=settings.kanban.addLink(String(body?.parent_id??''),String(body?.child_id??'')); return send(response,code,answer); }
+   if(url.pathname==='/api/plugins/kanban/links'&&request.method==='DELETE') {
+    const [parent,child]=[url.searchParams.get('parent_id'),url.searchParams.get('child_id')];
+    if(!parent||!child) return send(response,422,{detail:'parent_id and child_id are required'});
+    return send(response,200,settings.kanban.removeLink(parent,child));
    }
    if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
    send(response,404,{detail:'Not Found'});

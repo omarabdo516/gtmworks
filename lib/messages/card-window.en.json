@@ -66,5 +66,22 @@
   "evDecomposed": "Split into cards",
   "evStatus": "Moved",
   "cwAssignBusy": "An Agent is working on this card now. Stop it first, then give it to someone else.",
-  "cwAssignFailed": "The assignee wasn’t changed. Try again."
+  "cwAssignFailed": "The assignee wasn’t changed. Try again.",
+  "cwRename": "Rename",
+  "cwTitleLabel": "Card title",
+  "cwTitleMissing": "A card needs a title, even two words.",
+  "cwSave": "Save",
+  "cwCancel": "Cancel",
+  "cwDone": "Done",
+  "cwEdit": "Edit",
+  "cwEditDescription": "Edit the description",
+  "cwAddDescription": "Add a description",
+  "cwDescriptionHint": "Markdown: “- [ ]” makes a to-do. Ctrl+Enter saves, Esc cancels.",
+  "cwChanged": "Someone changed this while you were editing. Your words are still here: check the card, then save again.",
+  "cwSaveFailed": "That wasn’t saved. Try again.",
+  "cwWaitFor": "Wait for another card",
+  "cwAdd": "Add",
+  "cwNoWaitChoice": "No other card it can wait for",
+  "cwStopWaiting": "Stop waiting for {0}",
+  "cwRemove": "Remove"
 }

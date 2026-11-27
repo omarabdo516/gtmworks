@@ -135,3 +135,21 @@ test('a reader the database answers nothing for gets no board', async () => {
   assert.deepEqual(await readCompanyBoard(reader(),{company:'not a company'}),{state:'noEngine'});
  } finally { await fake.close(); }
 });
+
+// #837: a Card's Project is the Engine's tenant, a name; the board's Project filter is made from the Cards the reader
+// sees, so the name of a Project only a hidden Agent's Cards hold is not in their answer.
+test('each Card carries its Project name, and one only hidden Cards hold is not in the reader\'s answer', async () => {
+ const fake=await engineServing(company);
+ try {
+  const card=fields=>fake.settings.kanban.task(fields).id;
+  const launch=card({title:'Launch ads',status:'todo',tenant:'Spring launch'});
+  const plain=card({title:'Weekly report',status:'todo'});
+  card({title:'Seo keywords',status:'ready',assignee:profileOf(seo),tenant:'Secret project'});
+  const read=await readCompanyBoard(reader(),{company});
+  assert.equal(read.state,'found');
+  const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
+  assert.equal(shown[launch].project,'Spring launch');
+  assert.equal(shown[plain].project,null);
+  assert.ok(!JSON.stringify(read).includes('Secret project'));
+ } finally { await fake.close(); }
+});
