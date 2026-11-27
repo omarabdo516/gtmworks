@@ -83,5 +83,17 @@
   "cwAdd": "Add",
   "cwNoWaitChoice": "No other card it can wait for",
   "cwStopWaiting": "Stop waiting for {0}",
-  "cwRemove": "Remove"
+  "cwRemove": "Remove",
+  "cwFiles": "Files",
+  "cwAddFiles": "Add files",
+  "cwFileOpen": "Download {0}",
+  "cwFileNotNow": "Can’t be read now: the work sandbox is stopped.",
+  "cwFileUnservable": "This file isn’t in the Agent’s own folder, so it can’t be downloaded.",
+  "cwFileTooLarge": "“{0}” wasn’t added: a card’s file can be at most {1} MB.",
+  "cwFileAdding": "Adding “{0}”…",
+  "cwFilesAdding": "Adding {0} files…",
+  "cwFileAdded": "File added",
+  "cwFilesAdded": "{0} files added",
+  "cwFileFailed": "“{0}” wasn’t added. Try again.",
+  "cwFileNotAllowed": "You can read this card, not add to it."
 }

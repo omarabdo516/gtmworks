@@ -82,15 +82,19 @@ test('an Engine publishes no host port, joins its install network and its work n
  const guard=start.slice(0,start.indexOf('exec hermes gateway run'));
  const home=mkdtempSync(join(tmpdir(),'engine-start-'));
  const scratch=join(home,'cache','scratch');
- const started=key=>spawnSync('sh',['-ec',`${guard} test -d "$TMPDIR" && echo gateway started`],{env:{PATH:process.env.PATH,API_SERVER_KEY:key,TMPDIR:scratch},encoding:'utf8'});
+ const started=key=>spawnSync('sh',['-ec',`${guard} test -d "$TMPDIR" && echo gateway started`],{env:{PATH:process.env.PATH,API_SERVER_KEY:key,TMPDIR:scratch,HERMES_HOME:home},encoding:'utf8'});
  try {
   const refused=started('');
   assert.notEqual(refused.status,0);
   assert.equal(refused.stdout,'');
   assert.match(refused.stderr,/The Engine has no key/);
   assert.throws(()=>statSync(scratch),/ENOENT/,'an Engine with no key makes no folder');
+  assert.throws(()=>statSync(join(home,'kanban')),/ENOENT/,'nor the board\'s');
   assert.equal(started('k'.repeat(64)).stdout,'gateway started\n');
   assert.equal(statSync(scratch).mode&0o777,0o700);
+  // The board's attachments folder too (#843): the sandbox mounts it by its path in the volume, and a mount of a folder
+  // that is not there does not start. It is the Engine's, readable by the sandbox's user.
+  assert.equal(statSync(join(home,'kanban','attachments')).mode&0o777,0o755);
   assert.equal(started('k'.repeat(64)).stdout,'gateway started\n','an Engine whose folder is there starts as before');
  } finally {
   rmSync(home,{recursive:true,force:true});
@@ -161,9 +165,14 @@ test('every Company\'s work sandbox is the least container its Agents\' work nee
  assert.equal(sandbox.labels['gtmworks.disk'],'${SANDBOX_DISK:-10g}');
  assert.doesNotMatch(readFileSync('scripts/install.sh','utf8'),/SANDBOX_DISK=[0-9]|disk_size=[0-9'"]/);
  assert.match(readme,new RegExp(`a work disk\\s+of \\*\\*${sandbox.labels['gtmworks.disk'].match(/:-(\d+)g\}$/)[1]} GB\\*\\*\\s+by default`));
- // The Company's work folder, the sandbox's home and its own host key, and nothing else; the only key that reaches it is
- // a public one, passed when the container starts.
- assert.deepEqual(sandbox.volumes,['work:/work','home:/home/pn','host-key:/home/pn/.ssh-host:ro']);
+ // The Company's work folder, the sandbox's home and its own host key, and the Engine's Kanban attachments folder
+ // read-only at the Engine's own path (#843), and nothing else; the only key that reaches it is a public one, passed when
+ // the container starts. Of the Engine's volume only that folder, which the Engine's start makes, so the sandbox starts
+ // once its Engine is healthy.
+ assert.deepEqual(sandbox.volumes,['work:/work','home:/home/pn','host-key:/home/pn/.ssh-host:ro',
+  {type:'volume',source:'data',target:'/opt/data/kanban/attachments',read_only:true,volume:{subpath:'kanban/attachments'}}]);
+ assert.equal(template.services.engine.volumes[0],'data:/opt/data','it is the Engine\'s own data volume');
+ assert.deepEqual(sandbox.depends_on,{engine:{condition:'service_healthy'}});
  assert.deepEqual(Object.keys(sandbox.environment),['SSH_AUTHORIZED_KEY']);
  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.networks)),{work:{aliases:['sandbox']}});
  assert.match(sandbox.healthcheck.test.join(' '),/2222/);

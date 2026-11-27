@@ -179,7 +179,7 @@ export default function Board({company,slug,writer,me='',creating=false}:{compan
     </KanbanColumn>;
    })}
   </KanbanBoard>
-  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} board={cards??[]} cardHref={cardHref} showCard={showCard} onBoard={answer=>{ if(answer.cards) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); }} onClose={closeCard}/>}
+  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} board={cards??[]} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={answer=>{ if(answer.cards) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); }} onClose={closeCard}/>}
  {making&&<Suspense fallback={null}><NewCard company={company} project={filter.project==='all'||filter.project==='none'?'':filter.project} projects={[...new Set((cards??[]).flatMap(card=>card.project?[card.project]:[]))].sort()} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}
   onClose={()=>{ setMaking(false); if(creating&&window.location.pathname.endsWith('/work/new')) window.history.replaceState(window.history.state,'',`${base}/board`); opener.current?.focus(); }}/></Suspense>}
  </div></div>;

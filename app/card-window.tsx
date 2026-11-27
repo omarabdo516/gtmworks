@@ -7,6 +7,7 @@ import { leave } from '@/lib/motion';
 import { columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-columns.mjs';
 import type { CompanyCard } from '@/lib/company-card.mjs';
 import { CardDescription } from './card-description';
+import { CardFileChips, CardFilesRow } from './card-files';
 import { useCardChanges } from './board-live';
 import { DateRow, DescriptionEdit, StatusMenu, TitleEdit, WaitsFor } from './card-window-edit';
 import en from '@/lib/messages/card-window.en.json';
@@ -168,7 +169,8 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned}:{company:string,c
  </>;
 }
 
-export function CardWindow({company,id,seen,writer,board=[],cardHref,showCard,onBoard,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,board?:{id:string,title:string,column:string}[],cardHref:(id:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,onClose:()=>void}) {
+export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,showCard,onBoard,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,board?:{id:string,title:string,column:string}[],cardHref:(id:string)=>string,
+ fileHref:(card:string,file:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,onClose:()=>void}) {
  const {t,language,locale}=useI18n();
  const text:Record<string,string>=language==='ar'?ar:en;
  const c=(key:string,...values:unknown[])=>(text[key]??key).replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)]??''));
@@ -225,6 +227,8 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,showCard,on
   {editable&&card&&<WaitsFor company={company} card={card.id} chips={card.waitsFor.map(other=>({id:other.id,title:other.title,node:chipOpen(other)}))} choices={waitChoices} c={c} onSaved={saved}/>}
   {!editable&&card&&card.waitsFor.length>0&&<div className="cwp cwp--chips">{icon('hourglass',c('cwWaitsFor'))}<span className="sr-only">{c('cwWaitsFor')}:</span><ul className="cw-chips">{card.waitsFor.map(chip)}</ul></div>}
   {card&&card.waitedBy.length>0&&<div className="cwp cwp--chips">{icon('link',c('cwWaitedBy'))}<span className="sr-only">{c('cwWaitedBy')}:</span><ul className="cw-chips">{card.waitedBy.map(chip)}</ul></div>}
+  {card&&<CardFilesRow company={company} card={card.id} files={card.files} href={file=>fileHref(card.id,file.key)} writer={writer&&!card.archived} c={c}
+   whoOf={file=>[file.by?'person' in file.by?file.by.person:file.by.agent?.name??c('cwAnAgent'):'',file.at!=null?at(file.at):''].filter(Boolean).join(' · ')} onAdded={read.reread}/>}
   {card&&<div className="cwp cwp--made"><span className="cwp__s"><span className="cwp__ic" title={c('cwMadeBy')} aria-hidden="true">{card.madeBy?'agent' in card.madeBy?<AgentFace agent={card.madeBy.agent.id} size={20}/>:<Letter name={card.madeBy.person.name} size={20}/>:null}</span>
    <span className="od-truncate"><span className="sr-only">{c('cwMadeBy')}: </span>{card.madeBy?<bdi>{'agent' in card.madeBy?card.madeBy.agent.name:card.madeBy.person.name}</bdi>:'—'}{card.createdAt!=null&&<> · <span className="num">{at(card.createdAt,{})}</span></>}</span></span>
    <span className="cwp__ic cwp__src" role="img" aria-label={c('cwFromBoard')} title={c('cwFromBoard')}><ShellIcon name="board"/></span></div>}
@@ -247,7 +251,7 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,showCard,on
   const who='person' in comment.author?comment.author.person:comment.author.agent?.name??c('cwAnAgent');
   const face='person' in comment.author?<Letter name={comment.author.person} size={28}/>:comment.author.agent?<AgentFace agent={comment.author.agent.id} size={28}/>:<NoOne size={28}/>;
   return <li key={comment.id} className="lg-row lg-row--note">{face}<div className="lg-body"><p className="lg-line"><b className="lg-name"><bdi>{who}</bdi></b> <span className="lg-act">{c('cwCommented')}</span></p>
-   <p className="lg-note" dir="auto">{comment.body}</p><p className="lg-meta"><span className="lg-time num">{time(comment.at)}</span></p></div></li>;
+   {comment.body&&<p className="lg-note" dir="auto">{comment.body}</p>}{card&&<CardFileChips files={card.files.filter(file=>file.comment===comment.id)} href={file=>fileHref(card.id,file.key)} c={c}/>}<p className="lg-meta"><span className="lg-time num">{time(comment.at)}</span></p></div></li>;
  }):empty('cwNoComments');
  const activity=(list:CompanyCard['activity'])=>list.length?byDay(list,event=>{
   const actor=event.agent?.name??event.by??null;
@@ -277,7 +281,8 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,showCard,on
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
      {editable&&card&&<DescriptionEdit key={card.id} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
      {!editable&&card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
-     {card?.summary&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result"><p className="cw-sum" dir="auto">{card.summary}</p></div></section>}
+     {card&&card.column==='done'&&(card.summary||card.files.some(file=>file.from==='summary'))&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result">
+      {card.summary&&<p className="cw-sum" dir="auto">{card.summary}</p>}<CardFileChips files={card.files.filter(file=>file.from==='summary')} href={file=>fileHref(card.id,file.key)} c={c}/></div></section>}
     </div>
     {read.state!=='missing'&&side}
     {read.state!=='missing'&&<section className="cw-feed" aria-label={c('cwFeed')}>
