@@ -1,4 +1,10 @@
 [
+ {
+  "issue": 947,
+  "date": "2026-11-28",
+  "en": { "title": "A tool that fails its test says why", "body": "When a tool you added does not answer the engine, its page now says so and shows the engine's own reason under the line, in the direction it was written, instead of guessing at the address or the token." },
+  "ar": { "title": "الأداة اللي اختبارها بيفشل بقت تقول السبب", "body": "لما أداة انت ضفتها مردّتش على المحرك، صفحتها بقت تقول كده وبتعرض سبب المحرك نفسه تحت السطر، في اتجاهه، بدل ما تخمّن في العنوان أو التوكن." }
+ },
 {
   "issue": 951,
   "date": "2026-11-28",
