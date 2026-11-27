@@ -5,7 +5,7 @@ import { engineRecord, engineServing } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { readProviderKeys, setProviderKey, removeProviderKey } from '../lib/engine/providers.mjs';
 import { hermesEngine } from '../lib/engine/contract.mjs';
-import { changeCompanyKey, readCompanyKeys, withCompanyKeys } from '../lib/provider-keys.mjs';
+import { changeCompanyKey, readCompanyKeys, oneAtATime } from '../lib/provider-keys.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -171,8 +171,8 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
    {agent:agentId(one.main),name:'Lead',written:true},{agent:agentId(one.agents[0]),name:'Writer',written:true},{agent:agentId(one.agents[1]),name:'Designer',written:false}]}});
   const own=new Set([one.space,one.main,...one.agents]);
   const asked=fake.settings.managementRequests.map(request=>({request:`${request.method} ${request.path}`,profile:profileOf(request.path)}));
-  // The profile list is read once, to know which Agents have a design profile (#544); every other request names a profile.
-  for(const {request,profile} of asked) assert.ok(own.has(profile)||request==='GET /api/profiles',`${request} names one of the Company's own profiles`);
+  // Every request names one of the Company's own profiles: no other profile is ever written (decision 0079: no design profile).
+  for(const {request,profile} of asked) assert.ok(own.has(profile),`${request} names one of the Company's own profiles`);
   for(const name of [two.space,two.main,...two.agents]) assert.deepEqual(envOf(fake,name),{},`${name} holds no key`);
   for(const profile of [one.main,one.agents[0]]) {
    const steps=asked.filter(found=>found.profile===profile&&found.request.startsWith('PUT')).map(found=>found.request);
@@ -359,8 +359,8 @@ test('the install job sets a key on the pinned Engine for a Company\'s space and
 test('work on a Company\'s keys waits for work on the same Company spelled in another letter case', async () => {
  const order=[];
  const company='3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b';
- const first=withCompanyKeys(company,async()=>{ order.push('first in'); await new Promise(resolve=>setTimeout(resolve,50)); order.push('first out'); });
- const second=withCompanyKeys(company.toUpperCase(),async()=>{ order.push('second'); });
+ const first=oneAtATime(company,async()=>{ order.push('first in'); await new Promise(resolve=>setTimeout(resolve,50)); order.push('first out'); });
+ const second=oneAtATime(company.toUpperCase(),async()=>{ order.push('second'); });
  await Promise.all([first,second]);
  assert.deepEqual(order,['first in','first out','second']);
 });

@@ -1,14 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { provideProfile } from '../lib/engine/agents.mjs';
-import { readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer } from '../lib/engine/apps.mjs';
-import { writeProfileModel } from '../lib/engine/models.mjs';
-import { setProviderKey, removeProviderKey } from '../lib/engine/providers.mjs';
-import { readUsage } from '../lib/engine/sessions.mjs';
+import { readApps, prepareApp, prepareServer, prepareCommandServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, turnOffApp, testServer } from '../lib/engine/apps.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
-import { apps } from '../lib/app-catalogue.mjs';
+import { apps, openDesignGuide } from '../lib/app-catalogue.mjs';
+import { sandboxCommandOf } from '../lib/sandbox-command.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
-import { designProfileOf, designProfileConfig, openDesignServer } from '../lib/open-design.mjs';
 
 // The app driver (#30, #458) against a fake of the pinned release's MCP routes: the catalogued apps, a ready-made remote
 // server, a server the Owner added, the three sign-in kinds and removal. No config it writes carries a tool filter, and
@@ -25,7 +22,6 @@ async function companyEngine() {
 const states=async target=>Object.fromEntries((await readApps(target)).apps.map(app=>[app.key,app.state]));
 const signInState=url=>new URL(url).searchParams.get('state');
 const engineKeys=fake=>apps.filter(app=>app.source==='engine'&&fake.settings.catalog.includes(app.key)).map(app=>app.key);
-const spaceOf=`cs-${company.replaceAll('-','')}`;
 const remoteKeys=apps.filter(app=>app.source==='remote').map(app=>app.key);
 
 test('the apps listed are the pinned Engine entries it offers, the ready-made servers and the card that adds one', async () => {
@@ -278,160 +274,32 @@ test('a server installed for a sign-in is removed again when its config cannot b
  } finally { await fake.close(); }
 });
 
-// The Open Design app (#544, ADR 0025): a design profile of the Agent's own with a Run API key no other profile holds,
-// and a server entry that runs Open Design's MCP command in the work sandbox with that key, never the install's.
-test('Open Design gives the Agent a design profile with a key of its own, and runs its MCP command in the sandbox with it', async () => {
+// Open Design is the Owner's (decision 0079, ADR 0035): its card is the own-tool form filled in for a command in the work
+// sandbox, and once added under its name it is a command server like any other. No path makes, keys or removes a design
+// profile: nothing gtmworks asks the Engine names an `od-` profile.
+test('Open Design is a preset of the command card: a form until its server is added, then one command server card', async () => {
  const {fake,target,servers}=await companyEngine();
  try {
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const design=fake.settings.profiles.get(designProfileOf(target.profile));
-  assert.ok(design,'the design profile is made');
-  assert.match(design.key,/^[A-Za-z0-9_-]{43}$/);
-  assert.notEqual(design.key,target.key,'never the install\'s key');
-  assert.deepEqual(design.config.terminal,{cwd:`/work/${target.profile}`},'it works in the Agent\'s own folder');
-  assert.deepEqual(design.config.platform_toolsets,designProfileConfig(target.profile).platform_toolsets);
-  assert.ok(!design.config.platform_toolsets.api_server.includes('clarify'),'a design Run asks no question nobody would read');
-  const entry=servers()['open-design'];
-  assert.deepEqual({command:entry.command,args:entry.args},openDesignServer({profile:target.profile,engine:new URL(fake.address).hostname,key:design.key}));
-  assert.equal(entry.enabled,true);
-  assert.equal(JSON.stringify(servers()).includes(target.key),false,'the install\'s key is in no server entry');
-  const read=await readApps(target);
-  const app=read.apps.find(one=>one.key==='open-design');
-  assert.equal(app?.source,'sandbox');
-  assert.equal(app?.state,'connected');
-  // Turning it on again keeps the key the design profile takes, so the Agent's connected session stays as it is.
   fake.settings.managementRequests.length=0;
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  assert.equal(fake.settings.profiles.get(designProfileOf(target.profile)).key,design.key);
-  assert.ok(!fake.settings.managementRequests.some(request=>request.method==='DELETE'||request.path?.startsWith('/api/mcp/servers?')),'the entry is not added again');
- } finally { await fake.close(); }
-});
-
-test('a design profile that no longer takes the entry\'s key gets a new one, and off removes the entry and takes the key away, keeping the profile\'s history', async () => {
- const {fake,target,servers}=await companyEngine();
- try {
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const name=designProfileOf(target.profile);
-  const before=fake.settings.profiles.get(name).key;
-  fake.settings.profiles.get(name).key='changed-elsewhere-changed-elsewhere-1234';
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const after=fake.settings.profiles.get(name).key;
-  assert.notEqual(after,before);
-  assert.ok(servers()['open-design'].args.at(-1).endsWith(`'${after}'`));
+  const preset=apps.find(app=>app.key==='open-design');
+  assert.equal(preset?.source,'own');
+  assert.deepEqual(preset.preset,{command:'node',args:['/work/open-design/apps/daemon/dist/cli.js','mcp','--daemon-url','http://127.0.0.1:7456']});
+  const before=(await readApps(target,{test:false})).apps.filter(app=>app.key==='open-design');
+  assert.deepEqual(before.map(app=>[app.source,app.installed,app.state]),[['own',false,'off']]);
+  assert.deepEqual(before[0].preset,preset.preset,'the card carries what the form is filled with');
+  assert.equal(await prepareApp(target,'open-design',null),'failed','nothing connects Open Design but the command card');
+  assert.equal(await prepareCommandServer(target,{key:'open-design',...preset.preset}),null);
+  assert.equal(sandboxCommandOf(servers()['open-design'])?.command,'node','a command server like any other, run in the work sandbox');
+  const after=(await readApps(target,{test:false})).apps.filter(app=>app.key==='open-design');
+  assert.equal(after.length,1,'one card per name: the server stands for the preset');
+  assert.deepEqual({source:after[0].source,name:after[0].name,auth:after[0].auth,command:after[0].command,args:after[0].args,docs:after[0].docs,installed:after[0].installed},
+   {source:'custom',name:'Open Design',auth:'command',command:'node',args:preset.preset.args,docs:openDesignGuide,installed:true});
+  assert.deepEqual(await turnOffApp(target,'open-design'),{state:'disconnected'},'off for one Agent keeps it, as for any server the Owner added');
+  assert.equal(servers()['open-design'].enabled,false);
   assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'});
   assert.equal(servers()['open-design'],undefined);
-  assert.equal(fake.settings.profiles.has(name),true,'the design profile stays, with the Runs its usage counts');
-  assert.notEqual(fake.settings.profiles.get(name).key,after,'the key the sandbox kept runs nothing');
-  assert.match(fake.settings.profiles.get(name).key,/^[A-Za-z0-9_-]{43}$/);
-  assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'},'again: nothing left, nothing refused');
+  assert.equal((await readApps(target,{test:false})).apps.find(app=>app.key==='open-design')?.source,'own','the form is back');
+  const named=fake.settings.managementRequests.map(request=>`${request.method} ${request.path}`).filter(request=>/od-|\/api\/profiles(?:\?|$)/.test(request));
+  assert.deepEqual(named,[],'no design profile is listed, made or keyed');
  } finally { await fake.close(); }
-});
-
-test('the design profile gets its Agent\'s provider key and model, and later key and model writes reach it too', async () => {
- const {fake,target}=await companyEngine();
- try {
-  const agent=fake.settings.profiles.get(target.profile);
-  agent.env={OPENROUTER_API_KEY:'sk-or-agent-key-1234567890'};
-  agent.provider='openrouter'; agent.model='anthropic/claude-sonnet';
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const name=designProfileOf(target.profile);
-  const design=fake.settings.profiles.get(name);
-  assert.equal(design.env?.OPENROUTER_API_KEY,'sk-or-agent-key-1234567890','the Agent\'s key, copied inside the Engine');
-  assert.deepEqual([design.provider,design.model],['openrouter','anthropic/claude-sonnet'],'the Agent\'s model');
-  assert.deepEqual(fake.settings.reveals,[{profile:target.profile,key:'OPENROUTER_API_KEY'}],'only the keys the Agent holds are read');
-  // A later model choice and a later key for the Agent reach its design profile.
-  assert.equal((await writeProfileModel(target,{profile:target.profile,provider:'anthropic',model:'claude-opus'})).state,'saved');
-  assert.deepEqual([design.provider,design.model],['anthropic','claude-opus']);
-  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
-  const set=await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'});
-  assert.equal(set.state,'written');
-  assert.equal(design.env.ANTHROPIC_API_KEY,'sk-ant-new-key-1234567890');
-  const removed=await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'});
-  assert.equal(removed.state,'removed');
-  assert.equal(design.env.ANTHROPIC_API_KEY,undefined,'a removed key leaves the design profile too');
-  // Turned off, the design profile keeps following the Agent's model, so turning it on again starts from the Agent's.
-  await disconnectApp(target,'open-design');
-  assert.equal((await writeProfileModel(target,{profile:target.profile,provider:'openrouter',model:'x/y'})).state,'saved');
-  assert.deepEqual([design.provider,design.model],['openrouter','x/y']);
- } finally { await fake.close(); }
-});
-
-test('a design profile that refuses the Agent\'s new key or its removal leaves that Agent unfinished, never reported done', async () => {
- const {fake,target}=await companyEngine();
- try {
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const name=designProfileOf(target.profile);
-  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
-  fake.settings.envFail.add(name);
-  const set=await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'});
-  assert.equal(set.profiles[target.profile],'failed','the Agent is unfinished while its design profile lacks the key');
-  fake.settings.envFail.delete(name);
-  assert.equal((await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'})).profiles[target.profile],'written');
-  fake.settings.envFail.add(name);
-  const removed=await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'});
-  assert.equal(removed.profiles[target.profile],'failed','a key left in the design profile is not reported removed');
-  assert.equal(fake.settings.profiles.get(name).env.ANTHROPIC_API_KEY,'sk-ant-new-key-1234567890');
-  fake.settings.envFail.delete(name);
-  assert.equal((await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'})).profiles[target.profile],'removed','asked again, it is removed');
-  assert.equal(fake.settings.profiles.get(name).env.ANTHROPIC_API_KEY,undefined);
- } finally { await fake.close(); }
-});
-
-test('an Agent\'s usage counts the Runs of its design profile, and an Agent with none is read as before', async () => {
- const {fake,target}=await companyEngine();
- try {
-  const before=await readUsage(target,30);
-  assert.equal(before.state,'found');
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const name=designProfileOf(target.profile);
-  fake.settings.sessions.set('own-1',{profile:target.profile,model:'m',input_tokens:100,output_tokens:10,messages:[]});
-  fake.settings.sessions.set('design-1',{profile:name,model:'m',input_tokens:40,output_tokens:4,messages:[]});
-  const after=await readUsage(target,30);
-  assert.deepEqual([after.input,after.output,after.sessions],[140,14,2]);
-  assert.deepEqual(after.models,[{model:'m',input:140,output:14,sessions:2}]);
- } finally { await fake.close(); }
-});
-
-test('an Engine whose profile list cannot be read leaves key changes unfinished, never reports a design profile cleared', async () => {
- const {fake,target}=await companyEngine();
- try {
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
-  assert.equal((await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'})).profiles[target.profile],'written');
-  const listing=fake.settings.profilesListStatus;
-  fake.settings.profilesListStatus=503;
-  const removed=await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'});
-  assert.notEqual(removed.profiles[target.profile],'removed','unknown whether a design profile keeps it');
-  fake.settings.profilesListStatus=listing;
-  assert.equal((await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'})).profiles[target.profile],'removed');
-  assert.equal(fake.settings.profiles.get(designProfileOf(target.profile)).env.ANTHROPIC_API_KEY,undefined);
- } finally { await fake.close(); }
-});
-
-test('turning Open Design off seals the design profile first: a key it cannot replace leaves the app on', async () => {
- const {fake,target,servers}=await companyEngine();
- try {
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  const name=designProfileOf(target.profile);
-  const key=fake.settings.profiles.get(name).key;
-  fake.settings.envFail.add(name);
-  assert.notEqual((await disconnectApp(target,'open-design')).state,'disconnected');
-  assert.ok(servers()['open-design'],'the server stays, so the app is still shown on and can be turned off again');
-  assert.equal(fake.settings.profiles.get(name).key,key);
-  fake.settings.envFail.delete(name);
-  assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'});
-  assert.notEqual(fake.settings.profiles.get(name).key,key);
- } finally { await fake.close(); }
-});
-
-test('a key set with no model listed still stays unfinished when the profile list cannot be read', async () => {
- const {fake,target}=await companyEngine();
- try {
-  assert.equal(await prepareApp(target,'open-design',null),null);
-  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
-  fake.settings.profilesListStatus=503;
-  const set=await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'deepseek',value:'sk-deepseek-key-1234567890'});
-  assert.notEqual(set.profiles[target.profile],'noModel');
-  assert.notEqual(set.profiles[target.profile],'written');
- } finally { fake.settings.profilesListStatus=null; await fake.close(); }
 });

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, its "Open Design" paragraph superseded by ADR 0035
 date: 2026-11-21
 ---
 
@@ -20,7 +20,7 @@ Read in the pinned Engine (Hermes v0.23.0):
 - **How the Engine gets it.** gtmworks writes the server as `ssh` with that fixed route; ssh's options end before the host, and the Owner's command and its arguments are the one remote command after it, each word quoted for the sandbox's shell (`lib/sandbox-command.mjs`). Nothing the Owner types is read by ssh as an option or by a shell as more than one word. The command starts in the Agent's own folder of the Company's work folder, which the sandbox's login shell makes from the same `builtin cd` the terminal backend sends, so a file it writes is where that Agent's other work is.
 - **What the Owner gives.** In the apps sheet's own-tool card, the Owner picks "A command in the work sandbox" and gives a name, the command (one program name or path) and its arguments, one per line. Test lists its tools without leaving it; Add turns it on for the Agents picked. It is on or off per Agent like every app. The Engine profile stays the only record (ADR 0016, ADR 0021): the card reads the command back from the server entry, and turning it on for another Agent copies the command, so that Agent's copy starts in its own folder.
 - **What stays refused.** A command beside an address, a command with a space or a control character, and any command for a remote kind are refused before the Engine is asked.
-- **Open Design.** A ready-made app: the sandbox image carries it, its daemon runs in the sandbox, and its MCP command (`od mcp --daemon-url <daemon address>`, stdio) is connected through this same path for the Agents the Owner picks. Its designs are drawn by the Company's own Engine, with no model credential in the sandbox: [ADR 0025](0025-open-design-draws-with-the-company-engine.md), which supersedes what this paragraph first said about a key in the sandbox (#544).
+- **Open Design.** *Superseded by [ADR 0035](0035-open-design-is-installed-by-the-owner-not-shipped.md) (2026-11-27): Open Design is the Owner's to install, and its card is this command card filled in.* A ready-made app: the sandbox image carries it, its daemon runs in the sandbox, and its MCP command (`od mcp --daemon-url <daemon address>`, stdio) is connected through this same path for the Agents the Owner picks. Its designs are drawn by the Company's own Engine, with no model credential in the sandbox: [ADR 0025](0025-open-design-draws-with-the-company-engine.md), which supersedes what this paragraph first said about a key in the sandbox (#544).
 
 ## Consequences
 
