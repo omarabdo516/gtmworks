@@ -1,9 +1,11 @@
 ---
-status: accepted
+status: superseded by ADR 0035
 date: 2026-11-21
 ---
 
 # Open Design draws its designs with the Company's own Engine
+
+Superseded entirely by [ADR 0035](0035-open-design-is-installed-by-the-owner-not-shipped.md) (Omar, 2026-11-27, vault decision 0079): Open Design is the Owner's to install and connects as a command server; there is no design profile and it draws with the model set up inside Open Design.
 
 Omar's decision of 2026-11-21 on issue #544, with Hermes's route, under [ADR 0020](0020-full-power-first-limits-only-after-a-real-problem.md) and [ADR 0022](0022-hermes-first-then-the-smallest-change.md). [ADR 0024](0024-command-mcp-servers-run-in-the-work-sandbox.md) put Open Design in the work sandbox as a ready-made app and said its model access would be the Company's own key copied into the sandbox. Omar decided instead that Open Design must work for a Company whose only model access is a subscription sign-in, and that no sign-in or key is copied into the sandbox: Open Design's model calls go to the Company's own Engine. This record supersedes ADR 0024's "Open Design" paragraph where they differ; the rest of ADR 0024 holds. It is reversible.
 

@@ -600,10 +600,10 @@ test('sandbox_card_files holds only for a sandbox that mounts its Engine\'s atta
 
 // Spec #831 (#833): the board's proof on the real Engine is one step of an area the proof already runs, never a job of
 // its own. It ran in agents-sandbox until that area reached its 12 minutes with the step still waiting (run 45841934073);
-// the open-design area, which used 5 of its 12, runs it after its own checks, once it has made the first Company's second
-// Agent as agents-sandbox does, and reads where the worker's file landed from the host's Docker; every Engine it made, the
+// the open-design area, which used 5 of its 12 and holds no Open Design check since Open Design stopped shipping
+// (decision 0079; #911 moves the proof on), runs it once it has made the first Company's second Agent as agents-sandbox does, and reads where the worker's file landed from the host's Docker; every Engine it made, the
 // new Company's included, and every Engine an update brings up holds the board worker's setting.
-test('the Kanban check runs inside the open-design area after its own checks, and every Engine made or updated holds the board setting', () => {
+test('the Kanban check runs inside the open-design area, and every Engine made or updated holds the board setting', () => {
   const area = (name, next) => script.slice(script.indexOf(`\n${name}() {`), script.indexOf(next, script.indexOf(`\n${name}() {`)));
   const design = area('open_design', '\n# backup:');
   const sandbox = area('agents_sandbox', '\n# open-design:');
@@ -611,7 +611,7 @@ test('the Kanban check runs inside the open-design area after its own checks, an
   assert.ok(kanban > 0, 'open-design runs the Kanban check');
   assert.equal(sandbox.includes(' - kanban '), false, 'agents-sandbox no longer runs it');
   assert.ok(design.indexOf(' - prepare <') < design.indexOf(' - second <') && design.indexOf(' - second <') < kanban, 'the Card is worked by the second Agent, which exists by then');
-  assert.ok(design.lastIndexOf("fail 'no sign-in or key file of the Engine is in the sandbox'") < kanban, 'after every Open Design check');
+  assert.equal(/open-design-add|lib\/open-design|open-design-mcp/.test(design), false, 'no Open Design check is left in the area (decision 0079)');
   assert.equal(script.split(' - kanban ').length - 1, 1, 'the Kanban check runs once in the whole proof');
   assert.ok(!matrix.includes('kanban') && !cases.some(({ name }) => /kanban|board/.test(name)), 'no area of its own');
   // Where the worker's file and its dangerous command landed is read from the host's Docker, which a tool's answer

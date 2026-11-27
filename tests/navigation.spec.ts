@@ -21,6 +21,9 @@ test.beforeAll(async ({}, testInfo) => {
   freshSeed(testInfo);
   engine = await laneHermes();
   engine.settings.kanban.task({ id: measuredCard, title: 'Measured card', status: 'ready', body: '- [ ] Open it' });
+  // A Card made on the board has gtmworks's row beside it; with no Agent and no row only an Administrator would see it
+  // (#842, lib/company-board.mjs shownWithoutAgent), and the measured paths read as a Manager.
+  query(`insert into public.kanban_cards(company_id,task_id) values ('10000000-0000-0000-0000-000000000001','${measuredCard}') on conflict do nothing`);
   engine.settings.kanban.task({ title: `بطاقة قياس الوارد ${randomUUID()}`, status: 'review' });
 });
 test.afterAll(async () => { await engine?.close(); engine = undefined; });

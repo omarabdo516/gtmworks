@@ -6,6 +6,12 @@
   "ar": { "title": "الإعدادات كلها جوه gtmworks", "body": "كل الإعدادات بقت في إعدادات gtmworks نفسها؛ والسطر اللي كان بيفتح لوحة المحرّك بقى اسمه «سجلات المحرك والنظام (متقدم)»، ولصاحب التثبيت بس." }
  },
  {
+  "issue": 910,
+  "date": "2026-11-27",
+  "en": { "title": "Connect the Open Design you run", "body": "Open Design is no longer built into gtmworks: put it in your Company's work sandbox and start it as the guide on its page says, then pick Open Design in Apps, and the command form opens with its command filled in; Test lists its tools, Add turns it on for the Agents you pick, and it draws with the model you set up inside Open Design." },
+  "ar": { "title": "وصّل Open Design اللي انت مشغّله", "body": "Open Design مبقاش جوه gtmworks: حطه في صندوق شغل شركتك وشغّله زي ما الشرح اللي في صفحته بيقول، وبعدين اختار Open Design من التطبيقات، فتتفتح صفحة الأمر وأمره متكتب جاهز؛ «اختبر» بيعرض أدواته، و«ضيف» بيشغّله للوكلاء اللي تختارهم، وبيرسم بالموديل اللي انت ظبطته جوه Open Design." }
+ },
+ {
   "issue": 834,
   "date": "2026-11-27",
   "en": { "title": "The board is your Engine's own Kanban board", "body": "The board now shows the Cards your Agents work on the Company's Engine, and it updates live as they move; make a Card and give it to an Agent, a Member or nobody, open it to see everything the Engine keeps about it, comment, answer its Agent or stop its work, and Waiting on you and the bell show the Cards that wait on you; the list and the calendar show the same Cards." },
@@ -26,8 +32,8 @@
  {
   "issue": 842,
   "date": "2026-11-27",
-  "en": { "title": "Archive and restore Cards", "body": "Archive a Card from its More menu, several at once in select mode, or everything in Done, with Undo; archiving a Card an Agent is working on asks once and stops the work, and the archive icon lists the archived Cards to page through, search and restore." },
-  "ar": { "title": "أرشفة البطاقات ورجوعها", "body": "أرشف بطاقة من قايمة «أكتر»، أو كذا بطاقة مرة واحدة من الاختيار، أو كل اللي في «خلص»، ومعاها تراجع؛ وأرشفة بطاقة وكيل شغال عليها بتسألك مرة وتوقّف الشغل، وأيقونة الأرشيف بتعرض البطاقات المؤرشفة تقلّب فيها وتدوّر وترجّعها." }
+  "en": { "title": "Archive and restore Cards", "body": "Archive a Card from its More menu, several at once in select mode, or everything in Done, with Undo; archiving a Card an Agent is working on asks once and stops the work, and the archive icon lists the archived Cards to page through, search and restore, and a restored Card that was being worked on or waiting on you comes back stopped, so nothing starts until you press Continue." },
+  "ar": { "title": "أرشفة البطاقات ورجوعها", "body": "أرشف بطاقة من قايمة «أكتر»، أو كذا بطاقة مرة واحدة من الاختيار، أو كل اللي في «خلص»، ومعاها تراجع؛ وأرشفة بطاقة وكيل شغال عليها بتسألك مرة وتوقّف الشغل، وأيقونة الأرشيف بتعرض البطاقات المؤرشفة تقلّب فيها وتدوّر وترجّعها، والبطاقة اللي ترجع وكانت شغالة أو مستنياك بترجع واقفة، فمفيش حاجة بتبدأ لحد ما تدوس «كمّل»." }
  },
  {
   "issue": 844,

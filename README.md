@@ -545,7 +545,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - ✅ Roles, invite links and per-Member Agent access
 - 🟡 Good morning message from the main Agent (merged, waiting for the release, #572)
 - ✅ English and Egyptian Arabic, dictation in Egyptian Arabic
-- 🟡 Open Design: Agents make designs
+- 🟡 Open Design, installed by you and connected from Apps: Agents make designs
 - ✅ Watch the Agent's screen, take control for one session, and finish a step it hands you there
 - 🟡 Stop ends a whole Handover chain
 - 🟡 Numbers from connected apps (page built, no live source yet)

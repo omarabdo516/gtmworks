@@ -1,9 +1,11 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0036
 date: 2026-11-26
 ---
 
 # gtmworks is an interface and a gatekeeper over Hermes
+
+> Partly superseded by [ADR 0036](0036-the-move-onto-hermes-ends-at-a-count.md) (Omar, 2026-11-27): item 3 is superseded, Channels leave the product; and the bullet of item 4 that retires gtmworks's settings screens is withdrawn, every Hermes setting is drawn in gtmworks and saved straight into Hermes.
 
 > Since 2026-11-26 (#902) the Role these ADRs call **Owner** is named **Administrator / أدمن**: same Role, new word; the code keeps `owner`. Past ADR text keeps its words.
 
@@ -38,6 +40,7 @@ Item 4 is built (spec #866, 2026-11-26): the Owner opens the Engine's own dashbo
    - The statuses are the Engine's eight. How they are grouped on the screen is Omar's to draw. There is no Live column: published is done, with the publishing date on the Card.
    - A review works as Hermes does it: an Agent or a person passes the work or sends it back, and the Card shows who. The Engine records no identity on a write, so when a person reviews, gtmworks writes their name on the Engine's record. The line "an Agent never approves" ends; "Approval" and "Version" leave the product's words and the review stays.
    - A board worker's dangerous command runs (`approvals.single_query_mode: approve`), as [ADR 0020](0020-full-power-first-limits-only-after-a-real-problem.md) asks. It runs in the Company's Work sandbox, which holds no key.
+   - A Card is archived with the Engine's own archived status and restored with its own moves, never deleted (#842). Hermes has no move from the archive back to a question or a review that starts nothing ([kanban-board probe](../engine-probes/kanban-board.md), section 10), and gtmworks does not change Hermes for it. So a Card that waited on a person (a question or a review) comes back Planned and stopped, with the same Agent, and starts only when a person presses Continue, on Undo too (Omar, 2026-11-27). While a restore holds a Card with no Agent so nothing starts it, the board and the archived list show a Card with no Agent to an Administrator, and to anyone else only where gtmworks's own row beside it is and the Engine's record of the Card (whom it was given to, and its Runs) names no Agent hidden from them (Omar, 2026-11-27).
 3. **Channels get no new work.** What is built stays. Their fate is decided when a team uses them.
 4. **The Owner opens the Engine's own dashboard** behind gtmworks's sign-in, in gtmworks's colours, for every Hermes page gtmworks does not show: messaging platforms, plugins, webhooks, logs, system. gtmworks draws its own screen only for what a team uses daily.
    - Limited to the install owner (Omar, 2026-11-27, vault decision 0081, #915): every Hermes setting is drawn in gtmworks and saved straight into Hermes, and the row that opens the Engine's dashboard, named «Engine logs and system (advanced)», is shown and served only to the install owner (the account first-run made, `public.install_owner`) in a Company they are an Administrator of, for rare technical pages such as logs. Every other Administrator sees no row and gets the missing page under `/c/<slug>/hermes`. This supersedes the next point's retirement of gtmworks's settings screens in favour of the dashboard.
