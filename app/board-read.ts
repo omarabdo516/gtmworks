@@ -15,7 +15,7 @@ import { followBoard } from '@/app/board-live';
 // (app/board-live.ts), reads the board again at once. While the stream is down the board reads again on a slow timer.
 // Whom a Card waits on (#841): a Member by name, or every Administrator and Manager (`person` null), and whether that is
 // the reader (`mine`).
-export type CardWaits={mine:boolean,person:{id:string,name:string}|null};
+type CardWaits={mine:boolean,person:{id:string,name:string}|null};
 export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,waits?:CardWaits|null,comments:number,createdAt?:number|null,project?:string|null,publishOn?:string|null};
 type Agent={id:string,name:string};
 export type Board={cards:BoardCard[],main:Agent|null};

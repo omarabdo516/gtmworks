@@ -32,7 +32,7 @@ const NewCard=lazy(()=>import('./new-card'));
 // in Done and archives them, with Undo; the archive icon shows the archived Cards in place of the columns, with their
 // search, and Restore.
 
-export type { Board, BoardCard } from '@/app/board-read';
+export type { BoardCard } from '@/app/board-read';
 type Agent={id:string,name:string};
 
 const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],done:['boardEmptyDone','']};
