@@ -14,17 +14,23 @@ const companyProfile=`co-${company.replaceAll('-','')}`;
 const [lead,ads,seo]=['3b000000-0000-0000-0000-000000000001','3b000000-0000-0000-0000-000000000011','3b000000-0000-0000-0000-000000000021'];
 const profileOf=id=>`ag-${id.replaceAll('-','')}`;
 const agents=[{agent:lead,name:'Lead',profile:companyProfile,main:true},{agent:ads,name:'Ads',profile:profileOf(ads),main:false}];
-// The reader's own session, Seo among the Company's profiles but hidden from this reader.
-const reader=(seen=agents)=>({rpc:async name=>{
+// The reader, `me`, an Administrator unless named otherwise: a Card with no Agent and no row beside it is shown only to an
+// Administrator (lib/company-board.mjs shownWithoutAgent).
+const me='3a000000-0000-0000-0000-000000000001';
+// The reader's own session, Seo among the Company's profiles but hidden from this reader. `rows` are the task ids that
+// have gtmworks's row beside them.
+const reader=(seen=agents,{role='owner',rows=[]}={})=>({rpc:async name=>{
  if(name==='company_engine_target') return {data:[{profile:companyProfile,profiles:[companyProfile,profileOf(ads),profileOf(seo)]}],error:null};
  if(name==='company_app_agents') return {data:seen,error:null};
  return {data:null,error:{message:`unexpected ${name}`}};
 },from:table=>{
- // The rows beside the Cards and the active Members whom a Card may wait on (#841): none here.
- const read={select:()=>read,eq:()=>read,not:()=>read,is:()=>read,then:(done,failed)=>Promise.resolve(table==='kanban_cards'||table==='members'?{data:[],error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
+ // The rows beside the Cards, and the active Members whom a Card may wait on (#841): the reader alone.
+ const answer=table==='kanban_cards'?rows.map(task_id=>({task_id,assignee:null,publish_on:null,made_by:me,people:null}))
+  :table==='members'?[{person_id:me,role,people:{name:'Reader'}}]:null;
+ const read={select:()=>read,eq:()=>read,not:()=>read,is:()=>read,then:(done,failed)=>Promise.resolve(answer?{data:answer,error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
  return read;
 }});
-const columnOf=async(id,db=reader())=>(await readCompanyBoard(db,{company})).cards.find(card=>card.id===id)?.column??null;
+const columnOf=async(id,db=reader())=>(await readCompanyBoard(db,{company,me})).cards.find(card=>card.id===id)?.column??null;
 const kanbanAsked=fake=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/plugins/kanban')).map(request=>`${request.method} ${String(request.path).split('?')[0]}`);
 
 test('an archived Card leaves the board and its column, and Restore puts it back in the same column', async () => {
@@ -35,11 +41,11 @@ test('an archived Card leaves the board and its column, and Restore puts it back
   const planned=kanban.task({title:'December ad copy',status:'ready',assignee:profileOf(ads)}).id;
   const done=kanban.task({title:'Weekly report',status:'done',assignee:profileOf(ads)}).id;
   kanban.run(done,{profile:profileOf(ads),status:'done',outcome:'completed',summary:'Sent the weekly report.',ended_at:1});
-  const archived=await archiveCompanyCards(reader(),{company,cards:[idea,planned,done]});
+  const archived=await archiveCompanyCards(reader(),{company,me,cards:[idea,planned,done]});
   assert.deepEqual(archived,{state:'archived',archived:[idea,planned,done],left:[]});
-  const board=await readCompanyBoard(reader(),{company});
+  const board=await readCompanyBoard(reader(),{company,me});
   assert.deepEqual(board.cards.map(card=>card.id),[]);
-  const restored=await restoreCompanyCards(reader(),{company,cards:[idea,planned,done]});
+  const restored=await restoreCompanyCards(reader(),{company,me,cards:[idea,planned,done]});
   assert.deepEqual(restored,{state:'restored',restored:[idea,planned,done],left:[]});
   assert.deepEqual([await columnOf(idea),await columnOf(planned),await columnOf(done)],['ideas','planned','done']);
   // A done Card keeps its summary, and Restore asked the dispatcher for no tick: nothing started.
@@ -59,17 +65,17 @@ test('a Card an Agent works on asks once: nothing is archived until the person c
   const run=kanban.run(running,{profile:profileOf(ads)});
   const question=kanban.task({title:'Google Ads numbers',status:'blocked',assignee:companyProfile}).id;
   const quiet=kanban.task({title:'Email to old subscribers',status:'todo'}).id;
-  const asked=await archiveCompanyCards(reader(),{company,cards:[running,question,quiet]});
+  const asked=await archiveCompanyCards(reader(),{company,me,cards:[running,question,quiet]});
   assert.deepEqual(asked,{state:'stops',stops:[{about:running,kind:'run',title:'Meta campaign',agent:'Ads',agent_id:ads},
    {about:question,kind:'question',title:'Google Ads numbers',agent:'Lead',agent_id:lead}]});
   assert.deepEqual([await columnOf(running),await columnOf(question),await columnOf(quiet)],['progress','waiting','planned']);
-  const archived=await archiveCompanyCards(reader(),{company,cards:[running,question,quiet],stop:true});
+  const archived=await archiveCompanyCards(reader(),{company,me,cards:[running,question,quiet],stop:true});
   assert.deepEqual(archived,{state:'archived',archived:[running,question,quiet],left:[]});
   assert.deepEqual({status:run.status,outcome:run.outcome,ended:run.ended_at!=null},{status:'reclaimed',outcome:'reclaimed',ended:true});
   // Undo: the Card that was worked on is ready again and the dispatcher is asked at once, so its Agent goes on. The
   // question's Card cannot be put back to wait on its question (the Engine re-blocks it into triage): it comes back
   // stopped with its Agent, and neither that tick nor the Engine's next one starts it.
-  const undone=await restoreCompanyCards(reader(),{company,cards:[running,question,quiet],undo:true});
+  const undone=await restoreCompanyCards(reader(),{company,me,cards:[running,question,quiet],undo:true});
   assert.deepEqual(undone,{state:'restored',restored:[running,question,quiet],left:[]});
   assert.equal(kanban.ticks,1);
   assert.deepEqual([await columnOf(running),await columnOf(question),await columnOf(quiet)],['progress','planned','planned']);
@@ -84,10 +90,10 @@ test('Restore starts nothing: a Card that was worked on, waited on a question, w
   const kanban=fake.settings.kanban;
   const cards=['running','blocked','review','scheduled'].map(status=>kanban.task({title:`Card ${status}`,status,assignee:profileOf(ads)}).id);
   kanban.run(cards[0],{profile:profileOf(ads)});
-  await archiveCompanyCards(reader(),{company,cards,stop:true});
+  await archiveCompanyCards(reader(),{company,me,cards,stop:true});
   // Every move out of the archive goes through a Card with no Agent, which the dispatcher never starts, and the Agent
   // comes back only once the Card is stopped.
-  const restored=await restoreCompanyCards(reader(),{company,cards});
+  const restored=await restoreCompanyCards(reader(),{company,me,cards});
   const moves=kanban.patches.filter(patch=>cards.includes(patch.id)&&patch.body.status!=='archived');
   assert.deepEqual(moves.filter(patch=>patch.id===cards[1]).map(patch=>patch.body),[{assignee:'',status:'ready'},{status:'scheduled'},{assignee:profileOf(ads)}]);
   assert.ok(moves.every(patch=>patch.body.status!=='ready'||patch.body.assignee===''));
@@ -95,7 +101,7 @@ test('Restore starts nothing: a Card that was worked on, waited on a question, w
   assert.equal(kanban.ticks,0);
   kanban.dispatch();
   for(const id of cards) assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===id)),{status:'scheduled',assignee:profileOf(ads)});
-  const board=await readCompanyBoard(reader(),{company});
+  const board=await readCompanyBoard(reader(),{company,me});
   for(const id of cards) assert.deepEqual((({column,symbol,agent})=>({column,symbol,agent}))(board.cards.find(card=>card.id===id)),{column:'planned',symbol:{kind:'stopped'},agent:{id:ads,name:'Ads'}});
  } finally { await fake.close(); }
 });
@@ -109,16 +115,16 @@ test('a restore the Engine refuses part way starts nothing, a stopped Card that 
   const child=kanban.task({title:'Ad copy',status:'blocked',assignee:profileOf(ads)}).id;
   kanban.link(parent,child);
   const silent=kanban.task({title:'Old report',status:'done',assignee:profileOf(ads)}).id;
-  await archiveCompanyCards(reader(),{company,cards:[refused,child,silent],stop:true});
+  await archiveCompanyCards(reader(),{company,me,cards:[refused,child,silent],stop:true});
   // The Engine refuses the stop: the Card stays out of the archive with no Agent, so no tick starts it, and it is named.
   let patched=0;
   fake.settings.managedFail=(method,path)=>method==='PATCH'&&path.startsWith(`/api/plugins/kanban/tasks/${refused}`)&&++patched===2?409:null;
-  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[refused]}),{state:'restored',restored:[],left:[refused]});
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,me,cards:[refused]}),{state:'restored',restored:[],left:[refused]});
   fake.settings.managedFail=null;
   kanban.dispatch();
   assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===refused)),{status:'ready',assignee:null});
   // Waiting for an open Card, it is stopped too, and Continue lets it wait for that Card rather than start.
-  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[child,silent]}),{state:'restored',restored:[child,silent],left:[]});
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,me,cards:[child,silent]}),{state:'restored',restored:[child,silent],left:[]});
   assert.equal(kanban.status(child,'ready'),null);
   assert.equal(kanban.tasks.find(task=>task.id===child).status,'todo');
   // A done Card the Engine holds no summary or result for cannot be done again: it comes back stopped with its Agent.
@@ -133,11 +139,11 @@ test('a move out of the archive whose answer is lost keeps the Card with no Agen
   const lost=kanban.task({title:'Meta campaign',status:'blocked',assignee:profileOf(ads)}).id;
   const twice=kanban.task({title:'Google Ads numbers',status:'running',assignee:profileOf(ads)}).id;
   kanban.run(twice,{profile:profileOf(ads)});
-  await archiveCompanyCards(reader(),{company,cards:[lost,twice],stop:true});
+  await archiveCompanyCards(reader(),{company,me,cards:[lost,twice],stop:true});
   // The Engine made the move to ready, but its answer never came: the Card may be out of the archive, so its Agent is not
   // given back, and no tick starts it.
   kanban.loseAnswer=(id,body)=>id===lost&&body.status==='ready';
-  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[lost]}),{state:'restored',restored:[],left:[lost]});
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,me,cards:[lost]}),{state:'restored',restored:[],left:[lost]});
   kanban.loseAnswer=null;
   kanban.dispatch();
   assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===lost)),{status:'ready',assignee:null});
@@ -145,11 +151,41 @@ test('a move out of the archive whose answer is lost keeps the Card with no Agen
   // Card once it is done and leaves it.
   let held=false;
   fake.settings.managedDelay=(method,path)=>method==='PATCH'&&path.startsWith(`/api/plugins/kanban/tasks/${twice}`)&&!held?(held=true,300):null;
-  const [first,second]=await Promise.all([restoreCompanyCards(reader(),{company,cards:[twice]}),restoreCompanyCards(reader(),{company,cards:[twice]})]);
+  const [first,second]=await Promise.all([restoreCompanyCards(reader(),{company,me,cards:[twice]}),restoreCompanyCards(reader(),{company,me,cards:[twice]})]);
   fake.settings.managedDelay=null;
   assert.deepEqual([first.restored,second.restored].flat(),[twice]);
   kanban.dispatch();
   assert.deepEqual((({status,assignee})=>({status,assignee}))(kanban.tasks.find(task=>task.id===twice)),{status:'scheduled',assignee:profileOf(ads)});
+ } finally { await fake.close(); }
+});
+
+test('a Card with no Agent fails closed: during a restore a Member who cannot see its Agent gets nothing, and one with a row beside it shows as before', async () => {
+ const fake=await engineServing(company);
+ try {
+  const kanban=fake.settings.kanban;
+  const everyone=[...agents,{agent:'3b000000-0000-0000-0000-000000000021',name:'Seo',profile:profileOf(seo),main:false}];
+  const secret=kanban.task({title:'Competitor pricing leak',status:'blocked',assignee:profileOf(seo)}).id;
+  const idea=kanban.task({title:'Reel: a day in an accountant\'s life',status:'triage'}).id;
+  const loose=kanban.task({title:'Card an Agent made for nobody',status:'todo'}).id;
+  // The Contributor sees neither Seo nor Seo's Card; a Card with no Agent shows to them only with its row.
+  const contributor=(rows=[idea])=>reader(agents,{role:'contributor',rows});
+  const shown=async db=>(await readCompanyBoard(db,{company,me})).cards.map(card=>card.id);
+  assert.deepEqual(await shown(contributor()),[idea]);
+  assert.deepEqual((await shown(reader(everyone,{rows:[idea]}))).sort(),[secret,idea,loose].sort());
+  await archiveCompanyCards(reader(everyone,{rows:[idea]}),{company,me,cards:[secret],stop:true});
+  assert.deepEqual((await readArchivedCards(contributor(),{company,me})).cards,[]);
+  // An Administrator who sees Seo restores the Card; its stop is held while it has no Agent, and the Contributor's board
+  // and archived list read then hold nothing of it.
+  const now=()=>kanban.tasks.find(task=>task.id===secret);
+  fake.settings.managedDelay=(method,path)=>method==='PATCH'&&path.startsWith(`/api/plugins/kanban/tasks/${secret}`)&&now().status==='ready'&&now().assignee===null?400:null;
+  const restoring=restoreCompanyCards(reader(everyone,{rows:[idea]}),{company,me,cards:[secret]});
+  for(let tries=0;tries<100&&!(now().status==='ready'&&now().assignee===null);tries++) await new Promise(done=>setTimeout(done,5));
+  assert.deepEqual([now().status,now().assignee],['ready',null],'the restore holds the Card with no Agent');
+  const during={board:await shown(contributor()),archived:(await readArchivedCards(contributor(),{company,me})).cards.map(card=>card.id)};
+  fake.settings.managedDelay=null;
+  assert.deepEqual(await restoring,{state:'restored',restored:[secret],left:[]});
+  assert.deepEqual(during,{board:[idea],archived:[]});
+  assert.deepEqual(await shown(contributor()),[idea]);
  } finally { await fake.close(); }
 });
 
@@ -160,12 +196,12 @@ test('a Card that waited for an archived Card no longer waits, and waits again o
   const page=kanban.task({title:'Course page copy',status:'ready',assignee:profileOf(ads)}).id;
   const copy=kanban.task({title:'December ad copy',status:'todo',assignee:profileOf(ads)}).id;
   kanban.link(page,copy);
-  const symbolOf=async id=>(await readCompanyBoard(reader(),{company})).cards.find(card=>card.id===id)?.symbol??null;
+  const symbolOf=async id=>(await readCompanyBoard(reader(),{company,me})).cards.find(card=>card.id===id)?.symbol??null;
   assert.deepEqual(await symbolOf(copy),{kind:'waits',count:1});
-  await archiveCompanyCards(reader(),{company,cards:[page]});
+  await archiveCompanyCards(reader(),{company,me,cards:[page]});
   assert.equal(await symbolOf(copy),null);
   assert.equal(await columnOf(copy),'planned');
-  await restoreCompanyCards(reader(),{company,cards:[page]});
+  await restoreCompanyCards(reader(),{company,me,cards:[page]});
   assert.deepEqual(await symbolOf(copy),{kind:'waits',count:1});
   assert.equal(kanban.ticks,0);
  } finally { await fake.close(); }
@@ -178,12 +214,12 @@ test('a Card of an Agent hidden from the reader, or one gone from the board mean
   const hidden=kanban.task({title:'Seo keywords',status:'ready',assignee:profileOf(seo)}).id;
   const gone=kanban.task({title:'Old webinar',status:'archived'}).id;
   const mine=kanban.task({title:'Weekly report',status:'todo'}).id;
-  assert.deepEqual(await archiveCompanyCards(reader(),{company,cards:[hidden,gone,mine]}),{state:'archived',archived:[mine],left:[hidden,gone]});
+  assert.deepEqual(await archiveCompanyCards(reader(),{company,me,cards:[hidden,gone,mine]}),{state:'archived',archived:[mine],left:[hidden,gone]});
   assert.equal(kanban.tasks.find(task=>task.id===hidden).status,'ready');
   kanban.status(hidden,'archived');
-  assert.deepEqual(await restoreCompanyCards(reader(),{company,cards:[hidden,mine,'t_notthere']}),{state:'restored',restored:[mine],left:[hidden,'t_notthere']});
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,me,cards:[hidden,mine,'t_notthere']}),{state:'restored',restored:[mine],left:[hidden,'t_notthere']});
   assert.equal(kanban.tasks.find(task=>task.id===hidden).status,'archived');
-  for(const cards of [[],'t_one',[`t_${'x'.repeat(70)}`],Array.from({length:201},(_,n)=>`t_${n}`)]) assert.deepEqual(await archiveCompanyCards(reader(),{company,cards}),{state:'invalid'});
+  for(const cards of [[],'t_one',[`t_${'x'.repeat(70)}`],Array.from({length:201},(_,n)=>`t_${n}`)]) assert.deepEqual(await archiveCompanyCards(reader(),{company,me,cards}),{state:'invalid'});
  } finally { await fake.close(); }
 });
 
@@ -195,21 +231,21 @@ test('the archived list is fifty at a time, newest made first, searched by title
   for(let n=2;n<=60;n++) kanban.task({title:`Archived plan ${String(n).padStart(2,'0')}`,status:'archived'});
   kanban.task({title:'Archived plan of Seo',status:'archived',assignee:profileOf(seo)});
   kanban.task({title:'On the board',status:'todo'});
-  const first=await readArchivedCards(reader(),{company});
+  const first=await readArchivedCards(reader(),{company,me});
   assert.equal(first.state,'found');
   assert.equal(first.total,60);
   assert.equal(first.cards.length,50);
   assert.equal(first.cards[0].title,'Archived plan 60');
   assert.equal(first.cards.at(-1).title,'Archived plan 11');
   assert.equal(first.next,50);
-  const rest=await readArchivedCards(reader(),{company,from:50});
+  const rest=await readArchivedCards(reader(),{company,me,from:50});
   assert.equal(rest.cards.at(-1).title,'مُــهمّة إعلانات ديسمبر');
   assert.deepEqual(rest.cards.at(-1).agent,{id:ads,name:'Ads'});
   assert.equal(rest.next,null);
-  assert.deepEqual((await readArchivedCards(reader(),{company,query:'مهمه'})).cards.map(card=>card.title),['مُــهمّة إعلانات ديسمبر']);
-  assert.equal((await readArchivedCards(reader(),{company,query:'PLAN 0'})).cards.length,8);
-  assert.deepEqual((await readArchivedCards(reader(),{company,query:'nothing like it'})).cards,[]);
+  assert.deepEqual((await readArchivedCards(reader(),{company,me,query:'مهمه'})).cards.map(card=>card.title),['مُــهمّة إعلانات ديسمبر']);
+  assert.equal((await readArchivedCards(reader(),{company,me,query:'PLAN 0'})).cards.length,8);
+  assert.deepEqual((await readArchivedCards(reader(),{company,me,query:'nothing like it'})).cards,[]);
   assert.ok(!JSON.stringify(first).includes(profileOf(ads)));
-  assert.deepEqual(await readArchivedCards(reader(),{company,from:-1}),{state:'invalid'});
+  assert.deepEqual(await readArchivedCards(reader(),{company,me,from:-1}),{state:'invalid'});
  } finally { await fake.close(); }
 });

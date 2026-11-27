@@ -42,7 +42,7 @@ export async function GET(request:NextRequest) {
  try {
   const db=await supabase(); const params=request.nextUrl.searchParams; const company=params.get('company');
   const who=await allowed(db,'GET',company); if(who instanceof NextResponse) return who;
-  const read=await readArchivedCards(db,{company:company!,query:params.get('q')??'',from:params.get('from')??0});
+  const read=await readArchivedCards(db,{company:company!,me:who.person,query:params.get('q')??'',from:params.get('from')??0});
   if(read.state==='found') return reply({cards:read.cards,total:read.total,next:read.next});
   const [error,status]=failures[read.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
@@ -54,7 +54,7 @@ export async function POST(request:NextRequest) {
   if(!sent) return reply({error:'boardNotAllowed'},403);
   const who=await allowed(db,'POST',sent.company); if(who instanceof NextResponse) return who;
   const company=sent.company as string;
-  const done=await archiveCompanyCards(db,{company,cards:sent.cards,stop:sent.stop});
+  const done=await archiveCompanyCards(db,{company,me:who.person,cards:sent.cards,stop:sent.stop});
   if(done.state==='archived') return await board(db,company,who.person,{archived:done.archived,left:done.left});
   if(done.state==='stops') return reply({error:'cardsStop',stops:done.stops},409);
   const [error,status]=failures[done.state]; return reply({error},status);
@@ -67,7 +67,7 @@ export async function PATCH(request:NextRequest) {
   if(!sent) return reply({error:'boardNotAllowed'},403);
   const who=await allowed(db,'PATCH',sent.company); if(who instanceof NextResponse) return who;
   const company=sent.company as string;
-  const done=await restoreCompanyCards(db,{company,cards:sent.cards,undo:sent.undo});
+  const done=await restoreCompanyCards(db,{company,me:who.person,cards:sent.cards,undo:sent.undo});
   if(done.state==='restored') return await board(db,company,who.person,{restored:done.restored,left:done.left});
   const [error,status]=failures[done.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
