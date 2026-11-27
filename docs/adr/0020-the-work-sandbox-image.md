@@ -17,6 +17,6 @@ date: 2026-11-19
 
 ## Consequences
 
-- The base image is a desktop image; the built sandbox is about 3.81 GB on disk with Open Design (#544; 3.26 GB before it), as the install job measures it. An install pulls or builds one such image and every Company's sandbox runs it.
+- The base image is a desktop image; the built sandbox is about 3.26 GB on disk (3.81 GB while it carried Open Design, #544, until #911 removed it; the sizes area measured 3.26 GB on run 46023028538), as the install job measures it. An install pulls or builds one such image and every Company's sandbox runs it.
 - A change of base image is a change of the pin in that one line, and the check script says so when the built image's layers do not start with the pinned base's.
 - The Engine's `ssh` backend is pinned to the work user, the port and the key path; those three are part of the Company's sandbox template, not of a profile or Settings.
