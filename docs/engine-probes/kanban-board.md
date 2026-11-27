@@ -4,7 +4,7 @@ Measured on 2026-11-26 on `nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de
 the image `scripts/engine-template.yml` pins, unmodified, with a fake OpenAI-style model whose answers a script chose.
 This first pass ran the Engine alone, with its terminal on its own disk (`local` backend), to learn the board's
 routes and its lifecycle; the Work-sandbox steps (the `ssh` backend, the start folder, the files) are proven by the
-install proof's Kanban check (`scripts/ci-install-check.sh`, open-design area), and its results are added below.
+install proof's Kanban check (`scripts/ci-install-check.sh`, the proxy area since #911; the open-design area before it), and its results are added below.
 
 Sources read in the image: `plugins/kanban/dashboard/plugin_api.py` (the routes), `hermes_cli/kanban_db*.py` (states,
 review reopen), `hermes_cli/kanban_db_dispatch.py` (the worker's spawn), `tools/kanban_tools*.py` (the Agent's tools
@@ -105,8 +105,8 @@ declared path goes through the gateway's own delivery check (`gateway/platforms/
 
 ## 8. The install proof's Kanban check
 
-One step of the open-design area, `kanban` (`scripts/check-install-profiles.mjs`, run from
-`scripts/ci-install-check.sh` after every Open Design check), on the pinned Engine with the fake model, the Work
+One step of the proxy area since #911 (of the open-design area before it, which went with Open Design), `kanban`
+(`scripts/check-install-profiles.mjs`, run from `scripts/ci-install-check.sh` after the proxy area's dashboard check), on the pinned Engine with the fake model, the Work
 sandbox's `ssh` backend and the first Company's two Agents: the area makes the second Agent for it with the `second`
 step, as agents-sandbox does. No CI job is added. The job reads the host's Docker for where the worker's files landed,
 which a tool's own answer cannot fake.
@@ -124,8 +124,8 @@ its 12 minutes on the same run, and the second Agent takes about one more.
 | A dangerous command runs in a worker's Run and is not refused | `rm -rf /tmp/<marker>-danger/gone` after the profile wrote `single_query_mode: deny`: exit 0 and no refusal, and the job finds the folder gone in the sandbox |
 | An Agent in a Run API Run makes a Card for another Agent, and whether its session is told | the main Agent's Conversation calls `kanban_create` for the second Agent: `created_by` is the main Agent's profile; the Card is worked and the Engine's reviewing Agent passes it by itself; the proof prints `told` |
 | What a Card in `triage` does in two dispatcher ticks, and the decomposer's model | a Card with `triage: true` and no Agent, made first and read once the decomposer was called twice (at most 125 s, then up to 5 s for the Card to leave triage); the proof prints its status, its children, and the model each decomposer request named |
-| The settings are in a new Company's Engine and one `gtmworks update` brought up, and a profile's write does not change them | `engine_board_settings` (`scripts/ci-install-lib.sh`) on every Engine of the open-design area, the second Company's included, and after the update in the update and engines-update areas; the profile's own `deny` above |
-| No CI job is added | the check is one step of the open-design area (`tests/ci-install.test.mjs`) |
+| The settings are in a new Company's Engine and one `gtmworks update` brought up, and a profile's write does not change them | `engine_board_settings` (`scripts/ci-install-lib.sh`) on every Engine of the proxy area (the open-design area's before #911), the second Company's included, and after the update in the update and engines-update areas; the profile's own `deny` above |
+| No CI job is added | the check is one step of the proxy area, the open-design area's until #911 (`tests/ci-install.test.mjs`) |
 
 A person's return while the Engine's own tick has started a reviewing Agent on the Card: `PATCH status: ready` from
 `running` keeps the Card in review (`_set_status_direct` resumes a reviewer's Run to `review`), so the check first stops
@@ -264,10 +264,10 @@ What the install proof's Kanban check adds (`scripts/check-install-profiles.mjs`
 | --- | --- |
 | On the pinned Engine a worker opens a file a person added, from inside the Work sandbox | the step adds `<marker>-brief.txt` to Card A through `POST /tasks/{id}/attachments` under the person's name before the tick; the Engine's answer names it under `/opt/data/kanban/attachments/`; Card A's first command, in the sandbox, copies it from the path its prompt names into `/work/<marker>-attachment.txt`, and the job reads that file from the sandbox through the host's Docker and compares its bytes |
 | A write to that folder from the sandbox fails | the same command tries `touch <the file's folder>/<marker>-planted` and prints `refused`; the job finds no such file in the sandbox or on the Engine |
-| The mount is present for a new Company and for one `gtmworks update` brought up | `sandbox_card_files` (`scripts/ci-install-lib.sh`) on every Engine of the open-design area, the second Company's included, and after the update in the update and engines-update areas: the sandbox's mount at `/opt/data/kanban/attachments` is its Engine's data volume, read-only, subpath `kanban/attachments`, and a write there as the sandbox's user fails |
+| The mount is present for a new Company and for one `gtmworks update` brought up | `sandbox_card_files` (`scripts/ci-install-lib.sh`) on every Engine of the proxy area (the open-design area's before #911), the second Company's included, and after the update in the update and engines-update areas: the sandbox's mount at `/opt/data/kanban/attachments` is its Engine's data volume, read-only, subpath `kanban/attachments`, and a write there as the sandbox's user fails |
 
 The step's time grows by one request and two short commands inside Card A's first one, well under a second; the
-open-design area's minutes stay as section 8 gives them.
+area's minutes stay as section 8 gives them.
 
 What gtmworks keeps of it: nothing. A Card's file is listed from `GET /tasks/{id}` (its id, name, type, size, who added
 it and when; never `stored_path`), added and read back by gtmworks's own routes (`app/api/board/card/files/route.ts`,
@@ -282,8 +282,8 @@ sandbox. A link put there by the Engine itself would show the sandbox more of th
 
 ## 10. Restoring an archived Card without starting it (#842)
 
-Measured on 2026-11-27 on the same pinned image by `kanban-board/restore.py`, which the install proof's open-design
-area also runs in the install's own Engine (on a board of its own), so a new Engine that moves differently fails there.
+Measured on 2026-11-27 on the same pinned image by `kanban-board/restore.py`, which the install proof's proxy area
+(the open-design area's until #911) also runs in the install's own Engine (on a board of its own), so a new Engine that moves differently fails there.
 It drives the Kanban plugin's own routes and asks a dry-run dispatcher tick whether each Card would start. Each Card was
 left by its worker's own tools (`claim_task`, then `block_task`, `request_review`, `schedule_task` or `complete_task`),
 then archived.

@@ -108,11 +108,11 @@ SOFTWARE.
 
 Source: https://github.com/nexu-io/open-design, commit `b83646f4afb9b21b415d98c4d073477d077d7943` (the `open-design-v0.27.1` tag).
 
-The work sandbox image builds Open Design's daemon from that commit's source and carries the built daemon, with its
-production dependencies, at `/opt/open-design/app` (ADR 0025, `sandbox/Dockerfile`); gtmworks changes none of its files.
-Its mark in `public/logos/brand/open-design.svg` is its own `apps/web/public/brand-icon.svg`. Open Design is licensed
-under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0); its licence is copied beside the
-built daemon, `/opt/open-design/app/LICENSE`. Keep this notice while the sandbox image ships Open Design.
+gtmworks ships none of Open Design's code: an Owner installs it themselves and connects it as a command server
+(ADR 0035, `docs/open-design.md`), and the work sandbox image no longer carries it (#911). Only its mark is here: the
+apps sheet's Open Design card shows `public/logos/brand/open-design.svg`, its own `apps/web/public/brand-icon.svg` from
+that commit, unchanged. Open Design is licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). Keep this notice while the card shows its mark.
 
 ## noVNC
 

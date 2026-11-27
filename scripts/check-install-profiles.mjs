@@ -41,8 +41,8 @@
 //     same Agent and passed. The main Agent, in a Conversation, makes a Card for the second Agent with the Engine's own
 //     tool, which the Engine's reviewing Agent passes; whether the main Agent's session is told, and what a Card in
 //     triage does in two dispatcher ticks with the model its decomposer called, are printed. The job reads the host's
-//     Docker for where the worker's files landed. The open-design area runs it, in 270 s of its own, a line as each
-//     phase ends.
+//     Docker for where the worker's files landed. The proxy area runs it (#911), in 270 s of its own, a line as each phase
+//     ends.
 //   library <marker>: one Agent writes a text file and a picture in its own folder of the Company's work folder (#395),
 //     and the Owner's Library of it lists, previews and downloads both with the bytes the Agent wrote. In the same Run it
 //     plants a link to the Company's second Agent's memory on the Engine's disk (the job wrote `<marker>-leak` in it), a
@@ -124,7 +124,7 @@ const fakeModel=async(requests,results=[],plan=skillPlan)=>{
    const body=JSON.parse(raw||'{}'); requests.push(raw);
    const last=body.messages?.at(-1);
    if(last?.role==='tool') results.push(String(last.content));
-   // A step's plan may take its time (open-design paces its polls).
+   // A step's plan may take its time (kanban paces its polls).
    const call=await plan(body.messages||[],body);
    const finish=call?'tool_calls':'stop';
    const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
@@ -739,7 +739,7 @@ try {
 // Engine's own tool, which the second Agent works and the Engine's reviewing Agent passes; the step records whether the
 // main Agent's session is told. A Card in triage is watched for two dispatcher ticks, with the model its decomposer
 // called. The install job reads the host's Docker for where the worker's files landed.
-// Its time is its clock's (lib/install-proof.mjs): the open-design area runs it after about 6 of its 12 minutes, so the
+// Its time is its clock's (lib/install-proof.mjs): the proxy area runs it after about 7 of its 12 minutes (#911), so the
 // step has 270 s, prints a line as each phase ends, and holds every wait inside them. The triage Card's two ticks are the
 // Engine's own (its decomposer runs on no tick a caller asks for), so Card A, Card B and the triage Card run side by side
 // from its start; a failure prints the Cards as the board reads them before the step ends.

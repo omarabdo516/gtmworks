@@ -150,10 +150,12 @@ test('with the Engine stopped after a good read, the board keeps the Cards it la
  await expect(card(page,'Meta campaign for the course')).toBeVisible();
  await fake.close();
  try {
-  // The board reads again when the window comes back to it; the Engine does not answer.
-  const again=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/board');
+  // The board reads again when the window comes back to it; the Engine does not answer. A read still on its way when
+  // the Engine stopped (the live stream's, as the page opened) answers from before, and the focus then reads once it
+  // has (app/board-read.ts), so the read awaited is the first one asked after the stop.
+  const again=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/board');
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-  expect((await again).status()).toBe(503);
+  expect((await (await again).response())?.status()).toBe(503);
   await expect(page.getByRole('status').filter({hasText:'Couldn’t refresh the board. Showing what it last read.'})).toBeVisible();
   await expect(card(page,'Meta campaign for the course')).toBeVisible();
   await expect(column(page,'waiting').locator('.col__count')).toHaveText('2');
