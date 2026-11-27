@@ -160,7 +160,7 @@ Out of the board, the lists and the counts, with everything in it kept, until a 
 _Avoid_: deleted, removed, hidden, closed
 
 **Attachment / مرفق**:
-A file or reference image attached to a card or to one of its comments. It stays inside the company's storage; a person reads it by its number on the card, and only members of that company reach it. A design version is not an attachment.
+A file on a card. A person's is a Kanban attachment on the company's Engine, which the Agent working the card opens from the company's work sandbox, where the Engine's attachments folder is mounted read-only; a file an Agent made is named by a MEDIA line in its summary or one of its comments and stays in its own work folder. gtmworks keeps no copy of either: every member who can see the card reads and downloads them through gtmworks, and nobody outside the company reaches them. A design version is not an attachment.
 _Avoid_: upload, evidence file
 
 **Version / نسخة**:

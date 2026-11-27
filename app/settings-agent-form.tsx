@@ -99,7 +99,6 @@ export function AgentInstructionsReadOnly({instructions,empty}:{instructions:str
 // flashes this bar and focuses Save.
 export function AgentSaveBar({company,agent,name}:{company:string,agent:string,name:string}) {
  const {t}=useI18n();
- const language=useDraftValue(agent,'voice.language','');
  const speed=useDraftValue(agent,'voice.speed','1');
  const voice=useDraftValue(agent,'voice.voice','');
  const morningOn=useDraftValue(agent,'morning.on','off');
@@ -127,7 +126,7 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
   const changed=changedValues(agent);
   const stamp=draftStamp(agent);
   const changes:Record<string,unknown>=Object.fromEntries(Object.entries(changed).filter(([key])=>!key.startsWith('voice.')&&!key.startsWith('morning.')));
-  if(Object.keys(changed).some(key=>key.startsWith('voice.'))) changes.voice={language,speed,...(voice?{voice}:{})};
+  if(Object.keys(changed).some(key=>key.startsWith('voice.'))) changes.voice={speed,...(voice?{voice}:{})};
   // Good morning's switch and time go as one part, with the browser's zone for a message switched on the first time (#182).
   if(Object.keys(changed).some(key=>key.startsWith('morning.'))) {
    let zone:string|undefined; try { zone=Intl.DateTimeFormat().resolvedOptions().timeZone||undefined; } catch { zone=undefined; }
@@ -145,11 +144,9 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
    const sent:Record<string,string>={};
    for(const key of Object.keys(changes)) {
     if(key==='voice') {
-     const keptVoice=kept.voice as {language?:unknown,speed?:unknown,voice?:unknown}|null|undefined;
-     if(!keptVoice||typeof keptVoice.language!=='string'||typeof keptVoice.speed!=='number') { setFailed(true); return; }
-     patch['voice.language']=keptVoice.language;
+     const keptVoice=kept.voice as {speed?:unknown,voice?:unknown}|null|undefined;
+     if(!keptVoice||typeof keptVoice.speed!=='number') { setFailed(true); return; }
      patch['voice.speed']=String(keptVoice.speed);
-     sent['voice.language']=language;
      sent['voice.speed']=speed;
      if(typeof keptVoice.voice==='string') {
       patch['voice.voice']=keptVoice.voice;

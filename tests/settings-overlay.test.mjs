@@ -8,11 +8,11 @@ import { messages } from '../lib/i18n.mjs';
 // knowledge; Agents holds Agents, Learning, Recurring tasks and Apps; Engine holds Providers and Usage; Backups, Your
 // account and About stand on their own at the end.
 test('the overlay lists its sections in groups, Backups, Your account and About on their own at the end', () => {
-  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'usage', 'backup', 'account', 'about']);
+  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'voice', 'usage', 'backup', 'account', 'about']);
   assert.deepEqual(overlayGroups('owner').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [
     ['company', ['company', 'members', 'knowledge']],
     ['agents', ['agents', 'learning', 'routines', 'apps']],
-    ['engine', ['models', 'usage']],
+    ['engine', ['models', 'voice', 'usage']],
     [null, ['backup', 'account', 'about']],
   ]);
   for (const [key, label] of overlaySections) for (const language of ['en', 'ar']) assert.ok(messages[language][label], `${key}: ${language} label`);
@@ -38,7 +38,7 @@ test('the breadcrumb names the group of the open page, and nothing for a page on
 });
 
 test('the Owner alone sees Backup (#33)', () => {
-  assert.equal(visibleSections('owner').length, 12);
+  assert.equal(visibleSections('owner').length, 13);
   for (const role of ['manager', 'contributor', 'viewer']) {
     assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
     assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
@@ -49,6 +49,10 @@ test('the Owner alone sees Backup (#33)', () => {
 test('a request opens the section asked for only when the person may see it, else their first one', () => {
   assert.equal(pickSection(undefined, 'owner'), 'company');
   assert.equal(pickSection('usage', 'manager'), 'usage');
+  // Voice (#863) is the Owner's and the Managers', as Usage is.
+  assert.equal(pickSection('voice', 'manager'), 'voice');
+  assert.equal(pickSection('voice', 'contributor'), 'company');
+  assert.equal(pickSection('voice', 'viewer'), 'agents');
   assert.equal(pickSection('nonsense', 'owner'), 'company');
   assert.equal(pickSection('usage', 'contributor'), 'company');
   assert.equal(pickSection(undefined, 'viewer'), 'agents');
@@ -194,7 +198,7 @@ test('a search keeps the sidebar\'s groups (#612): a group named by the search k
   const en = key => messages.en[key];
   const shape = groups => groups.map(({ group, sections }) => [group, sections.map(([key]) => key)]);
   assert.deepEqual(shape(findGroups('', 'owner', en)), shape(overlayGroups('owner')));
-  assert.deepEqual(shape(findGroups('engine', 'owner', en)), [['engine', ['models', 'usage']]]);
+  assert.deepEqual(shape(findGroups('engine', 'owner', en)), [['engine', ['models', 'voice', 'usage']]]);
   assert.deepEqual(shape(findGroups('engine', 'contributor', en)), [['engine', ['models']]]);
   assert.deepEqual(shape(findGroups('engine', 'viewer', en)), []);
   assert.deepEqual(shape(findGroups('knowledge', 'owner', en)), [['company', ['knowledge']]]);

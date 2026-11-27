@@ -1,5 +1,5 @@
-export type OverlayIcon = 'building' | 'team' | 'bot' | 'book' | 'bulb' | 'cpu' | 'plug' | 'repeat' | 'gauge' | 'archive' | 'user' | 'info';
-export type OverlaySection = 'company' | 'members' | 'knowledge' | 'agents' | 'learning' | 'routines' | 'apps' | 'models' | 'usage' | 'backup' | 'account' | 'about';
+export type OverlayIcon = 'building' | 'team' | 'bot' | 'book' | 'bulb' | 'cpu' | 'plug' | 'repeat' | 'gauge' | 'archive' | 'user' | 'info' | 'mic';
+export type OverlaySection = 'company' | 'members' | 'knowledge' | 'agents' | 'learning' | 'routines' | 'apps' | 'models' | 'voice' | 'usage' | 'backup' | 'account' | 'about';
 export type OverlayGroup = 'company' | 'agents' | 'engine';
 export type OverlaySectionEntry = readonly [OverlaySection, string, OverlayIcon, boolean, OverlayGroup | null, boolean?];
 export const overlaySections: readonly OverlaySectionEntry[];

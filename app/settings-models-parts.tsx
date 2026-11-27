@@ -82,7 +82,7 @@ export function ModelsParts({company,companyName,owner,names,order,fallback,aske
   {choices&&fallback!==undefined?<FallbackModel company={company} owner={owner} model={fallback} options={choices.default.options} readAt={models.readAt}/>:null}
   <DefaultEffort/>
   {choices?<EachAgent company={company} owner={owner} models={choices} readAt={models.readAt}/>:null}
-  {speech.data!==undefined||speech.state==='failed'?<SpeechToText company={company} owner={owner} data={speech.data??{provider:null,missing:null}} readAt={speech.readAt}/>:<Line>{t('settingsPartReading')}</Line>}
+  {speech.data!==undefined||speech.state==='failed'?<SpeechToText company={company} owner={owner} data={speech.data??{provider:null,keys:null,missing:null}} readAt={speech.readAt}/>:<Line>{t('settingsPartReading')}</Line>}
   {again(speech)}
  </>;
 }

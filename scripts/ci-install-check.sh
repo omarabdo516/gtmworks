@@ -1152,6 +1152,7 @@ engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail 
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
   engine_board_settings "$name" || fail "the Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+  sandbox_card_files "$name" || fail "the work sandbox of the Engine $name holds its Kanban attachments folder read-only at the Engine's path"
 done
 kanban_marker="kanban-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 engine_node "$engine_key" - kanban "$kanban_marker" < scripts/check-install-profiles.mjs | tee kanban-proof.log \
@@ -1162,6 +1163,16 @@ kanban_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' kanban-proof.log | 
 [[ $(docker exec "$sandbox" cat "/work/$kanban_marker-card.txt") == "$kanban_marker-card" ]] || fail "a board worker's command wrote in the Company's work folder"
 docker exec "$sandbox" test -d "/tmp/$kanban_marker-danger" -a ! -e "/tmp/$kanban_marker-danger/gone" \
   || fail "a board worker's dangerous command ran in the work sandbox"
+# A person's file on Card A (#843): the worker opened it in the sandbox at the path the Engine named and copied it into the
+# work folder, and its write beside it failed, so neither the sandbox nor the Engine holds the file it tried to plant.
+kanban_file=$(sed -n 's/.*"attachment_path":"\([^"]*\)".*/\1/p' kanban-proof.log | tail -n 1)
+[[ $kanban_file == /opt/data/kanban/attachments/* ]] || fail "the Engine named a person's file on a Card by its path in its attachments folder"
+[[ $(docker exec "$sandbox" cat "/work/$kanban_marker-attachment.txt") == "$kanban_marker-attachment" ]] \
+  || { docker exec "$sandbox" ls -ln "$(dirname "$kanban_file")" >&2 || true; fail "a board worker opened a person's file on its Card from inside the work sandbox"; }
+grep -q '"attachment_write":"refused"' kanban-proof.log || fail "a board worker's write to the Kanban attachments folder fails from the sandbox"
+for container in "$sandbox" "$engine_id"; do
+  if docker exec "$container" test -e "$(dirname "$kanban_file")/$kanban_marker-planted"; then fail "a board worker planted a file in the Kanban attachments folder"; fi
+done
 # Nothing of the worker's is on the Engine's own disk outside its Kanban folders; the work folder the Engine reads, read
 # only, is the sandbox's own.
 engine_left=$(docker exec "$engine_id" sh -c 'find / \( -path /proc -o -path /sys -o -path /dev -o -path /opt/data/kanban -o -path /opt/data/work \) -prune -o -name "$1*" -print 2> /dev/null; true' sh "$kanban_marker") \
@@ -1678,6 +1689,7 @@ hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 # The Engine the update brought up holds the board worker's setting in its managed scope (spec #831, #833), which the
 # previous release never wrote.
 engine_board_settings "$engine" || fail "the updated Engine approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+sandbox_card_files "$engine" || fail "the updated Engine's work sandbox holds its Kanban attachments folder read-only at the Engine's path"
 ! publishes_host_port "$engine" || fail 'the Engine publishes no host port'
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | grep . | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
@@ -2201,6 +2213,7 @@ for folder in .engines/*/; do
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
   engine_board_settings "$engine" || fail "the updated Engine $name approves a board worker's dangerous command in its managed scope and gives it a short temp folder"
+  sandbox_card_files "$engine" || fail "the updated Engine $name's work sandbox holds its Kanban attachments folder read-only at the Engine's path"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done

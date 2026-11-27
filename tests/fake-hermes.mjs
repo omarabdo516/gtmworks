@@ -58,11 +58,24 @@ function kanbanBoard() {
  const comments=/** @type {{id:number,task_id:string,author:string,body:string,created_at:number}[]} */([]);
  const events=/** @type {{id:number,task_id:string,run_id:number|null,kind:string,payload:any,created_at:number}[]} */([]);
  const runs=/** @type {any[]} */([]);
+ // A person's file on a Card (#843; kanban_db.py task_attachments): its row, and its bytes as the Engine keeps them under
+ // `/opt/data/kanban/attachments/<task>/<name>` (attachments_root), which `stored_path` names.
+ const attachments=/** @type {{id:number,task_id:string,filename:string,stored_path:string,content_type:string|null,size:number,uploaded_by:string|null,created_at:number,body:Uint8Array}[]} */([]);
  let clock=Math.floor(Date.now()/1000);
  /** @param {string} task @param {string} kind @param {any} [payload] @param {number|null} [run] */
  const event=(task,kind,payload=null,run=null)=>{ events.push({id:events.length+1,task_id:task,run_id:run,kind,payload,created_at:++clock}); };
  const summaryOf=id=>runs.filter(run=>run.task_id===id&&run.summary).at(-1)?.summary??tasks.find(task=>task.id===id)?.latest_summary??null;
- return {tasks,links,comments,events,event,runs,
+ return {tasks,links,comments,events,event,runs,attachments,
+  // The Engine's one cap for a Card's file, the dashboard's, the tools' and the CLI's (KANBAN_ATTACHMENT_MAX_BYTES).
+  attachmentLimit:25*1024*1024,
+  /** A file on a Card, as the dashboard's upload stores it (upload_task_attachment). @param {string} task @param {{filename:string,body:string|Uint8Array,content_type?:string|null,uploaded_by?:string|null}} file */
+  attach(task,{filename,body,content_type=null,uploaded_by='dashboard'}) {
+   const bytes=typeof body==='string'?new TextEncoder().encode(body):body;
+   const row={id:attachments.length+1,task_id:task,filename,stored_path:`/opt/data/kanban/attachments/${task}/${filename}`,content_type,size:bytes.byteLength,uploaded_by,created_at:++clock,body:bytes};
+   attachments.push(row);
+   event(task,'attached',{filename,size:row.size,by:uploaded_by});
+   return row;
+  },
   /** @param {string} id @param {string} status */
   move(id,status) {
    const task=tasks.find(found=>found.id===id); if(!task) return;
@@ -99,7 +112,7 @@ function kanbanBoard() {
    const children=links.filter(link=>link.parent_id===id).map(link=>link.child_id).sort();
    const linked=[...new Set([...parents,...children])].map(other=>tasks.find(found=>found.id===other)).filter(Boolean);
    return {task:{...task,latest_summary:summaryOf(id),current_run_started_at:null},
-    comments:comments.filter(comment=>comment.task_id===id),events:events.filter(event=>event.task_id===id),attachments:[],
+    comments:comments.filter(comment=>comment.task_id===id),events:events.filter(event=>event.task_id===id),attachments:attachments.filter(row=>row.task_id===id).map(({body:_,...row})=>row),
     links:{parents,children},link_tasks:linked.map(other=>({id:other.id,title:other.title,status:other.status})),
     child_results:children.map(child=>tasks.find(found=>found.id===child)).filter(Boolean).map(child=>({id:child.id,title:child.title,status:child.status,latest_summary:summaryOf(child.id),result:child.result})),
     runs:runs.filter(run=>run.task_id===id)};
@@ -633,7 +646,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  });
  // The routes and answers observed on the pinned release's dashboard (port 9119), authenticated by its session token.
  const manage=(/** @type {import('node:http').IncomingMessage} */ request,/** @type {import('node:http').ServerResponse} */ response)=>{
-  let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
+  const chunks=/** @type {Buffer[]} */([]); request.on('data',chunk=>{chunks.push(chunk);}); request.on('end',()=>{
+   const bytes=Buffer.concat(chunks); const raw=bytes.toString('utf8');
    let body=null; try { body=raw?JSON.parse(raw):null; } catch { body=null; }
    settings.managementRequests.push({method:request.method,path:request.url,authorization:request.headers.authorization,range:request.headers.range,body});
    const url=new URL(request.url,'http://management');
@@ -1229,6 +1243,33 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     return send(response,200,{task});
    }
    if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
+   // A Card's files (#843; plugin_api.py list_task_attachments, upload_task_attachment, download_attachment): the upload is
+   // a multipart form with `file` and `uploaded_by`, refused past the Engine's cap with a 413 naming it in MB.
+   const cardFiles=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)\/attachments$/);
+   if(cardFiles) {
+    const id=decodeURIComponent(cardFiles[1]);
+    if(!settings.kanban.tasks.some(task=>task.id===id)) return send(response,404,{detail:`task ${id} not found`});
+    if(request.method==='GET') return send(response,200,{attachments:settings.kanban.attachments.filter(row=>row.task_id===id).map(({body:_,...row})=>row)});
+    if(request.method==='POST') {
+     void new Response(bytes,{headers:{'content-type':String(request.headers['content-type']||'')}}).formData().then(async form=>{
+      const file=form.get('file');
+      if(!file||typeof file==='string') return send(response,422,{detail:'file is required'});
+      const data=new Uint8Array(await file.arrayBuffer());
+      if(data.byteLength>settings.kanban.attachmentLimit) return send(response,413,{detail:`attachment exceeds ${settings.kanban.attachmentLimit/(1024*1024)} MB limit`});
+      const by=form.get('uploaded_by');
+      const {body:_,...row}=settings.kanban.attach(id,{filename:file.name,body:data,content_type:file.type||null,uploaded_by:typeof by==='string'&&by?by:'dashboard'});
+      return send(response,200,{attachment:row});
+     },()=>send(response,400,{detail:'There was an error parsing the body'}));
+     return;
+    }
+   }
+   const cardFile=url.pathname.match(/^\/api\/plugins\/kanban\/attachments\/(\d+)$/);
+   if(cardFile&&request.method==='GET') {
+    const row=settings.kanban.attachments.find(found=>found.id===Number(cardFile[1]));
+    if(!row) return send(response,404,{detail:'attachment not found'});
+    response.writeHead(200,{'Content-Type':row.content_type||'application/octet-stream','Content-Disposition':`attachment; filename*=utf-8''${encodeURIComponent(row.filename)}`,'Content-Length':row.body.byteLength});
+    return response.end(Buffer.from(row.body));
+   }
    send(response,404,{detail:'Not Found'});
   });
  };
