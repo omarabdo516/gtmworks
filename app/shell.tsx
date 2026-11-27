@@ -96,7 +96,7 @@ export default async function Shell({company,companies,personId,personName,role,
   <nav className="sb-scroll nav" aria-label={t('navigation')}>{slug&&<>
    <div className="sb-nav">{shellNav.map(([path,label,icon])=><div key={path} className="sb-row">
     <SidebarEntry className="sb-item" href={`/c/${slug}/${path}`} entry={path}><ShellIcon name={icon}/><span className="od-fill">{t(label)}</span></SidebarEntry>
-    {path==='work/board'&&<ApprovalsCount slug={slug} count={approvalCount}/>}
+    {path==='work/board'&&<ApprovalsCount slug={slug} company={company?.id} count={approvalCount}/>}
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>

@@ -660,11 +660,12 @@ test('Done it pressed while the Agent is busy waits as its person\'s next turn a
  } finally { speaks('en'); detach(); await fake.close(); }
 });
 
-// #146: the step is handed over in a chat whose first Run put its Card In progress. While it waits, the Card is drawn
-// once under its person's Waiting on you with its badge, and keeps its stage; the chat's pill shows the wait; Done it
-// sends the Card back. The chat's draft and Done it are rows of the Card's Log. The old board stays on the board opened on
-// Waiting on you (/approvals) until spec #831 takes it off (#846); what waits on whom on the Engine's board is #841.
-test('a Card whose chat hands its person a step waits under their Waiting on you and keeps its stage; Done it sends it back, and the chat\'s rows are on the Card\'s Log',async({page,browser})=>{
+// #146: the step is handed over in a chat whose first Run put its Card In progress. While it waits, the step is a row of
+// its person's Waiting on you, and the Card keeps its stage; the chat's pill shows the wait; Done it sends the Card back.
+// The chat's draft and Done it are rows of the Card's Log. The old board stays on the board opened on Waiting on you
+// (/approvals) until spec #831 takes it off (#846); since #841 its Cards are no part of that list, which draws the step on
+// its own row, and what waits on whom on the Engine's board is kanban-waiting.spec.ts.
+test('a Card whose chat hands its person a step waits as a row of their Waiting on you and keeps its stage; Done it sends it back, and the chat\'s rows are on the Card\'s Log',async({page,browser})=>{
  test.setTimeout(240000);
  const fake=await laneHermes(); const {conversation,show,detach}=await handedStep(fake);
  const others=['20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004'];
@@ -688,19 +689,17 @@ test('a Card whose chat hands its person a step waits under their Waiting on you
   query(`select public.agent_show_card('${conversation}','${run}','call-1','draft','خطة المقال','{"line":"مسودة","rows":[]}'::jsonb)`);
   show();
   const reviewer=await member('reviewer@example.com'), viewer=await member('viewer@example.com');
-  const badges={en:{omar:'Waiting on you',reviewer:'Waiting on عمر',viewer:'Waiting on the team',tag:'Handed to you'},ar:{omar:'مستنيك',reviewer:'مستني عمر',viewer:'مستني الفريق',tag:'اتسلّمتلك'}};
+  const tags={en:'Handed to you',ar:'اتسلّمتلك'};
+  const item=page.locator('.col[data-column="waiting"] a.mcard[data-kind="hand"]');
   for(const value of ['en','ar'] as const) {
    language(value);
-   for(const [who,on] of [['omar',page]] as const) {
-    await on.reload();
-    await expect(on.locator(`.col[data-column="waiting"] .kcard[data-card-id="${card}"]`),`${who} in ${value}`).toHaveCount(1);
-    await expect(kcard(on)).toHaveCount(1);
-    await expect(kcard(on).locator('.wtag--hand')).toHaveText(badges[value].tag);
-    await expect(kcard(on).locator('.badge')).toHaveText(badges[value][who]);
-    await expect(kcard(on).locator('.badge')).toHaveClass(who==='omar'?'badge badge--wait':'badge');
-    await expect(kcard(on).locator('.kcard__t')).toHaveText(handTitle);
-   }
-   await expect(page.locator('a.mcard[data-kind="hand"]')).toHaveCount(0);
+   await page.reload();
+   await expect(item,`omar in ${value}`).toHaveCount(1);
+   await expect(item.locator('.wtag--hand')).toHaveText(tags[value]);
+   await expect(item.locator('.mcard__q')).toHaveText(handTitle);
+   await expect(item).toHaveAttribute('href',new RegExp(`/conversations/${conversation}#hand-`));
+   // The old Card is no row of the list.
+   await expect(kcard(page)).toHaveCount(0);
    await expect(sidebar).toHaveText(String(before.sidebar+1));
    await expect(waitingCount(page)).toHaveText(String(before.column+1));
   }

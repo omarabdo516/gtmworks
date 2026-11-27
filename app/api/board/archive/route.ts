@@ -22,26 +22,26 @@ async function body(request:NextRequest):Promise<Record<string,unknown>|null> {
  const raw=await request.text(); if(raw.length>64000) return {};
  try { const parsed=JSON.parse(raw); return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{}; } catch { return {}; }
 }
-/** The signed-in person may use this method in the Company, or the answer to give. */
-async function allowed(db:Db,method:'GET'|'POST'|'PATCH',company:unknown):Promise<NextResponse|null> {
+/** The signed-in person, who may use this method in the Company, or the answer to give. */
+async function allowed(db:Db,method:'GET'|'POST'|'PATCH',company:unknown):Promise<NextResponse|{person:string}> {
  const {data:{user}}=await db.auth.getUser();
  if(!user) return reply({error:'boardNotAllowed'},401);
  if(typeof company!=='string'||!uuid.test(company)) return reply({error:'boardInvalid'},400);
  const may=await routePermission(db,file,method,company,user.id);
  if(may==='failed') return reply({error:'boardUnreachable'},503);
- if(may==='allowed') return null;
+ if(may==='allowed') return {person:user.id};
  const {data:member}=await db.from('members').select('role').eq('company_id',company).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  return member?reply({error:'boardNotAllowed'},403):reply({error:'boardNotFound'},404);
 }
-async function board(db:Db,company:string,extra:object) {
- const read=await readCompanyBoard(db,{company});
+async function board(db:Db,company:string,person:string,extra:object) {
+ const read=await readCompanyBoard(db,{company,me:person});
  return reply(read.state==='found'?{...extra,cards:read.cards,main:read.main}:extra);
 }
 
 export async function GET(request:NextRequest) {
  try {
   const db=await supabase(); const params=request.nextUrl.searchParams; const company=params.get('company');
-  const refused=await allowed(db,'GET',company); if(refused) return refused;
+  const who=await allowed(db,'GET',company); if(who instanceof NextResponse) return who;
   const read=await readArchivedCards(db,{company:company!,query:params.get('q')??'',from:params.get('from')??0});
   if(read.state==='found') return reply({cards:read.cards,total:read.total,next:read.next});
   const [error,status]=failures[read.state]; return reply({error},status);
@@ -52,10 +52,10 @@ export async function POST(request:NextRequest) {
  try {
   const db=await supabase(); const sent=await body(request);
   if(!sent) return reply({error:'boardNotAllowed'},403);
-  const refused=await allowed(db,'POST',sent.company); if(refused) return refused;
+  const who=await allowed(db,'POST',sent.company); if(who instanceof NextResponse) return who;
   const company=sent.company as string;
   const done=await archiveCompanyCards(db,{company,cards:sent.cards,stop:sent.stop});
-  if(done.state==='archived') return await board(db,company,{archived:done.archived,left:done.left});
+  if(done.state==='archived') return await board(db,company,who.person,{archived:done.archived,left:done.left});
   if(done.state==='stops') return reply({error:'cardsStop',stops:done.stops},409);
   const [error,status]=failures[done.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
@@ -65,10 +65,10 @@ export async function PATCH(request:NextRequest) {
  try {
   const db=await supabase(); const sent=await body(request);
   if(!sent) return reply({error:'boardNotAllowed'},403);
-  const refused=await allowed(db,'PATCH',sent.company); if(refused) return refused;
+  const who=await allowed(db,'PATCH',sent.company); if(who instanceof NextResponse) return who;
   const company=sent.company as string;
   const done=await restoreCompanyCards(db,{company,cards:sent.cards,undo:sent.undo});
-  if(done.state==='restored') return await board(db,company,{restored:done.restored,left:done.left});
+  if(done.state==='restored') return await board(db,company,who.person,{restored:done.restored,left:done.left});
   const [error,status]=failures[done.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
 }

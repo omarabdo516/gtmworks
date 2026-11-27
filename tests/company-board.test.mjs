@@ -14,12 +14,16 @@ const agents=[{agent:lead,name:'Lead',profile:companyProfile,main:true},{agent:a
 // The reader's own session: the Company's profiles (company_engine_target) and the Agents they see (company_app_agents),
 // Seo among the Company's profiles but hidden from this reader.
 // Its rows beside the Cards (kanban_cards, #836): the Member each Card is given to, with their name.
-const reader=(seen=agents,rows=[])=>({rpc:async name=>{
+// The Company's active Members (#841), whom a Card may wait on.
+const [omar,sara,mona,vic]=['20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004'];
+const members=[{person_id:omar,role:'owner',people:{name:'Omar Abdo'}},{person_id:sara,role:'manager',people:{name:'Sara'}},{person_id:mona,role:'contributor',people:{name:'Mona'}},{person_id:vic,role:'viewer',people:{name:'Vic'}}];
+const reader=(seen=agents,rows=[],people=members)=>({rpc:async name=>{
  if(name==='company_engine_target') return {data:[{profile:companyProfile,profiles:[companyProfile,profileOf(ads),profileOf(seo)]}],error:null};
  if(name==='company_app_agents') return {data:seen,error:null};
  return {data:null,error:{message:`unexpected ${name}`}};
 },from:table=>{
- const read={select:()=>read,eq:()=>read,not:()=>read,then:(done,failed)=>Promise.resolve(table==='kanban_cards'?{data:rows,error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
+ const answer=table==='kanban_cards'?{data:rows,error:null}:table==='members'?(people?{data:people,error:null}:{data:null,error:{message:'down'}}):{data:null,error:{message:`unexpected ${table}`}};
+ const read={select:()=>read,eq:()=>read,not:()=>read,is:()=>read,then:(done,failed)=>Promise.resolve(answer).then(done,failed)};
  return read;
 }});
 
@@ -85,7 +89,6 @@ test('a Card of an Agent hidden from the reader is not on their board; a Card fo
 test('a Card given to a Member shows that Member, and a Card with an Agent on the Engine is the Agent\'s alone', async () => {
  const fake=await engineServing(company);
  try {
-  const mona='20000000-0000-0000-0000-000000000003';
   const theirs=fake.settings.kanban.task({title:'Shoot the reel',status:'ready'}).id;
   const taken=fake.settings.kanban.task({title:'Ad copy',status:'ready',assignee:profileOf(ads)}).id;
   const nobody=fake.settings.kanban.task({title:'Someday',status:'ready'}).id;
@@ -121,6 +124,35 @@ test('Waiting on you lists the newest Card first, and Done the newest finished f
   const read=await readCompanyBoard(reader(),{company});
   assert.deepEqual(read.cards.filter(found=>found.column==='waiting').map(found=>found.id),[newer,middle,older]);
   assert.deepEqual(read.cards.filter(found=>found.column==='done').map(found=>found.id),[last,first]);
+ } finally { await fake.close(); }
+});
+
+// #841: who each Card waits on, as this reader reads it. A question on a Card given to a Member waits on them; on a Card
+// a person made, with no Member on it, on its maker; on a Card an Agent made on its own, on every Administrator and
+// Manager; a review on those who may decide it, whoever is on it; a Card given to a Member on them until it is done.
+test('each Card says whom it waits on and whether that is the reader', async () => {
+ const fake=await engineServing(company);
+ try {
+  const card=fields=>fake.settings.kanban.task(fields).id;
+  const given=card({title:'Asks Mona',status:'blocked'});
+  const made=card({title:'Asks its maker',status:'blocked',assignee:profileOf(ads)});
+  const agents_=card({title:'Asks the leads',status:'blocked',assignee:profileOf(ads)});
+  const review=card({title:'Needs a decision',status:'review',assignee:profileOf(ads)});
+  const planned=card({title:'Mona shoots the reel',status:'todo'});
+  const done=card({title:'Mona shot it',status:'done'});
+  const idle=card({title:'Nobody on it',status:'ready'});
+  const rows=[{task_id:given,assignee:mona,made_by:omar,people:{name:'Mona'}},{task_id:made,assignee:null,made_by:mona,people:null},{task_id:review,assignee:null,made_by:mona,people:null},
+   {task_id:planned,assignee:mona,made_by:omar,people:{name:'Mona'}},{task_id:done,assignee:mona,made_by:omar,people:{name:'Mona'}},{task_id:idle,assignee:null,made_by:omar,people:null}];
+  const as=async me=>Object.fromEntries((await readCompanyBoard(reader(agents,rows),{company,me})).cards.map(found=>[found.id,found.waits]));
+  const byMona={mine:false,person:{id:mona,name:'Mona'}}, leads={mine:false,person:null};
+  assert.deepEqual(await as(omar),{[given]:byMona,[made]:byMona,[agents_]:{...leads,mine:true},[review]:{...leads,mine:true},[planned]:byMona,[done]:null,[idle]:null});
+  assert.deepEqual(await as(sara),{[given]:byMona,[made]:byMona,[agents_]:{...leads,mine:true},[review]:{...leads,mine:true},[planned]:byMona,[done]:null,[idle]:null});
+  const mine={...byMona,mine:true};
+  assert.deepEqual(await as(mona),{[given]:mine,[made]:mine,[agents_]:leads,[review]:leads,[planned]:mine,[done]:null,[idle]:null});
+  assert.deepEqual(await as(vic),{[given]:byMona,[made]:byMona,[agents_]:leads,[review]:leads,[planned]:byMona,[done]:null,[idle]:null});
+  // A reader the board does not know is waited on by nothing; a Members read that fails gives no board.
+  assert.deepEqual(Object.values(await as(undefined)).filter(waits=>waits?.mine),[]);
+  assert.deepEqual(await readCompanyBoard(reader(agents,rows,null),{company,me:omar}),{state:'failed'});
  } finally { await fake.close(); }
 });
 

@@ -2,6 +2,7 @@ import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { oldCard } from './old-card';
+import { laneHermes } from './lane-hermes';
 
 // The board's motion as built (#131; design-reference: dragStart, dragMove, dragScroll, dragEnd, land, boardEnter,
 // syncWaitMarks): a carried Card leans with the pointer and scrolls the columns at an edge, flies back when it moves
@@ -235,41 +236,57 @@ test('the progress bars grow in when the board opens and the class that does it 
  expect(await bar.evaluate(el=>({name:getComputedStyle(el).animationName,transform:getComputedStyle(el).transform}))).toEqual({name:'none',transform:'matrix(0.5, 0, 0, 1, 0, 0)'});
 });
 
-test('a Card newly waiting on the approver nudges its badge and pops the sidebar count once, not on a reload and not when the count falls',async({page,context})=>{
+// Since #841 the sidebar's count is the list's rows and the Engine board's Cards that wait on the reader, not the old
+// board's approvals: the old Card's badge nudges on the old board (opened where a chat shows its Card, ?show=), and the
+// count pops when a Card of the Company's fake Engine starts waiting on the reader, which the board's live stream brings.
+test('a Card newly waiting on the approver nudges its badge, and a Card newly waiting on them pops the sidebar count once, not on a reload and not when the count falls',async({page,context})=>{
  // The board stays open in one tab while the approver moves a Card to review on its own page in another; the board is
  // drawn again when the reader next moves a Card there.
  const mover=cardIn('Redraw','أفكار');
- await signIn(page,'omar@example.com','/c/rs-learning/approvals');
- const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
- const tab=await context.newPage();
- // An old Card on its own page: New card makes its Cards on the Engine since #836.
- const {id}=await oldCard(tab,`Nudge ${Date.now()}`);
- await tab.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
- await tab.getByRole('button',{name:'Add design'}).click();
- await expect(tab.getByText(/Version 1:/)).toBeVisible();
- await page.reload();
- const count=page.locator('.sb-count');
- const before=Number(await count.textContent());
- await tab.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
- await expect(tab.locator('.card-stage-line')).toContainText('مراجعة');
- await redraw('ArrowRight');
- const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .badge--wait`);
- await expect(badge).toHaveClass(/is-new/);
- expect(await badge.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-nudge',duration:'0.52s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
- await expect(count).toHaveText(String(before+1));
- await expect(count).toHaveClass(/is-pop/);
- expect(await count.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-count-pop',duration:'0.36s',easing:'cubic-bezier(0.34, 1.45, 0.64, 1)'});
- // A reload shows neither.
- await page.reload();
- await expect(badge).toBeVisible();
- await expect(badge).not.toHaveClass(/is-new/);
- await expect(count).not.toHaveClass(/is-pop/);
- // Approving it: the count falls when the board is drawn again, and neither plays.
- await tab.reload();
- await tab.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
- await expect(tab.locator('.card-stage-line')).not.toContainText('مراجعة');
- await redraw('ArrowLeft');
- await expect(count).toHaveText(String(before));
- await expect(count).not.toHaveClass(/is-pop/);
- await expect(page.locator('#board-cols .badge--wait.is-new')).toHaveCount(0);
+ const fake=await laneHermes();
+ try {
+  const waits=fake.settings.kanban.task({title:`Pop ${Date.now()}`,status:'running'}).id;
+  // The old board is opened where a chat shows its Card; it then puts the board's own address in the bar, so it is
+  // opened again by its address rather than reloaded.
+  const oldBoard=`/c/rs-learning/work/board?show=${mover}`;
+  await signIn(page,'omar@example.com',oldBoard);
+  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
+  const tab=await context.newPage();
+  // An old Card on its own page: New card makes its Cards on the Engine since #836.
+  const {id}=await oldCard(tab,`Nudge ${Date.now()}`);
+  await tab.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
+  await tab.getByRole('button',{name:'Add design'}).click();
+  await expect(tab.getByText(/Version 1:/)).toBeVisible();
+  await page.goto(oldBoard);
+  const count=page.locator('.sb-count');
+  await expect(count).toHaveText(/^\d+$/);
+  const before=Number(await count.textContent());
+  await tab.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
+  await expect(tab.locator('.card-stage-line')).toContainText('مراجعة');
+  await redraw('ArrowRight');
+  const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .badge--wait`);
+  await expect(badge).toHaveClass(/is-new/);
+  expect(await badge.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-nudge',duration:'0.52s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
+  // The Engine's Card needs a review the approver may decide: the count rises by one and pops, with no reload.
+  fake.settings.kanban.move(waits,'review');
+  await expect(count).toHaveText(String(before+1));
+  await expect(count).toHaveClass(/is-pop/);
+  expect(await count.evaluate(el=>({name:getComputedStyle(el).animationName,duration:getComputedStyle(el).animationDuration,easing:getComputedStyle(el).animationTimingFunction}))).toEqual({name:'gw-count-pop',duration:'0.36s',easing:'cubic-bezier(0.34, 1.45, 0.64, 1)'});
+  // A reload shows neither.
+  await page.goto(oldBoard);
+  await expect(badge).toBeVisible();
+  await expect(badge).not.toHaveClass(/is-new/);
+  await expect(count).toHaveText(String(before+1));
+  await expect(count).not.toHaveClass(/is-pop/);
+  // Approving the old Card: no badge plays when the board is drawn again; the Engine's Card is passed: the count falls,
+  // and does not pop.
+  await tab.reload();
+  await tab.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
+  await expect(tab.locator('.card-stage-line')).not.toContainText('مراجعة');
+  await redraw('ArrowLeft');
+  fake.settings.kanban.move(waits,'done');
+  await expect(count).toHaveText(String(before));
+  await expect(count).not.toHaveClass(/is-pop/);
+  await expect(page.locator('#board-cols .badge--wait.is-new')).toHaveCount(0);
+ } finally { await fake.close(); }
 });

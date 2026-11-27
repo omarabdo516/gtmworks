@@ -1909,6 +1909,8 @@
   "symStopped": "اتوقف",
   "symWaits": "مستنية بطاقة تانية",
   "symWaitsN": "مستنية {0} بطاقات",
+  "symOnYou": "عليك انت",
+  "boardWaitingLeads": "مستني الأدمن أو المدير",
   "viewStatus": "الحالة",
   "viewDateOf": "موعد نشر {0}",
   "viewThisMonth": "الشهر ده",

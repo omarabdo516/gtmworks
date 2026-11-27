@@ -7,6 +7,10 @@ export type CardColumn = typeof cardColumns[number];
 export declare function columnOfStatus(status: string): CardColumn | null;
 export type CardSymbol = {kind:'working'|'question'|'review'|'failed'|'stopped'} | {kind:'waits', count:number};
 export declare function cardSymbol(card: {status:string, failures:number, parents:number}): CardSymbol | null;
+/** Whom a Card of the Engine's board waits on (#841): a person by id, every Administrator and Manager, or no one. */
+export type CardWaits = {person:string} | {leads:true};
+export declare function waitsOn(card: {status:string, person:string|null, maker:string|null}, members: Set<string>): CardWaits | null;
+export declare function waitsOnReader(waits: CardWaits | null, reader: {me:string, role:string|null|undefined}): boolean;
 export declare function orderCards<C extends {column:string, createdAt:number|null}>(cards: C[]): C[];
 /** A Card's chat waiting on its person (#146), read with the Card as `wait:card_wait`. */
 export type CardWait = {person:string, kind:'question'|'hand'|'permission', title:string};

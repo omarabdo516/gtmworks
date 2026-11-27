@@ -119,10 +119,14 @@ test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, rais
  }
 });
 
+// The old board's approvals are no part of Waiting on you since #841; the old board itself, with its own Waiting on you
+// column, is still served where a chat shows its Card (?show=) until #846.
+const oldBoard=(card:number)=>`/c/rs-learning/work/board?show=${card}`;
+
 test('a card waiting for a decision moves only by it: a drop on Live opens the card, a drop elsewhere says to decide in the chat',async({page})=>{
  // Wide enough to show Waiting on you and Live together, so the card is carried from one to the other.
  await page.setViewportSize({width:2200,height:900});
- await signIn(page,'omar@example.com','/c/rs-learning/approvals');
+ await signIn(page,'omar@example.com',oldBoard(5));
  const source=page.locator('.col[data-column="waiting"] .kcard[data-card-id="5"]');
  await expect(source).toBeVisible();
  const from=(await source.boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
@@ -135,13 +139,13 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  await expect(page).toHaveURL(/\/work\/board\/5$/);
  await expect(page.locator('.toast')).toHaveText('It needs your OK first. Decide here and the card moves on its own');
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(oldBoard(5));
  await page.locator('.kcard[data-card-id="5"] a').focus();
  await page.keyboard.press('Shift+ArrowRight');
  await expect(page.locator('.toast')).toHaveText('This card is waiting for your decision. Decide in the chat first');
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await expect(page).toHaveURL(/\/work\/board\/5$/);
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(oldBoard(5));
  expect(await landedColumn(page,5)).toBe('waiting');
 });
 
@@ -163,7 +167,7 @@ test('a Viewer cannot move a card',async({page})=>{
  await expect(page.getByRole('button',{name:'Add an idea'})).toHaveCount(0);
 });
 
-test('a card waiting for my approval is in Waiting on you and leaves it when I approve its version',async({page})=>{
+test('a card waiting for my approval is in the old board\'s Waiting on you and leaves it when I approve its version',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const card=await newCard(page,'Waiting approval');
  await page.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
@@ -171,24 +175,26 @@ test('a card waiting for my approval is in Waiting on you and leaves it when I a
  await expect(page.getByText(/Version 1:/)).toBeVisible();
  await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(oldBoard(card.id));
  const waiting=page.locator('.col[data-column="waiting"]');
  const queued=waiting.locator(`.kcard[data-card-id="${card.id}"]`);
  await expect(queued).toBeVisible();
  await expect(queued.locator('.badge--wait')).toHaveText('Waiting on you');
  const count=Number(await waiting.locator('.col__count').textContent());
- await queued.getByRole('link',{name:card.title}).click();
- await expect(page).toHaveURL(new RegExp(`${card.path}$`));
+ // The old board opens it over itself; its decision is on the Card's own page.
+ await expect(queued.getByRole('link',{name:card.title})).toBeVisible();
+ await page.goto(card.path);
  await page.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
  await expect(page.locator('.card-stage-line')).not.toContainText('مراجعة');
- await page.goto('/c/rs-learning/approvals');
+ await page.goto(oldBoard(card.id));
  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
 });
 
-test('Waiting on you shows exactly the reader\'s own list, approvals and items newest first, and nothing for someone else',async({page,browser})=>{
- // Omar holds the review step: a card he must approve, one item from before it entered review and one from after, so
- // approvals and items interleave by time. The Manager holds no approval, so a card in review is not theirs.
+test('Waiting on you shows exactly the reader\'s own list, items newest first, no approval of the old board, and nothing for someone else',async({page,browser})=>{
+ // Omar holds the review step: a card he must approve, one item from before it entered review and one from after. Since
+ // #841 the old board's approvals are no part of the list (the Engine board's Cards are, kanban-waiting.spec.ts): the
+ // items are listed newest first, and the approval is counted on Home alone. The Manager holds no approval.
  const omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', stamp=Date.now();
  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
  const card=await newCard(page,'Own list approval');
@@ -197,6 +203,10 @@ test('Waiting on you shows exactly the reader\'s own list, approvals and items n
  await expect(page.getByText(/Version 1:/)).toBeVisible();
  await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
  await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+ await page.goto('/c/rs-learning/home');
+ const awaiting=page.locator('.stats .stat').first().locator('strong');
+ const approvals=Number(await awaiting.textContent());
+ expect(approvals).toBeGreaterThanOrEqual(1);
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Older than the approval ${stamp}','',1)`);
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Newer than the approval ${stamp}','',1)`);
  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','For the Manager ${stamp}','',1)`);
@@ -206,21 +216,20 @@ test('Waiting on you shows exactly the reader\'s own list, approvals and items n
   await page.goto('/c/rs-learning/approvals');
   const waiting=page.locator('.col[data-column="waiting"]');
   const entries=waiting.locator(':is(.kcard,.mcard)');
-  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toBeVisible();
-  const order=await entries.evaluateAll(list=>list.map(entry=>entry.getAttribute('data-card-id')?`card:${entry.getAttribute('data-card-id')}`:entry.textContent||''));
+  await expect(waiting.locator('.mcard').filter({hasText:`Newer than the approval ${stamp}`})).toBeVisible();
+  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
+  await expect(waiting.locator('.kcard[data-card-id]')).toHaveCount(0);
+  const order=await entries.evaluateAll(list=>list.map(entry=>entry.textContent||''));
   const at=(match:string)=>order.findIndex(entry=>entry.includes(match));
-  expect(at(`card:${card.id}`)).toBeGreaterThan(at(`Newer than the approval ${stamp}`));
-  expect(at(`Older than the approval ${stamp}`)).toBeGreaterThan(at(`card:${card.id}`));
+  expect(at(`Older than the approval ${stamp}`)).toBeGreaterThan(at(`Newer than the approval ${stamp}`));
   expect(at(`Newer than the approval ${stamp}`)).toBeGreaterThanOrEqual(0);
   expect(at(`For the Manager ${stamp}`)).toBe(-1);
   // The column and the sidebar count the same list.
   await expect(waiting.locator('.col__count')).toHaveText(String(order.length));
   await expect(page.locator(`a[href="/c/rs-learning/approvals"]`).first()).toContainText(String(order.length));
-  // Home's "Awaiting your approval" counts approvals only; the items (two of them here) are not approvals.
-  const approvals=order.filter(entry=>entry.startsWith('card:')).length;
-  expect(approvals).toBeLessThan(order.length);
+  // Home's "Awaiting your approval" counts approvals only; the items are not approvals.
   await page.goto('/c/rs-learning/home');
-  await expect(page.locator('.stats .stat').first().locator('strong')).toHaveText(String(approvals));
+  await expect(awaiting).toHaveText(String(approvals));
 
   // The Manager sees their own item and not Omar's card in review, nor Omar's items.
   const other=await browser.newContext(); const managerPage=await other.newPage();

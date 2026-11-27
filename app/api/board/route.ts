@@ -19,7 +19,7 @@ export async function GET(request:NextRequest) {
   const allowed=await routePermission(db,'app/api/board/route.ts','GET',company,user.id);
   if(allowed==='failed') return reply({error:'boardUnreachable'},503);
   if(allowed!=='allowed') return reply({error:'boardNotFound'},404);
-  const read=await readCompanyBoard(db,{company});
+  const read=await readCompanyBoard(db,{company,me:user.id});
   if(read.state==='found') return reply({cards:read.cards,main:read.main});
   return reply({error:read.state==='noEngine'?'boardNoEngine':'boardUnreachable'},503);
  } catch { return reply({error:'boardFailed'},500); }

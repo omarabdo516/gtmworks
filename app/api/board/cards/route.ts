@@ -34,8 +34,8 @@ async function caller(db:Awaited<ReturnType<typeof supabase>>,method:'GET'|'POST
  const {data:member}=await db.from('members').select('role').eq('company_id',company).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  return {answer:member?reply({error:'boardNotAllowed'},403):reply({error:'boardNotFound'},404)};
 }
-async function board(db:Awaited<ReturnType<typeof supabase>>,company:string,extra:object) {
- const read=await readCompanyBoard(db,{company});
+async function board(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,extra:object) {
+ const read=await readCompanyBoard(db,{company,me:person});
  return reply(read.state==='found'?{...extra,cards:read.cards,main:read.main}:extra);
 }
 
@@ -55,7 +55,7 @@ export async function POST(request:NextRequest) {
   const who=await caller(db,'POST',sent.company); if('answer' in who) return who.answer;
   const company=sent.company as string;
   const made=await makeCompanyCard(db,{company,person:who.person,key:sent.key,title:sent.title,description:sent.description,assignee:sent.assignee,publishOn:sent.publishOn});
-  if(made.state==='made') return await board(db,company,{made:made.id});
+  if(made.state==='made') return await board(db,company,who.person,{made:made.id});
   const [error,status]=failures[made.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
 }
@@ -70,11 +70,11 @@ export async function PATCH(request:NextRequest) {
   if(dating===Object.hasOwn(sent,'assignee')) return reply({error:'cardInvalid'},400);
   if(dating) {
    const dated=await dateCompanyCard(db,{company,card:sent.card,publishOn:sent.publishOn});
-   if(dated.state==='dated') return await board(db,company,{dated:sent.card});
+   if(dated.state==='dated') return await board(db,company,who.person,{dated:sent.card});
    const [error,status]=failures[dated.state]; return reply({error},status);
   }
   const assigned=await assignCompanyCard(db,{company,card:sent.card,assignee:sent.assignee});
-  if(assigned.state==='assigned') return await board(db,company,{assigned:sent.card});
+  if(assigned.state==='assigned') return await board(db,company,who.person,{assigned:sent.card});
   const [error,status]=failures[assigned.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
 }

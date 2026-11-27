@@ -8,7 +8,7 @@ import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
 import { cardColumns, columnLabel } from '@/lib/board-columns.mjs';
 import { calendarMonth, filterCards, sortCards, viewChoices } from '@/lib/board-views.mjs';
 import { workDate } from '@/lib/work-date.mjs';
-import { useBoard, type Board, type BoardCard } from './board';
+import { useBoard, type Board, type BoardCard } from '@/app/board-read';
 import '@/app/board.css';
 
 // The list and the calendar (spec #831, #845): the same Cards as the board, read from the same answer (/api/board,

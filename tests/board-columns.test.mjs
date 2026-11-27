@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards } from '../lib/board-columns.mjs';
+import { boardColumns, chatWait, columnOf, keyboardTarget, blockReason, inEdgeBand, scrollAxes, onCard, visibleApprovals, waitingCount, chatPlace, orderColumn, placeByOne, placeOrder, placeChanges, cardColumns, columnOfStatus, cardSymbol, orderCards, waitsOn, waitsOnReader } from '../lib/board-columns.mjs';
 
 test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
@@ -198,4 +198,33 @@ test('Waiting on you lists the newest Card first; every other column keeps the E
   { id: 't_4', column: 'planned', createdAt: 100 }, { id: 't_5', column: 'waiting', createdAt: 200 },
  ];
  assert.deepEqual(orderCards(cards).map(card => card.id), ['t_3', 't_5', 't_1', 't_2', 't_4']);
+});
+
+// Spec #831 (#841): what waits on whom is worked out from the board read. A question waits on the Card's Member
+// Assignee, else the person who made it, else every Administrator and Manager; a review only on those who may decide it;
+// a Card given to a Member waits on them until it is done. A person who is no longer a Member is waited on by nobody.
+test('a waiting Card waits on its Member, else its maker, else the Administrators and Managers; a review on those who decide it', () => {
+ const members = new Set(['mona', 'omar', 'sara', 'vic']);
+ const blocked = { status: 'blocked', person: null, maker: null };
+ assert.deepEqual(waitsOn({ ...blocked, person: 'mona', maker: 'omar' }, members), { person: 'mona' });
+ assert.deepEqual(waitsOn({ ...blocked, maker: 'mona' }, members), { person: 'mona' });
+ assert.deepEqual(waitsOn(blocked, members), { leads: true });
+ // A former Member is waited on by nobody: the question goes to the next in line.
+ assert.deepEqual(waitsOn({ ...blocked, person: 'gone', maker: 'mona' }, members), { person: 'mona' });
+ assert.deepEqual(waitsOn({ ...blocked, maker: 'gone' }, members), { leads: true });
+ for (const card of [{ status: 'review', person: 'mona', maker: 'mona' }, { status: 'review', person: null, maker: null }])
+  assert.deepEqual(waitsOn(card, members), { leads: true });
+ for (const status of ['triage', 'todo', 'scheduled', 'ready', 'running'])
+  assert.deepEqual(waitsOn({ status, person: 'mona', maker: 'omar' }, members), { person: 'mona' }, status);
+ for (const status of ['triage', 'todo', 'ready', 'running']) assert.equal(waitsOn({ status, person: null, maker: 'omar' }, members), null, status);
+ assert.equal(waitsOn({ status: 'done', person: 'mona', maker: 'omar' }, members), null);
+ assert.equal(waitsOn({ status: 'ready', person: 'gone', maker: 'omar' }, members), null);
+});
+
+test('a Card waits on the reader when it waits on them by name, or on the Administrators and Managers and they are one', () => {
+ assert.equal(waitsOnReader({ person: 'mona' }, { me: 'mona', role: 'contributor' }), true);
+ assert.equal(waitsOnReader({ person: 'mona' }, { me: 'omar', role: 'owner' }), false);
+ for (const [role, mine] of [['owner', true], ['manager', true], ['contributor', false], ['viewer', false], [null, false]])
+  assert.equal(waitsOnReader({ leads: true }, { me: 'x', role }), mine, String(role));
+ assert.equal(waitsOnReader(null, { me: 'mona', role: 'owner' }), false);
 });

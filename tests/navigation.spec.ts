@@ -7,63 +7,23 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { tapOverlaps } from './tap-overlaps';
 import { execFileSync } from 'node:child_process';
-import { appOrigin } from './lane.mjs';
 import { oldCard } from './old-card';
 
 // Supabase CLI targets the local test database by default; never pass --remote.
 const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
 
-// The prepared-navigation test measures a non-empty Inbox: before this file's tests one new card is moved to review,
-// where it waits on Omar (the seed's approver). The setup runs in its own hooks, so the measured test keeps its own
-// deadline. Cleanup approves only that card, found by its own address and its run-unique title; each worker (a retry
-// starts a new one) cleans the card it created and nothing else.
-let inboxFixture: { title: string, path: string } | undefined;
-// The lane's fake Engine holds the one Card the measured path opens over the board (#835), at the id the path names.
+// The prepared-navigation test measures a non-empty Inbox: the lane's fake Engine holds a Card that needs review, which
+// waits on Omar, an Administrator (#841: Waiting on you is worked out from the Engine's board). The lane's fake Engine
+// also holds the one Card the measured path opens over the board (#835), at the id the path names. The setup runs in its
+// own hooks, so the measured test keeps its own deadline; closing the fake Engine takes both away.
 let engine: Awaited<ReturnType<typeof laneHermes>> | undefined;
-test.beforeAll(async ({ browser }, testInfo) => {
+test.beforeAll(async ({}, testInfo) => {
   freshSeed(testInfo);
   engine = await laneHermes();
   engine.settings.kanban.task({ id: measuredCard, title: 'Measured card', status: 'ready', body: '- [ ] Open it' });
-  const context = await browser.newContext({ baseURL: appOrigin });
-  try {
-    const page = await context.newPage();
-    // An old Card on its own page: New card makes its Cards on the Engine since #836.
-    await signIn(page, 'omar@example.com', '/c/rs-learning/home');
-    const title = `بطاقة قياس الوارد ${randomUUID()}`;
-    const { path } = await oldCard(page, title);
-    await expect(page.locator('.modal h2').first()).toHaveText(title);
-    expect(path).toMatch(/^\/c\/rs-learning\/work\/board\/\d+$/);
-    inboxFixture = { title, path };
-    await page.getByLabel("Move to list", { exact: true }).selectOption({ label: 'مراجعة' });
-    await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
-  } finally { await context.close(); }
+  engine.settings.kanban.task({ title: `بطاقة قياس الوارد ${randomUUID()}`, status: 'review' });
 });
 test.afterAll(async () => { await engine?.close(); engine = undefined; });
-test.afterAll(async ({ browser }) => {
-  const created = inboxFixture;
-  if (!created) return;
-  const context = await browser.newContext({ baseURL: appOrigin });
-  try {
-    const page = await context.newPage();
-    await signIn(page, 'omar@example.com', '/c/rs-learning/approvals');
-    await expect(page.locator('.approvals')).toBeVisible();
-    const card = page.locator('.approval-card')
-      .filter({ has: page.locator(`a[href="${created.path}"]`) })
-      .filter({ hasText: created.title });
-    // A setup that failed before the move left no approval to clean; otherwise exactly this card is approved, once,
-    // as the seed's single step needs (the same flow as "own comments, moves and approvals ...").
-    if (await card.count()) {
-      expect(await card.count(), 'only the card this run created').toBe(1);
-      // The waiting column lists the card; its decision is taken inside the card (#16).
-      await card.getByRole('link', { name: created.title }).click();
-      await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-      await expect(page.locator('.card-stage-line')).toContainText('معتمد');
-      await page.goto('/c/rs-learning/approvals');
-      await expect(card).toHaveCount(0);
-    }
-    inboxFixture = undefined;
-  } finally { await context.close(); }
-});
 
 test('prepared navigation (production, warm-up + 3 runs)', async ({ page }, testInfo) => {
   test.setTimeout(120000);

@@ -14,7 +14,7 @@ export async function POST(request:NextRequest) {
   const {action,card}=who.sent;
   if(action!=='stop'&&action!=='continue') return reply({error:'cardInvalid'},400);
   const done=action==='stop'?await stopCard(who.db,{company:who.company,person:who.person,card}):await continueCard(who.db,{company:who.company,card});
-  if(done.state==='stopped'||done.state==='continued') return await withBoard(who.db,who.company,{[done.state]:card});
+  if(done.state==='stopped'||done.state==='continued') return await withBoard(who,{[done.state]:card});
   const [error,status]=refusals[done.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
 }

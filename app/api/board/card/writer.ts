@@ -34,9 +34,9 @@ export async function notAllowed({db,person,company}:Writer,allowed:string) {
  return member?reply({error:'boardNotAllowed'},403):reply({error:'boardNotFound'},404);
 }
 
-/** A write's answer with the board as it now reads, so the Card is drawn where the Engine put it. */
-export async function withBoard(db:Db,company:string,done:object) {
- const read=await readCompanyBoard(db,{company});
+/** A write's answer with the board as it now reads for the person who wrote, so the Card is drawn where the Engine put it. */
+export async function withBoard({db,company,person}:{db:Db,company:string,person:string},done:object) {
+ const read=await readCompanyBoard(db,{company,me:person});
  return reply(read.state==='found'?{...done,cards:read.cards,main:read.main}:done);
 }
 

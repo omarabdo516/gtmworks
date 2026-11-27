@@ -21,8 +21,9 @@ export default async function CompanyLayout({children,settings,params}:{children
  const {t}=await getI18n();
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const db=await supabase();
- // Waiting on you is counted beside the sidebar's reads, so the count never holds the frame (app/approvals-count.tsx).
+ // Waiting on you is counted beside the sidebar's reads, so the count never holds the frame (app/approvals-count.tsx):
+ // its list's rows here, and the Engine's Cards that wait on the reader by the browser, from the board read (#841).
  // A count that could not be read leaves the pill empty until the sidebar's poll counts it, never the whole Shell an error.
- const approvals=approvalQueue(db,company.id,reader.user.id,reader.role).then(({count})=>count,()=>undefined);
+ const approvals=approvalQueue(db,company.id,reader.user.id,reader.role).then(({rows})=>rows,()=>undefined);
  return <><div className="contents" data-workspace><Shell company={company} companies={reader.companies} personId={reader.user.id} personName={reader.person?.name||reader.user.email||''} role={roleNames[reader.role]||''} owner={reader.role==='owner'} manage={reader.manage} canWrite={reader.canWrite} approvalCount={approvals}>{children}</Shell></div>{settings}</>;
 }

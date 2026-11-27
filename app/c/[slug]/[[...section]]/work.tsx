@@ -27,6 +27,8 @@ import { NoteText, type EditableNote } from '@/app/note-edit';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { boardColumns, blockReason, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, orderColumn, placeByOne, progressOf, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
+import { useWaitingCards } from '@/app/board-read';
+import { BoardCardTile } from '@/app/board-card';
 import { withMention } from '@/lib/channels';
 import { modelCauseOf, modelOutcome } from '@/lib/model-causes';
 import { ModelLine } from '@/app/model-line';
@@ -96,13 +98,16 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const waitingHere=new Set(boardCards.filter(c=>columnOfCard(c)==='waiting').map(c=>c.id));
  const asCard=(item:WaitingItem)=>onCard(item)&&(item.kind==='approval'||waitingHere.has(item.card_id!));
  const items=(p.waiting||[]).filter(item=>!asCard(item));
- // On "Waiting on you" (/approvals) the column is the reader's own list, exactly as waiting_list returns it (the same
- // source as the count): their approvals and their items, newest first. A card in review that waits on someone else is
- // not theirs, so it is not shown there; the board's own column still shows every card in review.
+ // On "Waiting on you" (/approvals) the column is the reader's own list (the same source as the count): the Cards of the
+ // Company's Engine board that wait on them, worked out from the board read in the browser and following it live (#841),
+ // then their items, exactly as waiting_list returns them, newest first. The old board's Cards are no part of it: its
+ // approvals are left out, and a chat's question, hand or permission request is drawn on its own row.
  const ownList=p.focus==='waiting';
- const ownEntries=(p.waiting||[]).flatMap((item,n,all):{item:WaitingItem,card?:Card}[]=>{ if(!asCard(item)) return [{item}]; if(all.findIndex(other=>asCard(other)&&other.card_id===item.card_id)<n) return []; const c=boardCards.find(x=>x.id===item.card_id); return c?[{item,card:c}]:[]; });
- const drawnCards=ownList?boardCards.filter(c=>columnOfCard(c)!=='waiting'||ownEntries.some(entry=>entry.card?.id===c.id)):boardCards;
- const waitingTotal=new Set((p.waiting||[]).filter(item=>asCard(item)&&waitingHere.has(item.card_id!)).map(item=>item.card_id)).size+items.length;
+ const engineWaiting=useWaitingCards(ownList?p.company:'');
+ const ownEntries=ownList?(p.waiting||[]).filter(item=>item.kind!=='approval').map(item=>({item})):[];
+ const ownTotal=ownEntries.length+(engineWaiting?.length??0);
+ const drawnCards=ownList?boardCards.filter(c=>columnOfCard(c)!=='waiting'):boardCards;
+ const waitingTotal=ownList?ownTotal:new Set((p.waiting||[]).filter(item=>asCard(item)&&waitingHere.has(item.card_id!)).map(item=>item.card_id)).size+items.length;
  const stagesIn=(column:string)=>p.stages.filter(s=>(s.board_column||'ideas')===column);
  const stageName=(c:Card)=>p.stages.find(s=>s.id===c.stage_id)?.name||'';
  // After a move the card is drawn again in its new column; the keyboard stays on it, and after a keyboard move the board
@@ -375,7 +380,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     :<button ref={archiveSearchButton} type="button" className="ib" aria-label={t('boardSearchArchived')} title={t('boardSearchArchived')} onClick={()=>setArchiveSearching(true)}><ShellIcon name="search"/></button>)}
    {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={archivedTotal==null?t('boardArchived'):t('boardArchivedCount',archivedTotal)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); setArchiveQuery(''); setArchiveSearching(false); dropAsking(); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&archivedTotal!=null&&<span className="num">{archivedTotal}</span>}</button>}
    {canSelect&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
-   <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
+   <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{ownList||(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
    <BoardPager/>
   </div>
   {selected&&<div className="bsel" role="region" aria-label={t('boardSelecting')}>
@@ -404,12 +409,15 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     if(column==='waiting'&&ownList) {
      // The reader's own list: everything the mentions name first, under "Mentions of you" with its count, then what needs
      // their reply, as the board's column draws it (design-reference: mentionGroupHTML above the Cards).
-     const mentions=ownEntries.filter(entry=>!entry.card&&(entry.item.kind==='mention'||entry.item.kind==='channel_mention'));
+     // The board's Cards that wait on the reader come first, in the board's order, each opening over the board (#841).
+     const mentions=ownEntries.filter(entry=>entry.item.kind==='mention'||entry.item.kind==='channel_mention');
      const replies=ownEntries.filter(entry=>!mentions.includes(entry));
-     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
-      {mentions.length>0&&<div className="mn-group" role="group" aria-labelledby="mn-h-own"><h3 className="mn-h" id="mn-h-own"><BoardIcon name="at"/><span>{t('waitingMentions')}</span> <span className="num">{mentions.length}</span></h3>{mentions.map(entry=>itemView(entry.item))}{replies.length>0&&<div className="mn-sep" role="separator"/>}</div>}
-      {replies.map(entry=>entry.card?<div key={`approval:${entry.card.id}`} className="column" data-stage-id={entry.card.stage_id} data-stage-name={stageName(entry.card)}>{cardView(entry.card)}</div>:itemView(entry.item))}
-      {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
+     const engineCards=engineWaiting??[];
+     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownTotal} waiting head={null}>
+      {mentions.length>0&&<div className="mn-group" role="group" aria-labelledby="mn-h-own"><h3 className="mn-h" id="mn-h-own"><BoardIcon name="at"/><span>{t('waitingMentions')}</span> <span className="num">{mentions.length}</span></h3>{mentions.map(entry=>itemView(entry.item))}{replies.length+engineCards.length>0&&<div className="mn-sep" role="separator"/>}</div>}
+      {engineCards.map(card=><BoardCardTile key={`card:${card.id}`} card={card} href={`${base}/board?card=${encodeURIComponent(card.id)}`} columnName={columnName}/>)}
+      {replies.map(entry=>itemView(entry.item))}
+      {!ownTotal&&engineWaiting!==undefined&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
      </KanbanColumn>;
     }
     const archiveAll=column==='done'&&canSelect&&!selected&&list.length?<button type="button" className="ib ib--sm col__act" aria-label={t('boardArchiveDone',columnName(column))} title={t('boardArchiveAll')} onClick={()=>archive(list.map(c=>c.id))}><ShellIcon name="archive"/></button>:null;

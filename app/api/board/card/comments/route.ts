@@ -13,7 +13,7 @@ export async function POST(request:NextRequest) {
   const who=await writing(request); if('answer' in who) return who.answer;
   const refused=await notAllowed(who,await routePermission(who.db,'app/api/board/card/comments/route.ts','POST',who.company,who.person)); if(refused) return refused;
   const done=await commentOnCard(who.db,{company:who.company,person:who.person,card:who.sent.card,body:who.sent.body,answer:who.sent.answer===true});
-  if(done.state==='commented'||done.state==='answered') return await withBoard(who.db,who.company,{[done.state]:who.sent.card});
+  if(done.state==='commented'||done.state==='answered') return await withBoard(who,{[done.state]:who.sent.card});
   const [error,status]=refusals[done.state]; return reply({error},status);
  } catch { return reply({error:'boardFailed'},500); }
 }

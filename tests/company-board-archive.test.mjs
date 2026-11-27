@@ -20,7 +20,8 @@ const reader=(seen=agents)=>({rpc:async name=>{
  if(name==='company_app_agents') return {data:seen,error:null};
  return {data:null,error:{message:`unexpected ${name}`}};
 },from:table=>{
- const read={select:()=>read,eq:()=>read,not:()=>read,then:(done,failed)=>Promise.resolve(table==='kanban_cards'?{data:[],error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
+ // The rows beside the Cards and the active Members whom a Card may wait on (#841): none here.
+ const read={select:()=>read,eq:()=>read,not:()=>read,is:()=>read,then:(done,failed)=>Promise.resolve(table==='kanban_cards'||table==='members'?{data:[],error:null}:{data:null,error:{message:`unexpected ${table}`}}).then(done,failed)};
  return read;
 }});
 const columnOf=async(id,db=reader())=>(await readCompanyBoard(db,{company})).cards.find(card=>card.id===id)?.column??null;

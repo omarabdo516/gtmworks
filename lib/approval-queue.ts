@@ -28,6 +28,9 @@ export type WaitingItem={kind:string,id:number,title:string,body:string,asked_by
 // from them, #190), every item but a hidden Agent's approvals, newest first (`items`), so no count names a Card the
 // board leaves out, and how many things wait (`count`), a Card once with its approval and its chat's question or hand
 // (#146).
+// Since spec #831 the Cards that wait are the Engine's board's, worked out from the board read in the browser (#841,
+// app/board-read.ts useWaitingCards): Waiting on you and the sidebar's count take the old board's approvals out of this list and draw
+// a chat's question, hand or permission request on its own row (`rows`, how many of those wait).
 // The role is no part of the read's key: the database reads it from the session, so a page may start the read before it
 // knows the role (the chat does) and its parts find the same read.
 export const approvalQueue=(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string,role?:string)=>{ void role; return queue(db,company,person); };
@@ -118,5 +121,5 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!changeResult.error&&!accessResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
+ return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,count:waitingCount(visible.items),rows:items.filter(item=>item.kind!=='approval').length,available:!stepResult.error&&!listResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!changeResult.error&&!accessResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
 });

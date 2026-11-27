@@ -104,9 +104,12 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
 });
 
 test('a Card waiting for an approval asks once; archived, the approval ends with no decision and leaves the approver\'s list, and restored it is back where it was sent from',async({page,browser})=>{
- // The seed's card 5 waits in review for the Owner's approval.
- await signIn(page,'omar@example.com',board);
- const before=await count(page);
+ // The seed's card 5 waits in review for the Owner's approval, in the old board's Waiting on you column: since #841 the
+ // old board's approvals are no part of the list itself, and the old board is opened where a chat shows a Card (?show=).
+ const approverList='/c/rs-learning/work/board?show=1';
+ const waiting=()=>page.locator('#board-cols .col[data-column="waiting"] .kcard[data-card-id="5"]');
+ await signIn(page,'omar@example.com',approverList);
+ await expect(waiting()).toHaveCount(1);
  const title=String(rows('select title from public.work_cards where id=5')[0].title);
  const reviewerPage=await (await browser.newContext()).newPage();
  await signIn(reviewerPage,'reviewer@example.com',board);
@@ -115,14 +118,15 @@ test('a Card waiting for an approval asks once; archived, the approval ends with
  await expect(confirm.getByRole('listitem')).toHaveText([`The approval of “${title}” ends with no decision`]);
  await confirm.getByRole('button',{name:'Archive and stop'}).click();
  await expect(sheetOf(reviewerPage).getByRole('region',{name:'Archived'})).toBeVisible();
- await page.reload();
- await expect.poll(()=>count(page)).toBe(before-1);
+ await page.goto(approverList);
+ await expect(waiting()).toHaveCount(0);
  expect(rows(`select count(*)::int as decided from public.work_activity where card_id=5 and action in ('approval_rejected','approval_approved')`)).toEqual([{decided:0}]);
  await sheetOf(reviewerPage).getByRole('region',{name:'Archived'}).getByRole('button',{name:'Restore'}).click();
  await expect(reviewerPage.locator('.toast')).toContainText('Restored');
  await reviewerPage.goto(columns);
  await expect(reviewerPage.locator('#board-cols [data-column="progress"] .kcard[data-card-id="5"]')).toBeVisible();
- await page.reload();
- await expect.poll(()=>count(page)).toBe(before-1);
+ await page.goto(approverList);
+ await expect(page.locator('#board-cols [data-column="progress"] .kcard[data-card-id="5"]')).toBeVisible();
+ await expect(waiting()).toHaveCount(0);
  await reviewerPage.context().close();
 });

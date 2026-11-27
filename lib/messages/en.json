@@ -1909,6 +1909,8 @@
   "symStopped": "Stopped",
   "symWaits": "Waiting for another card",
   "symWaitsN": "Waiting for {0} cards",
+  "symOnYou": "On you",
+  "boardWaitingLeads": "Waiting on an Administrator or a Manager",
   "viewStatus": "Status",
   "viewDateOf": "Publishing date of {0}",
   "viewThisMonth": "This month",
