@@ -103,7 +103,8 @@ test('the Viewer reads the channel, with the writer and their role, and has no c
 // item leaves the list and the counts. Opening the channel any other way leaves it waiting. A Viewer is mentioned and
 // reads their own as anyone else does.
 test('a Member mentioned in a channel finds it under "Mentions of you", and pressing it opens the channel at the message and clears it',async({page,context})=>{
- const count=async()=>Number(await page.locator('.sb-count__n').first().innerText());
+ // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
+ const count=async()=>{ const pill=page.locator('.sb-count__n').first(); await expect(pill).not.toBeEmpty(); return Number(await pill.innerText()); };
  await signIn(page,'viewer@example.com','/c/rs-learning/approvals');
  const viewerBefore=await count();
  await context.clearCookies();

@@ -580,6 +580,8 @@ test('a handed step waits in Waiting on you until Done it, which starts one Run 
   await page.setViewportSize({width:1440,height:900});
   await signIn(page,'omar@example.com','/c/rs-learning/approvals');
   const count=page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
+  // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
+  await expect(count).not.toBeEmpty();
   const before=Number(await count.textContent());
   const card=show();
   await page.reload();
@@ -683,6 +685,8 @@ test('a Card whose chat hands its person a step waits under their Waiting on you
   await signIn(page,'omar@example.com','/c/rs-learning/approvals');
   const sidebar=page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
   expect(await columnOf(page)).toBe('progress');
+  // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
+  await expect(sidebar).not.toBeEmpty();
   const before={sidebar:Number(await sidebar.textContent()),column:Number(await waitingCount(page).textContent())};
   // A draft shown in the chat once it has its Card, and the step handed over.
   query(`select public.agent_show_card('${conversation}','${run}','call-1','draft','خطة المقال','{"line":"مسودة","rows":[]}'::jsonb)`);

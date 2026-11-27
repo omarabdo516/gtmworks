@@ -249,6 +249,8 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await expect(tab.getByText(/Version 1:/)).toBeVisible();
  await page.reload();
  const count=page.locator('.sb-count');
+ // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
+ await expect(count).not.toBeEmpty();
  const before=Number(await count.textContent());
  await tab.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
  await expect(tab.locator('.card-stage-line')).toContainText('مراجعة');

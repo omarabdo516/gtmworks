@@ -67,6 +67,8 @@ test('integration: a pending request is one item with its Agent and what it asks
   await page.setViewportSize({width:1440,height:900});
   await signIn(page,'reviewer@example.com','/c/rs-learning/approvals');
   const {sidebar,column}=counts(page);
+  // The Company layout streams the waiting count beside the page; its pill is empty until it comes (#789).
+  await expect(sidebar).not.toBeEmpty();
   const before={sidebar:await number(sidebar),column:await number(column)};
   await page.goto('/c/rs-learning/numbers');
   const panel=page.locator('.panel--wait');
