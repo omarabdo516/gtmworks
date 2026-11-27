@@ -92,10 +92,10 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake 
 
 ## 4. Work: board, cards, projects, routines
 
-- 🟡 **The board.** Six columns over the stages, drag with undo, Shift plus arrows to reorder, motion as designed. Merged; waiting for the release (#572). [#34, #131, #168, #174, ADR 0013]
+- 🟡 **The board.** The Company's Engine's own Kanban board: five columns over the Engine's statuses, followed live, with drag and Undo and filters by Assignee and Project; the old board's Cards are switched off by #846. [#34, #131, #168, #174, ADR 0013, ADR 0033, #831]
 - ✅ **The Card sheet.** A Card opens over the board with its Chat and Log. [#116]
 - ✅ **Board, calendar and list views of Cards.** The list and the calendar read the board's own Cards from the Engine: the list sorts and filters them by Assignee, status and Project, and the calendar places each on its publishing date, undated Cards beside it. [#34, #845]
-- ✅ **Versions and Approvals.** Editing makes a new Version, an approval applies to one exact Version, and an Agent never approves. [#16, #137, GLOSSARY.md Version, Approval]
+- ✅ **Versions and Approvals.** Editing makes a new Version and an approval applies to one exact Version; on the Engine's board a Card's review is passed or sent back by an Administrator, a Manager or an Agent that reviews the work (#839). [#16, #137, GLOSSARY.md Version, Approval]
 - ✅ **"Waiting on you".** One list for approvals, questions, permissions, requests and mentions. [#16, #165, #200]
 - ✅ **Add an idea.** The Ideas column takes a new Card, once even if pressed twice. [#188, #452]
 - ✅ **Alone or with a team.** First run asks one question; "Alone" hides the team parts until the first Member joins. [#9, #10, #186]
