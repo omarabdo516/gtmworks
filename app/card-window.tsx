@@ -8,6 +8,7 @@ import { columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-colum
 import type { CompanyCard } from '@/lib/company-card.mjs';
 import { CardDescription } from './card-description';
 import { useCardChanges } from './board-live';
+import { ArchivedCallout, CardMore } from './board-archive';
 import en from '@/lib/messages/card-window.en.json';
 import ar from '@/lib/messages/card-window.ar.json';
 import './log.css';
@@ -165,7 +166,10 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned}:{company:string,c
  </>;
 }
 
-export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,cardHref:(id:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,onClose:()=>void}) {
+// `archive` and `restore` are the board's (#842, app/board-archive.tsx), for a Member who may write: the window stays on
+// the Card, archived and read only, and reads it again once the archive or the restore is done.
+export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,archive,restore,onClose}:{company:string,id:string,seen:BoardCardSeen|null,writer:boolean,cardHref:(id:string)=>string,showCard:(id:string)=>void,onBoard:(answer:BoardAnswer)=>void,
+ archive?:(id:string,done:()=>void)=>void,restore?:(id:string)=>Promise<unknown>,onClose:()=>void}) {
  const {t,language,locale}=useI18n();
  const text:Record<string,string>=language==='ar'?ar:en;
  const c=(key:string,...values:unknown[])=>(text[key]??key).replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)]??''));
@@ -253,8 +257,10 @@ export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onC
   <div className="cw__inner">
    <header className="cw-head"><div className="cw-head__row">
     {column&&<span className={`cw-status is-static${waiting?' is-wait':''}`}>{symbol&&sym(symbol)}<span>{columnName}</span></span>}
+    {card?.archived&&<span className="cw-status is-static"><ShellIcon name="archive"/><span>{t('cardArchived')}</span></span>}
     {!writer&&<span className="sym sym--mute" role="img" aria-label={c('cwReadOnly')} title={c('cwReadOnly')}><ShellIcon name="eye"/></span>}
     <span className="od-fill"/>
+    {card&&archive&&restore&&<CardMore archived={card.archived} archive={()=>archive(card.id,read.reread)} restore={()=>void restore(card.id).then(read.reread)}/>}
     <button type="button" className="circle-btn" aria-label={c('cwClose')} title={c('cwCloseTip')} onClick={close}><ShellIcon name="x"/></button>
    </div></header>
    <div className="cw-body">
@@ -262,6 +268,7 @@ export function CardWindow({company,id,seen,writer,cardHref,showCard,onBoard,onC
      <h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{title}</h2>
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
+     {card?.archived&&<ArchivedCallout restore={restore&&(()=>void restore(card.id).then(read.reread))}/>}
      {card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
      {card?.summary&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result"><p className="cw-sum" dir="auto">{card.summary}</p></div></section>}
     </div>

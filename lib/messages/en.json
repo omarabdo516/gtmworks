@@ -1752,6 +1752,7 @@
   "boardSearchArchived": "Search archived cards",
   "boardArchivedMore": "Show more",
   "boardArchivedFailed": "The archived cards couldn’t be read. Try again.",
+  "boardArchivedMade": "Made {0}",
   "logActChannelArchived": "archived the channel",
   "logActChannelRestored": "restored the channel",
   "archiveConfirmOne": "Archive the card?",

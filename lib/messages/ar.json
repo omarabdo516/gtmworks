@@ -1752,6 +1752,7 @@
   "boardSearchArchived": "دوّر في البطاقات المؤرشفة",
   "boardArchivedMore": "اعرض أكتر",
   "boardArchivedFailed": "البطاقات المؤرشفة ماتقرتش. جرّب تاني.",
+  "boardArchivedMade": "اتعملت {0}",
   "logActChannelArchived": "أرشف قناة",
   "logActChannelRestored": "رجّع قناة",
   "archiveConfirmOne": "أرشف البطاقة؟",
