@@ -1,11 +1,13 @@
 export type AppCategory='ads'|'content'|'communication'|'analytics'|'sales'|'more';
-export type AppSource='engine'|'remote'|'sandbox'|'own'|'custom';
+export type AppSource='engine'|'remote'|'own'|'custom';
+/** What the own-tool card is filled with for a command server the Owner runs (decision 0079). */
+export type AppPreset={readonly command:string,readonly args:readonly string[]};
 /** `command`: a command server the Owner added, which runs in the Company's work sandbox (#459). */
 export type AppAuth='oauth'|'header'|'none'|'command';
 /** A vendor that refuses OAuth dynamic client registration (#914): the install settings that hold its own client, and the
  *  page that tells the install's Owner how to make it. */
 export type AppOAuthClient={readonly id:string,readonly secret:string,readonly guide:string};
-export type App={readonly key:string,readonly name:string,readonly mark:string,readonly category:AppCategory,readonly source:AppSource,readonly url?:string,readonly docs?:string,readonly auth?:AppAuth,readonly care?:'customers'|'money',readonly oauthClient?:AppOAuthClient};
+export type App={readonly key:string,readonly name:string,readonly mark:string,readonly category:AppCategory,readonly source:AppSource,readonly url?:string,readonly docs?:string,readonly auth?:AppAuth,readonly care?:'customers'|'money',readonly preset?:AppPreset,readonly oauthClient?:AppOAuthClient};
 export type OAuthClient={id:string,secret?:string};
 export type AppState='connected'|'attention'|'off'|'checking';
 /** One visible Agent's view of one app. `state` null: its profile could not be read now. `own` false: the Agent still
@@ -15,11 +17,14 @@ export type AppAgent={id:string,name:string,connection:string,main:boolean,own:b
 export type AppEnv={name:string,prompt:string,required:boolean};
 /** `state` is mergedState(agents), never stored. `clientNeeded`: the vendor refuses dynamic registration and the install
  *  has no client of its own yet (#914), so nothing can be connected until its Owner adds one; `guide` says how. */
-export type CompanyApp={key:string,name:string,mark:string,category:AppCategory,source:AppSource,url?:string,command?:string,args?:string[],docs?:string,auth?:AppAuth,care?:'customers'|'money',fields?:AppEnv[],clientNeeded?:{guide:string},state:AppState,agents:AppAgent[]};
+export type CompanyApp={key:string,name:string,mark:string,category:AppCategory,source:AppSource,url?:string,command?:string,args?:string[],docs?:string,auth?:AppAuth,care?:'customers'|'money',fields?:AppEnv[],preset?:AppPreset,clientNeeded?:{guide:string},state:AppState,agents:AppAgent[]};
 export const appKey:RegExp;
 export const apps:readonly App[];
 export const appByKey:(key:unknown)=>App|undefined;
-export const customApp:(key:string)=>App;
+export const offeredApp:(key:unknown)=>App|undefined;
+export const openDesignGuide:string;
+export const customApp:(key:string,kind?:{command?:boolean})=>App;
+export const presetOf:(key:unknown)=>App|undefined;
 export const serverKeyOf:(name:unknown)=>string;
 export function knownApp(name:string):{key:string,name:string,mark:string}|undefined;
 export function appState(installed:boolean,reached:boolean):AppState;

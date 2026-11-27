@@ -192,38 +192,57 @@ test('Meta Ads signs in with the install\'s own Meta app: the window goes to Met
  delete fake.settings.profiles.get(profile)!.config.mcp_servers['meta-ads'];
 });
 
-test('the Owner turns Open Design on for Lead with no window; it runs in the work sandbox on a design profile of Lead\'s own, and turns off again',async({page})=>{
- // #544, ADR 0025: no vendor window, no field and no token; the Engine gets ssh into the work sandbox with its Run API
- // forwarded, and the key the sandbox gets runs only Lead's design profile.
+test('picking Open Design opens the command card filled in, in English and Arabic, and Add sends the Engine a command server like any other',async({page})=>{
+ // Decision 0079, ADR 0035: Open Design is the Owner's to install; its card is the own-tool form in "A command in the work
+ // sandbox" mode with its name, command and arguments filled in, and a guide. Add writes the command server the agents
+ // area proves for any command (ADR 0024): ssh into the work sandbox, the command as typed, and no design profile.
+ const preset=apps.find(app=>app.key==='open-design')!.preset!;
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await page.goto('/c/rs-learning/settings?section=apps');
  await page.locator('#apps-q').fill('open design');
  await expect(page.locator('.app__name')).toHaveText(['Open Design']);
- await expect(card(page,'Open Design').locator('.app__use')).toHaveText('Open Design makes designs in the work sandbox, drawn with your Company\'s own model through its Engine. Nothing to sign in to.');
+ await expect(card(page,'Open Design').locator('.app__use')).toHaveText('Open Design makes designs in the work sandbox, with the model you set up inside Open Design. You put it in the company’s work sandbox and start its daemon; the guide says how.');
  await card(page,'Open Design').getByRole('link',{name:'Connect Open Design'}).click();
  await expect(page.locator('#sov-h')).toHaveText('Connect Open Design');
- await expect(page.locator('#app-token')).toHaveCount(0);
- await page.screenshot({path:test.info().outputPath('open-design-detail.png')});
- await page.getByRole('button',{name:'Connect',exact:true}).click();
- await expect(page.locator('.sheet__meta .badge')).toHaveText('Connected');
- await page.screenshot({path:test.info().outputPath('open-design-on.png')});
- const design=fake.settings.profiles.get(`od-${profile}`);
- expect(design,'Lead\'s design profile is made').toBeTruthy();
- expect(design!.key).toMatch(/^[A-Za-z0-9_-]{43}$/);
- expect(design!.key).not.toBe(fake.settings.key);
- const designKey=design!.key;
+ await expect(page.locator('#own-name')).toHaveValue('open-design');
+ await expect(page.locator('#own-kind')).toHaveValue('command');
+ await expect(page.locator('#own-command')).toHaveValue('node');
+ await expect(page.locator('#own-args')).toHaveValue(preset.args.join('\n'));
+ await expect(page.locator('#app-guide')).toHaveText('How to put Open Design in the work sandbox and start it');
+ await expect(page.locator('#app-guide')).toHaveAttribute('href','https://github.com/omarabdo516/gtmworks/blob/main/docs/open-design.md');
+ await page.screenshot({path:test.info().outputPath('open-design-preset.png')});
+ await page.locator('#own-add').click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=apps$/);
  const entry=servers()['open-design'] as {command:string,args:string[],enabled:boolean};
  expect(entry.command).toBe('ssh');
  expect(entry.args).toContain('pn@sandbox');
- expect(entry.args[entry.args.indexOf('-R')+1]).toMatch(new RegExp(`^/home/pn/\\.gtmworks/engine-${profile}\\.sock:[^:]+:8642$`));
- expect(entry.args.at(-1)).toBe(`builtin cd -- /work/${profile} || exit 126; exec 'open-design-mcp' 'od-${profile}' '${design!.key}'`);
+ expect(entry.args).not.toContain('-R');
+ expect(entry.args.at(-1)).toBe(`builtin cd -- /work/${profile} || exit 126; exec 'node' '/home/pn/open-design/apps/daemon/dist/cli.js' 'mcp' '--daemon-url' 'http://127.0.0.1:7456'`);
+ expect([...fake.settings.profiles.keys()].filter(name=>name.startsWith('od-')),'no design profile').toEqual([]);
+ await page.locator('#apps-q').fill('open design');
+ await expect(page.locator('.app__name')).toHaveText(['Open Design']);
+ await expect(card(page,'Open Design').locator('.app__state')).toHaveText(/Connected/);
+ // The list names no Engine path; the card below shows the command as the Owner kept it, a path in the sandbox's home.
  await noEngineText(page);
+ await card(page,'Open Design').getByRole('link',{name:'Manage Open Design'}).click();
+ await expect(page.locator('#app-command')).toHaveText(['node',...preset.args].join(' '));
+ await expect(page.locator('#app-guide')).toBeVisible();
  await page.locator('#app-off').click();
  await page.locator('#app-off-go').click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=apps$/);
- await expect(card(page,'Open Design').locator('.app__state')).toHaveText('Not connected');
- expect(servers()['open-design'],'off removes the server').toBeUndefined();
- expect(fake.settings.profiles.get(`od-${profile}`)?.key,'and the key the sandbox kept runs nothing').not.toBe(designKey);
+ expect(servers()['open-design'],'Remove takes the server out').toBeUndefined();
+ // The same card in Egyptian Arabic: the words are the catalogue's, the command stays as typed, left to right.
+ query(`update public.people set language='ar' where id='${omar}'`);
+ try {
+  await page.goto('/c/rs-learning/settings?section=apps&app=open-design');
+  await expect(page.locator('#sov-h')).toHaveText('وصّل Open Design');
+  await expect(page.locator('#app-guide')).toHaveText('إزاي تحط Open Design في صندوق الشغل وتشغّله');
+  await expect(page.locator('#own-kind option:checked')).toHaveText('أمر في صندوق الشغل');
+  await expect(page.locator('#own-command')).toHaveValue('node');
+  await expect(page.locator('#own-command')).toHaveAttribute('dir','ltr');
+  await expect(page.locator('#own-args')).toHaveValue(preset.args.join('\n'));
+  await page.screenshot({path:test.info().outputPath('open-design-preset-ar.png')});
+ } finally { query(`update public.people set language='en' where id='${omar}'`); }
  expect(JSON.parse(query(`select actor_id,action,details->>'app' as app from public.company_log where company_id='${company}' and action in ('app_connected','app_disconnected') and details->>'app'='open-design' order by id`)))
   .toEqual([{actor_id:omar,action:'app_connected',app:'open-design'},{actor_id:omar,action:'app_disconnected',app:'open-design'}]);
 });

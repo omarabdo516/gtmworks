@@ -43,7 +43,7 @@ test('every Card on the Engine is in its column with its title, its Agent and it
   const done=card({title:'Weekly report',status:'done',assignee:companyProfile});
   fake.settings.kanban.comment(done,'Omar','Sent to the team.');
   card({title:'Old webinar',status:'archived'});
-  const read=await readCompanyBoard(reader(),{company});
+  const read=await readCompanyBoard(reader(),{company,me:omar});
   assert.equal(read.state,'found');
   const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
   const columnOf=id=>shown[id]?.column;
@@ -79,7 +79,7 @@ test('a Card of an Agent hidden from the reader is not on their board; a Card fo
   const hidden=fake.settings.kanban.task({title:'Seo keywords',status:'ready',assignee:profileOf(seo)}).id;
   const root=fake.settings.kanban.task({title:'Made on the Engine itself',status:'ready',assignee:'default'}).id;
   const seen=fake.settings.kanban.task({title:'Ads budget',status:'ready',assignee:profileOf(ads)}).id;
-  const read=await readCompanyBoard(reader(),{company});
+  const read=await readCompanyBoard(reader(),{company,me:omar});
   assert.deepEqual(read.cards.map(card=>card.id).sort(),[root,seen].sort());
   assert.equal(read.cards.find(card=>card.id===root).agent,null);
   assert.ok(!read.cards.some(card=>card.id===hidden));
@@ -92,7 +92,7 @@ test('a Card given to a Member shows that Member, and a Card with an Agent on th
   const theirs=fake.settings.kanban.task({title:'Shoot the reel',status:'ready'}).id;
   const taken=fake.settings.kanban.task({title:'Ad copy',status:'ready',assignee:profileOf(ads)}).id;
   const nobody=fake.settings.kanban.task({title:'Someday',status:'ready'}).id;
-  const read=await readCompanyBoard(reader(agents,[{task_id:theirs,assignee:mona,people:{name:'Mona'}},{task_id:taken,assignee:mona,people:{name:'Mona'}}]),{company});
+  const read=await readCompanyBoard(reader(agents,[{task_id:theirs,assignee:mona,people:{name:'Mona'}},{task_id:taken,assignee:mona,people:{name:'Mona'}}]),{company,me:omar});
   const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
   assert.deepEqual([shown[theirs].person,shown[theirs].agent],[{id:mona,name:'Mona'},null]);
   assert.deepEqual([shown[taken].person,shown[taken].agent],[null,{id:ads,name:'Ads'}]);
@@ -105,7 +105,7 @@ test('a Card carries its Project, the Engine\'s tenant, and the publishing date 
  try {
   const dated=fake.settings.kanban.task({title:'Launch reel',status:'ready',tenant:'Spring course'}).id;
   const undated=fake.settings.kanban.task({title:'Someday',status:'todo'}).id;
-  const read=await readCompanyBoard(reader(agents,[{task_id:dated,assignee:null,publish_on:'2026-12-03',people:null}]),{company});
+  const read=await readCompanyBoard(reader(agents,[{task_id:dated,assignee:null,publish_on:'2026-12-03',people:null}]),{company,me:omar});
   const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
   assert.deepEqual([shown[dated].project,shown[dated].publishOn,shown[dated].person],['Spring course','2026-12-03',null]);
   assert.deepEqual([shown[undated].project,shown[undated].publishOn],[null,null]);
@@ -121,7 +121,7 @@ test('Waiting on you lists the newest Card first, and Done the newest finished f
   const middle=card({title:'Middle question',status:'blocked',created_at:2000});
   const first=card({title:'Finished first',status:'done',completed_at:1000});
   const last=card({title:'Finished last',status:'done',completed_at:5000});
-  const read=await readCompanyBoard(reader(),{company});
+  const read=await readCompanyBoard(reader(),{company,me:omar});
   assert.deepEqual(read.cards.filter(found=>found.column==='waiting').map(found=>found.id),[newer,middle,older]);
   assert.deepEqual(read.cards.filter(found=>found.column==='done').map(found=>found.id),[last,first]);
  } finally { await fake.close(); }
@@ -189,7 +189,7 @@ test('each Card carries its Project name, and one only hidden Cards hold is not 
   const launch=card({title:'Launch ads',status:'todo',tenant:'Spring launch'});
   const plain=card({title:'Weekly report',status:'todo'});
   card({title:'Seo keywords',status:'ready',assignee:profileOf(seo),tenant:'Secret project'});
-  const read=await readCompanyBoard(reader(),{company});
+  const read=await readCompanyBoard(reader(),{company,me:omar});
   assert.equal(read.state,'found');
   const shown=Object.fromEntries(read.cards.map(found=>[found.id,found]));
   assert.equal(shown[launch].project,'Spring launch');

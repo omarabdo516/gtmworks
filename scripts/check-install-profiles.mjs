@@ -26,13 +26,6 @@
 //     work sandbox: the Engine holds ssh into the sandbox and never the command, and Test lists its tool; after the job
 //     restarts the Engine, an Agent calls it from a Conversation. The call holds until the job, which lists both
 //     containers' processes meanwhile, releases it; the job reads where it ran.
-//   open-design-add <marker>, then open-design <marker>: the Open Design app (#544, ADR 0025) turned on for the first
-//     Company's main Agent through the driver: its design profile has a key of its own, the Engine holds ssh into the
-//     sandbox with the Run API forwarded, and Test lists Open Design's tools. After the job restarts the Engine, the Agent
-//     is asked for a design from a Conversation: it makes an Open Design project, starts a run and reads it until it
-//     ends; Open Design's daemon draws it through its `hermes` runtime, which is a Run on the design profile, whose
-//     file tool writes the design into the project folder. The job lists both containers' processes during the call and
-//     reads the file in the Agent's folder of the work folder.
 //   sandbox-key <marker> <refused|runs>: one Agent's command, when the install job has replaced the sandbox's host key
 //     (refused) or put it back (runs): the Engine's ssh client trusts a host it has not seen but refuses a changed key, and
 //     the install pre-seeds known_hosts with the sandbox's, so a swapped sandbox is refused.
@@ -644,119 +637,6 @@ try {
  assert.equal((await disconnectApp(target,key)).state,'disconnected','Remove takes the server out of the profile');
  writeProof({step:'sandbox-mcp',marker,sandbox_host:host,profile:first.profile,cwd});
 } finally { if(model) { model.close(); model.closeAllConnections(); } await disconnectApp(target,key).catch(()=>{}); }
-}
-} else if(step==='open-design-add'||step==='open-design') {
-// The Open Design app (#544, ADR 0025), in two steps around an Engine restart the install job makes, as the command
-// server's are. `open-design-add` turns it on for the first Company's main Agent through the driver, as the Owner's turn-on
-// does. `open-design` asks that Agent for a design from a Conversation.
-assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
-const pair=JSON.parse(readFileSync(state,'utf8'));
-const first=pair[0];
-const firstEngine=await engineFor(first.company);
-const {prepareApp,testServer,readApps,disconnectApp}=await import(`${process.cwd()}/lib/engine/apps.mjs`);
-const {designProfileOf,openDesignKeyOf}=await import(`${process.cwd()}/lib/open-design.mjs`);
-const target={...firstEngine,profile:first.profile};
-const design=designProfileOf(first.profile);
-const key='open-design';
-if(step==='open-design-add') {
- await pointAtFakeModel(firstEngine,first.profile);
- let added=false;
- try {
-  // A provider key the Agent's profile holds (a fake one, never used): the design profile gets it inside the Engine.
-  const keyed=await manage(firstEngine,`/api/env?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',body:JSON.stringify({key:'OPENROUTER_API_KEY',value:`sk-or-v1-${marker}`})});
-  assert.equal(keyed.status,200,'a provider key is set on the Agent\'s profile');
-  assert.equal(await prepareApp(target,key,null),null,'Open Design is turned on for the Agent');
-  const designEnv=await (await manage(firstEngine,`/api/env?profile=${encodeURIComponent(design)}`)).json();
-  assert.equal(designEnv.OPENROUTER_API_KEY?.is_set,true,'the design profile has the Agent\'s provider key, inside the Engine');
-  await manage(firstEngine,`/api/env?profile=${encodeURIComponent(first.profile)}`,{method:'DELETE',body:JSON.stringify({key:'OPENROUTER_API_KEY'})});
-  const config=await (await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`)).json();
-  const entry=config.mcp_servers?.[key];
-  assert.equal(entry?.command,'ssh','the Engine starts ssh into the sandbox, never Open Design itself');
-  assert.ok(entry.args.includes('pn@sandbox')&&entry.args.includes('-R'),'over the terminal backend\'s route, with the Run API forwarded');
-  const designKey=openDesignKeyOf(entry,first.profile);
-  assert.ok(designKey&&designKey!==firstEngine.key,'the sandbox gets the design profile\'s own key, never the Engine\'s');
-  const runs=async(/** @type {string} */ profile,/** @type {string} */ bearer)=>(await fetch(`${firstEngine.address}/p/${encodeURIComponent(profile)}/v1/capabilities`,{headers:{Authorization:`Bearer ${bearer}`}})).status;
-  assert.equal(await runs(design,designKey),200,'the design key runs the design profile');
-  assert.equal(await runs(first.profile,designKey),401,'and no other profile');
-  // The design profile draws with its Agent's model access, copied inside the Engine (a provider key, a provider and a
-  // model; a subscription sign-in is the root's, ADR 0018). Here the Agent runs on the fake model, a custom endpoint, which
-  // is the one kind of access the driver does not copy (ADR 0025), so the proof gives the design profile the same stand-in.
-  await pointAtFakeModel(firstEngine,design);
-  const tested=await testServer(target,key);
-  assert.equal(tested.state,'connected','Test reaches Open Design in the sandbox');
-  for(const tool of ['create_project','start_run','get_run']) assert.ok(tested.tools?.includes(tool),`Test lists ${tool}`);
-  const card=(await readApps(target)).apps?.find(app=>app.key===key);
-  assert.deepEqual([card?.source,card?.state],['sandbox','connected']);
-  added=true;
-  writeProof({step:'open-design-add',marker,profile:first.profile,design,state:'added'});
- } finally { if(!added) await disconnectApp(target,key).catch(()=>{}); }
-} else {
-// Two Runs ask the fake model. The Agent's own: it reaches Open Design's tools through the Engine's tool search, makes a
-// project named for the marker, starts a run and reads it until it ends, then answers. The design profile's, which Open
-// Design's `hermes` runtime starts: it writes the design into the project folder its instructions name.
-const textOf=messages=>messages.map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
-const results=[]; const asked=[];
-const toolName=(body,name)=>{
- const tools=(body?.tools||[]).map(tool=>tool?.function).filter(Boolean);
- const direct=tools.find(tool=>typeof tool.name==='string'&&new RegExp(`^mcp__[\\w-]+__${name}$`).test(tool.name))?.name;
- if(direct) return {direct};
- const deferred=tools.find(tool=>tool.name==='tool_search')?.description?.match(new RegExp(`mcp__[\\w-]+__${name}`))?.[0];
- return deferred&&tools.some(tool=>tool.name==='tool_call')?{deferred}:null;
-};
-const callOf=(body,name,args,id)=>{
- const found=toolName(body,name);
- if(!found) return null;
- return found.direct?{id,type:'function',function:{name:found.direct,arguments:JSON.stringify(args)}}
-  :{id,type:'function',function:{name:'tool_call',arguments:JSON.stringify({calls:[{name:found.deferred,arguments:args}]})}};
-};
-let designed=null; let polls=0;
-const plan=async(messages,body)=>{
- const text=textOf(messages);
- // The design profile's Run: its instructions name the project folder.
- const folder=text.match(/drawing a design for Open Design, in the Company's work sandbox\. Its project folder is (\/work\/[^\s]+?)\. /)?.[1];
- if(folder&&text.includes(`DESIGN ${marker}`)) {
-  if(messages.some(message=>message.role==='tool')) return null;
-  designed=folder;
-  return {id:'call_design_file',type:'function',function:{name:'write_file',arguments:JSON.stringify({path:`${folder}/index.html`,content:`<!doctype html><html lang="en"><title>${marker}</title><body><h1>Spring sale</h1><p>${marker}</p></body></html>\n`})}};
- }
- if(!text.includes(`OPEN-DESIGN ${marker}`)) return null;
- const tools=messages.filter(message=>message.role==='tool').map(message=>String(message.content));
- const last=tools.at(-1)??'';
- if(!tools.length) return callOf(body,'create_project',{name:`Proof ${marker}`,id:marker},'call_od_project');
- if(tools.length===1) return callOf(body,'start_run',{project:marker,prompt:`DESIGN ${marker}: a spring sale poster.`},'call_od_start');
- const run=tools.join('\n').match(/runId\\*"\s*:\s*\\*"([0-9a-f-]{36})/)?.[1];
- if(!run) return null;
- const status=last.match(/status\\*"\s*:\s*\\*"(queued|running|succeeded|failed|canceled)/)?.[1];
- if(tools.length>2&&status&&status!=='queued'&&status!=='running') return null;
- if(polls++>=60) return null;
- if(tools.length>2) await new Promise(resolve=>setTimeout(resolve,2000));
- return callOf(body,'get_run',{runId:run},`call_od_get_${polls}`);
-};
-let model=null;
-try {
- const started=await fakeModel(asked,results,plan);
- model=started.model; const {reply}=started;
- await pointAtFakeModel(firstEngine,first.profile);
- await pointAtFakeModel(firstEngine,design);
- const person=await signedIn();
- const {data:{user}}=await person.auth.getUser();
- assert.ok(user,'the first-run Owner signs in');
- let answered=null;
- for(let attempt=0;attempt<3&&!designed;attempt++) {
-  if(attempt) await new Promise(resolve=>setTimeout(resolve,15000));
-  const conversation=randomUUID();
-  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`OPEN-DESIGN ${marker}: make a spring sale poster with Open Design and give me its file.`};
-  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
-  assert.deepEqual(sent,{conversation});
-  answered=await until('the reply',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),480);
- }
- assert.ok(answered?.body.includes(reply),answered?.body);
- assert.ok(designed,'Open Design\'s run reached the design profile on the Engine');
- assert.equal(designed,`/work/${first.profile}/open-design/projects/${marker}`,'the design is drawn in the Agent\'s own folder of the work folder');
- const finished=results.map(String).filter(result=>/status\\*"\s*:\s*\\*"succeeded/.test(result));
- assert.ok(finished.length>=1,`Open Design's run succeeded: ${results.map(String).at(-1)?.slice(0,400)}`);
- writeProof({step:'open-design',marker,profile:first.profile,design,folder:designed});
-} finally { if(model) { model.close(); model.closeAllConnections(); } }
 }
 } else if(step==='sandbox-key') {
 // The Engine's pinned ssh client is hard-coded `StrictHostKeyChecking=accept-new`, which trusts a host it has not seen

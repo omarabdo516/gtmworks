@@ -22,7 +22,7 @@ const states: Record<string, [AppAgent['state'], AppAgent['state']]> = { klaviyo
 const items: AppItem[] = apps.map(app => {
   const [mine, writers] = states[app.key] ?? ['off', 'off'];
   const agents = [agent(lead, 'Lead', true, mine), agent(writer, 'Writer', true, writers), agent(helper, 'Helper', false, mine)];
-  return { key: app.key, name: app.name, mark: app.mark, category: app.category, source: app.source, ...(app.url ? { url: app.url } : {}), ...(app.auth ? { auth: app.auth } : {}), ...(app.care ? { care: app.care } : {}), state: mergedState(agents), agents,
+  return { key: app.key, name: app.name, mark: app.mark, category: app.category, source: app.source, ...(app.url ? { url: app.url } : {}), ...(app.auth ? { auth: app.auth } : {}), ...(app.care ? { care: app.care } : {}), ...(app.preset ? { preset: app.preset } : {}), ...(app.docs ? { docs: app.docs } : {}), state: mergedState(agents), agents,
     use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: [app.name, ...[en, ar].flatMap(words => [`use.${app.key}`, `alias.${app.key}`].map(key => (words as Record<string, string>)[key]))].join(' ') };
 });
 const item = (key: string) => items.find(entry => entry.key === key)!;
@@ -326,6 +326,35 @@ test('the own-tool card adds a command that runs in the work sandbox, with its a
 });
 
 // #458: a server added but not reached (an address that does not answer, a refused token) keeps the form, with the reason.
+// Decision 0079: Open Design's card is the same form, filled in for a command in the work sandbox, every field editable,
+// with its guide; Test and Add send what the fields hold, as for any command.
+test('Open Design opens the command card filled in, with its guide, and sends what the Owner kept or changed', async () => {
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); sent.push(body);
+      return Promise.resolve(new Response(JSON.stringify(body.action === 'test' ? { key: 'open-design', state: 'connected', tools: ['list_projects'] } : { key: 'open-design', state: 'connected' }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const args = ['/home/pn/open-design/apps/daemon/dist/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'];
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('open-design')} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('heading', { name: 'Connect Open Design' })).toBeVisible();
+  await expect.element(screen.getByRole('textbox', { name: /Name/ })).toHaveValue('open-design');
+  await expect.element(screen.getByRole('combobox', { name: 'How it connects' })).toHaveValue('command');
+  await expect.element(screen.getByRole('textbox', { name: /^Command/ })).toHaveValue('node');
+  await expect.element(screen.getByRole('textbox', { name: /Arguments/ })).toHaveValue(args.join('\n'));
+  await expect.element(screen.getByRole('link', { name: 'How to put Open Design in the work sandbox and start it' })).toHaveAttribute('href', 'https://github.com/omarabdo516/gtmworks/blob/main/docs/open-design.md');
+  await screen.getByRole('button', { name: 'Test' }).click();
+  await expect.element(screen.getByText('list_projects')).toBeVisible();
+  expect(sent[0]).toEqual({ company: 'c-1', agent: lead, action: 'test', name: 'open-design', kind: 'command', command: 'node', args });
+  // Open Design run elsewhere: the daemon's address is the Owner's to change.
+  await screen.getByRole('textbox', { name: /Arguments/ }).fill([...args.slice(0, 3), 'http://od.internal:7456'].join('\n'));
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.poll(() => sent.at(-1)).toEqual({ company: 'c-1', agent: lead, action: 'add', name: 'open-design', kind: 'command', command: 'node', args: [...args.slice(0, 3), 'http://od.internal:7456'] });
+  await expect.poll(() => toast.mock.calls).toEqual([['open-design added']]);
+});
+
 test('the own-tool card keeps its form when the engine cannot reach the server it added', async () => {
   vi.stubGlobal('fetch', (url: string) => {
     if (url === '/api/company-servers') return Promise.resolve(new Response(JSON.stringify({ key: 'my-crm', state: 'attention' }), { status: 200 }));

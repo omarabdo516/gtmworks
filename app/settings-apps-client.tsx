@@ -264,6 +264,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
   </header>
   <div className="apps-body apps-detail">
    <div className="app-hero"><AppTile app={item} size="lg"/><p>{item.use}</p></div>
+   {custom&&item.docs&&<Guide href={item.docs} name={item.name} say={say}/>}
    {item.care&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say(item.care==='money'?'careMoney':'careCustomers')}</span></p>}
    {state==='attention'&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say('attentionNote')}</span></p>}
    {clientNeeded&&<p className="ro-note sov-warn" role="note" id="app-client-needed"><SettingsIcon name="shield"/><span>{named(say('clientNeeded'),item.name)}{' '}
@@ -313,17 +314,25 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
  </>;
 }
 
+// A guide that says how to run a server the Owner runs themselves (Open Design, docs/open-design.md), in a new tab.
+function Guide({href,name,say}:{href:string,name:string,say:Say}) {
+ return <p className="set-hint"><a className="link-btn" id="app-guide" href={href} target="_blank" rel="noreferrer">{named(say('guide'),name)}</a></p>;
+}
+
 // The Owner's own server (#458): a name, an address, the sign-in kind and, for a token, the token itself; or, as its own
 // kind (#459), a command and its arguments, one per line, which run in the Company's work sandbox. Test adds it to the
 // chosen Agent's profile and reads back the tools the server lists (names only); Add turns it on, and an OAuth server
 // then opens the vendor's window as every app does. The token is kept in this form until the answer and cleared at once;
-// gtmworks never stores or returns it.
+// gtmworks never stores or returns it. A preset (Open Design, decision 0079) opens the same form in the command kind with
+// its name, command and arguments filled in, every one editable, and links the guide that says how to run it.
 function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text}) {
  const say=sayer(text); const router=useRouter(); const reader=useAppsReader(company);
  const own=item.agents.filter(agent=>agent.own);
- const [name,setName]=useState(''); const [address,setAddress]=useState('');
- const [kind,setKind]=useState<'oauth'|'header'|'none'|'command'>('oauth'); const [token,setToken]=useState('');
- const [command,setCommand]=useState(''); const [argLines,setArgLines]=useState('');
+ const preset=item.preset;
+ const [name,setName]=useState(preset?item.key:''); const [address,setAddress]=useState('');
+ const [kind,setKind]=useState<'oauth'|'header'|'none'|'command'>(preset?'command':'oauth'); const [token,setToken]=useState('');
+ const [command,setCommand]=useState(preset?.command??''); const [argLines,setArgLines]=useState(preset?.args.join('\n')??'');
+ const title=preset?named(say('connectTitle'),item.name):say('ownName'); const intro=preset?item.use:say('ownIntro');
  const sandboxed=kind==='command';
  // One argument per line, each exactly as typed; an empty line is not an argument.
  const serverOf=()=>sandboxed?{kind,command:command.trim(),args:argLines.replace(/\r/g,'').split('\n').filter(line=>line!=='')}:{url:address,kind,token:kind==='header'?token:''};
@@ -406,10 +415,12 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  return <>
   <header className="apps-head">
    <div className="sheet__top"><To place={place} step={{back:item.key}} stay={busy} className="circle-btn" id="apps-back" aria-label={say('back')}><SettingsIcon name="back" rtl={rtl}/></To>
-    <h3 {...titled(place)} tabIndex={-1}>{say('ownName')}</h3>{place.kind!=='sheet'&&<InfoTip about={say('ownName')} id="apps-own-sub">{say('ownIntro')}</InfoTip>}<Close place={place}/></div>
-   {place.kind==='sheet'&&<p className="apps-sub">{say('ownIntro')}</p>}
+    <h3 {...titled(place)} tabIndex={-1}>{title}</h3>{place.kind!=='sheet'&&<InfoTip about={preset?item.name:say('ownName')} id="apps-own-sub">{intro}</InfoTip>}<Close place={place}/></div>
+   {place.kind==='sheet'&&<p className="apps-sub">{intro}</p>}
   </header>
   <div className="apps-body apps-detail">
+   {preset&&<div className="app-hero"><AppTile app={item} size="lg"/><p>{item.can}</p></div>}
+   {item.docs&&<Guide href={item.docs} name={item.name} say={say}/>}
    <div className="panel-card own-form">
     <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={(error==='ownRequired'||error==='commandRequired')&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
     <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>{ setKind(event.target.value as 'oauth'|'header'|'none'|'command'); setError(''); }}>
