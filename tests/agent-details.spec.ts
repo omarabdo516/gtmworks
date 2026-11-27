@@ -29,6 +29,8 @@ test.beforeAll(async({},testInfo)=>{
  // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
  freshSeed(testInfo);
  fake=await laneHermes();
+ // The open Run seeded below is still running on the Engine, so the worker leaves it working.
+ fake.settings.heldElsewhere=run=>run==='details-run';
  for(const [name,status,agent] of [['Retargeting ads','ready',ads],['June campaign','running',ads],['Spring copy','triage',copy]] as const)
   cardIds[name]=fake.settings.kanban.task({title:name,status,assignee:profileOf(agent)}).id;
  // Copy, Lead and SEO are made today, so none of them is asleep (#699: an Agent made over 7 days ago with no work for 7
