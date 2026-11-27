@@ -32,7 +32,6 @@ p { overflow-wrap:anywhere; }
 .avatar[style] { color:light-dark(var(--foreground),var(--primary-foreground)); }
 /* An Agent drawn by its name's first letter (components/agent-face) keeps the muted fill, so its letter keeps the foreground in both themes; its inline style is only its size. */
 .avatar.avatar--agent[style] { color:var(--foreground); }
-.recent-title { overflow:hidden; text-overflow:ellipsis; }
 .recent-error { font-size:var(--gw-fs-xs); color:var(--muted-foreground); }
 .content { padding:24px; }
 .heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
@@ -116,9 +115,7 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .home-agents .panel { padding:16px; }
 .home-agents h2 { display:flex; align-items:center; gap:8px; font-size:var(--gw-fs-base); }
 .home-agents p,.home-agents a { font-size:var(--gw-fs-xs); }
-.home-charts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
-.home-charts h2,.home-recent h2 { font-size:var(--gw-fs-base); }
-.home-charts p { font-size:var(--gw-fs-xs); color:var(--muted-foreground); }
+.home-recent h2 { font-size:var(--gw-fs-base); }
 .home-recent { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
 .home-dashboard article { min-width:0; }
 .stats { gap:8px; }
@@ -127,14 +124,7 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .stat .label { font-size:var(--gw-fs-base); color:var(--muted-foreground); }
 .unavailable { color:var(--muted-foreground); }
 .stat strong.unavailable { font-size:20px; }
-.chart-bars { list-style:none; display:grid; gap:8px; padding:0; margin:20px 0 0; font-size:var(--gw-fs-xs); }
-.chart-bars li { display:grid; grid-template-columns:minmax(70px,1fr) 1fr 24px; gap:6px; align-items:center; }
-.bar-track { height:8px; background:var(--muted); border-radius:var(--radius-sm); overflow:hidden; }
-.bar-track i { display:block; height:100%; background:var(--chart-2,var(--foreground)); border-radius:inherit; }
-.acceptance-chart { display:flex; min-height:180px; flex-direction:column; align-items:center; justify-content:center; gap:20px; }
-.acceptance-chart strong { font-size:36px; font-weight:var(--gw-fw-semibold); }
-.acceptance-chart progress { width:100%; accent-color:var(--primary); }
-.home-recent .authored-title,.recent-title { flex:1; }
+.home-recent .authored-title { flex:1; }
 .empty { color:var(--muted-foreground); }
 .split-layout,.cards-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; align-items:start; }
 .company-card .link { display:block; margin-top:24px; }
@@ -161,9 +151,6 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .approval-preview { max-width:100%; max-height:180px; margin-top:8px; border-radius:var(--radius-md); }
 .detail-row .lesson-change { margin:8px 0; padding:8px 12px; border-radius:var(--radius-sm); background:var(--muted); color:var(--foreground); font-size:var(--gw-fs-base); } .lesson-change ins { text-decoration:none; }
 .approval-count { font-size:var(--gw-fs-xs); padding:2px 6px; border-radius:var(--radius-sm); background:var(--muted); margin-inline-start:6px; }
-.decision-form { display:flex; align-items:flex-start; gap:12px; margin:16px 0; }
-.decision-form summary { padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius-md); }
-.approval-settings { margin-top:24px; }
 .agents-panel { min-width:0; }
 .agent-create-form { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin-top:20px; }
 .agent-create-form label,.agent-webhook-form label { display:block; font-size:var(--gw-fs-xs); color:var(--muted-foreground); }
@@ -179,7 +166,7 @@ button.add-card { justify-content:flex-start; border:0; background:transparent; 
 .login { width:calc(100% - 32px); max-width:430px; margin:12vh auto; }
 a:has(.link-pending) { background:var(--sidebar-accent)!important; color:var(--sidebar-accent-foreground)!important; }
 .navigation-progress { position:fixed; inset:0 0 auto; height:3px; background:var(--primary); z-index:60; pointer-events:none; }
-@media(max-width:1100px) { .home-agents { grid-template-columns:repeat(2,minmax(0,1fr)); } .home-charts { grid-template-columns:1fr; } }
+@media(max-width:1100px) { .home-agents { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:767px) {
  .content { padding:16px; } h1 { font-size:20px; line-height:28px; }
  .home-agents,.home-recent,.split-layout,.cards-grid { grid-template-columns:1fr; }

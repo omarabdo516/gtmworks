@@ -469,7 +469,6 @@ function rawValueExceptions() {
     ['app/globals.css', '@layer components .author-chip i', 'border-radius', '999px'],
     ['app/globals.css', '@layer components .stat strong', 'font-size', '30px'],
     ['app/globals.css', '@layer components .stat strong.unavailable', 'font-size', '20px'],
-    ['app/globals.css', '@layer components .acceptance-chart strong', 'font-size', '36px'],
     ['app/globals.css', '@layer components @media(max-width:767px) h1', 'font-size', '20px'],
     ['app/globals.css', '@layer components @media(max-width:767px) .stat strong', 'font-size', '24px'],
     ['app/globals.css', '@layer components @media(max-width:767px) .stat strong.unavailable', 'font-size', '18px'],
