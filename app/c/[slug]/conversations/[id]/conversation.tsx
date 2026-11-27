@@ -15,7 +15,6 @@ import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ConversationSteps } from '@/lib/conversation-steps';
 import type { Send } from '@/lib/sending';
 import { columnLabel } from '@/lib/board-columns.mjs';
-import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';

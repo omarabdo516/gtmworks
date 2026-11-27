@@ -1,0 +1,1 @@
+| `old-board-off.test.mjs` | The old board is switched off (spec #831, #846): no product code (app, components, lib, the worker and the server) names one of the old Card tables, and the check itself finds one named in a line of code; the migrations of the spec drop no table and delete, empty, change or alter no row or table of the old board. | 0.1 s | — | new |
