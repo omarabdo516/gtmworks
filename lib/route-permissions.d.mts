@@ -1,8 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-export type Access = 'viewer' | 'contributor' | 'manager' | 'owner' | 'public' | 'signedIn' | 'setupCode' | 'agentKey';
+export type Access = 'viewer' | 'contributor' | 'manager' | 'owner' | 'installOwner' | 'public' | 'signedIn' | 'setupCode' | 'agentKey';
 type Entry = Access | Record<string, Access>;
 export const roleOrder: string[];
 export const outsideCompany: string[];
+export const beyondRole: string[];
 export const routePermissions: Record<string, Record<string, Access>>;
 export const actionPermissions: Record<string, Entry>;
 export function requiredFor(table: Record<string, Entry>, key: string, part?: string): Access;

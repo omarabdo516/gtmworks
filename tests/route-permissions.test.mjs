@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { globSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { actionPermissions, installWide, outsideCompany, permission, permitted, requiredFor, roleOrder, routePermissions } from '../lib/route-permissions.mjs';
+import { actionPermissions, beyondRole, outsideCompany, permission, permitted, requiredFor, roleOrder, routePermissions } from '../lib/route-permissions.mjs';
 
 // Rule b of 2026-11-13: every server route and server action is in one table (lib/route-permissions.mjs), anything
 // missing needs Owner, and the role is read from the database on every request.
@@ -88,7 +88,7 @@ test('a route or action added without a table entry is reported, and needs Owner
 });
 
 test('every table entry names a known level, and no route or action in it is gone from the tree', () => {
-  const known = new Set([...roleOrder, ...outsideCompany, ...installWide]);
+  const known = new Set([...roleOrder, ...outsideCompany, ...beyondRole]);
   for (const entry of [...Object.values(routePermissions).flatMap(Object.values), ...Object.values(actionPermissions).flatMap(value => typeof value === 'string' ? [value] : Object.values(value))]) assert.ok(known.has(entry), entry);
   assert.deepEqual(Object.keys(routePermissions).filter(file => !routeFiles().includes(file)), []);
   const actions = actionFiles().flatMap(file => exportedActions(read(file)));

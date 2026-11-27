@@ -1,8 +1,8 @@
-// The install owner's Hermes dashboard on the pinned Engine (#869, spec #866; #915), run by the install proof's proxy area
-// in a Node container against the HTTPS proxy in front of the install, after first run made the Owner, the install owner,
-// and their Company. It is
-// Probe B's gate check (docs/engine-probes/engine-dashboard.md) on the product's own gate:
-// - the Owner loads the dashboard's first page, an inner page, the code its first page names, a lazily loaded page's
+// The install owner's Hermes dashboard on the pinned Engine (#869, spec #866, #915), run by the install proof's proxy
+// area in a Node container against the HTTPS proxy in front of the install, after first run made the install owner, the
+// first Administrator, and their Company. It is Probe B's gate check (docs/engine-probes/engine-dashboard.md) on the
+// product's own gate:
+// - the install owner loads the dashboard's first page, an inner page, the code its first page names, a lazily loaded page's
 //   code at the root /assets/ for the page that asks for it, an API route, and a socket through gtmworks's web server;
 // - a Manager, a Contributor, a Viewer and an Administrator who is not the install owner (#915) of the same Company, an
 //   Owner of another Company only, all made here, and a
@@ -11,7 +11,8 @@
 // - no answer to any of them, and no socket's upgrade or frames, holds the Engine's key (ENGINE_KEY, given by name);
 // - the dashboard's live parts close with the Role (#870): the install owner opens the chat, its terminal and the
 //   board's event stream; within five seconds of their Role being changed every one is closed and gets nothing after
-//   that line, the terminal included, and a new one is refused.
+//   that line, the terminal included, and a new one is refused; given the Role back, a new board stream reports the next
+//   Card.
 // - the dashboard is in gtmworks's colours and the Owner's language (#872): gtmworks's theme, light and dark, is the
 //   default of this new Company's Engine, with gtmworks's name where Hermes shows its wordmark, and paints its first
 //   page; the page is in the Owner's language and colour scheme, and in Arabic, right to left and dark on its next load
@@ -227,17 +228,20 @@ const changed=Date.now();
 for(const one of live.all) one.line=changed+5000;
 try {
  await json(`/rest/v1/members?company_id=eq.${company}&person_id=eq.${ownerId}`,{method:'PATCH',headers:asService,body:JSON.stringify({role:'manager'})});
- await until('every socket of the Owner whose Role changed is closed',()=>live.all.every(one=>one.closedAt!==null),7000);
+ await until('every socket of the Administrator whose Role changed is closed',()=>live.all.every(one=>one.closedAt!==null),7000);
  for(const one of live.all) assert.ok(one.closedAt-changed<5000,`${one.path} closed ${one.closedAt-changed} ms after the change, within five seconds`);
- assert.equal((await get(`${prefix}/api/auth/ws-ticket`,{cookie:owner,method:'POST'})).status,404,'the changed Owner mints no new ticket');
- assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,owner),404,'the changed Owner opens no new socket');
+ assert.equal((await get(`${prefix}/api/auth/ws-ticket`,{cookie:owner,method:'POST'})).status,404,'the changed Administrator mints no new ticket');
+ assert.equal(await socketOpens(`${prefix}/api/ws?ticket=any`,owner),404,'the changed Administrator opens no new socket');
 } finally { await json(`/rest/v1/members?company_id=eq.${company}&person_id=eq.${ownerId}`,{method:'PATCH',headers:asService,body:JSON.stringify({role:'owner'})}); }
+const reopened=await liveParts(owner,'install owner\'s reopened');
 const after=await card('A Card after the Role changed');
+await until('a board stream opened with the Role given back reports the Card',()=>after(reopened.board),30000);
+for(const one of reopened.all) one.socket.destroy();
 for(const one of live.all) {
  assert.equal(one.after,0,`${one.path} got nothing after the line`);
  assert.ok(!after(one),`${one.path} never reported the Card made after the change`);
 }
-console.log(`The chat, the terminal and the board stream of the install owner made a Manager closed within ${Math.max(...live.all.map(one=>one.closedAt-changed))} ms and got nothing after`);
+console.log(`The chat, the terminal and the board stream of the install owner made a Manager closed within ${Math.max(...live.all.map(one=>one.closedAt-changed))} ms and got nothing after; given the Role back, a new board stream reported the next Card`);
 
 // The four refusals on the pinned Engine (#871): each is refused for the Owner on its route with gtmworks's answer, which
 // names where gtmworks does it; the update route leaves the Engine's version as it was; writing a key stays open, and the

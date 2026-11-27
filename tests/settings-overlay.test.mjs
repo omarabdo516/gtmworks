@@ -230,7 +230,7 @@ test('the Engine dashboard row is shown only to an Administrator who is the inst
   assert.deepEqual(findSections('logs', 'owner', t, true).map(([key]) => key), ['hermes']);
   // Backup stays every Administrator's (#33).
   assert.ok(visibleSections('owner', false).some(([key]) => key === 'backup'));
-  // It reads as a technical tool, in both languages, and never names the Engine (#286).
+  // It reads as a technical tool, in both languages, and never names the Engine's product (#286).
   assert.equal(messages.en.settingsEngineDashboard, 'Engine logs and system (advanced)');
   assert.equal(messages.ar.settingsEngineDashboard, 'سجلات المحرك والنظام (متقدم)');
 });
