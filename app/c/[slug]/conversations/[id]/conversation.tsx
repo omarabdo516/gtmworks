@@ -157,6 +157,7 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
  const [mode,setMode]=useState<'reading'|'engine'|'fallback'>('reading');
  const [failed,setFailed]=useState(false);
  const [older,setOlder]=useState(false);
+ const [moreFailed,setMoreFailed]=useState(false);
  const [usage,setUsage]=useState<ConversationRecord['usage']>(null);
  const pageRef=useRef<EnginePage|null>(null); const modeRef=useRef(mode); const olderRef=useRef(false); const oldRef=useRef(hasOldMessages); const lastAsk=useRef(0);
  useEffect(()=>{ pageRef.current=page; },[page]);
@@ -197,7 +198,7 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
     const kept=overlaps?current!.messages.filter(message=>!fresh.has(message.id)):[];
     const older=overlaps&&current!.nextOffset>readNow.nextOffset;
     const next=overlaps?{messages:[...kept,...readNow.messages],nextOffset:Math.max(readNow.nextOffset,current!.nextOffset),hasMore:older?current!.hasMore:readNow.hasMore}:{messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
-    pageRef.current=next; setPage(next); setMode('engine'); setFailed(false);
+    pageRef.current=next; setPage(next); setMode('engine'); setFailed(false); setMoreFailed(false);
     if(readNow.messages.length) rememberPage(storage,{messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore});
    } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
    else if(oldRef.current()>0) setMode('fallback');
@@ -233,7 +234,8 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    // the history ends, so the messages before it are never lost. Twenty pages at a time; a later scroll goes on.
    for(let step=0;step<20;step++) {
     const readNow=await read(current.nextOffset);
-    if(readNow.state!=='found'||!pageRef.current) return false;
+    if(readNow.state!=='found'||!pageRef.current) { setMoreFailed(true); return false; }
+    setMoreFailed(false);
     const seen=new Set(pageRef.current.messages.map(message=>message.id));
     const carried=readNow.messages.filter(message=>!seen.has(message.id));
     if(carried.length) {
@@ -247,7 +249,7 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    return false;
   } finally { olderRef.current=false; setOlder(false); }
  };
- return {page,mode,failed,older,more,usage,refresh:()=>void refreshRef.current(),hasMore:page?.hasMore??false};
+ return {page,mode,failed,older,moreFailed,more,usage,refresh:()=>void refreshRef.current(),hasMore:page?.hasMore??false};
 }
 
 export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean}) {
@@ -276,9 +278,10 @@ export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,st
  // transcript scrolls or the history ends, so there is no history a person cannot reach (#875).
  useLayoutEffect(()=>{
   const view=box.current;
-  if(!view||!engine.page||engine.older||!engine.hasMore) return;
+  // A failed older read is not retried by this effect: the person can scroll again, and a good refresh clears it.
+  if(!view||!engine.page||engine.older||engine.moreFailed||!engine.hasMore) return;
   if(!engine.page.messages.length||view.scrollHeight<=view.clientHeight+80) void engine.more();
- },[engine.page?.nextOffset,engine.hasMore,engine.older]); // eslint-disable-line react-hooks/exhaustive-deps
+ },[engine.page?.nextOffset,engine.hasMore,engine.older,engine.moreFailed]); // eslint-disable-line react-hooks/exhaustive-deps
  const welcome=!shown.messages.length&&agent?.main;
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
