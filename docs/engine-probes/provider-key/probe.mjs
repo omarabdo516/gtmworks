@@ -115,7 +115,8 @@ await main(async()=>{
  // Kept once means the key was only ever borrowed: with the root's entry gone, the next Run must fail. It answered, so the
  // profile copied the key into its own store on an earlier Run, and that copy outlives the removal of both keys.
  if(afterRoot.done.status==='failed') mark(5,true,'the key answered, and with the env copy and then the root\'s entry removed the next Run fails: the key stayed once, borrowed and never copied');
- else mark(5,false,`the key answered, but the profile copied it into its own auth.json on an earlier Run, and the copy outlives the removal of both keys (after the root's entry was removed the Run still ended ${afterRoot.done.status}, sent with ${afterRoot.auth})`);
+ else if(afterRoot.done.status==='completed'&&afterRoot.auth===`Bearer ${KEY_B}`) mark(5,false,`the key answered, but the profile copied it into its own auth.json on an earlier Run, and the copy outlives the removal of both keys (after the root's entry was removed the Run still ended ${afterRoot.done.status}, sent with ${afterRoot.auth})`);
+ else fail('the Run after the root\'s entry is removed ends failed, or completed with the copied key',JSON.stringify({status:afterRoot.done.status,auth:afterRoot.auth}));
 
  say('');
  const failed=verdicts.filter(one=>!one.ok);
