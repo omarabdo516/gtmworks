@@ -132,6 +132,9 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:?Run scripts/install.sh}
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:?Run scripts/install.sh}
       SETUP_CODE: ${SETUP_CODE:?Run scripts/install.sh}
+      # Optional (#914): this install's own Meta app, for Meta Ads (docs/connect-meta-ads.md).
+      META_ADS_CLIENT_ID: ${META_ADS_CLIENT_ID:-}
+      META_ADS_CLIENT_SECRET: ${META_ADS_CLIENT_SECRET:-}
       GTMWORKS_SELF_HOSTED: "true"
     command: [sh, -c, "node lib/install-env.mjs validate web && exec node scripts/web-server.mjs"]
     healthcheck:

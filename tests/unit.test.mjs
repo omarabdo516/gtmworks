@@ -365,3 +365,12 @@ test('every server action is wrapped so a thrown failure is logged',()=>{
  assert.ok(files.length>=5,files.join());
  for(const file of files) for(const line of readFileSync(file,'utf8').split('\n').filter(line=>/^export /.test(line))) assert.match(line,/^export const (\w+)=withActionLog\('\1',/,`${file}: ${line.slice(0,60)}`);
 });
+
+test('a failed app sign-in\'s log line is redacted whole before it is bounded, so no part of a secret is left (#914)', async () => {
+  const { appSignInFailedLine } = await import('../lib/diagnostics.mjs');
+  const secret = 'S'.repeat(40);
+  const line = JSON.parse(appSignInFailedLine({ app: 'meta-ads', reason: 'registration', detail: `${'a '.repeat(185)}${secret} and more` }, { env: {} }));
+  assert.equal(line.message.length <= 400, true);
+  assert.doesNotMatch(line.message, /SSSS/);
+  assert.equal(JSON.parse(appSignInFailedLine({ app: 'meta-ads', reason: 'engine', detail: 'x' }, { env: {} })).reason, 'engine');
+});
