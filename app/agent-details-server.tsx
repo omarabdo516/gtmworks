@@ -7,7 +7,7 @@ import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { agentFiles, agentLogFilter, fileSize, latestActivity, pickTab, type DetailsTab } from '@/lib/agent-details.mjs';
 import { agentFaceStates, type AgentFaceState } from '@/lib/agent-face-states';
 import { ShellIcon } from '@/components/shell-icon';
-import { drawnAt, type LogRow } from '@/lib/activity-log.mjs';
+import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
 import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
 import { detailsTabs } from '@/app/agent-details-tabs';
@@ -27,7 +27,6 @@ const logShown=50;
 // The Agent's name and the reader's role may still be on their way: a page can start the details' reads beside its own
 // (the chat does) and they are awaited with the first of them.
 export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:roled,tab}:{company:string,agent:string,name:string|PromiseLike<string>,slug:string,me:string,role:string|PromiseLike<string>,tab?:string}):Promise<AgentDetailsView> {
- const drawn=drawnAt();
  // The Agent's state for the reader (#699), the sidebar's own read; the open Run above says only what it is doing.
  const stateRead=agentFaceStates(db,company);
  const [{t,language},name,role,{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount},{data:channelFileRows,count:channelFileCount}]=await Promise.all([getI18n(),named,roled,

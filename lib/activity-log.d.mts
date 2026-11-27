@@ -5,7 +5,6 @@ export const subscriptionNames:Record<string,string>;
 export function describeEntry(row: Pick<LogRow, 'action' | 'subject' | 'details' | 'body' | 'person_id' | 'agent_id'>, names?: { name?: (id: string) => string | undefined, agentName?: (id: string) => string | undefined }): LogLine;
 export type Who = { kind: 'all' } | { kind: 'system' } | { kind: 'person' | 'agent', id: string };
 export function parseWho(value: unknown): Who;
-export function parseCard(value: unknown): number | null;
 export const logPageSize: number;
 export function logCursor(row: { created_at: string, id: number }): string;
 export function parseBefore(value: unknown): { at: string, id: string } | null;
@@ -14,7 +13,4 @@ export function dateFormatter(locale: string, options: Intl.DateTimeFormatOption
 export function dayOf(iso: string, timeZone?: string): string;
 export function daysBack(day: string, today: string): number;
 export function groupByDay<T extends { id: number, created_at: string }>(rows: T[], timeZone?: string): { day: string, items: T[] }[];
-export const noteEditWindow: number;
-export function currentNoteText<T extends { action: string, details: Record<string, unknown> }>(rows: T[], comments: { id: number, body: string }[]): T[];
-export function drawnAt(): number;
 export function logEmptyNote(rows: { companyRows: number | null }): 'noMatch' | 'empty';
