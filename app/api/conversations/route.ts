@@ -14,6 +14,7 @@ import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestByt
 import { discardConversationFiles, keepConversationFiles, type ConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
+import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-messages';
 import { conversationSteps } from '@/lib/conversation-steps';
 import { agentAppStates } from '@/lib/company-app-items';
 
@@ -202,6 +203,34 @@ async function retry(db:Database,body:Record<string,unknown>) {
  return reply(retried);
 }
 
+// A page of the Conversation's messages, read from its Agent's Engine session (#875): the last 50 when it opens, then
+// the 50 before each time the person scrolls back. This is the messages' own request, never the page's (ADR 0030): the
+// frame, the Agent and the composer are drawn without it, and the browser keeps the last page it read while this one
+// answers. Only the Conversation's own person reads it (the row is read with their session, and named as theirs), and
+// another Member of the Company or of another Company is answered not found as the row is. `none` is a Conversation
+// with no Engine session yet; the browser then draws what the old record holds until its first send gives one.
+async function messages(db:Database,person:string,company:string,conversation:string,offset:unknown,limit:unknown) {
+ const from=typeof offset==='string'?Number.parseInt(offset,10):0;
+ const size=typeof limit==='string'?Number.parseInt(limit,10):50;
+ if(!Number.isSafeInteger(from)||from<0||!Number.isSafeInteger(size)||size<1||size>50) return refuse('conversationFailed',400);
+ const {data:found,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
+ if(error) return refuse('conversationUnread',503);
+ if(!found) return refuse('conversationNotFound',404);
+ const read=await conversationMessagesPage(db,company,found,{offset:from,limit:size}).catch(()=>null);
+ if(!read) return refuse('conversationUnread',503);
+ if(read.state==='notSeen') return refuse('conversationNotFound',404);
+ return reply(read);
+}
+
+// The Conversation's token use (#347), its Engine session's detail read on its own request after the messages (ADR 0030).
+// Only its own person asks; a session the Engine does not know is null, and the page keeps no usage line.
+async function usage(db:Database,person:string,company:string,conversation:string) {
+ const {data:found,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
+ if(error) return refuse('conversationUnread',503);
+ if(!found) return refuse('conversationNotFound',404);
+ return reply({usage:await conversationUsage(db,company,found).catch(()=>null)});
+}
+
 // Each reply's steps and the Conversation's token use (#766, ADR 0030): their own request, after the messages are drawn,
 // read from the Agent's Hermes session through the person's own session (RLS sees only their Conversation), on the
 // profile the Engine handle gives this reader: an Agent hidden from them is not found (#782). A session that cannot be
@@ -257,6 +286,8 @@ async function respond(request:NextRequest) {
    const {data:agents}=writer?await db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',body.company).order('name'):{data:[]};
    return reply({writer:!!writer,agents:agents||[]});
   }
+  if(body.intent==='read') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await messages(db,user.id,body.company,body.conversation,body.offset,body.limit):refuse('conversationNotFound',404);
+  if(body.intent==='usage') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await usage(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
   if(body.intent==='steps') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await steps(db,body.company,body.conversation):refuse('conversationNotFound',404);
   if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
   return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation,body.since):refuse('conversationNotFound',404);

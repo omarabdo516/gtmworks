@@ -7,7 +7,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { companyOf, companyReader } from '@/lib/company-reader';
 import Page from '@/app/page-frame';
-import ConversationView, { ConversationLoaded, ConversationNotRead } from './conversation';
+import ConversationView, { ConversationLoaded, ConversationNotRead, EngineLoaded } from './conversation';
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
@@ -53,7 +53,9 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Each reply's steps and the token use (#766, ADR 0030) go out now beside the record and come down the same response
  // once read, never awaited by the page or the messages: the chat shows them without first waiting for its script and
  // a second request (decision 0042). A read that fails is null, and the replies stay as they are.
- const steps=conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
+ // The Engine's messages and their steps are one read now (#875); the old record's steps and usage are read only for a
+ // Conversation with no Engine session yet.
+ const steps=conversation.hermes_session_id?Promise.resolve(null):conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
  // The Agent's details beside the chat, while it is still attached to the company, and the reader's role. The details'
  // reads go out now with them, not after the frame's reads (decision 0042): they are the page's longest, and the page
  // has loaded only once they are drawn.
@@ -91,15 +93,19 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={!!conversation.hermes_session_id}/></ConversationView></main>
  </Page>;
 }
 
-// The chat once its record is read, streamed in place of the placeholder.
-async function Loaded({record,steps,team}:{record:ReturnType<typeof conversationRecord>,steps:Promise<ConversationSteps|null>,team:boolean}) {
+// The chat once its record is read, streamed in place of the placeholder. A Conversation with an Engine session reads
+// its messages from the Engine on their own request (#875); one without reads what the old record holds, as until its
+// first send gives it a session. The old record is still read here as that fallback and for the frame's other states;
+// #883 switches it off.
+async function Loaded({record,steps,team,engine}:{record:ReturnType<typeof conversationRecord>,steps:Promise<ConversationSteps|null>,team:boolean,engine:boolean}) {
  // Everything outside this boundary is drawn by now, so the page's first bytes leave next.
  markOpen('firstByte');
  // A record that could not be read draws its line with "Try again", never an empty Conversation (#768).
  const read=await record.catch(()=>null);
- return read?<ConversationLoaded initial={read} steps={steps} team={team}/>:<ConversationNotRead/>;
+ if(!read) return <ConversationNotRead/>;
+ return engine?<EngineLoaded key={read.conversation.id} initial={read} steps={steps} team={team}/>:<ConversationLoaded initial={read} steps={steps} team={team}/>;
 }

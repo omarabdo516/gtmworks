@@ -25,7 +25,7 @@ import { toast } from '@/app/toast';
 import { useRouter } from 'next/navigation';
 
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
-type Live={record:ConversationRecord,asked:()=>void,sending:Send};
+type Live={record:ConversationRecord,asked:()=>void,sending:Send,engine?:true};
 // The record, and the sends made before it arrived, reach the title, the corner and the composer through this store,
 // not through this frame's state or its context value: the transcript arrives while the page still streams in, and a
 // render of this frame then would make React draw the transcript again in the browser, leaving the streamed copy hidden
@@ -76,7 +76,9 @@ function ChatHead({panel,agent,conversation,title}:{panel:DetailsPanel,agent:Det
  const record=live?.record;
  // The head's face shows the Agent's state as the sidebar's tile does (app/sidebar-live), with what this chat knows.
  const state=useAgentState(conversation.agent_id??'');
- return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto"/></>;
+ // The Engine's messages are a page of the end, not the Conversation's first words: its title stays the database's.
+ const named=record&&!live?.engine;
+ return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={named?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto"/></>;
 }
 
 // The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or
@@ -121,6 +123,141 @@ const useView=()=>use(ChatView)!;
 export function ConversationNotRead() {
  const {c}=useConversationText(); const router=useRouter();
  return <div className="transcript"><div className="transcript__col"><p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')} <button type="button" className="link-btn" onClick={()=>router.refresh()}>{c('conversationTryAgain')}</button></p></div></div>;
+}
+
+// A Conversation whose messages are the Engine's (#875): the page draws its frame, Agent and composer from the database
+// and this reads the last 50 messages from the Agent's session on a request of its own (ADR 0030). Scroll to the top
+// reads the 50 before. The last good read stays in this browser while a new read runs, and a read that fails after one
+// says it could not refresh. A Conversation with no Engine session, or one whose session the Engine does not answer,
+// falls back to the old record once, as until its first send gives it a session.
+type EnginePage={messages:ConversationRecord['messages'],nextOffset:number,hasMore:boolean};
+type EngineRead=(EnginePage&{state:'found'})|{state:'none'|'notSeen'|'missing'|'refused'|'unreachable'|'unread'};
+const engineReads=new Map<string,EnginePage>();
+const engineKey=(company:string,conversation:string)=>`gw-conversation:${company}:${conversation}`;
+function rememberedPage(storage:string):EnginePage|null {
+ const held=engineReads.get(storage);
+ if(held) return held;
+ try {
+  const raw=sessionStorage.getItem(storage); if(!raw) return null;
+  const page=JSON.parse(raw) as EnginePage;
+  return Array.isArray(page?.messages)&&Number.isSafeInteger(page.nextOffset)?page:null;
+ } catch { return null; }
+}
+function rememberPage(storage:string,page:EnginePage) {
+ // The last reads of the conversations this tab opened, ten of them: enough to go back to one, never a growing copy.
+ if(engineReads.size>=10) { const oldest=engineReads.keys().next().value; if(oldest) { engineReads.delete(oldest); try { sessionStorage.removeItem(oldest); } catch { /* Nothing kept. */ } } }
+ engineReads.set(storage,page);
+ try { sessionStorage.setItem(storage,JSON.stringify(page)); } catch { /* The last read stays in memory. */ }
+}
+// The messages' own read, kept beside the frame: `page` is what is drawn, `mode` whether it is the Engine's or the old
+// record's, `failed` a read that failed after a good one, and `more` the 50 before the oldest drawn.
+function useEnginePage(company:string,conversation:string,hasOldMessages:()=>number) {
+ const storage=engineKey(company,conversation);
+ const [page,setPage]=useState<EnginePage|null>(null);
+ const [mode,setMode]=useState<'reading'|'engine'|'fallback'>('reading');
+ const [failed,setFailed]=useState(false);
+ const [older,setOlder]=useState(false);
+ const [usage,setUsage]=useState<ConversationRecord['usage']>(null);
+ const pageRef=useRef<EnginePage|null>(null); const modeRef=useRef(mode); const olderRef=useRef(false); const oldRef=useRef(hasOldMessages);
+ useEffect(()=>{ pageRef.current=page; },[page]);
+ useEffect(()=>{ modeRef.current=mode; },[mode]);
+ useEffect(()=>{ oldRef.current=hasOldMessages; },[hasOldMessages]);
+ const read=async(offset:number):Promise<EngineRead>=>{
+  try {
+   const response=await fetch(`/api/conversations?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}&intent=read&offset=${offset}&limit=50`,{cache:'no-store'});
+   if(!response.ok) { await response.arrayBuffer().catch(()=>{}); return {state:response.status===404?'notSeen':'unread'}; }
+   return await response.json() as EngineRead;
+  } catch { return {state:'unread'}; }
+ };
+ // The token use is the session detail's, on a request of its own, so a slow detail never holds the messages (ADR 0030).
+ const readUsage=async()=>{
+  try {
+   const response=await fetch(`/api/conversations?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}&intent=usage`,{cache:'no-store'});
+   if(!response.ok) { await response.arrayBuffer().catch(()=>{}); return; }
+   const body=await response.json() as {usage?:ConversationRecord['usage']};
+   if(body.usage) setUsage(body.usage);
+  } catch { /* The last usage read stays. */ }
+ };
+ const refresh=async()=>{
+  const held=rememberedPage(storage);
+  if(held&&!pageRef.current) { pageRef.current=held; setPage(held); setMode('engine'); }
+  void readUsage();
+  const readNow=await read(0);
+  if(readNow.state==='found') {
+   if(readNow.messages.length) {
+    const next={messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
+    pageRef.current=next; setPage(next); setMode('engine'); rememberPage(storage,next); setFailed(false);
+   } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
+   else if(oldRef.current()>0) setMode('fallback');
+   else { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); setMode('engine'); }
+   return;
+  }
+  if(pageRef.current||modeRef.current==='engine') setFailed(true);
+  else setMode('fallback');
+ };
+ const refreshRef=useRef<()=>Promise<void>>(async()=>{});
+ useEffect(()=>{ refreshRef.current=refresh; });
+ // The last good read this browser kept shows at once, then a read asks the Engine again (and a tab that comes back
+ // asks once more). A first read that fails or finds no messages leaves the old record in charge.
+ useEffect(()=>{
+  void refreshRef.current();
+  const shown=()=>{ if(document.visibilityState==='visible') void refreshRef.current(); };
+  window.addEventListener('focus',shown);
+  document.addEventListener('visibilitychange',shown);
+  return ()=>{ window.removeEventListener('focus',shown); document.removeEventListener('visibilitychange',shown); };
+ },[company,conversation]);
+ const more=async()=>{
+  const current=pageRef.current;
+  if(!current?.hasMore||olderRef.current) return false;
+  olderRef.current=true; setOlder(true);
+  try {
+   const readNow=await read(current.nextOffset);
+   if(readNow.state!=='found'||!pageRef.current) return false;
+   const seen=new Set(pageRef.current.messages.map(message=>message.id));
+   const carried=readNow.messages.filter(message=>!seen.has(message.id));
+   if(!carried.length) { const done={...pageRef.current,hasMore:false}; pageRef.current=done; setPage(done); return false; }
+   const next={messages:[...carried,...pageRef.current.messages],nextOffset:readNow.nextOffset,hasMore:readNow.hasMore};
+   pageRef.current=next; setPage(next); return true;
+  } finally { olderRef.current=false; setOlder(false); }
+ };
+ return {page,mode,failed,older,more,usage,refresh:()=>void refreshRef.current(),hasMore:page?.hasMore??false};
+}
+
+export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean}) {
+ const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
+ const {record,asked,reread,sending}=useConversationRecord({company,initial,steps});
+ const {c}=useConversationText();
+ const engine=useEnginePage(company,conversation.id,()=>record.messages.length);
+ // What the transcript draws: the Engine's messages when they were read, else the old record, which a first read that
+ // fails leaves in charge (and which the composer and the title read either way). The old record's live states — the
+ // working line, Stop, a question or a request to act — wait for #876 to #879, which bring them on this read.
+ const shown=useMemo(()=>{
+  const base=engine.page?{...record,messages:engine.page.messages,pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
+  const usage=engine.usage??base.usage;
+  return usage===base.usage?base:{...base,usage};
+ },[record,engine.page,engine.usage]);
+ useLayoutEffect(()=>{ store.set({record:shown,asked,sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
+ const box=useRef<HTMLDivElement>(null); const stick=useRef(true); const preserve=useRef<{height:number,top:number}|null>(null);
+ // The newest page opens on its last message; a page read above the oldest keeps the reader where they were.
+ useLayoutEffect(()=>{
+  const view=box.current; if(!view) return;
+  const held=preserve.current;
+  if(held) { view.scrollTop=view.scrollHeight-held.height+held.top; preserve.current=null; }
+  else if(stick.current) view.scrollTop=view.scrollHeight;
+ },[shown.messages.length]);
+ const welcome=!shown.messages.length&&agent?.main;
+ return <div className="transcript" ref={box} onScroll={event=>{
+  const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
+  if(view.scrollTop<80&&view.scrollHeight>view.clientHeight+80&&engine.hasMore&&!engine.older) {
+   preserve.current={height:view.scrollHeight,top:view.scrollTop};
+   void engine.more().then(added=>{ if(!added) preserve.current=null; });
+  }
+ }}><div className="transcript__col">
+  {team&&<PrivateLine agent={conversation.agent_name}/>}
+  {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
+  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={asked} reread={reread} details={!!agent}/>}
+  {engine.failed&&engine.page&&<p className="note convo-status" role="alert" data-outcome="refresh" data-refresh>{c('conversationNoRefresh')} <button type="button" className="link-btn" onClick={engine.refresh}>{c('conversationTryAgain')}</button></p>}
+ </div></div>;
 }
 
 export function ConversationLoaded({initial,steps,team}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean}) {

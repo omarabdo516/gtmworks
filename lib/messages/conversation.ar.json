@@ -3,6 +3,8 @@
   "conversationQueued": "هيقراها بعد الرد اللي شغال عليه",
   "conversationNotSent": "ما اتبعتتش",
   "conversationUnread": "مقدرناش نقرا المحادثة دي.",
+  "conversationNoRefresh": "مقدرناش نحدّث. بنعرض آخر حاجة اتقرت.",
+  "conversationEngineSummary": "ملخص المحرك للرسايل الأقدم",
   "conversationTryAgain": "جرّب تاني",
   "conversationAnswerNotDelivered": "موصلتش: الوكيل كان بطّل يستنى الإجابة دي. ابعتها تاني في رسالة جديدة.",
   "conversationAddressed": "لـ {0} · الوكيل متسألش",

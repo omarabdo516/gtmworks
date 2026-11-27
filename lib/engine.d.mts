@@ -27,6 +27,14 @@ export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'fai
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};
+// One stored message of a session, as the Engine's messages route returns it: a person's message, the Agent's tool call,
+// the tool's answer or its reply, and the Engine's own compaction summary (a user message that starts with
+// `[CONTEXT COMPACTION`). The fields gtmworks reads are named; the Engine may send more.
+export type SessionMessage={role:string,content?:unknown,timestamp?:number,tool_calls?:unknown,tool_call_id?:string,tool_name?:string,message_uid?:string,id?:number,display_kind?:string,compacted?:number,[field:string]:unknown};
+// The last messages of a session, a page at a time (#875). `prefix` is the page before the one asked for, when that one
+// starts in the middle of a turn: only its tool calls are read, so the first reply on the page still carries its steps.
+// `usage` is the session's token use, read beside the newest page only.
+export type SessionMessagesRead={state:'found',messages:SessionMessage[],prefix:SessionMessage[],more:boolean}|{state:'missing'|'refused'|'unreachable',messages:null,prefix:[],more:false};
 // A Run's tool calls as they happen (#646): each call starting (its id, tool and the Engine's preview) or ending (done or
 // failed, by the same id, or none when the Engine gave it none), a loss when older events are gone, and one end last.
 export type RunStepEvent={seq:number,step:{call:string|null,tool:string,preview:string|null,state:'started'|'done'|'failed'}};

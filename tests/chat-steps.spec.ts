@@ -37,7 +37,7 @@ test.beforeAll(async({browser},testInfo)=>{
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
-test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows them within one second of opening',async({page})=>{
+test('a reply\'s steps on screen are its Hermes session\'s, and the chat\'s first byte is under one second',async({page})=>{
  const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`steps-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
  query(`do $$ begin
@@ -59,25 +59,29 @@ test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows t
  await page.goto(`/c/rs-learning/conversations/${conversation}`,{waitUntil:'commit'});
  await expect(toggle).toHaveText('Used 2 tools · 41 sec');
  const took=Date.now()-opened;
- console.log(`chat open to steps visible: ${took} ms`);
  // Where the time went, read after the clock stops: the browser's own timing of the page, and the server's chat_opened
  // line for this open (docs/production-logs.md), written once its response has gone.
  const nav=await page.evaluate(()=>{ const entry=performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming; return {firstByte:Math.round(entry.responseStart),domContentLoaded:Math.round(entry.domContentLoadedEventEnd),load:Math.round(entry.loadEventEnd)}; });
+ console.log(`chat open: first byte ${nav.firstByte} ms, steps visible ${took} ms`);
  console.log(`  browser: ${JSON.stringify(nav)}`);
  const line=async()=>(await readFile(serverLogOf(),'utf8').catch(()=>'')).split('\n').find(entry=>entry.includes('"chat_opened"')&&entry.includes(conversation));
  await expect.poll(line,{timeout:5000}).toBeTruthy().catch(()=>{});
  console.log(`  server: ${await line()??'no chat_opened line'}`);
- test.info().annotations.push({type:'open-to-steps-visible-ms',description:String(took)});
- expect(took,'the chat opens with its steps within one second').toBeLessThan(1000);
+ test.info().annotations.push({type:'first-byte-ms',description:String(nav.firstByte)},{type:'open-to-steps-visible-ms',description:String(took)});
+ // ADR 0030's target: the page's first content, from the database, leaves in under a second. The messages and their
+ // steps are the Engine's own request now (#875), so they follow once it answers; the steps are still proved here.
+ expect(nav.firstByte,'the chat\'s first byte').toBeLessThan(1000);
+ expect(took,'the steps are drawn once the session answers').toBeLessThan(3000);
  await toggle.click();
  await expect(page.locator('.steps__list .step')).toHaveText(['web_search · accounting courses CairoDone','read_file · campaigns.csvSkipped']);
  expect(fake.settings.managementRequests.some(request=>request.path?.startsWith(`/api/sessions/${session}/messages?profile=${profile}`)),'read from the Agent\'s own profile').toBe(true);
 });
 
-// #766 (ADR 0030): the Conversation's record never waits on the Engine. With the session's read held five seconds, the
-// page's first byte and its messages are not held by it, the steps fill in once it answers, and a read that never
-// answers leaves the messages as they are, with no error line.
-test('a session read held five seconds holds neither the first byte nor the messages, and the steps arrive after',async({page})=>{
+// #875 (ADR 0030): the page's frame, Agent and composer never wait on the Engine; the messages are the Engine's own
+// request now. With the session's read held three seconds, the first byte and the composer are drawn without it, the
+// messages and their steps arrive once it answers, and a read that never answers leaves the old record's messages, with
+// no error line.
+test('a session read held three seconds holds neither the first byte nor the composer, and the messages and steps arrive after',async({page})=>{
  const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`slow-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T11:12:00Z')/1000;
  query(`do $$ begin
@@ -92,27 +96,29 @@ test('a session read held five seconds holds neither the first byte nor the mess
   {role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:sent+10},
   {role:'assistant',content:'Here is the copy.',timestamp:sent+42}]});
  await signIn(page,'omar@example.com','/c/rs-learning/home');
- fake.settings.sessionDelay=5000;
+ fake.settings.sessionDelay=3000;
  try {
   const opened=Date.now();
   await page.goto(`/c/rs-learning/conversations/${conversation}`,{waitUntil:'commit'});
-  await expect(page.getByText('Here is the copy.')).toBeVisible();
-  const took=Date.now()-opened;
+  await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
+  const composed=Date.now()-opened;
   const firstByte=await page.evaluate(()=>Math.round((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).responseStart));
-  console.log(`chat open with a slow session, messages visible: ${took} ms, first byte ${firstByte} ms`);
+  console.log(`chat open with a slow session, composer ${composed} ms, first byte ${firstByte} ms`);
   expect(firstByte,'the first byte is not held by the Engine').toBeLessThan(2000);
-  expect(took,'the messages are not held by the Engine').toBeLessThan(4000);
-  // Held five seconds the read passes the server's own five-second limit on it, so those steps never come and nothing
-  // says so; held two, they fill in once it answers.
-  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
-  fake.settings.sessionDelay=2000;
-  await page.reload({waitUntil:'commit'});
-  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  expect(composed,'the composer is not held by the Engine').toBeLessThan(2000);
+  // The messages are the Engine's own read (#875): none is drawn until it answers, and then its steps are under the
+  // reply without a second wait.
+  expect(await page.locator('.msg').count(),'the messages are still on their way').toBe(0);
+  await expect(page.getByText('Here is the copy.')).toBeVisible({timeout:10000});
+  const took=Date.now()-opened;
+  console.log(`chat messages visible: ${took} ms`);
+  expect(took,'the messages arrive once the session answers').toBeLessThan(6000);
   await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 41 sec',{timeout:15000});
-  // A session read that never answers leaves the messages as they are, with no error line in the Conversation.
+  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
+  // A session read that never answers falls back to the old record's messages, with no error line in the Conversation.
   fake.settings.sessionDelay=Infinity;
   await page.reload({waitUntil:'commit'});
-  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  await expect(page.getByText('Here is the copy.')).toBeVisible({timeout:15000});
   await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
  } finally { fake.settings.sessionDelay=0; }
 });
