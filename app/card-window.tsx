@@ -289,7 +289,7 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
      {card&&card.symbol&&<CardCallout key={card.id} company={company} card={card} writer={writer} c={c} sym={sym(card.symbol)} onDone={talked}/>}
-     {editable&&card&&<DescriptionEdit key={card.id} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
+     {editable&&card&&<DescriptionEdit key={`description:${card.id}`} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
      {!editable&&card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
      {card&&card.column==='done'&&(card.summary||card.files.some(file=>file.from==='summary'))&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result">
       {card.summary&&<p className="cw-sum" dir="auto">{card.summary}</p>}<CardFileChips files={card.files.filter(file=>file.from==='summary')} href={file=>fileHref(card.id,file.key)} c={c}/></div></section>}
