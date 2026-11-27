@@ -2,10 +2,9 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, waiting, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { placedName, readProviderNames } from './provider-names.mjs';
-import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 
@@ -15,7 +14,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // database checks that again when they stop it), the Agents Lead made in it (an Agent since removed has no card), the
 // Agents its person asked Lead for and the Owner's answer (#17), the cards its Agent showed with its replies (#136), the
 // rules its Agent saved in it: a suggestion with who it was sent to, and how it was decided (RLS: only the person who
-// told it reads one that is not the team's), the Card it put on the board with that Card's column now (#144), and the
+// told it reads one that is not the team's), and the
 // questions its Agent asked with their answers (#138); while one waits for its answer the record says so (`asking`). The
 // record is what the database holds and never waits on the Engine (ADR 0030, #766): each reply's tool calls (#141) and
 // the Conversation's token use (#347), which the Agent's Hermes session keeps, are their own read (conversationSteps),
@@ -46,7 +45,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // poll a new stamp, never a stamp newer than the rows it came with.
  const stamp=await db.rpc('conversation_stamp',{conversation}).then(({data})=>typeof data==='string'?data:null,()=>null);
  const stamped=Promise.resolve(stamp);
- const [{ends,resets,ranOut,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
+ const [{ends,resets,ranOut,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},accessRows]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_run_resets(run_id,resets_at),conversation_run_ran_out(run_id,provider,account,place),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
@@ -71,7 +70,6 @@ export async function conversationRecord(db:Database,person:string,company:strin
   db.from('conversation_attachments').select('id,name,content_type,message_id,send_key,position').eq('conversation_id',conversation).order('position').then(({data})=>(data||[]) as StoredFile[]),
   db.rpc('conversation_working_for',{conversation}),
   db.from('people').select('name').eq('id',person).maybeSingle(),
-  tiedCard(db,company,conversation),
   // The cards that asked whether to request an Agent hidden from this person (#167), which never name that Agent until
   // it is opened for them (conversation_agent_access: this person's own Conversation only).
   db.rpc('conversation_agent_access',{conversation}).then(({data})=>(data||[]) as AccessRow[]),
@@ -143,7 +141,6 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const {data:permit}=replyRows.some(row=>row.kind==='permission'&&row.state==='open')?await db.rpc('permission_choices',{c:company}):{data:null};
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
- const board=card&&{card:card.card,column:card.column};
  // A reply that failed for a cause a retry cannot fix (#422, #457) says so: the Owner fixes it, a Member asks the Owner.
  const ended=latestEnd(messages,ends);
  const reason: 'credit'|'key'|'model'|'access'|null=ended==='no_credit'?'credit':ended==='key_refused'?'key':ended==='model_missing'?'model':ended==='no_access'?'access':null;
@@ -155,22 +152,12 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const resetsAt=reason==='access'?resets.find(row=>row.run_id===lastRun)?.resets_at:undefined;
  // And which accounts ran out, by the Owner's name for each (#731), when the Engine's pool named them.
  const accounts=reason==='access'?await ranOutNames(db,company,ranOut.filter(row=>row.run_id===lastRun)):[];
- // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
- // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
- // of a Run no message of the person started. A job command's answer (#358) is a message from an Agent the chat handed
- // work to, never the chat's Agent's, so it is never taken for that answer.
- const first=messages.find(message=>message.author==='person');
- const firstReply=card&&first&&card.created_at>first.created_at
-  ?(lead
-   ?messages.find(message=>message.author==='agent'&&!(message.agent_id&&faces.has(message.agent_id))&&!messages.some(own=>own.author==='person'&&own.run_id===message.run_id))
-   :messages.find(message=>message.author==='agent'&&message.run_id===first.run_id))?.id
-  :undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   // What the poll sends back to ask whether anything changed since this read (#767); left out when it could not be read.
   ...await stamped.then(stamp=>stamp?{stamp}:{}),
   ...(found.good_morning_day?{morningDay:found.good_morning_day}:{}),
-  messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,[],files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files,waiting(messages,ends,commandRuns).length>0),firstReply)
+  messages:withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,[],files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files,waiting(messages,ends,commandRuns).length>0)
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
   usage:null as SessionUsage|null,
   pending:waiting(messages,ends,commandRuns).length>0||queuedWaiting(queued),
@@ -187,7 +174,6 @@ export async function conversationRecord(db:Database,person:string,company:strin
   // A turn waiting behind another person's Run says whom the Agent works for (#763).
   ...(runner&&runner.person!==person?{workingFor:runner.name}:{}),
   canStop:!!runner&&(runner.person===person||manages===true),
-  ...(board?{board}:{}),
  };
 }
 type RanOutRow={run_id:string,provider:string,account:string,place:number};
@@ -209,11 +195,3 @@ const handPickup=(card:ReplyCard|null,queued:QueuedTurn[],messages:{author:strin
  const written=!!failed&&(messages.some(message=>message.author==='person'&&message.created_at>failed)||queued.some(turn=>!handTurn(turn)&&turn.queued_at>failed));
  return failed&&!written?{...card,failed:true}:card;
 };
-
-// The chat's Card on the board (#144), the one it put there or was started from (#145), with its column now: "Waiting
-// on you" while the chat waits on its person (#146).
-export async function tiedCard(db:Database,company:string,conversation:string) {
- const {data}=await db.from('work_cards').select('id,created_at,stage_id,wait:card_wait,work_stages(id,board_column)').eq('company_id',company).eq('conversation_id',conversation).maybeSingle();
- const card=data as {id:number,created_at:string,stage_id:number,wait:CardWait|null,work_stages:{id:number,board_column:BoardColumn}|null}|null;
- return card?.work_stages?{card:card.id,column:columnOf(card,[card.work_stages]) as BoardColumn,created_at:card.created_at}:undefined;
-}

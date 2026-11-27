@@ -8,9 +8,6 @@ import { Inbox } from 'lucide-react';
 import Page from '@/app/page-frame';
 import { approvalQueue } from '@/lib/approval-queue';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
-import { boardCardColumns } from '@/lib/board-columns.mjs';
-import { currentNoteText, drawnAt, parseCard } from '@/lib/activity-log.mjs';
-import { cardSheet } from '@/app/card-sheet-server';
 import { orderAgents } from '@/lib/sidebar.mjs';
 import Members from './members';
 import { pageAlert } from '@/lib/page-alert.mjs';
@@ -18,23 +15,19 @@ import Home from './home';
 import CompanyHermesAgents from './company-hermes-agents';
 import Skills from './skills';
 import { companySkillAgents } from '@/lib/company-skill-items';
-import Work, { type Card } from './work';
 import Board from './board';
 import BoardViews from './board-views';
-import { addIdea, archiveCards, archivedCardList, placeMove, workAction, undoMove } from './work-actions';
-import { archivedCardCount, archivedCardPage } from '@/lib/archived-cards';
+import Waiting from './waiting';
 import Projects from './projects';
 import Usage from './usage';
 import { managedUsage } from '@/lib/company-app-items';
-import { Approvals, ApprovalSettings } from './approvals';
-import { type WorkActivity, type WorkMember } from '@/lib/work-activity';
 
-export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,show?:string,idea?:string,decided?:string,item?:string}>}) { const {t,language}=await getI18n();
- const {slug,section:parts}=await params; const cardId=parts?.[0]==='work' && parts?.[1]==='board' && parts?.[2] ? Number(parts[2]) : undefined; const section=cardId?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const reader=await companyReader(slug);
+export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,decided?:string,item?:string}>}) { const {t,language}=await getI18n();
+ const {slug,section:parts}=await params; const oldCard=parts?.[0]==='work'&&parts?.[1]==='board'&&parts.length>2; const section=oldCard?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const reader=await companyReader(slug);
  // Signing in returns to the page asked for, with the settings overlay's own state (section, agent, period), the Card
- // open over the board (card) and the Card a chat shows on the board (show) kept, so a link to Settings, Subscription
- // and models or to a Card opens there; other query values (one-time notices) are not carried.
- if(!reader) { const asked=await searchParams; const kept=new URLSearchParams(Object.entries({section:asked.section,agent:asked.agent,period:asked.period,card:asked.card,show:asked.show}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();
+ // open over the board (card) kept, so a link to Settings, Subscription and models or to a Card opens there; other query
+ // values (one-time notices) are not carried.
+ if(!reader) { const asked=await searchParams; const kept=new URLSearchParams(Object.entries({section:asked.section,agent:asked.agent,period:asked.period,card:asked.card}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();
   redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}${kept?`?${kept}`:''}`)}`); }
  const {user,company,role}=reader; if(!company || !sections[section]) notFound(); const title=t(sections[section]);
  // A Company worked alone has no Member permissions to set (#10); its invitation form is in the settings overlay.
@@ -44,12 +37,12 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // Usage is the Owner's and the Managers' (#32), checked here for the page as the database checks each read.
  if(section==='usage'&&!manage) notFound();
  // The board (spec #831): the Company's Engine's own Kanban board. Its frame is drawn here from nothing the Engine keeps,
- // and the browser reads its Cards after (ADR 0030); a person who is no Member found no Company above. A Card of the
- // Engine opens over it at ?card=<its id> in the Engine's Card window (#835), which the board draws and reads itself. An
- // old board's Card, a number (?card=, ?show=), still opens on the old board until it is switched off (#846). New card
- // (/work/new) is the board with its New card open (#836); a Viewer gets the board alone.
- const opened=await searchParams;
- if(section==='work/new'||section==='work/board'&&!cardId&&parseCard(opened.card)===null&&opened.show===undefined) return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} reviewer={manage} me={user.id} creating={section==='work/new'}/></main></Page>;
+ // and the browser reads its Cards after (ADR 0030); a person who is no Member found no Company above. A Card opens over
+ // it at ?card=<its id> in the Engine's Card window (#835), which the board draws and reads itself. New card (/work/new) is
+ // the board with its New card open (#836); a Viewer gets the board alone. The old board is switched off (#846): an old
+ // Card's own address (/work/board/<number>) leads to the board.
+ if(oldCard) redirect(`/c/${slug}/work/board`);
+ if(section==='work/new'||section==='work/board') return <Page title={title}><main className="content"><Board key={company.id} company={company.id} slug={slug} writer={canCreate} reviewer={manage} me={user.id} creating={section==='work/new'}/></main></Page>;
  // The list and the calendar read the same board (#845): their frame is drawn here and their Cards are the board's read.
  if(section==='work/list'||section==='work/calendar') return <Page title={title}><main className="content"><BoardViews key={`${company.id}:${section}`} company={company.id} slug={slug} view={section==='work/list'?'list':'calendar'} writer={canCreate}/></main></Page>;
  const {data:members}=section==='settings/members'?await db.from('members').select('person_id,role,grant_publishing,grant_money_figures,grant_customer_data,people(name)').eq('company_id',company.id).order('role'): {data:[]};
@@ -59,103 +52,33 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // Each managed Company's token use in the last 30 days, read from the bundled Engine (#347, #32).
  const usageRows=section==='usage'?await managedUsage(user.id,30):[];
  const query=await searchParams; const message=pageAlert(query.message,t);
- const waitingFailures:Record<string,string>={rule:'waitingRuleFailed',access:'waitingAccessFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
-  'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing',
-  'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong',
-  'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-writtenLate':'waitingChangeWrittenLate','change-reasonMissing':'waitingChangeReasonMissing','change-editInvalid':'waitingChangeEditInvalid'};
- const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):failed.startsWith('change-')?t('waitingChangeFailed'):message;
- const {steps,cards:myCards,visible:myVisibleCards,items:waitingItems,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,role);
- const isWork=section.startsWith('work/')||section==='settings/work';
- // The board and the board opened on Waiting on you (/approvals).
- const onBoard=section==='work/board'||section==='approvals';
- // An idea just added comes back on the board with its own address (#188): the Card flashes and the board toasts it.
- const ideaAdded=onBoard&&query.idea==='1';
- // A decided learning suggestion comes back to the board with its outcome and its Agent's name (#169): the address names
- // the waiting item, never the Agent, and the page reads its name here as the person reading the board.
- const decidedItem=section==='approvals'&&(query.decided==='approve'||query.decided==='reject')&&/^[1-9]\d{0,17}$/.test(query.item||'')?Number(query.item):null;
- const {data:decided}=decidedItem!=null?await db.from('waiting_items').select('body,agent_rules(hermes_agents(name))').eq('company_id',company.id).eq('id',decidedItem).maybeSingle():{data:null};
- // The suggestion's Agent, through its rule; the item's own line only when the rule names none (as #169 read it).
- const decidedRow=decided as {body?:string|null,agent_rules:{hermes_agents:{name:string}|null}|null}|null;
- const ruleDecision=decidedItem!=null?{approve:query.decided==='approve',agent:decidedRow?.agent_rules?.hermes_agents?.name||String(decidedRow?.body||'')}:undefined;
- // The board reads its Cards through board_cards (#190): no Card of an Agent hidden from the reader, each with the
- // Company Agents that worked on it (crew). Other places list Cards as before.
- // Typed as the table read it stands in for, whose rows the untyped client leaves open.
- const read=(t:string)=>db.from(t).select('*').eq('company_id',company.id);
- const cards=()=>db.from('work_cards').select(boardCardColumns).eq('company_id',company.id) as unknown as ReturnType<typeof read>;
- const boardCards=()=>db.rpc('board_cards',{c:company.id}).select(`${boardCardColumns},crew`) as unknown as ReturnType<typeof read>;
- // A Card's own Agent and the board's chips (#144, #190): the Company's Agents the reader sees, in the sidebar's order.
- // Home's Agent tiles read their in-progress Cards on their own, newest first, so the capped Card list never hides one (#460).
- // shortcut: one read for every Agent, so past the Data API's 1,000 rows one Agent's Cards could crowd out another's; read per Agent if a Company ever holds that many in progress.
- const [workData,{data:agentRows},homeAgentCards]=await Promise.all([
-  (isWork||section==='home'||section==='approvals')?Promise.all(['work_stages','work_labels','work_cards','work_checklist','work_activity','work_creatives','work_versions','work_card_labels','work_assignees','work_attachments'].map(t=>t==='work_cards'?onBoard?boardCards():cards():read(t))):[],
-  onBoard?db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]},
-  section==='home'?db.from('work_cards').select('id,title,stage_id,next_actor,agent_id,created_at,wait:card_wait,work_stages!inner(board_column)').eq('company_id',company.id).not('agent_id','is',null).eq('work_stages.board_column','progress').order('created_at',{ascending:false}).order('id',{ascending:false}):{data:[],error:null},
- ]);
- const cardAgents=orderAgents((agentRows||[]) as {id:string,connection_id:string,name:string,speciality:string,is_default:boolean}[]);
- // The Card list is capped at the Data API's row limit; the reader's own pending approvals were read by id
- // (approvalQueue, company-scoped), so one past the cap still reaches Waiting on you and its board column.
- if(workData[2]?.data) { const known=new Set(workData[2].data.map((c:{id:number})=>c.id)); const missing=(onBoard?myVisibleCards:myCards).filter(c=>!known.has(c.id));
-  if(onBoard&&missing.length) workData[2].data.push(...((await boardCards().in('id',missing.map(c=>c.id))).data||[])); else workData[2].data.push(...missing); }
- // A Card open over the board (#116) is named in the board's address; one the reader's own board does not hold opens nothing.
- const sheetId=section==='work/board'&&!cardId?parseCard(query.card):null;
- // A chat's corner pill opens the board on its Card (#144).
- const shownId=section==='work/board'&&!cardId?parseCard(query.show)??undefined:undefined;
- // The Card list is capped, so a Card the address names (open over the board, or shown from a chat) is read by id (the
- // reader's own rights, this Company) when the list missed it.
- for(const named of [sheetId,shownId]) if(named!=null&&workData[2]?.data&&!workData[2].data.some(c=>c.id===named)) { const {data:asked}=await boardCards().eq('id',named).maybeSingle(); if(asked) workData[2].data.push(asked); }
- // The board's archive list (#670), read apart from current Cards, which leave archived ones out in the database. An
- // archived Card named in the address opens read-only over the board, from every link that leads to it: the board's
- // own (?card), its own page's address (an old link, the log's, a morning's), and the board link its Conversation or
- // channel gives (?show), which has no current Card to show.
- // The board's archive list (#670, #705), read apart from current Cards, which leave archived ones out in the database:
- // its first page, newest archived first, and how many there are; the board reads the next pages and its searches
- // through archivedCardList. An archived Card the address names and the page does not hold is read by id, under the
- // same rights and this Company, so it opens read-only over the board from every link that leads to it: the board's own
- // (?card), its own page's address (an old link, the log's, a morning's), and the board link its Conversation or
- // channel gives (?show), which has no current Card to show.
- const onArchiveBoard=section==='work/board';
- const [archivedFirst,archivedTotal]=onArchiveBoard?await Promise.all([archivedCardPage<Card>(db,company.id,{}),archivedCardCount(db,company.id)]):[null,null];
- const archivedNamed:Card[]=[];
- const archived=()=>[...(archivedFirst?.items||[]),...archivedNamed];
- for(const named of [cardId,shownId,sheetId]) if(onArchiveBoard&&named!=null&&!archived().some(c=>c.id===named)&&!workData[2]?.data?.some(c=>c.id===named)) {
-  const {data:asked}=await db.rpc('archived_cards',{c:company.id}).select('*').eq('id',named).maybeSingle(); if(asked) archivedNamed.push(asked as Card); }
- const isArchived=(id:number|null|undefined)=>id!=null&&archived().some(c=>c.id===id)&&!workData[2]?.data?.some(c=>c.id===id);
- for(const named of [cardId,shownId]) if(isArchived(named)) redirect(`/c/${slug}/work/board?card=${named}`);
- const sheetArchived=isArchived(sheetId);
- const sheet=sheetId!=null&&(sheetArchived||workData[2]?.data?.some(c=>c.id===sheetId))?await cardSheet(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate&&!sheetArchived,t,language}):undefined;
- // The active Members, and the names of former ones (spec #695: an old role agent's among them), whose rows their read
- // rule hides: what they did keeps its name, and no picker offers them.
- const workRead=isWork||section==='home'||section==='approvals';
- const [{data:activeMembers},{data:formerMembers}]=workRead?await Promise.all([
-  db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null),
-  db.rpc('former_member_names',{c:company.id}),
- ]):[{data:[]},{data:[]}];
- const workMembers=[...((activeMembers||[]) as unknown as WorkMember[]),
-  ...((formerMembers||[]) as {person_id:string,name:string}[]).map(({person_id,name}):WorkMember=>({person_id,removed_at:'removed',people:{name}}))];
- const {data:projects}=(isWork||section==='projects')?await db.from('work_projects').select('id,name,goal,status').eq('company_id',company.id).order('id'):{data:[]};
- const {data:filedCards}=section==='projects'?await db.from('work_cards').select('project_id').eq('company_id',company.id).not('project_id','is',null):{data:[]};
- const cardCounts:Record<number,number>={}; for(const c of filedCards||[]) cardCounts[c.project_id]=(cardCounts[c.project_id]||0)+1;
- const versionRows=workData[6]?.data || [];
- const signed=versionRows.length ? await db.storage.from('creatives').createSignedUrls(versionRows.map(v=>v.path),3600) : {data:[]};
- const versions=versionRows.map((v,i)=>({...v,url:signed.data?.[i]?.signedUrl || null}));
- const commentIds=(workData[4]?.data || []).filter(a=>a.action==='comment_added').map(a=>Number((a.details as {id?:unknown}|null)?.id)).filter(Number.isSafeInteger);
- const {data:currentComments}=commentIds.length?await db.from('work_comments').select('id,body').eq('company_id',company.id).in('id',[...new Set(commentIds)]):{data:[]};
- const activityRows=await Promise.all(currentNoteText(workData[4]?.data || [],(currentComments||[]) as {id:number,body:string}[]).map(async a=>{
-  if(typeof a.evidence!=='string' || !a.evidence.startsWith('file:')) return a;
-  const {data}=await db.storage.from('creatives').createSignedUrl(a.evidence.slice(5),3600);
-  return {...a,evidence_url:data?.signedUrl || null};
- }));
- // An open Card's notes (#22): their current text (an edit changes it), the Runs their Agent mentions started, and the
- // Agents' replies in the log. Read as the signed-in person, so an Agent hidden from them and its replies are left out.
- const cardNotes=isWork&&cardId?await Promise.all([
-  db.from('work_comments').select('id,body,edited_at,author_id,created_at').eq('company_id',company.id).eq('card_id',cardId),
-  db.from('note_runs').select('note_id,agent_id,agent_name,outcome').eq('company_id',company.id).eq('card_id',cardId),
-  db.from('company_log').select('actor_id,actor_name,body,details,created_at').eq('company_id',company.id).eq('card_id',cardId).eq('action','note_reply'),
-  db.from('hermes_agents').select('id,name,connection_id').eq('company_id',company.id),
- ]).then(([comments,runs,replies,agents])=>({me:user.id,owner:role==='owner',drawnAt:drawnAt(),comments:comments.data||[],runs:runs.data||[],agents:agents.data||[],
-  replies:(replies.data||[]).map(r=>({reply_to:Number(r.details?.reply_to),actor_id:r.actor_id,actor_name:r.actor_name,body:r.body||'',created_at:r.created_at}))})):undefined;
- const openCard=workData[2]?.data?.find(c=>c.id===cardId);
- const settingsLeaf:Record<string,string>={'settings/members':'members','settings/work':'workSettings'};
- const crumbs=openCard?[{label:t('work'),href:`/c/${slug}/work/board`},{label:openCard.title}]:settingsLeaf[section]?[{label:company.name,href:`/c/${slug}/home`},{label:t('settings'),href:`/c/${slug}/settings`},{label:t(settingsLeaf[section])}]:undefined;
- return <Page title={title} crumbs={crumbs} card={workData[2]?.data?.some(c=>c.id===cardId)?cardId:sheet?.id}><main className="content">{isWork?<><Work key={`${company.id}:work`} workAction={workAction} placeMove={placeMove} addIdea={addIdea} undoMove={undoMove} archiveCards={archiveCards} archived={onArchiveBoard?{first:archivedFirst,total:archivedTotal,named:archivedNamed}:undefined} readArchived={archivedCardList} me={user.id} canCreate={canCreate} alone={company.work_mode==='alone'} notes={cardNotes} slug={slug} company={company.id} section={section} cardId={cardId} stages={(workData[0]?.data || []).sort((a,b)=>a.position-b.position)} labels={workData[1]?.data || []} cards={workData[2]?.data || []} items={workData[3]?.data || []} activity={activityRows.sort((a,b)=>b.id-a.id)} creatives={workData[5]?.data || []} versions={versions} cardLabels={workData[7]?.data || []} assignees={workData[8]?.data || []} attachments={(workData[9]?.data || []).map(({id,card_id,comment_id,name,content_type})=>({id,card_id,comment_id,name,content_type}))} projects={projects || []} message={message} members={(workMembers || []) as unknown as Parameters<typeof Work>[0]['members']} approvableIds={myVisibleCards.map(c=>c.id)} waiting={waitingItems} sheet={sheet} show={shownId} ideaAdded={ideaAdded} cardAgents={cardAgents || []}/>{section==='settings/work'&&<ApprovalSettings slug={slug} company={company.id} steps={steps} members={workMembers.filter(member=>!member.removed_at) as unknown as Parameters<typeof ApprovalSettings>[0]['members']} manage={manage}/>}</>:section==='projects'?<Projects slug={slug} company={company.id} projects={projects || []} counts={cardCounts} canEdit={canCreate} message={message}/>:section==='approvals'?<><Approvals key={`${company.id}:waiting`} me={user.id} canCreate={canCreate} alone={company.work_mode==='alone'} cardAgents={cardAgents} slug={slug} company={company.id} stages={(workData[0]?.data || []).sort((a,b)=>a.position-b.position)} labels={workData[1]?.data || []} cards={workData[2]?.data || []} items={workData[3]?.data || []} activity={activityRows.sort((a,b)=>b.id-a.id) as WorkActivity[]} creatives={workData[5]?.data || []} versions={versions} cardLabels={workData[7]?.data || []} assignees={workData[8]?.data || []} attachments={(workData[9]?.data || []).map(({id,card_id,comment_id,name,content_type})=>({id,card_id,comment_id,name,content_type}))} projects={(await db.from('work_projects').select('id,name').eq('company_id',company.id).order('id')).data || []} message={waitingFailure} members={(workMembers || []) as unknown as WorkMember[]} approvableIds={myVisibleCards.map(c=>c.id)} waiting={waitingItems} ruleDecision={ruleDecision}/></>:section==='skills'?<Skills company={company.id} slug={slug} agents={skillAgents} manage={manage} refused={query.refused} failed={!!query.failed}/>:section==='agents'?<div className="stack"><CompanyHermesAgents key={company.id} company={company.id} owner={canOwner} initial={companyHermesAgents || []}/></div>:section==='usage'?<Usage slug={slug} rows={usageRows}/>:section==='settings/members'?<Members members={(members || []) as unknown as Parameters<typeof Members>[0]['members']} audit={audit || []} slug={slug} company={company.id} manage={manage} canOwner={canOwner} me={user.id} message={message}/>:section==='home'?<Home slug={slug} companyId={company.id} agentCards={homeAgentCards.error?null:(homeAgentCards.data||[]) as unknown as NonNullable<Parameters<typeof Home>[0]['agentCards']>} cards={workData[2]?.error?null:workData[2]?.data || []} stages={workData[0]?.error?null:workData[0]?.data || []} activity={workData[4]?.error?null:activityRows as WorkActivity[]} members={(workMembers || []) as unknown as Parameters<typeof Home>[0]['members']} approvalCount={approvalsAvailable?myVisibleCards.length:null}/>:<section className="panel"><h2>{title}</h2><EmptyState icon={Inbox} message={placeholders[section]?t(placeholders[section]):t('noDataToDisplayYet')}/></section>}</main></Page>;
+ if(section==='approvals') {
+  const waitingFailures:Record<string,string>={rule:'waitingRuleFailed',access:'waitingAccessFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
+   'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing',
+   'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong',
+   'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-writtenLate':'waitingChangeWrittenLate','change-reasonMissing':'waitingChangeReasonMissing','change-editInvalid':'waitingChangeEditInvalid'};
+  const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):failed.startsWith('change-')?t('waitingChangeFailed'):message;
+  // A decided learning suggestion comes back with its outcome and its Agent's name (#169): the address names the waiting
+  // item, never the Agent, and the page reads its name here as the person reading the list.
+  const decidedItem=(query.decided==='approve'||query.decided==='reject')&&/^[1-9]\d{0,17}$/.test(query.item||'')?Number(query.item):null;
+  const [{items},{data:agentRows},{data:me},{data:decided}]=await Promise.all([
+   approvalQueue(db,company.id,user.id,role),
+   db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'),
+   db.from('people').select('name').eq('id',user.id).maybeSingle(),
+   decidedItem!=null?db.from('waiting_items').select('body,agent_rules(hermes_agents(name))').eq('company_id',company.id).eq('id',decidedItem).maybeSingle():Promise.resolve({data:null}),
+  ]);
+  // The suggestion's Agent, through its rule; the item's own line only when the rule names none (as #169 read it).
+  const decidedRow=decided as {body?:string|null,agent_rules:{hermes_agents:{name:string}|null}|null}|null;
+  const ruleDecision=decidedItem!=null?{approve:query.decided==='approve',agent:decidedRow?.agent_rules?.hermes_agents?.name||String(decidedRow?.body||'')}:undefined;
+  // The Company's main Agent comes first in the sidebar's order; a Member's Agent request names it (#17).
+  const lead=orderAgents((agentRows||[]) as {id:string,connection_id:string,name:string,speciality:string,is_default:boolean}[])[0]?.name||'Lead';
+  const mine=((me as {name?:string}|null)?.name||'').trim();
+  return <Page title={title}><main className="content"><Waiting key={`${company.id}:waiting`} company={company.id} writer={canCreate} reviewer={manage} me={user.id} items={items} message={waitingFailure} ruleDecision={ruleDecision}
+   people={{slug,company:company.id,lead,alone:company.work_mode==='alone',myNames:mine?[mine,mine.split(/\s+/)[0]]:[]}}/></main></Page>;
+ }
+ const {data:projects}=section==='projects'?await db.from('work_projects').select('id,name,goal,status').eq('company_id',company.id).order('id'):{data:[]};
+ const waitingRows=section==='home'?await approvalQueue(db,company.id,user.id,role).then(({rows,available})=>available?rows:null):null;
+ const settingsLeaf:Record<string,string>={'settings/members':'members'};
+ const crumbs=settingsLeaf[section]?[{label:company.name,href:`/c/${slug}/home`},{label:t('settings'),href:`/c/${slug}/settings`},{label:t(settingsLeaf[section])}]:undefined;
+ return <Page title={title} crumbs={crumbs}><main className="content">{section==='projects'?<Projects slug={slug} company={company.id} projects={projects || []} canEdit={canCreate} message={message}/>:section==='skills'?<Skills company={company.id} slug={slug} agents={skillAgents} manage={manage} refused={query.refused} failed={!!query.failed}/>:section==='agents'?<div className="stack"><CompanyHermesAgents key={company.id} company={company.id} owner={canOwner} initial={companyHermesAgents || []}/></div>:section==='usage'?<Usage slug={slug} rows={usageRows}/>:section==='settings/members'?<Members members={(members || []) as unknown as Parameters<typeof Members>[0]['members']} audit={audit || []} slug={slug} company={company.id} manage={manage} canOwner={canOwner} me={user.id} message={message}/>:section==='home'?<Home slug={slug} companyId={company.id} waitingRows={waitingRows}/>:<section className="panel"><h2>{title}</h2><EmptyState icon={Inbox} message={placeholders[section]?t(placeholders[section]):t('noDataToDisplayYet')}/></section>}</main></Page>;
 }

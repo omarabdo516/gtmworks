@@ -1,20 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { attachmentHeaders } from './attachments.mjs';
 
-// Where a file is named: on a Card's messages, narrowed to one Card when `card` is given (a run key reaches its own Card's
-// files only), in a Conversation (#21), which only its own person reads, or in a channel (#156), which every Member of
-// that channel reads.
-export type AttachmentSource={from:'card',card?:number}|{from:'conversation'}|{from:'channel'};
-const tables={card:'work_attachments',conversation:'conversation_attachments',channel:'channel_attachments'} as const;
+// Where a file is named: in a Conversation (#21), which only its own person reads, or in a channel (#156), which every
+// Member of that channel reads. A file on a Card of the Engine's board is the Engine's (#843, app/c/[slug]/files/board).
+export type AttachmentSource={from:'conversation'}|{from:'channel'};
+const tables={conversation:'conversation_attachments',channel:'channel_attachments'} as const;
 
 // The one place an attachment's bytes leave the private bucket. The caller passes a client that acts as the asking person
 // or agent: the attachment row and the storage object are both read through it, so row level security decides who gets here.
 // null when there is no such file for this reader; 'failed' when a read failed (#777), which the route answers as an
 // error, never as "not found".
-async function attachmentFile(db: SupabaseClient, company: string, id: number, source: AttachmentSource = { from: 'card' }): Promise<Response | null | 'failed'> {
+async function attachmentFile(db: SupabaseClient, company: string, id: number, source: AttachmentSource): Promise<Response | null | 'failed'> {
  if (!Number.isSafeInteger(id) || id < 1) return null;
- const found = db.from(tables[source.from]).select('name,content_type,path').eq('company_id', company).eq('id', id);
- const row = await (source.from === 'card' && source.card !== undefined ? found.eq('card_id', source.card) : found).maybeSingle();
+ const row = await db.from(tables[source.from]).select('name,content_type,path').eq('company_id', company).eq('id', id).maybeSingle();
  if (row.error) return 'failed';
  if (!row.data) return null;
  const file = await db.storage.from('creatives').download(row.data.path);
