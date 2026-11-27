@@ -106,6 +106,29 @@ test('Restore starts nothing: a Card that was worked on, waited on a question, w
  } finally { await fake.close(); }
 });
 
+test('a Card that waited on a person (a question or a review) comes back Planned with the same Agent, by Undo or Restore, and starts only after Continue (Omar, 2026-11-27)', async () => {
+ const fake=await engineServing(company);
+ try {
+  const kanban=fake.settings.kanban;
+  const question=kanban.task({title:'Which city for the shoot?',status:'blocked',assignee:profileOf(ads)}).id;
+  const review=kanban.task({title:'SEO article',status:'review',assignee:profileOf(ads)}).id;
+  assert.deepEqual([await columnOf(question),await columnOf(review)],['waiting','waiting']);
+  await archiveCompanyCards(reader(),{company,me,cards:[question,review],stop:true});
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,me,cards:[question],undo:true}),{state:'restored',restored:[question],left:[]});
+  assert.deepEqual(await restoreCompanyCards(reader(),{company,me,cards:[review]}),{state:'restored',restored:[review],left:[]});
+  const seen=async id=>(({column,symbol,agent})=>({column,symbol,agent}))((await readCompanyBoard(reader(),{company,me})).cards.find(card=>card.id===id));
+  for(const id of [question,review]) assert.deepEqual(await seen(id),{column:'planned',symbol:{kind:'stopped'},agent:{id:ads,name:'Ads'}});
+  // The dispatcher's tick starts neither: no Run opens on them.
+  const runs=id=>kanban.runs.filter(run=>run.task_id===id&&run.ended_at==null).length;
+  kanban.dispatch();
+  assert.deepEqual([runs(question),runs(review)],[0,0]);
+  // Continue (the Engine's move from stopped to ready) lets the question's Card go on, and the next tick starts it.
+  assert.equal(kanban.status(question,'ready'),null);
+  kanban.dispatch();
+  assert.deepEqual([runs(question),runs(review)],[1,0]);
+ } finally { await fake.close(); }
+});
+
 test('a restore the Engine refuses part way starts nothing, a stopped Card that waits for an open one waits after Continue, and a done Card with nothing said comes back stopped', async () => {
  const fake=await engineServing(company);
  try {
