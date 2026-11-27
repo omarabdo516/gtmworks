@@ -1,5 +1,11 @@
 [
  {
+  "issue": 915,
+  "date": "2026-11-27",
+  "en": { "title": "Settings stay in gtmworks", "body": "Every setting is in gtmworks's own Settings; the row that opened the Engine's own dashboard is now «Engine logs and system (advanced)», for the install owner alone." },
+  "ar": { "title": "الإعدادات كلها جوه gtmworks", "body": "كل الإعدادات بقت في إعدادات gtmworks نفسها؛ والسطر اللي كان بيفتح لوحة المحرّك بقى اسمه «سجلات المحرك والنظام (متقدم)»، ولصاحب التثبيت بس." }
+ },
+ {
   "issue": 911,
   "date": "2026-11-27",
   "en": { "title": "A smaller work sandbox to download", "body": "The work sandbox every Company's Agents work in no longer carries Open Design, so it is about half a gigabyte smaller and a first install or an update downloads less; Open Design is still yours to run and connect from Apps." },

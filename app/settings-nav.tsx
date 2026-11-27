@@ -11,11 +11,11 @@ import { holdLeave } from './settings-draft';
 const editable = (target: EventTarget | null) => target instanceof HTMLElement && (target.isContentEditable || !!target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"], [role="combobox"], [role="searchbox"]'));
 
 // The overlay's section list in its groups (#612) with "Find a setting" above it (#613). The list is the Role's own
-// (findGroups, built on overlayGroups), so a search shows a section only to someone who may open it. `/` anywhere in Settings outside a
-// field takes the person to the search; Enter opens the first section found, Escape empties the search before it closes
-// Settings, and a section opened (from the search or any other way) starts with an empty search, whichever of the
+// (findGroups, built on overlayGroups; the Engine dashboard's row only for the install owner, #915), so a search shows
+// a section only to someone who may open it. `/` anywhere in Settings outside a field takes the person to the search;
+// Enter opens the first section found, Escape empties the search before it closes Settings, and a section opened (from the search or any other way) starts with an empty search, whichever of the
 // layer's routes (#612) draws it.
-export function SettingsNav({slug,role,section,learningWaiting,agentsWaiting}:{slug:string,role:string,section:OverlaySection,learningWaiting:number,agentsWaiting:number}) {
+export function SettingsNav({slug,role,installOwner=false,section,learningWaiting,agentsWaiting}:{slug:string,role:string,installOwner?:boolean,section:OverlaySection,learningWaiting:number,agentsWaiting:number}) {
  const {t}=useI18n();
  const [query,setQuery]=useState('');
  const search=useRef<HTMLInputElement>(null);
@@ -35,7 +35,7 @@ export function SettingsNav({slug,role,section,learningWaiting,agentsWaiting}:{s
   document.addEventListener('keydown',keys);
   return ()=>document.removeEventListener('keydown',keys);
  },[]);
- const groups=findGroups(query,role,t);
+ const groups=findGroups(query,role,t,installOwner);
  const found=groups.flatMap(group=>group.sections);
  const wanted=query.trim();
  const clear=()=>{ setQuery(''); search.current?.focus(); };

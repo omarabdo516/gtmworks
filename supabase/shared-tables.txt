@@ -4,3 +4,4 @@ company_owner_links
 people
 setup_claim
 install_updates
+install_owner

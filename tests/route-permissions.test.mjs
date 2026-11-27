@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { globSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { actionPermissions, outsideCompany, permitted, requiredFor, roleOrder, routePermissions } from '../lib/route-permissions.mjs';
+import { actionPermissions, beyondRole, outsideCompany, permission, permitted, requiredFor, roleOrder, routePermissions } from '../lib/route-permissions.mjs';
 
 // Rule b of 2026-11-13: every server route and server action is in one table (lib/route-permissions.mjs), anything
 // missing needs Owner, and the role is read from the database on every request.
@@ -88,7 +88,7 @@ test('a route or action added without a table entry is reported, and needs Owner
 });
 
 test('every table entry names a known level, and no route or action in it is gone from the tree', () => {
-  const known = new Set([...roleOrder, ...outsideCompany]);
+  const known = new Set([...roleOrder, ...outsideCompany, ...beyondRole]);
   for (const entry of [...Object.values(routePermissions).flatMap(Object.values), ...Object.values(actionPermissions).flatMap(value => typeof value === 'string' ? [value] : Object.values(value))]) assert.ok(known.has(entry), entry);
   assert.deepEqual(Object.keys(routePermissions).filter(file => !routeFiles().includes(file)), []);
   const actions = actionFiles().flatMap(file => exportedActions(read(file)));
@@ -137,4 +137,23 @@ test('the own-server route refuses a Manager, a Contributor and a Viewer', async
  const outcomes = [];
  for (const role of ['owner', 'manager', 'contributor', 'viewer']) outcomes.push([role, await permitted(members([role]).db, level, company)]);
  assert.deepEqual(outcomes, [['owner', true], ['manager', false], ['contributor', false], ['viewer', false]]);
+});
+
+// #915 (decision 0081): the Company's Hermes dashboard, its code files and its sockets are the install owner's alone,
+// and only in a Company they are an Administrator of. An Administrator who is not the install owner gets the missing page.
+test('the Engine dashboard is for an Administrator of the Company who is the install owner', async () => {
+ const company = '10000000-0000-0000-0000-000000000001';
+ const asked = (role, installOwner) => {
+  const fake = members([role]);
+  return { ...fake.db, rpc: async name => { assert.equal(name, 'is_install_owner'); return { data: installOwner, error: null }; } };
+ };
+ for (const [file, method] of [['app/c/[slug]/hermes/[[...path]]/route.ts', 'GET'], ['app/c/[slug]/hermes/[[...path]]/route.ts', 'POST'], ['app/assets/[...path]/route.ts', 'GET']]) {
+  const level = requiredFor(routePermissions, file, method);
+  const outcomes = [];
+  for (const [role, installOwner] of [['owner', true], ['owner', false], ['manager', true], ['viewer', true]]) outcomes.push(await permitted(asked(role, installOwner), level, company));
+  assert.deepEqual(outcomes, [true, false, false, false], `${file} ${method}`);
+ }
+ // No place in the Company refuses the install owner too, and a failed read of the flag is a failure, never a yes.
+ assert.equal(await permitted({ ...members([]).db, rpc: async () => ({ data: true, error: null }) }, 'installOwner', company), false);
+ assert.equal(await permission({ ...members(['owner']).db, rpc: async () => ({ data: null, error: { message: 'down' } }) }, 'installOwner', company), 'failed');
 });

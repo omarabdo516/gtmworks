@@ -7,6 +7,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { AgentFace } from '@/components/agent-face';
 import { agentFaceStates, faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
+import { permitted } from '@/lib/route-permissions.mjs';
 import { pickSection, pageReadAt, overlayHref, agentsMainFirst, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
@@ -59,6 +60,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // ?agent=<id> alone opens that Agent's page.
  const section=pickSection(query.section??(query.agent?'agents':undefined),role);
  const owner=role==='owner', canManage=owner||role==='manager', canWrite=role!=='viewer';
+ // The Engine dashboard's row is the install owner's alone (#915), by the rule its routes ask; a failed read is no.
+ const installOwner=owner&&await permitted(db,'installOwner',company.id,userId);
  const needAgents=['members','agents'].includes(section);
  const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id).order('name')).data||[]):[];
  const members:Member[]=section==='members'?orderMembers(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]):[];
@@ -130,7 +133,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :<SoonSection t={t} section={section} ro={ro} models={<ModelsParts company={company.id} companyName={company.name} owner={owner} names={names} order={order} fallback={fallback} asked={readAt}/>}/>;
  // Nothing is left to wait for: the page's first bytes leave next.
  markSettingsOpen('firstByte');
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}><PartsReader person={userId}/>{page}</OverlayChrome>;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} installOwner={installOwner} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={section==='learning'&&skillAsked?'sov-skill-back':agent?agentTabFocus(tab):undefined}><PartsReader person={userId}/>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
