@@ -222,3 +222,60 @@ took 64 s). The step took 120 s, set by the triage Card; seconds below are from 
 | A Card in `triage` in two ticks, the decomposer's model | after two of the Engine's own ticks (120 s) the Card is still `triage` with no children; the decomposer called the model twice, both `fake-model`, the default profile's main model |
 | The settings in a new Company's Engine and an updated one, not changed by a profile | `engine_board_settings` held on every Engine of open-design, the second Company's included, and the install-update and install-engines-update jobs of the same commit are green |
 | No CI job is added | the check ran as a step of install-open-design |
+
+## 9. A person's file on a Card, in the Work sandbox (#843)
+
+Read in the pinned image, unmodified:
+
+- The Engine keeps a Card's file under its Kanban attachments folder, `/opt/data/kanban/attachments/<task>/<name>` on the
+  default board (`hermes_cli/kanban_db.py`: `attachments_root`, `kanban_home`, `task_attachments_dir`), and its row
+  carries that absolute path (`stored_path`). The dashboard's `POST /tasks/{id}/attachments` takes a multipart form,
+  `file` and `uploaded_by` (free text, so gtmworks writes the person's name), streams it to disk and answers the row; past
+  `KANBAN_ATTACHMENT_MAX_BYTES`, 25 MB, the dashboard's, the tools' and the CLI's one cap, it answers 413 `attachment
+  exceeds 25 MB limit` and keeps nothing. `GET /attachments/{id}` serves the file only from under that folder.
+- The worker is told each file by that absolute path in its first prompt, under `## Attachments`: "Read them with the
+  file/terminal tools at the absolute paths below" (`hermes_cli/kanban_db_context.py`, `_ctx_attachments`). Hermes's own
+  word for a remote backend is in the same two places: "Workers read attachments by absolute path, so remote terminal
+  backends must mount it" (`attachments_root`), "remote terminal backends need the attachments dir mounted".
+- On the `ssh` backend a worker's `read_file` sends the path as given to the remote shell (`tools/file_tools.py`,
+  `read_file_tool`: `file_ops.read_file(path)` when the file operations do not use host paths), and its terminal runs
+  there, so the file must be at that same path inside the Work sandbox. No read guard names the Kanban folders
+  (`agent/file_safety.py`, `get_read_block_error`: credential stores, `mcp-tokens/`, `browser-profile/`, `vault/`,
+  `webapp/`, skill caches).
+- The Engine writes the file with Python's default mode under the gateway's umask (`open(dest, "wb")`, a folder with
+  `mkdir`): no write of the pinned image narrows it, so the file is `0644` and its folder `0755` under the usual `022`,
+  readable by the sandbox's user (`pn`, uid 1000) beside the Engine's (`hermes`, uid 10000). The install proof's copy
+  below is what shows it on the real Engine; a failed copy prints the folder's modes.
+
+So it needs no change to the Engine, a setting at most in ADR 0022's order, and here not even that: the install mounts
+the folder. `scripts/engine-template.yml` gives each Company's sandbox one more volume, the Engine's own data volume with
+Docker's `subpath: kanban/attachments`, read-only, at `/opt/data/kanban/attachments`: only that folder of the volume, so
+nothing else the Engine keeps there (its keys, its sign-ins, its sessions) reaches the sandbox, and the sandbox writes
+nothing the Engine reads (ADR 0018). A mount of a subpath that is not there does not start, and a fresh volume has none,
+so the Engine's start makes the folder, `0755` and the Engine's user's, before the gateway, and the sandbox starts once
+its Engine is healthy (`depends_on: service_healthy`). It needs Docker Engine 26 and Compose 2.26 or later (the volume
+subpath). The template is the one every Engine of an install is made from, so a new Company and one brought up by
+`gtmworks update` both have it.
+
+What the install proof's Kanban check adds (`scripts/check-install-profiles.mjs`, `lib/install-kanban.mjs`,
+`scripts/ci-install-check.sh`):
+
+| Acceptance criterion of #843 | Where the check holds it |
+| --- | --- |
+| On the pinned Engine a worker opens a file a person added, from inside the Work sandbox | the step adds `<marker>-brief.txt` to Card A through `POST /tasks/{id}/attachments` under the person's name before the tick; the Engine's answer names it under `/opt/data/kanban/attachments/`; Card A's first command, in the sandbox, copies it from the path its prompt names into `/work/<marker>-attachment.txt`, and the job reads that file from the sandbox through the host's Docker and compares its bytes |
+| A write to that folder from the sandbox fails | the same command tries `touch <the file's folder>/<marker>-planted` and prints `refused`; the job finds no such file in the sandbox or on the Engine |
+| The mount is present for a new Company and for one `gtmworks update` brought up | `sandbox_card_files` (`scripts/ci-install-lib.sh`) on every Engine of the open-design area, the second Company's included, and after the update in the update and engines-update areas: the sandbox's mount at `/opt/data/kanban/attachments` is its Engine's data volume, read-only, subpath `kanban/attachments`, and a write there as the sandbox's user fails |
+
+The step's time grows by one request and two short commands inside Card A's first one, well under a second; the
+open-design area's minutes stay as section 8 gives them.
+
+What gtmworks keeps of it: nothing. A Card's file is listed from `GET /tasks/{id}` (its id, name, type, size, who added
+it and when; never `stored_path`), added and read back by gtmworks's own routes (`app/api/board/card/files/route.ts`,
+`app/c/[slug]/files/board/[card]/[file]/route.ts`), and a file the Agent made is named by a MEDIA line in its summary or
+comment and read from its own work folder in the sandbox through the Engine's file routes (ADR 0028, lib/engine/files.mjs),
+as a Conversation's reply is.
+
+A shortcut to note: a volume subpath that is a symbolic link is followed inside the volume by Docker. Nothing in the
+sandbox can make one there (the mount is read-only), and on the Engine only the Engine's own processes write under
+`/opt/data/kanban`; the file tools write only under `/work` (`HERMES_WRITE_SAFE_ROOT`) and the terminal runs in the
+sandbox. A link put there by the Engine itself would show the sandbox more of the volume, read-only.
