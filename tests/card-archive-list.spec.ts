@@ -63,8 +63,10 @@ test('the board\'s archive icon lists archived Cards with their Assignee and whe
 test('the archive list shows fifty archived Cards, newest first, "Show more" adds the rest, and its search finds one past the first page',async({page})=>{
  // Sixty archived Cards, the oldest titled in Arabic.
  const kanban=fake.settings.kanban;
- kanban.task({title:'مُــهمّة إعلانات ديسمبر',status:'archived'});
- for(let n=2;n<=60;n++) kanban.task({title:`Archived plan ${String(n).padStart(2,'0')}`,status:'archived'});
+ const made=[kanban.task({title:'مُــهمّة إعلانات ديسمبر',status:'archived'}).id];
+ for(let n=2;n<=60;n++) made.push(kanban.task({title:`Archived plan ${String(n).padStart(2,'0')}`,status:'archived'}).id);
+ // A Card with no Agent shows only where gtmworks's row beside it is (fail closed, ADR 0033): these were made from the board.
+ query(`insert into public.kanban_cards(company_id,task_id) values ${[...made].map(id=>`('${rs}','${id}')`).join(',')} on conflict do nothing`);
  await signIn(page,'reviewer@example.com',board);
  await archivedToggle(page).click();
  await expect(archivedToggle(page)).toHaveAccessibleName('Archived · 60');

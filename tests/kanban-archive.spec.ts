@@ -39,6 +39,8 @@ test.beforeAll(async({},testInfo)=>{
  cards.after=kanban.task({title:'Email after the course page',status:'todo'}).id;
  kanban.link(cards.page,cards.after);
  cards.old=kanban.task({title:'Old webinar',status:'archived'}).id;
+ // A Card with no Agent shows only where gtmworks's row beside it is (fail closed, ADR 0033): these were made from the board.
+ query(`insert into public.kanban_cards(company_id,task_id) values ${[cards.email,cards.after,cards.old].map(id=>`('${rs}','${id}')`).join(',')} on conflict do nothing`);
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
