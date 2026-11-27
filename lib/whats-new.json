@@ -1,5 +1,11 @@
 [
  {
+  "issue": 839,
+  "date": "2026-11-27",
+  "en": { "title": "Pass a Card's review or send it back", "body": "When an Agent hands in a Card for review, an Administrator or a Manager passes it, which moves it to Done, or sends it back with a reason the Agent reads on its next try; an Agent that reviews the work does the same by itself, and the Card says who passed it or sent it back." },
+  "ar": { "title": "عدّي مراجعة البطاقة أو رجّعها", "body": "لما وكيل يسلّم بطاقة للمراجعة، الأدمن أو المدير يعدّيها فتروح «خلصت»، أو يرجّعها بسبب الوكيل بيقراه في المحاولة الجاية؛ والوكيل اللي بيراجع الشغل بيعمل نفس الحاجة لوحده، والبطاقة بتقول مين عدّاها أو رجّعها." }
+ },
+ {
   "issue": 844,
   "date": "2026-11-26",
   "en": { "title": "Agents give each other work as Cards", "body": "Ask an Agent in a chat to give a job to another Agent, or type a job command such as /campaign, and it makes a Card on the board for that Agent; the chat shows one line naming the Card and its Agent that opens it, and the Agent that made it learns the result when the Card is done." },

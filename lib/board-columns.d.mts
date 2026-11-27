@@ -5,7 +5,8 @@ export declare const boardCardColumns: '*,wait:card_wait';
 export declare const cardColumns: readonly ['waiting', 'ideas', 'planned', 'progress', 'done'];
 export type CardColumn = typeof cardColumns[number];
 export declare function columnOfStatus(status: string): CardColumn | null;
-export type CardSymbol = {kind:'working'|'question'|'review'|'failed'|'stopped'} | {kind:'waits', count:number};
+// 'sentBack' and 'passed' are a review's outcome, which only a Card's own read knows (lib/company-card.mjs, #839).
+export type CardSymbol = {kind:'working'|'question'|'review'|'failed'|'stopped'|'sentBack'|'passed'} | {kind:'waits', count:number};
 export declare function cardSymbol(card: {status:string, failures:number, parents:number}): CardSymbol | null;
 export declare function orderCards<C extends {column:string, createdAt:number|null}>(cards: C[]): C[];
 /** A Card's chat waiting on its person (#146), read with the Card as `wait:card_wait`. */

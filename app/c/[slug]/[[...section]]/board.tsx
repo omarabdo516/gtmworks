@@ -79,11 +79,13 @@ export function useBoard(company:string):Read&{accept:(board:Board)=>void} {
 // assistive technology reads.
 const symbols:{[kind in CardSymbol['kind']]:{icon?:ShellIconName,tone:'ok'|'wait'|'bad'|'mute'}}={
  working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},stopped:{icon:'stop',tone:'mute'},waits:{icon:'hourglass',tone:'mute'},
+ // A review's outcome, which only the Card's own read knows (#839): no board Card carries one.
+ sentBack:{icon:'sendBack',tone:'mute'},passed:{icon:'passed',tone:'ok'},
 };
-const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits'} as const;
+const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits',sentBack:'symSentBack',passed:'symPassed'} as const;
 const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],done:['boardEmptyDone','']};
 
-export default function Board({company,slug,writer,creating=false}:{company:string,slug:string,writer:boolean,creating?:boolean}) {
+export default function Board({company,slug,writer,reviewer=false,creating=false}:{company:string,slug:string,writer:boolean,reviewer?:boolean,creating?:boolean}) {
  const {t}=useI18n();
  const read=useBoard(company);
  // New card is open (#836): at /work/new it opens with the page, and closing it leaves the board at its own address.
@@ -145,7 +147,7 @@ export default function Board({company,slug,writer,creating=false}:{company:stri
     </section>;
    })}
   </div>
-  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={answer=>{ if(answer.cards) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); }} onClose={closeCard}/>}
+  {open&&<CardWindow key={company} company={company} id={open} seen={cards?.find(card=>card.id===open)??null} writer={writer} reviewer={reviewer} cardHref={cardHref} fileHref={(card,file)=>`/c/${slug}/files/board/${encodeURIComponent(card)}/${encodeURIComponent(file)}`} showCard={showCard} onBoard={answer=>{ if(answer.cards) read.accept({cards:answer.cards as BoardCard[],main:answer.main??null}); }} onClose={closeCard}/>}
  {making&&<Suspense fallback={null}><NewCard company={company} onMade={(answer:MadeBoard)=>{ if(answer.cards) read.accept({cards:answer.cards,main:answer.main??null}); setMade(answer.made); }}
   onClose={()=>{ setMaking(false); if(creating&&window.location.pathname.endsWith('/work/new')) window.history.replaceState(window.history.state,'',`${base}/board`); opener.current?.focus(); }}/></Suspense>}
  </div></div>;

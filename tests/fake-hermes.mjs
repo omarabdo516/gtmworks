@@ -139,7 +139,9 @@ function kanbanBoard() {
    if(!task||task.status!=='running'&&!task.claim_lock) return false;
    const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
    if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',ended_at:++clock,error:reason?`manual_reclaim: ${reason}`:null});
-   Object.assign(task,{status:'ready',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null,consecutive_failures:0,last_failure_error:null});
+   // A reviewer's Run goes back to review (_retry_status_for_run: the Run's claim came from `review`), #839.
+   const fromReview=open&&events.some(row=>row.kind==='claimed'&&row.run_id===open.id&&row.payload?.source_status==='review');
+   Object.assign(task,{status:fromReview?'review':'ready',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null,consecutive_failures:0,last_failure_error:null});
    event(id,'reclaimed',{manual:true,reason},open?.id??null);
    return true;
   },
@@ -147,11 +149,31 @@ function kanbanBoard() {
   // (unblock_task, the failure counter starting again), `scheduled` parks it from todo, ready, running or blocked where
   // the dispatcher does not start it (schedule_task, an open Run ending `scheduled`), and `running` is the dispatcher's
   // alone. Answers the status code: 400 for `running` or an unknown status, 409 for a move from where the Card is not.
-  /** @param {string} id @param {string} status */
-  setStatus(id,status) {
+  // A review (#839; kanban_db.py reopen_review_task, complete_task): `ready` from `review` sends it back, to the
+  // implementer the latest review_requested names (review_reopened); `done` with a `summary` completes it, ending its open
+  // Run with that summary, or, on a Card no Run holds, a Run of no length made for it (_synthesize_ended_run), which no
+  // claim names.
+  /** @param {string} id @param {string} status @param {{summary?:unknown}} [fields] */
+  setStatus(id,status,{summary}={}) {
    const task=tasks.find(found=>found.id===id);
    if(!task) return 404;
    if(status==='running'||![...kanbanStatuses,'archived'].includes(status)) return 400;
+   if(status==='ready'&&task.status==='review') {
+    const implementer=events.filter(row=>row.task_id===id&&row.kind==='review_requested').at(-1)?.payload?.implementer??null;
+    Object.assign(task,{status:'ready',current_run_id:null,...implementer?{assignee:implementer}:{}});
+    event(id,'review_reopened',implementer?{status:'ready',implementer}:null);
+    return 200;
+   }
+   if(status==='done'&&['running','ready','blocked','review'].includes(task.status)) {
+    const text=typeof summary==='string'?summary:null;
+    const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+    const ended=open?Object.assign(open,{status:'done',outcome:'completed',ended_at:++clock,summary:text}):this.run(id,{profile:task.assignee,status:'done',outcome:'completed',summary:text});
+    if(!open) ended.ended_at=ended.started_at;
+    Object.assign(task,{status:'done',completed_at:++clock,claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null,consecutive_failures:0});
+    event(id,'completed',{summary:text},ended.id);
+    if(subscriptions.has(id)) this.told?.(task,/** @type {string} */(subscriptions.get(id)),text);
+    return 200;
+   }
    if(status==='ready'&&['blocked','scheduled'].includes(task.status)) {
     Object.assign(task,{status:'ready',current_run_id:null,consecutive_failures:0,last_failure_error:null});
     event(id,'unblocked',null);
@@ -165,6 +187,44 @@ function kanbanBoard() {
     return 200;
    }
    return 409;
+  },
+  // A review on the Engine, as its Agents do it (#839; kanban_db.py request_review, request_changes, complete_task): the
+  // worker hands its work in (`requestReview`: its open Run, or one of no length, ends review_requested with its summary,
+  // the Card in review); the Engine's tick starts a reviewing Agent on it (`claimReview`: a Run claimed from review, on
+  // the Card's own Agent unless another is named); and that Agent passes it (`reviewerPasses`, kanban_complete: done) or
+  // returns it with a reason (`reviewerReturns`, kanban_request_changes: ready again, on the implementer).
+  /** @param {string} id @param {string} summary */
+  requestReview(id,summary) {
+   const task=tasks.find(found=>found.id===id); if(!task) return;
+   const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+   const ended=open?Object.assign(open,{status:'review',outcome:'review_requested',ended_at:++clock,summary}):this.run(id,{profile:task.assignee,status:'review',outcome:'review_requested',summary});
+   if(!open) ended.ended_at=ended.started_at;
+   Object.assign(task,{status:'review',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+   event(id,'review_requested',{summary,implementer:ended.profile,reviewer:null},ended.id);
+  },
+  /** @param {string} id @param {string|null} [profile] */
+  claimReview(id,profile=null) {
+   const task=tasks.find(found=>found.id===id); if(!task||task.status!=='review') return null;
+   const opened=this.run(id,{profile:profile??task.assignee,claim_lock:`fake:${id}`});
+   Object.assign(task,{status:'running',claim_lock:`fake:${id}`,current_run_id:opened.id});
+   event(id,'claimed',{assignee:opened.profile,run_id:opened.id,source_status:'review'},opened.id);
+   return opened;
+  },
+  /** @param {string} id @param {string} summary */
+  reviewerPasses(id,summary) {
+   const task=tasks.find(found=>found.id===id); const open=runs.find(run=>run.task_id===id&&run.ended_at==null); if(!task||!open) return;
+   Object.assign(open,{status:'done',outcome:'completed',ended_at:++clock,summary});
+   Object.assign(task,{status:'done',completed_at:++clock,claim_lock:null,current_run_id:null,consecutive_failures:0});
+   event(id,'completed',{summary},open.id);
+   if(subscriptions.has(id)) this.told?.(task,/** @type {string} */(subscriptions.get(id)),summary);
+  },
+  /** @param {string} id @param {string} reason */
+  reviewerReturns(id,reason) {
+   const task=tasks.find(found=>found.id===id); const open=runs.find(run=>run.task_id===id&&run.ended_at==null); if(!task||!open) return;
+   const implementer=events.filter(row=>row.task_id===id&&row.kind==='review_requested').at(-1)?.payload?.implementer??task.assignee;
+   Object.assign(open,{status:'ready',outcome:'changes_requested',ended_at:++clock,summary:reason});
+   Object.assign(task,{status:'ready',assignee:implementer,claim_lock:null,current_run_id:null});
+   event(id,'changes_requested',{reason,implementer,reviewer:open.profile,status:'ready'},open.id);
   },
   // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
   // a Card that is not archived, the Engine answers that Card again. `ready` unless asked for triage or a parent is not
@@ -1535,7 +1595,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      settings.kanban.event(task.id,'assigned',{assignee:task.assignee});
     }
     if(typeof body?.status==='string') {
-     const moved=settings.kanban.setStatus(task.id,body.status);
+     const moved=settings.kanban.setStatus(task.id,body.status,body);
      if(moved!==200) return send(response,moved,{detail:`status transition to '${body.status}' not valid from current state`});
     }
     return send(response,200,{task});
