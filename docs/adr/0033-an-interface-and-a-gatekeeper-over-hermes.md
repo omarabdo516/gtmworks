@@ -1,9 +1,11 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0036
 date: 2026-11-26
 ---
 
 # gtmworks is an interface and a gatekeeper over Hermes
+
+> Partly superseded by [ADR 0036](0036-the-move-onto-hermes-ends-at-a-count.md) (Omar, 2026-11-27): item 3 is superseded, Channels leave the product; and the bullet of item 4 that retires gtmworks's settings screens is withdrawn, every Hermes setting is drawn in gtmworks and saved straight into Hermes.
 
 > Since 2026-11-26 (#902) the Role these ADRs call **Owner** is named **Administrator / أدمن**: same Role, new word; the code keeps `owner`. Past ADR text keeps its words.
 
