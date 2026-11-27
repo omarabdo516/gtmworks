@@ -35,9 +35,9 @@ const NewCard=lazy(()=>import('./new-card'));
 // carried over them shows the column refused and says why, and one dropped there stays where it was. The board filters
 // by Assignee and by Project (app/board-filters.tsx); a Card made while a Project is chosen is made in it.
 
-export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,project?:string|null,comments:number};
+export type BoardCard={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null,comments:number,project?:string|null,publishOn?:string|null};
 type Agent={id:string,name:string};
-type Board={cards:BoardCard[],main:Agent|null};
+export type Board={cards:BoardCard[],main:Agent|null};
 type Read={board:Board|null,state:'reading'|'read'|'failed'};
 
 const kept=new Map<string,Board>();
@@ -47,8 +47,9 @@ const kept=new Map<string,Board>();
 const againAfter=[3000,10000,30000];
 const slowRead=30000;
 
-// `accept` takes the board a write answered with (#836): it is a read like any other.
-function useBoard(company:string):Read&{accept:(board:Board)=>void} {
+// `accept` takes the board a write answered with (#836): it is a read like any other. The list and the calendar read
+// the same board through it (#845), and share its last good read.
+export function useBoard(company:string):Read&{accept:(board:Board)=>void} {
  const [read,setRead]=useState<Read>(()=>({board:kept.get(company)??null,state:'reading'}));
  const accept=useCallback((board:Board)=>{ kept.set(company,board); setRead({board,state:'read'}); },[company]);
  useEffect(()=>{
@@ -86,9 +87,9 @@ function useBoard(company:string):Read&{accept:(board:Board)=>void} {
 // One shape, one colour and one name for each state (design-reference-card: SYMS); the name is the tooltip and what
 // assistive technology reads.
 const symbols:{[kind in CardSymbol['kind']]:{icon?:ShellIconName,tone:'ok'|'wait'|'bad'|'mute'}}={
- working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},waits:{icon:'hourglass',tone:'mute'},
+ working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},stopped:{icon:'stop',tone:'mute'},waits:{icon:'hourglass',tone:'mute'},
 };
-const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',waits:'symWaits'} as const;
+const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits'} as const;
 const emptyKey:Record<CardColumn,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],done:['boardEmptyDone','']};
 
 export default function Board({company,slug,writer,me='',creating=false}:{company:string,slug:string,writer:boolean,me?:string,creating?:boolean}) {

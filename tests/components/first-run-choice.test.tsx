@@ -1,4 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import { act } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import FirstRunChoice, { FirstRunGate, type FirstRunState } from '@/app/first-run-choice';
@@ -67,6 +70,27 @@ test('picking "Alone" opens the workspace as one step, sending alone and no row'
  expect(form.get('choice')).toBe('alone');
  expect(form.get('mode')).toBe('alone');
  expect(form.get('rows')).toBe('[]');
+});
+
+// The cloud journey's "Alone", picked on the server-drawn question before React took it over, stayed checked with the
+// button disabled, and picking it again changed nothing (scripts/cloud-verify.mjs).
+test('"Alone" picked on the server-drawn question before the page hydrates is kept, and opens the workspace', async () => {
+ const question = <LanguageProvider language="en">
+  <FirstRunChoice slug="acme-abcd1234" company="10000000-0000-0000-0000-000000000090" companyName="Acme" personName="Omar"
+   lead={{ id: 'f0000000-0000-0000-0000-000000000090', name: 'Lead' }} brand={<>gtm<span>works</span></>} mark={<span/>} finish={finish}/>
+ </LanguageProvider>;
+ const host = document.body.appendChild(document.createElement('div'));
+ host.innerHTML = renderToString(question);
+ host.querySelector<HTMLInputElement>('input[value="alone"]')!.click();
+ const root = await act(async () => hydrateRoot(host, question));
+ try {
+  const open = host.querySelector<HTMLButtonElement>('#fr-go')!;
+  await expect.poll(() => open.disabled).toBe(false);
+  expect(host.querySelector<HTMLInputElement>('input[value="alone"]')!.checked).toBe(true);
+  await act(async () => open.click());
+  await expect.poll(() => finish.mock.calls.length).toBe(1);
+  expect(finish.mock.calls[0][1].get('choice')).toBe('alone');
+ } finally { act(() => root.unmount()); host.remove(); }
 });
 
 test('"Add a member" adds a focused row that starts as Contributor; a row can be removed only while there is more than one', async () => {

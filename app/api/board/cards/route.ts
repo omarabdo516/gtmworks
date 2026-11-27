@@ -4,11 +4,11 @@ import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routePermission } from '@/lib/route-permissions.mjs';
 import { readCompanyBoard } from '@/lib/company-board.mjs';
-import { assignCompanyCard, cardChoices, makeCompanyCard } from '@/lib/company-board-cards.mjs';
+import { assignCompanyCard, cardChoices, dateCompanyCard, makeCompanyCard } from '@/lib/company-board-cards.mjs';
 
 // New card and a Card's Assignee (spec #831, #836): GET is whom a Card may be given to (the Agents the reader sees, the
 // Company's Members and the reader for "Assign to me"), POST makes a Card on the Company's Engine and PATCH gives one to
-// an Agent, a Member or nobody. An Owner, a Manager or a Contributor; a Viewer is refused here, before anything reaches
+// an Agent, a Member or nobody (`assignee`), or sets or clears its publishing date (`publishOn`, #845), one of the two. An Owner, a Manager or a Contributor; a Viewer is refused here, before anything reaches
 // the Engine, and a person who is no Member finds no such board. The request runs as the signed-in person, so the
 // database checks the row's Role again (ADR 0004). A write answers with the board as it now reads, so the Card is drawn
 // where the Engine put it; no answer names the Engine, its address, its key or a profile.
@@ -66,6 +66,13 @@ export async function PATCH(request:NextRequest) {
   if(!sent) return reply({error:'boardNotAllowed'},403);
   const who=await caller(db,'PATCH',sent.company); if('answer' in who) return who.answer;
   const company=sent.company as string;
+  const dating=Object.hasOwn(sent,'publishOn');
+  if(dating===Object.hasOwn(sent,'assignee')) return reply({error:'cardInvalid'},400);
+  if(dating) {
+   const dated=await dateCompanyCard(db,{company,card:sent.card,publishOn:sent.publishOn});
+   if(dated.state==='dated') return await board(db,company,{dated:sent.card});
+   const [error,status]=failures[dated.state]; return reply({error},status);
+  }
   const assigned=await assignCompanyCard(db,{company,card:sent.card,assignee:sent.assignee});
   if(assigned.state==='assigned') return await board(db,company,{assigned:sent.card});
   const [error,status]=failures[assigned.state]; return reply({error},status);

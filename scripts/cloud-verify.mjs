@@ -7,6 +7,7 @@
 //   --out DIR                                where the screenshots go (default $TMPDIR/gtmworks-cloud/screens)
 // It refuses any app or database but the local stack's (scripts/first-run-db.mjs assertLocalTarget).
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -79,14 +80,49 @@ function putSeedBack() {
  }
 }
 
+// `next dev` compiles a page the first time it is asked for, and that compile rebuilds the client code the Company layout
+// shares: the page the browser is on reloads itself and the press that asked for the new page is lost (the first-run
+// answer stayed on Home while its Conversation was made). So the seeded Owner opens every page the journey walks, in a
+// browser of its own, and waits on each until the dev server has stopped rebuilding (its hot reload says so in the
+// console); next.config.mjs keeps them compiled while the server runs. A Conversation nobody has is enough to compile
+// its page.
+const journeyPages=slug=>[`/c/${slug}/home`,`/c/${slug}/conversations/${randomUUID()}`,`/c/${slug}/numbers`,`/c/${slug}/work/board`];
+async function compileJourneyPages(browser) {
+ const context=await browser.newContext();
+ try {
+  const page=await context.newPage();
+  let building=false, last=Date.now();
+  page.on('console',message=>{
+   const text=message.text();
+   if(text.startsWith('[Fast Refresh] rebuilding')) { building=true; last=Date.now(); }
+   else if(/^\[Fast Refresh\] (done|performing full reload)/.test(text)) { building=false; last=Date.now(); }
+  });
+  page.on('load',()=>{ building=false; last=Date.now(); });
+  await signIn(page,seeded.email,seeded.password);
+  for(const path of journeyPages(seeded.company)) {
+   // The compile this asks for can reload the page under the navigation; the page is asked for again until it answers.
+   await expect(async()=>{
+    const response=await page.goto(`${origin}${path}`);
+    if(!response||response.status()>=500) throw new Error(`${path} answered ${response?.status()}`);
+   }).toPass({timeout:120000});
+   await expect.poll(()=>!building&&Date.now()-last>3000,{message:`the dev server kept rebuilding after ${path}`,timeout:120000}).toBe(true);
+  }
+ } finally { await context.close(); }
+}
+
 async function signInOnly(page) {
  await signIn(page,seeded.email,seeded.password);
  await expect(page.locator('.sidebar')).toBeVisible({timeout:60000});
  const file=join(out,'cloud-verify-signed-in.png'); await page.screenshot({path:file});
- return `Signed in as ${seeded.email} at ${page.url()} (screenshot ${file})`;
+ const reached=page.url();
+ // The pages a session walks are compiled now, so its first press on one is not lost to a reload.
+ await compileJourneyPages(page.context().browser());
+ return `Signed in as ${seeded.email} at ${reached} (screenshot ${file})`;
 }
 
 async function journey(page) {
+ await compileJourneyPages(page.context().browser());
+ step('the dev server has compiled every page the journey opens');
  const owner={name:'Cloud owner',email:'cloud-owner@example.test',password:'cloud-owner-password',company:'Cloud Company'};
  const code=readFileSync(join(state,'setup-code'),'utf8').trim();
  // In a process of its own, so the truncate's notices stay out of the journey's lines unless it fails.
@@ -169,8 +205,15 @@ try {
  const page=await (await browser.newContext({viewport:{width:1440,height:900}})).newPage();
  if(mode==='sign-in') console.log(await signInOnly(page));
  else {
+  // A reload the dev server forces on the page drops what was being done there; the journey names it when it fails.
+  const reloads=[];
+  page.on('console',message=>{ if(message.text().startsWith('[Fast Refresh] performing full reload')) reloads.push(page.url()); });
   try { await journey(page); }
-  catch(error) { await screenshot(page,'failed').catch(()=>{}); throw error; }
+  catch(error) {
+   await screenshot(page,'failed').catch(()=>{});
+   if(reloads.length) error.message+=`\nThe dev server reloaded the page while it compiled (on ${reloads.join(', ')}): is a page the journey opens missing from journeyPages?`;
+   throw error;
+  }
   // Passed or not, the journey ends on the seed as local-db.sh left it: no journey Owner, Company or Card stays behind.
   finally { putSeedBack(); }
   console.log(`Journey passed; screenshots in ${out}`);

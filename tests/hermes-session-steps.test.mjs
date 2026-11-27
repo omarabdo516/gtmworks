@@ -114,3 +114,24 @@ test('a turn\'s create through the scheduling tool carries the Routine it made, 
   assert.deepEqual(read.turns[0].steps.map(step=>step.routine??null),[null,{name:'Leads summary',schedule:'0 9 * * *'},null,null]);
  } finally { await fake.close(); }
 });
+
+// Spec #831 (#844): a Card the Agent made in the turn with the Engine's own Kanban tool (v0.23.0 tools/kanban_tools.py
+// _handle_create, registered as kanban_create): only a create whose result is the Engine's `ok` naming the task it made
+// carries the Card, with the title and the board name (the profile) the call gave. A failed create, one still running,
+// and a result naming no task id carry none.
+test('a turn\'s create through the Kanban tool carries the Card it made: its id, its title and the profile it was given to',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.sessions.set('session-k',{profile,messages:[
+   user(1000,'Give Ads the March plan'),
+   asked(1001,[call('k1','kanban_create',{title:'Plan the March ads',body:'EGP 9,000 for 30 days.',assignee:'ag-ads'}),call('k2','kanban_create',{title:'No one',assignee:'ag-none'})]),
+   result(1002,'k1','kanban_create',{ok:true,task_id:'t_1a2b3c4d',status:'ready',workspace_kind:'scratch',workspace_path:null,project_id:null,gated:false,subscribed:true}),
+   result(1003,'k2','kanban_create',{error:'assignee is required'}),
+   asked(1004,[call('k3','kanban_create',{title:'Later',assignee:'ag-ads'}),call('k4','kanban_create',{title:'Odd',assignee:'ag-ads'}),call('k5','kanban_show',{task_id:'t_1a2b3c4d'})]),
+   result(1005,'k4','kanban_create',{ok:true,task_id:'../etc'}),
+   result(1006,'k5','kanban_show',{ok:true,task_id:'t_1a2b3c4d'}),
+   replied(1007,'I gave Ads the March plan.')]});
+  const read=await engineFor(connection(fake)).session('session-k');
+  assert.deepEqual(read.turns[0].steps.map(step=>step.card??null),[{id:'t_1a2b3c4d',title:'Plan the March ads',profile:'ag-ads'},null,null,null,null]);
+ } finally { await fake.close(); }
+});

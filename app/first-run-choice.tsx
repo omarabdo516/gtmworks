@@ -65,6 +65,12 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  // Opening moves focus into the question (the dialog itself, as the settings overlay does), so Tab starts at the
  // choices without either one looking picked before the Owner picks it.
  useEffect(()=>{ box.current?.focus({preventScroll:true}); },[]);
+ // A choice picked on the server-drawn question before React took it over stays checked on the page, and picking it
+ // again changes nothing: it is taken as the answer, as the composer keeps text typed early.
+ useEffect(()=>{
+  const picked=box.current?.querySelector<HTMLInputElement>('.fr-choice__input:checked')?.value;
+  if(picked==='alone'||picked==='team') setMode(current=>current??picked);
+ },[]);
  // A step that changes, a row added or removed and an error each say where the focus goes next.
  useEffect(()=>{ if(focusTo.current) { document.getElementById(focusTo.current)?.focus(); focusTo.current=null; } });
  // The action's first refused row takes the focus.

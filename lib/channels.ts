@@ -1,12 +1,12 @@
 import type { supabase } from './supabase';
 import type { BoardColumn } from './board-columns.mjs';
 import { agentFaceStates, type AgentFaceState } from './agent-face-states';
-import type { SessionUsage } from './engine.mjs';
+import type { SessionTurn as EngineTurn, SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
 import { replyShown } from './media-tags.mjs';
 import { calledAgents, mentionedAgent } from './composer-mentions.mjs';
 import type { Sending } from './sending';
-import { handoverEnding, messageFiles, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
+import { handoverEnding, messageFiles, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps } from './conversations';
 import { mustRead, ReadFailed } from './read-failed';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -122,7 +122,7 @@ export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMa
 export const inWrittenOrder=(lines:ChannelMessage[]):ChannelMessage[]=>[...lines].sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:0);
 // A channel's replies read their Run's steps from the Agent's Hermes session when the channel opens (#346), never kept.
 // `profile` is the one the Run was pinned to; the callback reads the session there.
-type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>;
+type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:EngineTurn[],usage:SessionUsage|null}|null>;
 const shownMessages=200;
 
 // A Run its person stopped (#478) is no Run that could not reply: the message says nothing more of it, as a Conversation's.
@@ -216,7 +216,9 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
    group.replies.push(reply); groups.set(key,group);
   }
   await Promise.all([...groups.values()].map(async group=>{
-   const turns=(await session(group.agent,group.session,group.profile).catch(()=>null))?.turns??null;
+   // A Card a channel's Agent made (#844) draws no row in a channel, which gets no new work (spec #831): the step stays,
+   // and the profile it names never leaves the server.
+   const turns=(await session(group.agent,group.session,group.profile).catch(()=>null))?.turns?.map(turn=>({...turn,steps:turn.steps.map(({card:_made,...step})=>step)}))??null;
    const rows=stepsOfReplies(group.replies.map(reply=>({author:'agent',run_id:String(reply.id),created_at:reply.created_at})),turns);
    for(const row of rows) stepsOf.set(Number(row.run_id),{list:row.steps,seconds:row.seconds});
   }));

@@ -4,9 +4,9 @@ import { cdp, page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-react';
 import type {} from '@vitest/browser-playwright';
 import NewCard from '@/app/c/[slug]/[[...section]]/new-card';
+import BoardViews from '@/app/c/[slug]/[[...section]]/board-views';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { LooksProvider } from '@/lib/agent-looks-client';
-import { showWork, workProps } from './work-page';
 import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -105,8 +105,10 @@ test('a refused Card says so and keeps the form, and a retry sends the same key'
  expect(sent.map(body => body.key)).toEqual([sent[0].key, sent[0].key]);
 });
 
-for (const view of ['list', 'calendar']) test(`on the ${view}, + New card leads to New card on the board`, async () => {
- const screen = await showWork(workProps({ section: `work/${view}` }));
+// The list and the calendar read the board (#845); their socket to the board's live stream never opens here.
+for (const view of ['list', 'calendar'] as const) test(`on the ${view}, + New card leads to New card on the board`, async () => {
+ engine(); vi.stubGlobal('WebSocket', class extends EventTarget { close() {} });
+ const screen = await render(<LanguageProvider language="en"><LooksProvider looks={{ agents: {}, requests: {}, removed: {} }}><BoardViews company={company} slug="rs-learning" view={view} writer/></LooksProvider></LanguageProvider>);
  await expect.element(screen.getByRole('link', { name: '+ New card' })).toHaveAttribute('href', '/c/rs-learning/work/new');
 });
 

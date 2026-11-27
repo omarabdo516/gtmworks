@@ -69,8 +69,12 @@ test('prepared navigation (production, warm-up + 3 runs)', async ({ page }, test
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
-  // The measured Inbox step opens a non-empty Inbox from the sidebar's approvals entry.
-  expect(Number(await page.locator('.sidebar .sb-count[href$="/approvals"]').textContent())).toBeGreaterThan(0);
+  // The measured Inbox step opens a non-empty Inbox from the sidebar's approvals entry. The Company layout streams the
+  // count beside the page, and the pill stays empty until it comes (app/approvals-count.tsx, #789); the board's frame is
+  // drawn before it since the board reads the Engine (#834). So the count is read once it has come, and it is not 0.
+  const waiting = page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
+  await expect(waiting).not.toBeEmpty();
+  expect(Number(await waiting.textContent())).toBeGreaterThan(0);
   const runs: Record<string, Timing[]> = Object.fromEntries(clickPath.map(step => [step.name, []]));
   for (let run = 0; run < 4; run++) {
     await page.goto('/c/rs-learning/work/board');

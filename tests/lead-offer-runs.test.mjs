@@ -39,7 +39,7 @@ function database({brief,main=true,tools=null}={}) {
   if(name==='conversation_handover_agents') return ok([{name:'Ads',job:'Meta ads'}]);
   if(name==='pin_run') return ok({tools:tools?JSON.stringify(tools.map(tool=>JSON.parse(args.specs[tool]))):null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
-  if(name==='pin_lead_brief') return ok(main?brief??null:null);
+  if(name==='pin_run_brief') return ok(main?brief??null:null);
   if(name==='begin_turn_start') return ok(1);
   if(name==='send_conversation_message'||name==='record_conversation_turn') return ok(true);
   if(name==='queued_conversations') return ok([{conversation}]);
@@ -59,7 +59,7 @@ test('an Owner\'s Run is told "Make it?" with "Not now", and the team that perso
  assert.match(text,/«اعمله»/);
  assert.match(text,/- Reach: Plans the Meta ads\./);
  assert.doesNotMatch(text,/Ask Omar for it\?/);
- assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief'),[['pin_lead_brief',{conversation,message_key:sendKey}]]);
+ assert.deepEqual(store.calls.filter(([name])=>name==='pin_run_brief'),[['pin_run_brief',{conversation,message_key:sendKey}]]);
 });
 
 test('a Manager\'s and a Contributor\'s Run is told to ask the Owner by first name, and to request an Agent',async()=>{
@@ -95,7 +95,7 @@ test('a retry sends the same pinned brief, read again from the database for the 
  assert.equal(started.length,2,'each attempt asks the Engine to start the Run');
  assert.deepEqual(started.map(start=>start.instructions),[first,first],'and both carry the same pinned brief');
  assert.equal(fake.runs.length,1,'the same send key is the same Run');
- assert.equal(store.calls.filter(([name])=>name==='pin_lead_brief').length,2,'each attempt reads the Run\'s one pinned brief');
+ assert.equal(store.calls.filter(([name])=>name==='pin_run_brief').length,2,'each attempt reads the Run\'s one pinned brief');
 });
 
 test('another Agent\'s Run is told nothing of the person\'s team: the main Agent alone makes the offer',async()=>{
@@ -104,14 +104,14 @@ test('another Agent\'s Run is told nothing of the person\'s team: the main Agent
  assert.equal(fake.runs[0].instructions,null);
  // The starter asks for every turn's brief (the service role may not read which Agent is the main one), and the
  // database answers none for any other Agent.
- assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief').length,1);
+ assert.deepEqual(store.calls.filter(([name])=>name==='pin_run_brief').length,1);
 });
 
 test('a Lead Run that waited starts with the same pinned brief',async()=>{
  const fake=fakeEngine(); const store=database({brief:briefs.manager});
  assert.equal(await withEngineContract(fake.engineFor,()=>startQueuedTurns(store.service,{})),1);
  assert.match(fake.runs[0].instructions,/"Ask Omar for it\?" with the choices "Ask Omar for it" and "Not now"/);
- assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief'),[['pin_lead_brief',{conversation,message_key:sendKey}]]);
+ assert.deepEqual(store.calls.filter(([name])=>name==='pin_run_brief'),[['pin_run_brief',{conversation,message_key:sendKey}]]);
 });
 
 // #167: a Contributor with an Agent hidden from them is offered ask_to_open_agent, and told the Agent's job and never its

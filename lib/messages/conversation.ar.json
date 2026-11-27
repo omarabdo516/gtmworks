@@ -48,5 +48,8 @@
   "accessAnsweredDeclined": "{0} قال لأ على طلبك دلوقتي، فالوكيل ده لسه مش متاح ليك. لو لسه محتاج الشغلانة دي، قولّي هنا.",
   "accessAvailable": "الوكيل ده بقى متاح ليك: هتلاقيه في الوكلاء عندك.",
   "activityThinking": "بيفكر",
-  "activityWriting": "بيكتب الرد"
+  "activityWriting": "بيكتب الرد",
+  "chatCardMade": "اتعملت بطاقة لـ {0}",
+  "chatCardMadeAlone": "اتعملت بطاقة",
+  "chatCardOpen": "افتح البطاقة"
 }

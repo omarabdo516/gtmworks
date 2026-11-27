@@ -177,15 +177,17 @@ test('the Engine board has five columns, Waiting on you first and no Live, and e
  assert.equal(columnOfStatus('something new'), null);
 });
 
-test('a Card\'s symbol says what it is doing: working now, a question, a review, stopped after failures, waiting for other Cards', () => {
+test('a Card\'s symbol says what it is doing: working now, a question, a review, stopped after failures, stopped, waiting for other Cards', () => {
  assert.deepEqual(cardSymbol({ status: 'running', failures: 0, parents: 0 }), { kind: 'working' });
+ // Parked where the dispatcher does not start it (#838): a person's Stop, or an Agent that set its Card aside.
+ assert.deepEqual(cardSymbol({ status: 'scheduled', failures: 0, parents: 0 }), { kind: 'stopped' });
  assert.deepEqual(cardSymbol({ status: 'blocked', failures: 0, parents: 0 }), { kind: 'question' });
  assert.deepEqual(cardSymbol({ status: 'blocked', failures: 1, parents: 0 }), { kind: 'question' });
  assert.deepEqual(cardSymbol({ status: 'blocked', failures: 2, parents: 0 }), { kind: 'failed' });
  assert.deepEqual(cardSymbol({ status: 'review', failures: 0, parents: 0 }), { kind: 'review' });
  assert.deepEqual(cardSymbol({ status: 'todo', failures: 0, parents: 1 }), { kind: 'waits', count: 1 });
  assert.deepEqual(cardSymbol({ status: 'todo', failures: 0, parents: 3 }), { kind: 'waits', count: 3 });
- for (const status of ['triage', 'todo', 'scheduled', 'ready', 'done']) assert.equal(cardSymbol({ status, failures: 0, parents: 0 }), null, status);
+ for (const status of ['triage', 'todo', 'ready', 'done']) assert.equal(cardSymbol({ status, failures: 0, parents: 0 }), null, status);
  // A Card that already started is no longer waiting for its parents, whatever links it keeps.
  assert.deepEqual(cardSymbol({ status: 'running', failures: 0, parents: 2 }), { kind: 'working' });
 });

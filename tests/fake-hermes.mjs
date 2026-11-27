@@ -53,6 +53,9 @@ export function screenFrame(grab) {
 // tails and GET /tasks/{id} lists; a test moves a task to another status with `move`, as a worker or another person
 // would, records any other change with `event`, and gives a task its Runs with `run` (the Run dataclass). A Card whole
 // is `detail(id)`, GET /tasks/{id}'s answer.
+// A Card an Agent made in a Run with kanban_create (#844) subscribes the Run's session (`subscribe`, the Engine's
+// _maybe_auto_subscribe): once the Card is done, `told` is given the task, that session and its summary, as the Engine's
+// notifier wakes the session that made it (docs/engine-probes/kanban-board.md, section 5).
 export const kanbanStatuses=['triage','todo','scheduled','ready','running','blocked','review','done'];
 function kanbanBoard() {
  const tasks=/** @type {any[]} */([]);
@@ -67,6 +70,7 @@ function kanbanBoard() {
  /** @param {string} task @param {string} kind @param {any} [payload] @param {number|null} [run] */
  const event=(task,kind,payload=null,run=null)=>{ events.push({id:events.length+1,task_id:task,run_id:run,kind,payload,created_at:++clock}); };
  const summaryOf=id=>runs.filter(run=>run.task_id===id&&run.summary).at(-1)?.summary??tasks.find(task=>task.id===id)?.latest_summary??null;
+ const subscriptions=/** @type {Map<string,string>} */(new Map());
  return {tasks,links,comments,events,event,runs,attachments,
   // The Engine's one cap for a Card's file, the dashboard's, the tools' and the CLI's (KANBAN_ATTACHMENT_MAX_BYTES).
   attachmentLimit:25*1024*1024,
@@ -78,11 +82,15 @@ function kanbanBoard() {
    event(task,'attached',{filename,size:row.size,by:uploaded_by});
    return row;
   },
+  told:/** @type {((task:any,session:string,summary:string|null)=>void)|null} */(null),
+  /** @param {string} id @param {string} session */
+  subscribe(id,session) { subscriptions.set(id,session); },
   /** @param {string} id @param {string} status */
   move(id,status) {
    const task=tasks.find(found=>found.id===id); if(!task) return;
    task.status=status; if(status==='done') task.completed_at=++clock;
    event(id,'status',{status});
+   if(status==='done'&&subscriptions.has(id)) this.told?.(task,/** @type {string} */(subscriptions.get(id)),summaryOf(id));
   },
   /** @param {Record<string,any>} fields */
   task(fields) {
@@ -140,11 +148,12 @@ function kanbanBoard() {
     set(s,s==='blocked'?'blocked':'review_requested',null); this.recompute(); return null; }
    if(s==='ready'||s==='todo') {
     if(task.status==='review') { set(landing,'review_reopened',{status:landing}); this.recompute(); return null; }
-    if(s==='ready'&&['blocked','scheduled'].includes(task.status)) { set(landing,'unblocked',{status:landing}); this.recompute(); return null; }
+    if(s==='ready'&&['blocked','scheduled'].includes(task.status)) { Object.assign(task,{current_run_id:null,consecutive_failures:0,last_failure_error:null}); set(landing,'unblocked',landing==='ready'?null:{status:landing}); this.recompute(); return null; }
     if(s==='ready'&&open.length) return [409,`Cannot move to 'ready': blocked by parent(s) not done — ${open.map(parent=>`'${parent.title}' (${parent.id}, status=${parent.status})`).join(', ')}`];
     set(s); if(s==='ready') this.recompute(); return null;
    }
-   if(s==='triage'||s==='scheduled') { set(s); return null; }
+   if(s==='scheduled') return this.setStatus(id,s)===200?null:[409,"status transition to 'scheduled' not valid from current state"];
+   if(s==='triage') { set(s); return null; }
    return [400,`unknown status: ${s}`];
   },
   // recompute_ready: a `todo` Card whose parents are all done or archived is `ready`.
@@ -176,6 +185,41 @@ function kanbanBoard() {
   },
   /** @param {string} task @param {string} author @param {string} body */
   comment(task,author,body) { comments.push({id:comments.length+1,task_id:task,author,body,created_at:++clock}); event(task,'commented',{author,len:body.length}); },
+  // The Engine's own stop for an open Run (reclaim_task, #838): the worker and its Run end `reclaimed`, the claim is
+  // released, the failure counter starts again and the Card goes back to `ready`; false for a Card with no open Run.
+  /** @param {string} id @param {string|null} [reason] */
+  reclaim(id,reason=null) {
+   const task=tasks.find(found=>found.id===id);
+   if(!task||task.status!=='running'&&!task.claim_lock) return false;
+   const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+   if(open) Object.assign(open,{status:'reclaimed',outcome:'reclaimed',ended_at:++clock,error:reason?`manual_reclaim: ${reason}`:null});
+   Object.assign(task,{status:'ready',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null,consecutive_failures:0,last_failure_error:null});
+   event(id,'reclaimed',{manual:true,reason},open?.id??null);
+   return true;
+  },
+  // A person's move (update_task's status, #838): `ready` from `blocked` or `scheduled` lets the Card go on
+  // (unblock_task, the failure counter starting again), `scheduled` parks it from todo, ready, running or blocked where
+  // the dispatcher does not start it (schedule_task, an open Run ending `scheduled`), and `running` is the dispatcher's
+  // alone. Answers the status code: 400 for `running` or an unknown status, 409 for a move from where the Card is not.
+  /** @param {string} id @param {string} status */
+  setStatus(id,status) {
+   const task=tasks.find(found=>found.id===id);
+   if(!task) return 404;
+   if(status==='running'||![...kanbanStatuses,'archived'].includes(status)) return 400;
+   if(status==='ready'&&['blocked','scheduled'].includes(task.status)) {
+    Object.assign(task,{status:'ready',current_run_id:null,consecutive_failures:0,last_failure_error:null});
+    event(id,'unblocked',null);
+    return 200;
+   }
+   if(status==='scheduled'&&['todo','ready','running','blocked'].includes(task.status)) {
+    const open=runs.find(run=>run.task_id===id&&run.ended_at==null);
+    if(open) Object.assign(open,{status:'scheduled',outcome:'scheduled',ended_at:++clock});
+    Object.assign(task,{status:'scheduled',claim_lock:null,claim_expires:null,worker_pid:null,current_run_id:null});
+    event(id,'scheduled',{reason:null},open?.id??null);
+    return 200;
+   }
+   return 409;
+  },
   // POST /tasks (create_task, #836): a Card made by a person on the dashboard. With an idempotency key it already holds on
   // a Card that is not archived, the Engine answers that Card again. `ready` unless asked for triage or a parent is not
   // done, an assignee or none (hermes_cli/kanban_db_graph.py initial_task_state).
@@ -195,13 +239,22 @@ function kanbanBoard() {
   // `running`; a Card with no Agent is never claimed. `ticks` counts the ticks asked for. The Engine's own tick runs
   // every 60 s; the fake runs one only when it is asked, through POST /dispatch or a test calling this. Each claim is a
   // `claimed` event, so a live board sees the Card start.
+  // Each claim opens a Run on the Card's Agent (#838), and the worker's first prompt is kept in `prompts`, as the
+  // Engine builds it (hermes_cli/kanban_db_context.py): its header line, its body and every comment under its author.
   ticks:0,
+  prompts:/** @type {{task:string,run:number,profile:string,prompt:string}[]} */([]),
   dispatch() {
    this.ticks++;
    // A tick first promotes every Card whose parents are done (dispatch_once's recompute_ready).
    this.recompute();
    const spawned=tasks.filter(task=>task.status==='ready'&&task.assignee);
-   for(const task of spawned) { Object.assign(task,{status:'running',started_at:++clock,claim_lock:`fake:${task.id}`,current_run_id:clock}); event(task.id,'claimed',{assignee:task.assignee}); }
+   for(const task of spawned) {
+    const opened=this.run(task.id,{profile:task.assignee,claim_lock:`fake:${task.id}`});
+    Object.assign(task,{status:'running',started_at:task.started_at??clock,claim_lock:`fake:${task.id}`,current_run_id:opened.id});
+    event(task.id,'claimed',{assignee:task.assignee,run_id:opened.id},opened.id);
+    const thread=comments.filter(comment=>comment.task_id===task.id).flatMap(comment=>[`comment from worker \`${comment.author}\`:`,comment.body,'']);
+    this.prompts.push({task:task.id,run:opened.id,profile:task.assignee,prompt:[`# Kanban task ${task.id}: ${task.title}`,'','## Body',task.body??'','',...thread.length?['## Comment thread',...thread]:[]].join('\n')});
+   }
    return {reclaimed:0,crashed:[],timed_out:[],auto_blocked:[],promoted:0,spawned:spawned.map(task=>[task.id,task.assignee,`/opt/data/kanban/workspaces/${task.id}`]),skipped_unassigned:[],skipped_nonspawnable:[]};
   },
   // GET /board (get_board): every task not archived, in its status's column, each with its link, comment and child counts
@@ -341,7 +394,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
   // The most rows a cron job's run history lists (#535: the pinned Engine lists 100 at most).
   cronRunsAtMost:100,startDelay:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
@@ -480,6 +533,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // A function of the job answers each job its own way (#183: the night's results beside the morning's greeting).
   cronReply:/** @type {string|((job:any)=>string)} */('Here is what ran overnight.'),
   routineAsks:/** @type {(input:string)=>{name:string,prompt:string,schedule:string}|null} */(()=>null),
+  // #844: the Card a chat Run's model makes with the Engine's own kanban_create, chosen from the Run's input and the
+  // instructions gtmworks sent it (where the board names are): only on a profile whose Runs are offered the kanban
+  // toolset. The Card is made on the board by the Run's profile and subscribes its session; the Run's events report the
+  // call (tool.started, tool.completed) and its session keeps the person's message, the call, its result as the Engine
+  // answers it (tools/kanban_tools.py _handle_create) and the reply, so its steps are read as a real Run's are. Each Run
+  // keeps what its session had been told by the notifier before it started (`told`).
+  kanbanAsks:/** @type {(input:string,instructions:string)=>{title:string,body?:string,assignee:string}|null} */(()=>null),
   profilesListStatus:/** @type {number|null} */(null),
   // Each session archived on a profile ("profile:session", #674), every flag sent to one, and the status a flag is
   // answered with instead (an Engine busy or going away).
@@ -591,6 +651,31 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   patternKeys:['mcp_elicitation'],kept:[`mcp:${each.app.server}/${each.app.tool}`]}
   :(keys=>({description:each.description??'',command:each.command??'',patternKeys:keys,kept:keys}))(each.keys??[each.description||'recursive delete']);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
+ // A Run's kanban_create (#844): the Card made by the Run's profile, its session subscribed, the call in the Run's events
+ // and its session.
+ const madeCard=run=>{
+  const task=settings.kanban.create({title:run.card.title,body:run.card.body??null,assignee:run.card.assignee});
+  Object.assign(task,{created_by:run.profile,session_id:run.session??null});
+  if(run.session) settings.kanban.subscribe(task.id,run.session);
+  const call=`call_${randomUUID().replaceAll('-','').slice(0,12)}`; const at=Date.now()/1000;
+  push(run.id,{event:'tool.started',tool:'kanban_create',tool_call_id:call,preview:run.card.title});
+  push(run.id,{event:'tool.completed',tool:'kanban_create',tool_call_id:call,error:false});
+  if(!run.session) return;
+  const found=settings.sessions.get(run.session)??{profile:run.profile,messages:[]};
+  settings.sessions.set(run.session,found);
+  found.messages.push({role:'user',content:inputText(run.input),timestamp:at},
+   {role:'assistant',content:'',tool_calls:[{id:call,type:'function',function:{name:'kanban_create',arguments:JSON.stringify(run.card)}}],timestamp:at+0.5},
+   {role:'tool',tool_call_id:call,tool_name:'kanban_create',content:JSON.stringify({ok:true,task_id:task.id,status:task.status,workspace_kind:'scratch',workspace_path:null,project_id:null,gated:false,subscribed:!!run.session}),timestamp:at+1},
+   {role:'assistant',content:settings.reply(inputText(run.input),[],[]),timestamp:at+1.5});
+ };
+ // The Engine's notifier (#844): a Card made from a session wakes that session with a user turn naming the Card and its
+ // result, which the session's Agent answers; the session's next Run holds it.
+ settings.kanban.told=(task,session,summary)=>{
+  const found=settings.sessions.get(session); if(!found) return;
+  const at=Date.now()/1000;
+  found.messages.push({role:'user',content:`[kanban] Task ${task.id} completed. Title: ${task.title} Assignee: @${task.assignee} Result: ${summary??''}`,timestamp:at},
+   {role:'assistant',content:'Noted.',timestamp:at+0.5});
+ };
  // A cron job as the pinned release stores and lists it (cron/jobs.py create_job, web_server_cron.py
  // _annotate_cron_job). Only the shapes gtmworks reads are parsed: a five-field cron expression and "every <n>m|h".
  const cronStore=name=>{ if(!settings.cron.has(name)) settings.cron.set(name,[]); return settings.cron.get(name); };
@@ -690,7 +775,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const runProfile=decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||'default');
      const asks=settings.routineAsks(inputText(sent.input));
      if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
-     run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
+     run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000,
+      told:(settings.sessions.get(request.headers['x-hermes-session-key'])?.messages??[]).filter(message=>message.role==='user'&&String(message.content).startsWith('[kanban]')).map(message=>message.content)}; settings.runs.push(run);
+     const card=enabledToolsets(profileOf(runProfile)?.config).includes('kanban')?settings.kanbanAsks(inputText(sent.input),String(sent.instructions??'')):null;
+     if(card) run.card=card;
      const runProvider=sent.provider??profileOf(runProfile)?.provider;
      const runModel=sent.model??profileOf(runProfile)?.model;
      const accounts=(settings.defaultPool[runProvider]||[]).filter(row=>row.auth_type==='oauth');
@@ -720,6 +808,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       if(!settings.answeredOn.has(run.id)) run.outOfAccounts=true;
      }
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
+     if(run.card) madeCard(run);
     }
     // A start whose answer is lost: the run exists, but the connection closes before any answer (loseStarts of them).
     if(settings.loseStarts>0) { settings.loseStarts--; request.socket.destroy(); return; }
@@ -1516,6 +1605,22 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const [parent,child]=[url.searchParams.get('parent_id'),url.searchParams.get('child_id')];
     if(!parent||!child) return send(response,422,{detail:'parent_id and child_id are required'});
     return send(response,200,settings.kanban.removeLink(parent,child));
+   }
+   // A comment under the author the caller names (add_comment: an empty body is a 400, the author `dashboard` when none)
+   // and the Engine's stop for a Card's open Run (reclaim_task_endpoint: 409 when it has none), #838.
+   const kanbanComment=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)\/comments$/);
+   if(kanbanComment&&request.method==='POST') {
+    const id=decodeURIComponent(kanbanComment[1]);
+    if(typeof body?.body!=='string'||!body.body.trim()) return send(response,400,{detail:'body is required'});
+    if(!settings.kanban.tasks.some(found=>found.id===id)) return send(response,404,{detail:`task ${id} not found`});
+    settings.kanban.comment(id,typeof body.author==='string'&&body.author?body.author:'dashboard',body.body);
+    return send(response,200,{ok:true});
+   }
+   const kanbanReclaim=url.pathname.match(/^\/api\/plugins\/kanban\/tasks\/([^/]+)\/reclaim$/);
+   if(kanbanReclaim&&request.method==='POST') {
+    const id=decodeURIComponent(kanbanReclaim[1]);
+    return settings.kanban.reclaim(id,typeof body?.reason==='string'?body.reason:null)?send(response,200,{ok:true,task_id:id})
+     :send(response,409,{detail:`cannot reclaim ${id}: not in a claimable state (not running, or unknown id)`});
    }
    if(url.pathname==='/api/plugins/kanban/dispatch'&&request.method==='POST') return send(response,200,settings.kanban.dispatch());
    // A Card's files (#843; plugin_api.py list_task_attachments, upload_task_attachment, download_attachment): the upload is

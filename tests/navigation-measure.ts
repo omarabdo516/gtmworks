@@ -4,7 +4,8 @@ type Step = { name: string, link: string, path: string, content: string, search?
 // Each step leaves from a sidebar entry the shell has (#8): Numbers opens its own page (#35) where Home used to be the
 // first entry, and Activity log opens /log (#11). On the board a Card opens in its Card window (#835). The window's own
 // motion is its allowance over the budgets (app/card-window.css, .cw): the 280ms rise runs after it is shown, and the
-// 190ms leave runs before the board is shown again. The Card's page still opens from the list.
+// 190ms leave runs before the board is shown again. The list reads the same board (#845): its Card opens the board
+// with that Card's window.
 // A step that opens a new page counts `settled` from the end of the reference's own motion (#135): the page region's
 // fadeIn (design-reference/index.html .view-enter, 200ms, after the page is shown) and the 150ms fade of the row that
 // becomes current (.sb-item, .agent-tile), which runs beside it. A Card's sheet opens over the same page, which does not fade.
@@ -25,8 +26,8 @@ export const clickPath: Step[] = [
   { name: 'open sheet', link: `#board-cols .kcard[data-card="${measuredCard}"] a`, path: '/work/board', search: `?card=${measuredCard}`, content: '.cw[open]', motion: { shown: 0, settled: 280 } },
   { name: 'close sheet', link: '.cw[open] .cw-head .circle-btn[aria-label="Close the card"]', path: '/work/board', search: '', content: '.board', gone: '.cw[open]', motion: { shown: 190, settled: 190 } },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr', motion: opensPage },
-  { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: opensPage },
-  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensBoard },
+  { name: 'open card', link: `.table a[href$="?card=${measuredCard}"]`, path: '/work/board', search: `?card=${measuredCard}`, content: '.cw[open]', motion: opensBoard },
+  { name: 'close card', link: '.cw[open] .cw-head .circle-btn[aria-label="Close the card"]', path: '/work/board', search: '', content: '.board', gone: '.cw[open]', motion: { shown: 190, settled: 190 } },
   { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar', motion: opensPage },
   // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensBoard },

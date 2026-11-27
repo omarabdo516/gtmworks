@@ -36,7 +36,7 @@ function databases(other) {
   if(name==='claim_conversation_turn') return {data:due?[{company,agent,person:'p',send_key:due[0],message:due[1].message,connection,profile,note:null,retry:false,has_files:false}]:[],error:null};
   if(['conversation_handover_agents'].includes(name)) return {data:[],error:null};
   if(name==='pin_run') return {data:{tools:null},error:null};
-  if(['pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return {data:null,error:null};
+  if(['pin_run_history','pin_run_model','pin_run_brief'].includes(name)) return {data:null,error:null};
   if(name==='begin_turn_start') {
    const reservation=reservations.get(args.message_key);
    if(reservation.in_flight) return {data:0,error:null};

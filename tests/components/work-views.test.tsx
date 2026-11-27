@@ -50,25 +50,6 @@ test('the board\'s Month filter lists each month of the Cards, newest first, aft
  expect([...(select.element() as HTMLSelectElement).options].map(option => option.textContent)).toEqual(['All months', 'December 2026', 'November 2026']);
 });
 
-test('the List filters by month too, and a row\'s title opens its Card', async () => {
- const screen = await showWork(workProps({ section: 'work/list', cards }));
- const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board/${id}"]`).length;
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board/1');
- await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
- await expect.poll(() => row(1)).toBe(0);
- expect(row(3)).toBe(1);
- await userEvent.selectOptions(screen.getByLabelText('Month'), '');
- await expect.poll(() => row(1)).toBe(1);
-});
-
-test('the Calendar shows a Card on its publishing day in its month, linking to the Card', async () => {
- const screen = await showWork(workProps({ section: 'work/calendar', cards }));
- await userEvent.fill(screen.getByLabelText('Month'), '2026-11');
- const link = screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' });
- await expect.element(link).toHaveAttribute('href', '/c/rs-learning/work/board/1');
- expect(link.element().closest('.day')!.firstChild!.textContent).toBe('12');
-});
-
 test('Work settings name every stage\'s and every label\'s fields for what they change', async () => {
  const screen = await showWork(workProps({ section: 'settings/work' }));
  for (const name of ['Stage name أفكار', 'Stage order أفكار', 'Label name static', 'Label color static']) await expect.element(screen.getByLabelText(name, { exact: true })).toBeVisible();

@@ -22,7 +22,7 @@ function databases({ refused = false, listed = null } = {}) {
     if (name === 'queued_conversations') return { data: queued.length && !turn.started_at ? [{ conversation: 'c' }] : [], error: null };
     if (name === 'claim_conversation_turn') return { data: queued.length && !turn.started_at ? [{ company: 'co', agent: queued[0].agent, person: 'p', send_key: 'k', message: queued[0].message, connection: owners, profile: 'writer', note: null, retry: false, has_files: false }] : [], error: null };
     if (name === 'conversation_handover_agents') return { data: [], error: null };
-    if (['pin_run', 'pin_run_history', 'pin_run_model', 'pin_lead_brief'].includes(name)) return { data: null, error: null };
+    if (['pin_run', 'pin_run_history', 'pin_run_model', 'pin_run_brief'].includes(name)) return { data: null, error: null };
     if (name === 'begin_turn_start') return { data: 1, error: null };
     if (name === 'record_conversation_turn') { recorded.push(given); turn.started_at = 'now'; return { data: true, error: null }; }
     return { data: null, error: { message: `unexpected ${name}` } };

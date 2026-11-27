@@ -7,7 +7,7 @@ export type CardColumn = typeof cardColumns[number];
 export declare function columnOfStatus(status: string): CardColumn | null;
 export declare function statusOfColumn(column: string, waits: boolean): 'triage' | 'ready' | 'todo' | 'done' | null;
 export declare function moveTarget(column: string, key: string, rtl: boolean): CardColumn | null;
-export type CardSymbol = {kind:'working'|'question'|'review'|'failed'} | {kind:'waits', count:number};
+export type CardSymbol = {kind:'working'|'question'|'review'|'failed'|'stopped'} | {kind:'waits', count:number};
 export declare function cardSymbol(card: {status:string, failures:number, parents:number}): CardSymbol | null;
 export declare function orderCards<C extends {column:string, createdAt:number|null}>(cards: C[]): C[];
 /** A Card's chat waiting on its person (#146), read with the Card as `wait:card_wait`. */

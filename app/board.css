@@ -229,6 +229,22 @@
 
 /* ---------- list and calendar share the head ---------- */
 .gw .board-view--page .board-body { padding: 0 var(--s8) var(--s8); font-size: var(--gw-fs-base); }
+/* The list's four filters wrap on a narrow screen. The calendar keeps its undated Cards beside the month on a wide
+   screen, and under it, side by side with the month's dates, where a day would grow too narrow for its titles (#845). */
+.gw .board-view--page .work-filters { flex-wrap: wrap; }
+.gw .board-view--page .view-calendar { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.gw .board-view--page .day__n { display: block; }
+.gw .board-view--page .muted { color: var(--gw-text-3); }
+.gw .board-view--page .view-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s4); align-items: start; }
+.gw .board-view--page .view-side__h { margin: 0 0 var(--s3); font-size: var(--gw-fs-sm); font-weight: var(--gw-fw-semibold); }
+.gw .board-view--page .view-side ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s2); }
+.gw .board-view--page .view-side__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); font-size: var(--gw-fs-sm); }
+.gw .board-view--page .view-side__row .authored-title { min-width: 0; overflow-wrap: anywhere; }
+.gw .board-view--page .view-date { height: 30px; min-height: 0; padding: 0 var(--s2); font-size: var(--gw-fs-xs); }
+@media (min-width: 1600px) {
+  .gw .board-view--page .view-calendar { grid-template-columns: minmax(0, 1fr) 280px; }
+  .gw .board-view--page .view-side { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- motion and narrow screens ---------- */
 @media (prefers-reduced-motion: reduce) {

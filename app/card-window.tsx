@@ -7,6 +7,7 @@ import { leave } from '@/lib/motion';
 import { columnLabel, type CardColumn, type CardSymbol } from '@/lib/board-columns.mjs';
 import type { CompanyCard } from '@/lib/company-card.mjs';
 import { CardDescription } from './card-description';
+import { CardCallout, CommentField, RunControl } from './card-talk';
 import { CardFileChips, CardFilesRow } from './card-files';
 import { useCardChanges } from './board-live';
 import { DateRow, DescriptionEdit, StatusMenu, TitleEdit, WaitsFor } from './card-window-edit';
@@ -23,11 +24,12 @@ import './card-window.css';
 // it), and the Comments, Activity and Runs tabs. The last good read stays while the window reads again, and when the
 // Engine does not answer, which the window says in one line; it lives in this browser's memory only.
 //
-// A Viewer reads the Read only line where a Member who may write will find the comment field (#838). For a Member who
-// may write, the status, the title, the description with its to-do items, the publishing date and the Cards it waits for
-// are controls (#837, app/card-window-edit.tsx); a Card's Project is named when it is made, as the Engine takes no other,
-// so here it is read only. Closing lets it leave first; then the board's own address comes back and the keyboard is on
-// the Card.
+// A Member who may write comments under the tabs, answers a question or lets a Card stopped after two failures go on from
+// the callout at the top, and stops or starts its Agent at the end of the Assignee row (#838, app/card-talk.tsx); a Viewer
+// reads the Read only line there instead. For a Member who may write, the status, the title, the description with its
+// to-do items, the publishing date and the Cards it waits for are controls (#837, app/card-window-edit.tsx); a Card's
+// Project is named when it is made, as the Engine takes no other, so here it is read only. Closing lets it leave first;
+// then the board's own address comes back and the keyboard is on the Card.
 
 type Read={card:CompanyCard|null,state:'reading'|'read'|'failed'|'missing'};
 export type BoardCardSeen={id:string,title:string,column:CardColumn,symbol:CardSymbol|null,agent:{id:string,name:string}|null,person?:{id:string,name:string}|null};
@@ -79,9 +81,9 @@ function useCard(company:string,id:string):Read&{reread:()=>void} {
 }
 
 const symbols:{[kind in CardSymbol['kind']]:{icon?:ShellIconName,tone:'ok'|'wait'|'bad'|'mute'}}={
- working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},waits:{icon:'hourglass',tone:'mute'},
+ working:{tone:'ok'},question:{icon:'ask',tone:'wait'},review:{icon:'needsReview',tone:'wait'},failed:{icon:'alert',tone:'bad'},stopped:{icon:'stop',tone:'mute'},waits:{icon:'hourglass',tone:'mute'},
 };
-const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',waits:'symWaits'} as const;
+const symbolKey={working:'symWorking',question:'symQuestion',review:'symReview',failed:'symFailed',stopped:'symStopped',waits:'symWaits'} as const;
 const runKey={running:'runRunning',done:'runDone',question:'runQuestion',review:'runReview',sentBack:'runSentBack',failed:'runFailed',stopped:'runStopped',moved:'runMoved'} as const;
 const eventKey:Record<string,string>={created:'evCreated',claimed:'evClaimed',completed:'evCompleted',blocked:'evBlocked',unblocked:'evUnblocked',commented:'evCommented',
  review_requested:'evReviewRequested',changes_requested:'evChangesRequested',review_reopened:'evReviewReopened',archived:'evArchived',reclaimed:'evReclaimed',crashed:'evCrashed',
@@ -100,8 +102,8 @@ const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=
 // sees and the Members, then nobody. Arrow keys move and wrap, Escape closes it back to the button without closing the
 // Card. The choice shows at once and is given on the Engine and in the row (PATCH /api/board/cards); a refusal puts the
 // Card's Assignee back and says why. A Card has at most one Assignee: an Agent given it clears the Member, and the reverse.
-function AssigneeMenu({company,card,agent,person,c,onAssigned}:{company:string,card:string,agent:{id:string,name:string}|null,person:{id:string,name:string}|null,
- c:(key:string,...values:unknown[])=>string,onAssigned:(answer:BoardAnswer)=>void}) {
+function AssigneeMenu({company,card,agent,person,c,onAssigned,control}:{company:string,card:string,agent:{id:string,name:string}|null,person:{id:string,name:string}|null,
+ c:(key:string,...values:unknown[])=>string,onAssigned:(answer:BoardAnswer)=>void,control?:ReactNode}) {
  const {t}=useI18n(); const menuId=useId();
  const [open,setOpen]=useState(false); const [choices,setChoices]=useState<Choices|null>(null);
  const [chosen,setChosen]=useState<{card:string,value:string}|null>(null); const [said,setSaid]=useState('');
@@ -155,6 +157,7 @@ function AssigneeMenu({company,card,agent,person,c,onAssigned}:{company:string,c
    <button ref={button} type="button" className={`cwp__b${value?'':' is-empty'}`} id="cw-asg" aria-haspopup="menu" aria-expanded={open} aria-controls={open?menuId:undefined}
     aria-label={t('boardCardAssignee',shown)} title={c('cwAssignee')} onClick={()=>setOpen(!open)}>
     <span className="cwp__ic">{faceOf(value,20)}</span><bdi className="od-truncate">{shown}</bdi></button>
+   {control}
    {open&&<div ref={menu} className="menu cw-pop" id={menuId} role="menu" aria-label={c('cwAssignee')} onKeyDown={keys}>
     {choices&&item(`member:${choices.me}`,t('assignToMe'),<ShellIcon name="hand"/>,false)}
     {!!choices?.agents.length&&<div className="menu__label" role="presentation">{t('ncAgents')}</div>}
@@ -178,6 +181,10 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
  const read=useCard(company,id); const card=read.card;
  const box=useRef<HTMLDialogElement>(null); const stopLeaving=useRef(()=>{});
  const [leaving,setLeaving]=useState(false);
+ // A write from the window (#838): the board takes the answer's read, and the Card is read again; Stop's refusal is said
+ // under the Assignee row.
+ const talked=(answer:BoardAnswer)=>{ onBoard(answer); read.reread(); };
+ const [runSaid,setRunSaid]=useState({id,text:''});
  // Another Card opened from this one (a Card it waits for) starts on its own Comments, with the keyboard on its title.
  const [shown,setShown]=useState<{id:string,tab:Tab}>({id,tab:'comments'}); const tab=shown.id===id?shown.tab:'comments';
  const setTab=(next:Tab)=>setShown({id,tab:next});
@@ -219,8 +226,10 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
  // waited for and not waiting for it; the Engine refuses any longer loop itself.
  const waitChoices=card?board.filter(other=>other.id!==card.id&&other.column!=='done'&&!card.waitsFor.some(link=>link.id===other.id)&&!card.waitedBy.some(link=>link.id===other.id)):[];
  const side=<aside className="cw-side" aria-label={c('cwDetails')}><div className="cwp-list">
-  {writer&&card&&!card.archived?<AssigneeMenu company={company} card={card.id} agent={agent} person={person} c={c} onAssigned={answer=>{ onBoard(answer); read.reread(); }}/>
+  {writer&&card&&!card.archived?<AssigneeMenu company={company} card={card.id} agent={agent} person={person} c={c} onAssigned={talked}
+   control={<RunControl company={company} card={card} c={c} onDone={talked} onSaid={text=>setRunSaid({id,text})}/>}/>
    :row(agent?<AgentFace agent={agent.id} size={20}/>:person?<Letter name={person.name} size={20}/>:<NoOne size={20}/>,c('cwAssignee'),<bdi className="od-truncate">{agent?.name||person?.name||c('cwNoOne')}</bdi>)}
+  {runSaid.id===id&&runSaid.text&&<p className="cw-said is-bad" role="alert">{runSaid.text}</p>}
   {editable&&card&&<DateRow company={company} card={card.id} publishOn={card.publishOn} c={c} label={t('publishingDate')} onSaved={saved}/>}
   {!editable&&card?.publishOn&&row(<ShellIcon name="calendar"/>,t('publishingDate'),<span className="num">{new Date(`${card.publishOn}T12:00:00Z`).toLocaleDateString(locale,{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}</span>)}
   {card?.project&&row(<ShellIcon name="folder"/>,c('cwProject'),<bdi className="od-truncate" dir="auto">{card.project}</bdi>)}
@@ -279,6 +288,7 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
      <TitleEdit company={company} card={id} title={title} editable={editable} c={c} onSaved={saved}/>
      {read.state==='missing'&&<p className="cw-said is-bad" role="alert">{c('cwMissing')}</p>}
      {card&&read.state==='failed'&&<p className="cw-said" role="status">{c('cwRefreshFailed')}</p>}
+     {card&&card.symbol&&<CardCallout key={card.id} company={company} card={card} writer={writer} c={c} sym={sym(card.symbol)} onDone={talked}/>}
      {editable&&card&&<DescriptionEdit key={card.id} company={company} card={card.id} body={card.description} ui={ui} c={c} onSaved={saved}/>}
      {!editable&&card&&card.description.trim()&&<section className="cw-sec cw-desc-sec" aria-labelledby="cw-h-desc"><h3 className="sr-only" id="cw-h-desc">{c('cwDescription')}</h3><CardDescription body={card.description} ui={ui} c={c}/></section>}
      {card&&card.column==='done'&&(card.summary||card.files.some(file=>file.from==='summary'))&&<section className="cw-sec" aria-labelledby="cw-h-res"><h3 className="sr-only" id="cw-h-res">{c('cwResult')}</h3><div className="cw-result">
@@ -292,7 +302,8 @@ export function CardWindow({company,id,seen,writer,board=[],cardHref,fileHref,sh
        <ShellIcon name={name}/>{tab===key&&<span>{label}</span>}{count!=null&&<span className="num cw-tabs__n">{count}</span>}</button>)}
      </div>
      <div className="cw-list" id="cw-list" role="tabpanel" aria-labelledby={`cw-tab-${tab}`} tabIndex={-1}>{panel}</div>
-     <div className="cw-comp">{!writer&&<p className="ro-line"><ShellIcon name="eye"/><span>{c('cwReadOnly')}</span></p>}</div>
+     <div className="cw-comp">{!writer?<p className="ro-line"><ShellIcon name="eye"/><span>{c('cwReadOnly')}</span></p>
+      :card&&!card.archived&&<CommentField key={card.id} company={company} card={card} c={c} onDone={talked}/>}</div>
     </section>}
    </div>
   </div>

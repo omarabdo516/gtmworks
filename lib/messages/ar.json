@@ -1920,6 +1920,13 @@
   "symQuestion": "عنده سؤال",
   "symReview": "محتاجة مراجعة",
   "symFailed": "وقف بعد محاولتين",
+  "symStopped": "اتوقف",
   "symWaits": "مستنية بطاقة تانية",
-  "symWaitsN": "مستنية {0} بطاقات"
+  "symWaitsN": "مستنية {0} بطاقات",
+  "viewStatus": "الحالة",
+  "viewDateOf": "موعد نشر {0}",
+  "viewThisMonth": "الشهر ده",
+  "viewUndated": "من غير موعد نشر",
+  "viewUndatedNone": "كل البطاقات ليها موعد.",
+  "viewDateFailed": "الموعد متحفظش. جرّب تاني."
 }

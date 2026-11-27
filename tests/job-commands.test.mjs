@@ -5,7 +5,6 @@ import { withEngineContract } from '../lib/engine/handle.mjs';
 import { randomUUID } from 'node:crypto';
 import { commandList, jobCommandIn } from '../lib/composer-mentions.mjs';
 import { sendMessage } from '../lib/conversation-runs.mjs';
-import { driveHandovers } from '../lib/handovers.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // #159, the job commands beside "/agent" (design-reference: CMDS, classifyWork): each belongs to the Agent a Member sees
@@ -45,10 +44,12 @@ test('two Agents made from one role: the first the Member\'s list draws answers,
  assert.equal(list.at(-1).command, '/agent');
 });
 
-// #358: a job command sent in the main Agent's Conversation hands its job to the Agent of that role in the same chat
-// (lib/composer-mentions.mjs jobCommandIn, lib/conversation-runs.mjs): the command is gtmworks's own, so no Engine Run of
-// the Lead's is started for it, and the target Agent's Run answers the person. Words that begin with no listed command
-// of an Agent this person sees, or carry no job, are plain text and run on the Conversation's Agent as typed (item 4).
+// #358, #470, spec #831 (#844): a job command sent in the main Agent's Conversation becomes a Card given to the Agent of
+// that role (lib/composer-mentions.mjs jobCommandIn, lib/lead-offer.mjs): the message is the main Agent's own turn, and
+// its Run is asked to make one Card for that Agent with the Engine's own kanban_create, by the board name the Run's
+// pinned brief gives it (pin_run_brief). No Handover is kept and no Run of the other Agent is started by gtmworks: the
+// Engine's dispatcher starts it. Words that begin with no listed command of an Agent this person sees, or carry no job,
+// are plain text and ask for no Card.
 const company = '10000000-0000-0000-0000-000000000001';
 const conversation = 'c9000000-0000-0000-0000-000000000001';
 const lead = 'a9000000-0000-0000-0000-000000000001';
@@ -63,9 +64,15 @@ const visible = [
  { id: reach, name: 'Reach', template: 'meta', is_default: false },
  { id: faye, name: 'Faye', template: null, is_default: false },
 ];
+// The brief pin_run_brief pins for a Run of each Agent (supabase/tests/run_board_brief.sql proves the real one).
+const reachBoard = 'ag-a9000000000000000000000000000002';
+const briefs = {
+ [lead]: { role: 'contributor', owner: 'Omar', main: true, self: 'co-rs', agents: [{ name: 'Faye', job: 'Writes.', board: 'ag-faye', role: null }, { name: 'Reach', job: 'Runs the Meta ads.', board: reachBoard, role: 'meta' }] },
+ [faye]: { role: 'contributor', owner: 'Omar', main: false, self: 'ag-faye', agents: [{ name: 'Lead', job: 'General', board: 'co-rs', role: null }, { name: 'Reach', job: 'Runs the Meta ads.', board: reachBoard, role: 'meta' }] },
+};
 // A Conversation already there on `stored` (as the database keeps it), or a new chat of this Member opened with `chosen`.
 // Every call the send makes is answered, and the ones that name an Agent are kept for the assertions.
-function databases({ stored = null, chosen = null, agents = visible, handed = true } = {}) {
+function databases({ stored = null, chosen = null, agents = visible } = {}) {
  const calls = [];
  const query = () => {
   let columns = '';
@@ -83,14 +90,12 @@ function databases({ stored = null, chosen = null, agents = visible, handed = tr
   calls.push([name, args]);
   if (name === 'conversation_agent') return { data: stored, error: null };
   if (name === 'answer_question') return { data: 'none', error: null };
-  if (name === 'pin_lead_brief') return { data: null, error: null };
-  if (name === 'command_handover') return { data: handed, error: null };
   // #764: the message is stored as its turn, and the one starter claims and starts it.
   if (name === 'queue_conversation_turn') { turns.push({ ...args, started: false }); return { data: { state: 'queued' }, error: null }; }
   const waiting = turns.find(turn => !turn.started);
+  if (name === 'pin_run_brief') return { data: briefs[turns.find(turn => turn.message_key === args.message_key)?.agent] ?? null, error: null };
   if (name === 'queued_conversations') return { data: waiting ? [{ conversation }] : [], error: null };
   if (name === 'claim_conversation_turn') return { data: waiting ? [{ company, agent: waiting.agent, person: 'p', send_key: waiting.message_key, message: waiting.message, connection: 'f9000000-0000-0000-0000-000000000001', profile: 'writer', note: null, retry: false, has_files: false }] : [], error: null };
-  if (name === 'conversation_handover_agents') return { data: [], error: null };
   if (['pin_run', 'pin_run_history', 'pin_run_model'].includes(name)) return { data: null, error: null };
   if (name === 'begin_turn_start') return { data: 1, error: null };
   if (name === 'record_conversation_turn') { const turn = turns.find(each => each.message_key === args.message_key); turn.started = true; return { data: true, error: null }; }
@@ -103,44 +108,39 @@ function databases({ stored = null, chosen = null, agents = visible, handed = tr
  return { db, service: { rpc, from: () => read }, calls };
 }
 const runsNamed = (calls, name) => calls.filter(call => call[0] === name).map(call => call[1]);
+const asksForCard = /This message is the job command/;
 
-test('a job command in the main Agent\'s Conversation is handed to the Agent of its role, and the Lead starts no Run', async () => {
+test('a job command in the main Agent\'s Conversation is its own turn, whose Run is asked to make one Card for the Agent of its role, and no Handover is kept', async () => {
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead });
  const send = message => withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message}));
  assert.deepEqual(await send('/campaign Launch the December ads'), { conversation });
- assert.deepEqual(runsNamed(calls, 'command_handover'), [{ conversation, c: company, agent: lead, message_key: runsNamed(calls, 'command_handover')[0].message_key, message: '/campaign Launch the December ads', role: 'meta', goal: 'Launch the December ads' }]);
- assert.deepEqual(fake.runs, [], 'no Run of the Lead\'s: the command hands the job over itself');
- assert.deepEqual(runsNamed(calls, 'queue_conversation_turn'), [], 'and no turn is stored for the Lead');
- assert.deepEqual(runsNamed(calls, 'record_conversation_turn'), [], 'the database keeps the person\'s message with the handover');
+ assert.deepEqual(runsNamed(calls, 'queue_conversation_turn').map(({ agent, message }) => [agent, message]), [[lead, '/campaign Launch the December ads']], 'the person\'s message is the main Agent\'s turn');
+ assert.deepEqual(fake.runs.map(run => run.input), ['/campaign Launch the December ads']);
+ const [run] = fake.runs;
+ assert.ok(run.instructions.includes(`This message is the job command /campaign for Reach: make one card for Reach with kanban_create, its assignee ${reachBoard}, for this job: Launch the December ads\n`), run.instructions);
+ assert.doesNotMatch(run.instructions, /hand_to_agent|gtmworks-tool/, 'no tool of gtmworks\'s own is described for it');
+ assert.deepEqual(run.tools, [], 'and none is offered');
+ assert.deepEqual(calls.filter(([name]) => /handover|hand_to_agent/.test(name)), [], 'no Handover is asked of the database');
 });
 
-test('a job command typed in another Agent\'s Conversation runs there once, as typed, and no handoff starts', async () => {
+test('a job command typed in another Agent\'s Conversation runs there once, as typed, and asks for no Card for the command', async () => {
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: faye });
  const send = message => withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message}));
  assert.deepEqual(await send('/campaign Launch the December ads'), { conversation });
  assert.deepEqual(fake.runs.map(run => run.input), ['/campaign Launch the December ads']);
- assert.equal(fake.runs.length, 1, 'one Run per message, and no Run for the Agent the command names elsewhere');
+ assert.doesNotMatch(fake.runs[0].instructions, asksForCard, 'only the main Agent takes a job command');
+ assert.match(fake.runs[0].instructions, new RegExp(`kanban_create[^.]*\\(yours is ag-faye\\)`), 'it may still give a job as a Card of its own accord');
  assert.deepEqual(runsNamed(calls, 'queue_conversation_turn').map(({ agent, message }) => [agent, message]), [[faye, '/campaign Launch the December ads']]);
- assert.deepEqual(runsNamed(calls, 'command_handover'), [], 'a command is handed over only in the main Agent\'s Conversation');
 });
 
-test('a command with no job after it, or one no Agent of the Company was made from, is sent as plain text', async () => {
- // A bare command names no job to hand over, and /report's role has no Agent here: both go to the Lead as typed.
- const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead });
+test('a command with no job after it, or one no Agent of the Company was made from, asks for no Card', async () => {
+ // A bare command names no job, and /report's role has no Agent here: both go to the main Agent as typed.
+ const fake = fakeEngine(); const { db, service } = databases({ stored: lead });
  const send = message => withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message}));
  assert.deepEqual(await send('/campaign '), { conversation });
  assert.deepEqual(await send('/report last week by channel'), { conversation });
  assert.deepEqual(fake.runs.map(run => run.input), ['/campaign ', '/report last week by channel']);
- assert.deepEqual(runsNamed(calls, 'command_handover'), []);
-});
-
-test('a job command handed over but refused by the database falls back to the Conversation\'s own Run, as typed', async () => {
- // The Agent the command names is hidden from this person, or has no profile: the command is no handover, and the
- // message is sent as typed rather than lost.
- const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead, handed: false });
- assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey: randomUUID(),message: '/campaign Launch the December ads'})), { conversation });
- assert.deepEqual(fake.runs.map(run => run.input), ['/campaign Launch the December ads']);
- assert.deepEqual(runsNamed(calls, 'queue_conversation_turn').map(({ agent }) => agent), [lead]);
+ for (const run of fake.runs) assert.doesNotMatch(run.instructions, asksForCard, run.input);
 });
 
 test('a job command typed in a new chat where it is not listed goes to the chat\'s Agent, as typed', async () => {
@@ -163,60 +163,3 @@ test('a message that begins with a listed command names the job after it and the
  assert.equal(jobCommandIn('/agent Make me an Agent', seen), null, 'and /agent stays a request to the main Agent');
 });
 
-// The database's side of #358 as its functions keep it (supabase/tests/command_handovers.sql proves the real ones): the
-// person's message with its handover row, the worker's two legs, and the target's words kept as the chat's answer.
-function handedDatabases() {
- const calls = [];
- const targetSession = 'd9000000-0000-0000-0000-000000000001';
- const targetProfile = 'ag-09000000000000000000000000000002';
- const kept = { message: null, handover: null, agentMessage: null, end: null };
- const query = () => {
-  let columns = '';
-  const chain = { select: (names) => { columns = names; return chain; }, eq: () => chain, in: () => chain, order: () => chain,
-   maybeSingle: async () => ({ data: columns === 'id,is_default' ? { id: lead, instructions: null, is_default: true } : null, error: null }),
-   then: (resolve, reject) => Promise.resolve({ data: columns.includes('template') ? visible.map(({ id, name, template }) => ({ id, name, template })) : visible, error: null }).then(resolve, reject) };
-  return chain;
- };
- const rpc = async (name, args) => {
-  calls.push([name, args]);
-  if (name === 'conversation_agent') return { data: lead, error: null };
-  if (name === 'answer_question') return { data: 'none', error: null };
-  if (name === 'command_handover') {
-   kept.message = { author: 'person', body: args.message, run_id: `command:${args.message_key}` };
-   kept.handover = { id: 7, state: 'waiting', conversation: args.conversation, run_id: kept.message.run_id, from: args.agent, to: reach, goal: args.goal, target_run: null };
-   return { data: true, error: null };
-  }
-  // No Run Stop ended a handover on is left to stop (#478).
-  if (name === 'stopped_runs_open') return { data: [], error: null };
-  if (name === 'handover_runs_stopping') return { data: [], error: null };
-  if (name === 'handovers_due') return { data: kept.handover && kept.handover.state !== 'done' ? [{ id: 7, state: kept.handover.state, conversation, run: kept.handover.state === 'target' ? kept.handover.target_run : null, profile: targetProfile, attempt: 0, company }] : [], error: null };
-  if (name === 'begin_handover') return { data: [{ state: 'waiting', attempt: 1, company, profile: targetProfile, session: targetSession, input: `The job:\n${kept.handover.goal}`, instructions: 'Run the ads.' }], error: null };
-  if (name === 'answer_handover') { kept.handover.target_run = args.run; kept.handover.state = 'target'; return { data: true, error: null }; }
-  if (name === 'close_handover_target') {
-   kept.end = { run: kept.handover.run_id, outcome: args.run_outcome };
-   if (args.run_outcome === 'completed') kept.agentMessage = { author: 'agent', agent_id: reach, author_name: 'Reach', body: args.words, run: args.run };
-   kept.handover.state = 'done';
-   return { data: true, error: null };
-  }
-  return { data: null, error: { message: `unexpected ${name}` } };
- };
- return { db: { rpc, from: () => query() }, service: { rpc }, calls, kept };
-}
-
-test('on the fake engine a command sent to the Lead hands the job over, and the chat\'s reply comes from that Agent', async () => {
- // #358's check: the command is sent, the handover row is kept, and the answer the person reads is the target Agent's.
- // A long article keeps its whole reply in the chat, past the summary a #317 handover carries.
- const fake = fakeEngine(); fake.settings.reply = input => `Reach did it: ${input.split('\n').at(-1)}`.padEnd(9000,' .');
- const { db, service, kept } = handedDatabases(); const sendKey = randomUUID();
- assert.deepEqual(await withEngineContract(fake.engineFor,()=>sendMessage(db, service, {company,conversation,sendKey,message: '/campaign Launch the December ads'})), { conversation });
- assert.deepEqual(kept.message, { author: 'person', body: '/campaign Launch the December ads', run_id: `command:${sendKey}` });
- assert.deepEqual([kept.handover.from, kept.handover.to, kept.handover.goal], [lead, reach, 'Launch the December ads'], 'the handoff row: the Lead to the Agent of /campaign\'s role, with the job');
- assert.deepEqual(fake.runs, [], 'the Lead starts no Run: the command hands the job over itself');
- // The worker moves the handover: the target's job in a session of its own for this chat, then its reply kept as the
- // chat's message from it.
- await withEngineContract(fake.engineFor,()=>driveHandovers(service, {}));
- await withEngineContract(fake.engineFor,()=>driveHandovers(service, {}));
- assert.deepEqual(fake.runs.map(run => [run.conversation, run.input]), [[`d9000000-0000-0000-0000-000000000001`, 'The job:\nLaunch the December ads']]);
- assert.deepEqual(kept.agentMessage, { author: 'agent', agent_id: reach, author_name: 'Reach', body: `Reach did it: Launch the December ads`.padEnd(9000,' .'), run: fake.runs[0].id }, 'the reply comes from that Agent, in this chat, whole');
- assert.deepEqual(kept.end, { run: `command:${sendKey}`, outcome: 'completed' }, 'and the person\'s own message stops waiting');
-});

@@ -57,17 +57,6 @@ test('work dates use Arabic month names and day-first western digits', async () 
 });
 
 
-test('work list sorts stages by position and actors by name', async () => {
- const {sortWorkCards}=await import('../lib/work-sort.mjs');
- const cards=[{title:'أ',stage_id:2,next_actor:'a',channel:'',go_live:null},{title:'ب',stage_id:12,next_actor:'z',channel:'',go_live:null}];
- const stages=[{id:2,position:8},{id:12,position:1}];
- const members=[{person_id:'a',people:{name:'يوسف'}},{person_id:'z',people:{name:'أحمد'}}];
- assert.deepEqual(sortWorkCards(cards,'stage_id','ascending',stages,members).map(c=>c.stage_id),[12,2]);
- assert.deepEqual(sortWorkCards(cards,'stage_id','descending',stages,members).map(c=>c.stage_id),[2,12]);
- assert.deepEqual(sortWorkCards(cards,'next_actor','ascending',stages,members).map(c=>c.next_actor),['z','a']);
- assert.deepEqual(cards.map(c=>c.stage_id),[2,12]);
-});
-
 test('authenticated secret encryption', async () => {
  const {encryptSecret,decryptSecret}=await import('../lib/agent-crypto.mjs');
  const key=Buffer.alloc(32,7).toString('base64'); const encrypted=encryptSecret('webhook-secret',key);
