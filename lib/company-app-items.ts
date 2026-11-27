@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { supabase } from './supabase';
 import { readAgentApps, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, testCompanyApp, type AgentTool, type AgentsUsage } from './company-apps.mjs';
 import { appsUnreadLine } from './diagnostics.mjs';
-import { appByKey } from './app-catalogue.mjs';
+import { presetOf } from './app-catalogue.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
@@ -28,7 +28,7 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
   return apps.map(entry=>{
    // A command server the Owner added (#459) reads as one that runs in the work sandbox; one added under a preset's name
    // (Open Design) keeps the preset's words.
-   const style=entry.source==='custom'&&!appByKey(entry.key)?.preset?entry.auth==='command'?'command':'custom':entry.key;
+   const style=entry.source==='custom'&&!(entry.auth==='command'&&presetOf(entry.key))?entry.auth==='command'?'command':'custom':entry.key;
    const name=entry.source==='own'&&!entry.preset?text.ownName:entry.name;
    const use=text[`use.${style}`], can=text[`can.${style}`];
    // A command server's command and arguments (#459) reach the Owner's browser only: an argument can hold what the
