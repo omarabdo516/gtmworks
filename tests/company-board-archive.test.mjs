@@ -182,7 +182,7 @@ test('a move out of the archive whose answer is lost keeps the Card with no Agen
  } finally { await fake.close(); }
 });
 
-test('a Card with no Agent fails closed: during a restore a Member who cannot see its Agent gets nothing, and one with a row beside it shows as before', async () => {
+test('a Card with no Agent fails closed: during a restore a Member who cannot see its Agent gets nothing, row or no row, and an idea Card with a row shows as before', async () => {
  const fake=await engineServing(company);
  try {
   const kanban=fake.settings.kanban;
@@ -190,8 +190,9 @@ test('a Card with no Agent fails closed: during a restore a Member who cannot se
   const secret=kanban.task({title:'Competitor pricing leak',status:'blocked',assignee:profileOf(seo)}).id;
   const idea=kanban.task({title:'Reel: a day in an accountant\'s life',status:'triage'}).id;
   const loose=kanban.task({title:'Card an Agent made for nobody',status:'todo'}).id;
-  // The Contributor sees neither Seo nor Seo's Card; a Card with no Agent shows to them only with its row.
-  const contributor=(rows=[idea])=>reader(agents,{role:'contributor',rows});
+  // The Contributor sees neither Seo nor Seo's Card; a Card with no Agent shows to them only with its row. Seo's Card has
+  // a row too, as one the board made for Seo has (lib/company-board-cards.mjs makeCompanyCard): a row alone is no leave.
+  const contributor=(rows=[idea,secret])=>reader(agents,{role:'contributor',rows});
   const shown=async db=>(await readCompanyBoard(db,{company,me})).cards.map(card=>card.id);
   assert.deepEqual(await shown(contributor()),[idea]);
   assert.deepEqual((await shown(reader(everyone,{rows:[idea]}))).sort(),[secret,idea,loose].sort());
