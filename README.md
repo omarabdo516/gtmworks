@@ -175,7 +175,7 @@ answer.
 built on the Engine's own sandbox image with ffmpeg, Chromium, Node, Python and the
 Arabic fonts added and an ordinary user to work as. A release pins it by tag and digest
 and the install pulls it, so a release install builds nothing; a source checkout builds
-it from `sandbox/Dockerfile`. It takes about **3.81 GB** on disk with Open Design's daemon (the install job prints
+it from `sandbox/Dockerfile`. It takes about **3.26 GB** on disk, with no Open Design since #911 (the install job prints
 the measured size on every run). A Company's work folder is a volume, not a copy of the
 image, so the image is fetched once for the whole install.
 
