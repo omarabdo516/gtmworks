@@ -25,6 +25,8 @@ test('the images are the install\'s pinned images and the checks\' helpers, each
     assert.doesNotMatch(image, /^gtmworks/, 'the run builds its own images');
     assert.doesNotMatch(image, /\$/, 'a variable is no image');
   }
+  // The update areas install fixed commits whose own compose files still start the mailbox this release removes (#956).
+  assert.ok(images.includes('axllent/mailpit:v1.27.10@sha256:b1f1be18af530d939a11ee8820b379e0c88eeec204d904bfad68862adced3a5a'),'the older releases\' mailbox is listed');
   assert.deepEqual(images, [...new Set(images)].sort(), 'each once, in order');
 });
 
