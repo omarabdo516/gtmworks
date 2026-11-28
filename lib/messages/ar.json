@@ -1818,5 +1818,6 @@
   "passwordLinkFailed": "معرفناش نعمل لينك كلمة المرور. جرّب تاني.",
   "passwordLinkNotAllowed": "المدير مايقدرش يعمل لينك كلمة مرور لأدمن.",
   "logActPasswordLinkMade": "عمل لينك كلمة مرور لـ",
-  "logActPasswordLinkUsed": "غيّر كلمة المرور بلينك كلمة مرور"
+  "logActPasswordLinkUsed": "غيّر كلمة المرور بلينك كلمة مرور",
+  "logActPasswordLinkCancelled": "وقّف لينك كلمة مرور قديم لـ"
 }

@@ -148,11 +148,14 @@ test('Card, Member and Agent rows say who changed what', () => {
  const passwordUsed = describeEntry({ subject: 'member', action: 'password_link_used', person_id: lead, details: { person_name: 'Nour', private: 'managers' } });
  assert.deepEqual([passwordMade.act, passwordMade.obj], [['logActPasswordLinkMade'], 'Nour']);
  assert.deepEqual([passwordUsed.act, passwordUsed.obj], [['logActPasswordLinkUsed'], undefined]);
+ const passwordCancelled = describeEntry({ subject: 'member', action: 'password_link_cancelled', person_id: lead, details: { person_name: 'Nour', private: 'managers' } });
+ assert.deepEqual([passwordCancelled.act, passwordCancelled.obj], [['logActPasswordLinkCancelled'], 'Nour']);
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActPasswordLinkCancelled')), ['ended an earlier password link for', 'وقّف لينك كلمة مرور قديم لـ']);
  assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActPasswordLinkMade'), i18n(language).t('logActPasswordLinkUsed')]), [['made a password link for', 'set a new password with a password link'], ['عمل لينك كلمة مرور لـ', 'غيّر كلمة المرور بلينك كلمة مرور']]);
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, back, note, idea, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, linkMade, linkUsed, linkCancelled, passwordMade, passwordUsed, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
+ const rows = [moved, back, note, idea, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, linkMade, linkUsed, linkCancelled, passwordMade, passwordUsed, passwordCancelled, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
   t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));

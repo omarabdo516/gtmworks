@@ -5,7 +5,7 @@
 -- Administrator makes one for any Member; a Manager for a Manager, a Contributor or a Viewer, never an Administrator, so
 -- a Manager cannot take over an Administrator's account. Opening the page uses nothing; only sending its form claims it,
 -- in one transaction that locks it, finds it unused, not cancelled and not ended, ends every session of the Member and
--- marks it used. Making and using one are written in the Company log.
+-- marks it used. Making, replacing (a newer link cancels the earlier) and using one are written in the Company log.
 -- Additive: one column, a wider kind list and three functions. The previous app version runs against it unchanged.
 alter table public.company_links add column person_id uuid references public.people(id) on delete cascade;
 alter table public.company_links drop constraint company_links_kind_check;
@@ -27,11 +27,15 @@ begin
  if person is null or target is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
  if target='owner' and asker<>'owner' then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
  if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='22023'; end if;
- update public.company_links set cancelled_at=now()
-  where company_id=c and kind='password' and person_id=person and used_at is null and cancelled_at is null;
+ select p.name into named from public.people p where p.id=person;
+ -- Each earlier live link it ends is written in the Company log as cancelled.
+ with ended as (update public.company_links set cancelled_at=now()
+  where company_id=c and kind='password' and person_id=person and used_at is null and cancelled_at is null and ends_at>now() returning id)
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
+  select c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member',person,'password_link_cancelled',
+   jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now() from ended;
  insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
   values(c,'password',link_hash,auth.uid(),person,now()+interval '24 hours') returning id into made;
- select p.name into named from public.people p where p.id=person;
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
   values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member',person,'password_link_made',
    jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
@@ -62,7 +66,7 @@ grant execute on function public.password_link_open(text) to service_role;
 -- then sets the new password and signs this browser in. Returns the Member, their email and the Company's slug.
 create function public.claim_password_link(link_hash text) returns table(person uuid, email text, slug text)
 language plpgsql security definer set search_path='' as $function$
-declare link public.company_links; target public.member_role;
+declare link public.company_links; target public.member_role; named text;
 begin
  if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='55000'; end if;
  select l.* into link from public.company_links l where l.secret_hash=link_hash and l.kind='password' for update;
@@ -76,9 +80,10 @@ begin
  end if;
  update public.company_links set used_at=now(),used_by=link.person_id where id=link.id;
  delete from auth.sessions s where s.user_id=link.person_id;
+ select p.name into named from public.people p where p.id=link.person_id;
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
-  values(link.company_id,link.person_id,'person',(select name from public.people where id=link.person_id),'member',link.person_id,'password_link_used',
-   jsonb_build_object('person_name',(select name from public.people where id=link.person_id),'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+  values(link.company_id,link.person_id,'person',named,'member',link.person_id,'password_link_used',
+   jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
  return query select link.person_id,u.email::text,c.slug from auth.users u, public.companies c where u.id=link.person_id and c.id=link.company_id;
 end $function$;
 revoke all on function public.claim_password_link(text) from public,anon,authenticated,service_role;

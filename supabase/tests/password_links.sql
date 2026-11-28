@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(33);
 -- #954, ADR 0019: an Administrator or a Manager makes a password link for a Member of their Company; a Manager never for
 -- an Administrator. Only its secret's hash is kept, in the table no Member reads; it ends after 24 hours and works once.
 -- Sending its form claims it in one transaction that ends every session of the Member. Making and using it are written
@@ -78,6 +78,7 @@ select public.make_password_link('10000000-0000-0000-0000-000000000001','2000000
 select public.make_password_link('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003',encode(extensions.digest(repeat('9',64),'sha256'),'hex'));
 reset role;
 select throws_ok($$select * from public.claim_password_link(encode(extensions.digest(repeat('f',64),'sha256'),'hex'))$$,'55000','passwordLinkCancelled','a newer link for the same Member ends the earlier one');
+select is((select count(*)::int from public.company_log where action='password_link_cancelled' and person_id='20000000-0000-0000-0000-000000000003'),2,'and each one ended is in the Company log as cancelled: the Manager''s refused link, then the first of these two');
 -- An Invite link's page never opens a password link, nor the other way round.
 select is((select count(*)::int from public.invite_link_open(encode(extensions.digest(repeat('9',64),'sha256'),'hex'))),0,'a password link is no Invite link');
 select is((select count(*)::int from public.password_link_open(encode(extensions.digest(repeat('9',64),'sha256'),'hex'))),1,'and opens as a password link');

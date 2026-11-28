@@ -12,7 +12,7 @@ import { cappedForm } from '@/lib/request-body.mjs';
 // this browser in. The link is spent by this request, in claim_password_link's one transaction, never by opening the
 // page: the page's check (check=1) only asks whether it is open, so a link preview fetching the page uses nothing. Only
 // the link's hash is held here, so no log or address receives its secret.
-const plain=(language:'en'|'ar',key:string,status:number)=>new NextResponse(i18n(language).t(key),{status,headers:{'content-type':'text/plain; charset=utf-8'}});
+const refusal=(language:'en'|'ar',key:string,status:number)=>new NextResponse(i18n(language).t(key),{status,headers:{'content-type':'text/plain; charset=utf-8'}});
 const redacted=(error:{name:string,code?:string,status?:number,message:string})=>({name:error.name,code:error.code,status:error.status,message:error.message.replace(/\S+@\S+/g,'[redacted]')});
 
 export async function POST(request:NextRequest) {
@@ -22,7 +22,7 @@ export async function POST(request:NextRequest) {
  const secret=String(form.get('code')||''), language=form.get('language')==='ar'?'ar':'en';
  if(!linkSecretShape.test(secret)) {
   logActionFailure('password_link_missing',new Error('The password link carried no secret'));
-  return plain(language,'passwordLinkNeedsNew',410);
+  return refusal(language,'passwordLinkNeedsNew',410);
  }
  const admin=setupAdmin(), hash=linkSecretHash(secret);
  const {data:open,error}=await admin.rpc('password_link_open',{link_hash:hash});
@@ -33,7 +33,8 @@ export async function POST(request:NextRequest) {
  const link=(open as {company:string,person_name:string,email:string}[]|null)?.[0];
  if(!link) {
   logActionFailure('password_link_refused',new Error('The password link is unknown, used, cancelled or ended'));
-  return plain(language,'passwordLinkNeedsNew',410);
+  // The page's own check gets a refusal it reads; a sent form opens the page's clear refusal.
+  return form.get('check')==='1'?refusal(language,'passwordLinkNeedsNew',410):NextResponse.redirect(appUrl(`/password?language=${language}`),303);
  }
  // The page asks whose password waits behind its link before it shows the form; the answer changes nothing.
  if(form.get('check')==='1') return NextResponse.json({company:link.company,person:link.person_name,email:link.email});
@@ -44,15 +45,16 @@ export async function POST(request:NextRequest) {
  const member=(claimed as {person:string,email:string,slug:string}[]|null)?.[0];
  if(failure || !member) {
   logActionFailure(failure?'claim_password_link':'password_link_empty_claim',failure ?? new Error('The claim returned no Member'));
-  // A link spent by another send at the same moment, or one whose Member left, is refused in plain words.
-  if(!failure || failure.code==='55000') return plain(language,'passwordLinkNeedsNew',410);
+  // A link spent by another send at the same moment, or one whose Member left, opens the page's clear refusal: the
+  // address carries no secret, so the page says the link can't be used and whom to ask.
+  if(!failure || failure.code==='55000') return NextResponse.redirect(appUrl(`/password?language=${language}`),303);
   throw new Error('The password link could not be claimed');
  }
  // The claim has ended every session of the Member; the new password is set by the server's own key.
  const {error:saveError}=await admin.auth.admin.updateUserById(member.person,{password});
  if(saveError) {
   logActionFailure('password_link_save',redacted(saveError));
-  return plain(language,'passwordLinkSaveFailed',500);
+  return refusal(language,'passwordLinkSaveFailed',500);
  }
  // The Member is signed in with the password just chosen. Should that fail, the password is saved and the sign-in page
  // opens on the Company's home.

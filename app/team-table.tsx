@@ -99,12 +99,12 @@ export function TeamTable({company,members,invitations,links=[],agents,allowed,i
  const {t}=useI18n();
  const [passwordLink,setPasswordLink]=useState<MadePasswordLink|null>(null);
  // A password link (#954): an Administrator makes one for any other Member, a Manager for any but an Administrator.
- const linkFor=(member:TeamMember)=>makePasswordLink&&member.person_id!==userId&&(owner||member.role!=='owner');
+ const linkFor=(member:TeamMember)=>member.person_id!==userId&&(owner||member.role!=='owner')?makePasswordLink:undefined;
  const who=(member:TeamMember)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{t(member.role)}</span></span></span>;};
  const others=agents.filter(agent=>!agent.is_default);
  return <><div className="table-wrap"><table className="table ta-table">
   <thead><tr><th scope="col">{t('settingsMember')}</th>{agents.map(agent=><th scope="col" key={agent.id}><span className="ta-ag"><AgentFace agent={agent.id} size={24}/><bdi>{agent.name}</bdi></span></th>)}</tr></thead>
-  <tbody>{members.map(member=>{const name=(member.people?.name||t('member')).split(' ')[0]; return <tr key={member.person_id}><th scope="row">{linkFor(member)&&makePasswordLink?<span className="ta-link">{who(member)}<PasswordLinkButton person={member.person_id} name={member.people?.name||t('member')} make={makePasswordLink} made={setPasswordLink}/></span>:who(member)}</th>
+  <tbody>{members.map(member=>{const name=(member.people?.name||t('member')).split(' ')[0], make=linkFor(member); return <tr key={member.person_id}><th scope="row">{make?<span className="ta-link">{who(member)}<PasswordLinkButton person={member.person_id} name={member.people?.name||t('member')} make={make} made={setPasswordLink}/></span>:who(member)}</th>
    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
    {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)
     :others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{member:member.person_id}} agent={agent.id} agentName={agent.name} personName={name} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`} save={save}/></td>)}

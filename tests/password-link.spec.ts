@@ -122,8 +122,11 @@ test('a Manager makes a password link for a Viewer; a preview leaves it unused; 
  await expect(alertWith(person,refusedPage)).toHaveText(refusedPage);
  await expect(person.getByLabel('New password')).toHaveCount(0);
  const again=await person.request.post('/password/submit',{form:{code:secret,language:'en',password:'another-password-954',confirm:'another-password-954'}});
- expect(again.status()).toBe(410);
- expect(await again.text()).toBe(refusedPage);
+ // A sent form for a spent link opens the page's clear refusal, with no secret in its address.
+ expect(again.status()).toBe(200);
+ expect(new URL(again.url()).pathname+new URL(again.url()).search).toBe('/password?language=en');
+ await person.goto(again.url());
+ await expect(alertWith(person,refusedPage)).toHaveText(refusedPage);
  await fresh.close();
 });
 
@@ -140,7 +143,8 @@ test('an Administrator makes a password link for a Manager; an ended link and on
 
  const fresh=await browser.newContext();
  const person=await fresh.newPage();
- // The first link was replaced by the second.
+ // The first link was replaced by the second, and that is in the Company log.
+ expect(rows<{n:number}>(`select count(*)::int as n from public.company_log where company_id='${company}' and action='password_link_cancelled' and person_id='20000000-0000-0000-0000-000000000002'`)[0].n).toBe(1);
  await person.goto(first);
  await expect(alertWith(person,refusedPage)).toHaveText(refusedPage);
  // The second, once its 24 hours are over.
@@ -149,7 +153,7 @@ test('an Administrator makes a password link for a Manager; an ended link and on
  await person.goto(second);
  await expect(alertWith(person,refusedPage)).toHaveText(refusedPage);
  const ended=await person.request.post('/password/submit',{form:{code:second.split('#code=')[1],language:'en',password:'manager-new-password',confirm:'manager-new-password'}});
- expect(ended.status()).toBe(410);
+ expect(new URL(ended.url()).pathname).toBe('/password');
  await fresh.close();
  // The Manager's password never changed.
  await page.context().clearCookies();

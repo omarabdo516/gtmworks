@@ -1818,5 +1818,6 @@
   "passwordLinkFailed": "Couldn’t make the password link. Try again.",
   "passwordLinkNotAllowed": "A Manager can’t make a password link for an Administrator.",
   "logActPasswordLinkMade": "made a password link for",
-  "logActPasswordLinkUsed": "set a new password with a password link"
+  "logActPasswordLinkUsed": "set a new password with a password link",
+  "logActPasswordLinkCancelled": "ended an earlier password link for"
 }
