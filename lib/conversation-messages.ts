@@ -54,7 +54,8 @@ function messageParts(message?:SessionMessage):{body:string,paths:string[],image
  if(message?.role==='assistant') { const {body,paths}=takeFileTags(takeToolCalls(textOf(message.content)).reply); return {body,paths:[...new Set(paths)],images:0}; }
  const lines=textOf(message?.content).split('\n'); let images=0;
  while(lines.length&&lines.at(-1)===imageLine) { lines.pop(); images++; }
- return {body:images?lines.join('\n').trimEnd():textOf(message?.content),paths:[],images};
+ // The line before each `[image]` is the Engine's own separator, so what is left is the person's words exactly.
+ return {body:images?lines.join('\n'):textOf(message?.content),paths:[],images};
 }
 const replyText=(message?:SessionMessage)=>messageParts(message).body;
 // Whether an Agent's message is a reply a person reads: words, or a file it names.

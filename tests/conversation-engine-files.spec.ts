@@ -87,6 +87,23 @@ test('an image a person attaches reaches the Agent\'s Run and is drawn in the Co
  expect(kept(),'no row and no stored object for the image').toEqual(before);
 });
 
+test('Try again on an image message with no reply sends its words as they were and its images again, read back from the session',async({page})=>{
+ test.setTimeout(180000);
+ const url=`data:image/png;base64,${png.toString('base64')}`;
+ // The person's words end with a new line of their own; the Run that carried them left no reply.
+ await openConversation(page,[{role:'user',content:[{type:'text',text:'Look at this\n'},{type:'image_url',image_url:{url}}],timestamp:1}]);
+ const sent=page.locator('.msg[data-author=person]');
+ await expect(sent.locator('.msg-files .file-thumb img')).toHaveCount(1,{timeout:20000});
+ const starts=fake.settings.counts().runStart??0;
+ await page.locator('[data-outcome=no-reply]').getByRole('button',{name:'Try again'}).click();
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+1);
+ const parts=(fake.settings.runs.at(-1)!.input as {content:{type:string,text?:string,image_url?:{url:string}}[]}[]).at(-1)!.content;
+ expect(parts).toEqual([{type:'text',text:'Look at this\n'},{type:'image_url',image_url:{url}}]);
+ await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Reply to: Look at this/,{timeout:30000});
+ // The message sent again is drawn once, as the session holds it.
+ await expect(sent).toHaveCount(2);
+});
+
 test('the limits on a person\'s images are as today: a kind the Agent cannot read and too many are refused before anything is sent',async({page})=>{
  test.setTimeout(120000);
  const {conversation}=await openConversation(page);

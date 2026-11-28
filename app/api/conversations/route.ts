@@ -285,7 +285,10 @@ async function respond(request:NextRequest) {
    const fields=await request.formData();
    const field=(name:string)=>{ const value=fields.get(name); return typeof value==='string'?value:undefined; };
    const card=field('card');
-   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message:field('message'),agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
+   // A form sends a text's line breaks as CRLF (the HTML form encoding), where the box and a JSON send keep the person's
+   // own LF: the message is read back as they typed it (#880), so the Agent's words and the drawn ones are the same.
+   const message=field('message')?.replace(/\r\n/g,'\n');
+   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message,agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
    // Every file is passed to the check, an empty one included: it is refused with the line, never silently dropped.
    chosen=fields.getAll('files').filter((file):file is File=>file instanceof File);
    if(chosen.length&&body.intent!==undefined) return refuse('conversationFailed',400);
