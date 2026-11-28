@@ -216,14 +216,12 @@ test('drawer targets are at least 44px and do not overlap', async ({ page }) => 
 test('with many recent chats the drawer list scrolls above a footer that stays put, and no tap areas overlap', async ({ page }) => {
   // The Manager's own chats make the list longer than a phone screen (#48). (The old board's recent Cards left with it, #846.)
   // The lists hold only Conversations with an Agent (#881, lib/conversation-list.ts), so the chats are with a Lead of
-  // the file's own; with no Engine session yet each is drawn from its row, by its Agent's name.
+  // the file's own as the Company's main Agent; with no Engine session yet each is drawn from its row, by its Agent's name.
   const company = '10000000-0000-0000-0000-000000000001', manager = '20000000-0000-0000-0000-000000000002', stamp = Date.now();
-  const lead = randomUUID();
+  const lead = randomUUID(), profile = `co-${company.replaceAll('-', '')}`;
   const chats = Array.from({ length: 16 }, (_, index) => `63000000-0000-4000-8000-${String(stamp + index).slice(-12).padStart(12, '0')}`);
   query(`do $$ begin
-    insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','co-${company.replaceAll('-', '')}',true)
-     on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
-    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${lead}','${company}','Lead','General',true,'co-${company.replaceAll('-', '')}');
+    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${lead}','${company}','Lead','General',true,'${profile}');
     insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ${chats.map(id => `('${id}','${company}','${manager}','${lead}','Lead')`).join(',')};
   end $$;`);
   await page.setViewportSize({ width: 390, height: 900 });
