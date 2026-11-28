@@ -49,6 +49,14 @@ const opened=async(page:Page,{person=omar,email='omar@example.com'}={})=>{
  await expect(page.getByLabel('Message',{exact:true})).toBeVisible({timeout:20000});
  return conversation;
 };
+// The same on a session that already holds `turns` exchanges, so the transcript scrolls.
+const openedLong=async(page:Page,turns:number)=>{
+ const conversation=randomUUID(); const session=`gtmworks-${randomUUID()}`;
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Ads','${session}')`);
+ fake.settings.sessions.set(session,{profile,messages:Array.from({length:turns},(_,at)=>[{role:'user',content:`Question ${at}`,timestamp:at*2+1},{role:'assistant',content:`Answer ${at}\n\nwith a second paragraph to take some room.`,finish_reason:'stop',timestamp:at*2+2}]).flat()});
+ await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Answer \d+/,{timeout:20000});
+};
 const send=async(page:Page,text:string)=>{ const box=page.getByLabel('Message',{exact:true}); await box.fill(text); await box.press('Enter'); };
 const reply=(page:Page)=>page.locator('.msg[data-author=agent]').last();
 
@@ -185,4 +193,16 @@ test('a card answered in one tab closes in the person\'s other tab',async({page,
  await expect(asked).toHaveAttribute('aria-label','Which city?: Answered',{timeout:20000});
  await expect(asked).toContainText('Cairo');
  await other.close();
+});
+
+test('a card that arrives while the reader is at the bottom of a long Conversation comes into view',async({page})=>{
+ test.setTimeout(120000);
+ await openedLong(page,20);
+ fake.settings.questions=input=>input.includes('city')?[{question:'Which city?',choices:['Cairo','Giza']}]:[];
+ await send(page,'Pick a city');
+ const card=page.getByRole('group',{name:'Which city?'});
+ await expect(card).toBeVisible({timeout:20000});
+ await expect(card.getByRole('button',{name:/Giza/})).toBeInViewport();
+ await card.getByRole('button',{name:/Giza/}).click();
+ await expect(reply(page)).toHaveText(/Reply to: Pick a city/,{timeout:30000});
 });

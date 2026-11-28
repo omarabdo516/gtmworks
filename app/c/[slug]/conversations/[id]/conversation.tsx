@@ -474,13 +474,15 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  if(sent.held.some(each=>!spent.has(each.by))) setSpent(new Map([...spent,...sent.held.map(each=>[each.by,each.id] as const)]));
  useEffect(()=>{ release(sent.held.map(each=>each.id)); },[sent.held.map(each=>each.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true); const preserve=useRef<{height:number,top:number}|null>(null);
+ // A card the Run waits on, and its settling, keep a reader at the bottom with it (#878).
+ const askingKey=run.asking?`${run.asking.card.id}:${run.asking.settled?'settled':'open'}`:null;
  // The newest page opens on its last message; a page read above the oldest keeps the reader where they were.
  useLayoutEffect(()=>{
   const view=box.current; if(!view) return;
   const held=preserve.current;
   if(held) { view.scrollTop=view.scrollHeight-held.height+held.top; preserve.current=null; }
   else if(stick.current) view.scrollTop=view.scrollHeight;
- },[shown.messages.length,run.reply,run.view?.steps.length]);
+ },[shown.messages.length,run.reply,run.view?.steps.length,askingKey]);
  // A newest page of only tool calls and results can be shorter than the viewport: read the older pages until the
  // transcript scrolls or the history ends, so there is no history a person cannot reach (#875).
  useLayoutEffect(()=>{
