@@ -248,3 +248,23 @@ begin
 end $$;
 revoke all on function public.refuse_conversation_model(uuid,uuid,jsonb) from public,anon,authenticated,service_role;
 grant execute on function public.refuse_conversation_model(uuid,uuid,jsonb) to authenticated;
+
+-- The Runs the rows of Engine Conversations hold (#882), for the worker: a Run whose person left the Conversation while it
+-- worked has its end seen by no live read, so the worker asks the Engine how each one is and lets go of each that ended
+-- or is gone (lib/conversation-held-runs.mjs); the Agent's face then stops showing it working, for every reader.
+create function public.held_conversation_runs() returns table(company_id uuid, conversation uuid, profile text, runs text[])
+language sql stable security definer set search_path='' as $$
+ select v.company_id, v.id, a.profile, v.open_runs
+ from public.conversations v join public.hermes_agents a on a.id=v.agent_id and a.company_id=v.company_id
+ where cardinality(v.open_runs)>0 and a.profile is not null
+ order by v.company_id, v.id;
+$$;
+revoke all on function public.held_conversation_runs() from public,anon,authenticated,service_role;
+grant execute on function public.held_conversation_runs() to service_role;
+
+create function public.let_go_conversation_run(conversation uuid, run text) returns boolean language sql security definer set search_path='' as $$
+ with ended as (update public.conversations v set open_runs=array_remove(v.open_runs,run) where v.id=conversation and run=any(v.open_runs) returning 1)
+ select exists(select 1 from ended);
+$$;
+revoke all on function public.let_go_conversation_run(uuid,text) from public,anon,authenticated,service_role;
+grant execute on function public.let_go_conversation_run(uuid,text) to service_role;

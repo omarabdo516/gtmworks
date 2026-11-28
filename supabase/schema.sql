@@ -6472,6 +6472,22 @@ $$;
 ALTER FUNCTION public.handovers_due(just_conversation uuid, after bigint, just_channel uuid) OWNER TO postgres;
 
 --
+-- Name: held_conversation_runs(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.held_conversation_runs() RETURNS TABLE(company_id uuid, conversation uuid, profile text, runs text[])
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select v.company_id, v.id, a.profile, v.open_runs
+ from public.conversations v join public.hermes_agents a on a.id=v.agent_id and a.company_id=v.company_id
+ where cardinality(v.open_runs)>0 and a.profile is not null
+ order by v.company_id, v.id;
+$$;
+
+ALTER FUNCTION public.held_conversation_runs() OWNER TO postgres;
+
+--
 -- Name: hermes_profile_address(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -7150,6 +7166,20 @@ CREATE FUNCTION public.lead_tools_spec_89() RETURNS text
 $$;
 
 ALTER FUNCTION public.lead_tools_spec_89() OWNER TO postgres;
+
+--
+-- Name: let_go_conversation_run(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.let_go_conversation_run(conversation uuid, run text) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ with ended as (update public.conversations v set open_runs=array_remove(v.open_runs,run) where v.id=conversation and run=any(v.open_runs) returning 1)
+ select exists(select 1 from ended);
+$$;
+
+ALTER FUNCTION public.let_go_conversation_run(conversation uuid, run text) OWNER TO postgres;
 
 --
 -- Name: link_channel_files(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -21391,6 +21421,13 @@ REVOKE ALL ON FUNCTION public.handovers_due(just_conversation uuid, after bigint
 GRANT ALL ON FUNCTION public.handovers_due(just_conversation uuid, after bigint, just_channel uuid) TO service_role;
 
 --
+-- Name: FUNCTION held_conversation_runs(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.held_conversation_runs() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.held_conversation_runs() TO service_role;
+
+--
 -- Name: FUNCTION hermes_profile_address(address text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21615,6 +21652,13 @@ GRANT ALL ON FUNCTION public.lead_soul_work() TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.lead_tools_spec_89() FROM PUBLIC;
+
+--
+-- Name: FUNCTION let_go_conversation_run(conversation uuid, run text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.let_go_conversation_run(conversation uuid, run text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.let_go_conversation_run(conversation uuid, run text) TO service_role;
 
 --
 -- Name: FUNCTION link_channel_files(); Type: ACL; Schema: public; Owner: postgres

@@ -5,6 +5,10 @@ select json_build_object(
  'work_counts_open_runs',position('open_runs' in pg_get_functiondef('public.agent_work(uuid)'::regprocedure))>0,
  'refuse_model_signed_in_only',has_function_privilege('authenticated','public.refuse_conversation_model(uuid,uuid,jsonb)','execute')
   and not has_function_privilege('anon','public.refuse_conversation_model(uuid,uuid,jsonb)','execute'),
+ 'worker_only',has_function_privilege('service_role','public.held_conversation_runs()','execute')
+  and not has_function_privilege('authenticated','public.held_conversation_runs()','execute')
+  and has_function_privilege('service_role','public.let_go_conversation_run(uuid,text)','execute')
+  and not has_function_privilege('authenticated','public.let_go_conversation_run(uuid,text)','execute'),
  'grants_kept',has_function_privilege('authenticated','public.open_engine_conversation(uuid,uuid,uuid,text)','execute')
   and not has_function_privilege('authenticated','public.open_first_conversation(uuid,uuid,uuid,text)','execute')
   and has_function_privilege('service_role','public.open_first_conversation(uuid,uuid,uuid,text)','execute')
