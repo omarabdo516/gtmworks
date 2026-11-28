@@ -8,6 +8,7 @@ import { inviteRoles } from '@/lib/member-roles.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InviteSection } from './invite-section';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
+import { PasswordLinkButton, PasswordLinkMade, type MakePasswordLink, type MadePasswordLink } from './password-link-section';
 import { toast } from './toast';
 
 // The Team table (#15, #185, #187; design-reference: teamTableHTML): one row per Member, the main Agent shown to all,
@@ -94,13 +95,16 @@ export function PendingLinks({links,cancelLink}:{links:TeamLink[],cancelLink:Can
  </ul>;
 }
 
-export function TeamTable({company,members,invitations,links=[],agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,makeLink,cancelLink,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,makeLink?:MakeLink,cancelLink?:CancelLink,hint?:boolean}) {
+export function TeamTable({company,members,invitations,links=[],agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,makeLink,cancelLink,makePasswordLink,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,makeLink?:MakeLink,cancelLink?:CancelLink,makePasswordLink?:MakePasswordLink,hint?:boolean}) {
  const {t}=useI18n();
+ const [passwordLink,setPasswordLink]=useState<MadePasswordLink|null>(null);
+ // A password link (#954): an Administrator makes one for any other Member, a Manager for any but an Administrator.
+ const linkFor=(member:TeamMember)=>makePasswordLink&&member.person_id!==userId&&(owner||member.role!=='owner');
  const who=(member:TeamMember)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{t(member.role)}</span></span></span>;};
  const others=agents.filter(agent=>!agent.is_default);
  return <><div className="table-wrap"><table className="table ta-table">
   <thead><tr><th scope="col">{t('settingsMember')}</th>{agents.map(agent=><th scope="col" key={agent.id}><span className="ta-ag"><AgentFace agent={agent.id} size={24}/><bdi>{agent.name}</bdi></span></th>)}</tr></thead>
-  <tbody>{members.map(member=>{const name=(member.people?.name||t('member')).split(' ')[0]; return <tr key={member.person_id}><th scope="row">{who(member)}</th>
+  <tbody>{members.map(member=>{const name=(member.people?.name||t('member')).split(' ')[0]; return <tr key={member.person_id}><th scope="row">{linkFor(member)&&makePasswordLink?<span className="ta-link">{who(member)}<PasswordLinkButton person={member.person_id} name={member.people?.name||t('member')} make={makePasswordLink} made={setPasswordLink}/></span>:who(member)}</th>
    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
    {member.role==='owner'?(others.length>0&&<td colSpan={others.length}><span className="ta-all">{t('settingsOwnerSeesAll')}</span></td>)
     :others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{member:member.person_id}} agent={agent.id} agentName={agent.name} personName={name} on={allowed.has(`${member.person_id}:${agent.id}`)} label={`${member.people?.name||t('member')} · ${agent.name}`} save={save}/></td>)}
@@ -113,6 +117,7 @@ export function TeamTable({company,members,invitations,links=[],agents,allowed,i
    {/* An Invite link (#951) still waiting for its Person: its label, Role, maker, end, and Cancel. */}
    {owner&&cancelLink&&links.map(link=><InviteLinkRow key={link.id} link={link} cancelLink={cancelLink} cols={agents.length+1}/>)}
   </tbody></table></div>
+ {passwordLink&&<PasswordLinkMade key={passwordLink.link} made={passwordLink} close={()=>setPasswordLink(null)}/>}
  {hint&&<p className="set-hint ta-hint">{t('settingsTeamHint')}</p>}
  {owner&&<InviteSection mode="table" roles={inviteRoles(t)} send={send}/>}
  {/* An Invite link (#950): the Administrator's way in for a new Person, with the Agents they will see. */}

@@ -48,13 +48,9 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
    mail(JSON.parse(body).email,trustForwardedHost && forwarded ? `http://${forwarded}` : base,'magiclink',base);
    return json({});
   }
-  if(url.pathname==='/auth/v1/recover' && request.method==='POST' && request.headers.apikey==='anon') {
-   mail(JSON.parse(body).email,base,'recovery',url.searchParams.get('redirect_to'));
-   return json({});
-  }
-  if(url.pathname==='/auth/v1/verify' && ['invite','recovery'].includes(url.searchParams.get('type'))) return send(303,{location:`${url.searchParams.get('redirect_to')}#access_token=a&refresh_token=r&type=${url.searchParams.get('type')}`});
+  if(url.pathname==='/auth/v1/verify' && url.searchParams.get('type')==='invite') return send(303,{location:`${url.searchParams.get('redirect_to')}#access_token=a&refresh_token=r&type=${url.searchParams.get('type')}`});
   if(url.pathname==='/auth/v1/verify') return send(303,{location:`${url.searchParams.get('redirect_to')}&code=c`});
-  if(url.pathname==='/auth/accept' || url.pathname==='/auth/reset') return send(200);
+  if(url.pathname==='/auth/accept') return send(200);
   if(url.pathname===`/c/${slug}/home` && cookie.includes('session=s')) return send(200,{},'<h1>Proxy Company</h1>');
   send(404);
  });
@@ -76,7 +72,6 @@ test('the proxied install check follows the password first run to the Company ho
  assert.equal(status,0,output);
  assert.match(output,new RegExp(`Reached http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
  assert.match(output,new RegExp(`Invitation returned to http://127\\.0\\.0\\.1:\\d+/auth/accept\\?next=${encodeURIComponent(`/c/${slug}/settings/members`)}`));
- assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
  assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
 });
 

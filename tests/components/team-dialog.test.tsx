@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 // panel is the person's own (a text selection dragged out of it) and leaves the dialog open.
 const actions=():TeamActions=>({
  load: async () => ({ members: [{ person_id: 'p-1', role: 'owner', people: { name: 'Omar' } }], invitations: [], links: [], agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', is_default: true }, { id: 'a-2', connection_id: 'c-2', name: 'Meta Ads', is_default: false }], allowed: [], invitedAllowed: [] }),
- save: async () => '', saveInvitation: async () => '', invite: async () => ({}), makeLink: async () => ({}), cancelLink: async () => '',
+ save: async () => '', saveInvitation: async () => '', invite: async () => ({}), makeLink: async () => ({}), cancelLink: async () => '', makePasswordLink: async () => ({}),
 });
 const reducedMotion = () => vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }));
 const press = (element: Element, type: 'mousedown' | 'mouseup') => element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));

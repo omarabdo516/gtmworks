@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { TeamTable, type CancelLink, type SaveSwitch, type TeamLink } from '@/app/team-table';
+import type { MakePasswordLink } from '@/app/password-link-section';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n } from '@/lib/i18n.mjs';
 import { roleDescription } from '@/lib/member-roles.mjs';
@@ -69,4 +70,36 @@ test('a cancel the database refuses says why and keeps the link in the table', a
  await screen.getByRole('button', {name:'Cancel Nour Salah’s invite link'}).click();
  await expect.element(screen.getByText('Couldn’t cancel the link. Try again.')).toBeVisible();
  await expect.element(screen.getByText('Nour Salah')).toBeVisible();
+});
+
+// #954: a password link per Member. An Administrator sees it on every other Member's row, a Manager on every row but
+// an Administrator's, and nobody on their own. The made link is shown once below the table; a refusal stays on the row.
+const people = [{ person_id: 'p-0', role: 'owner', people: { name: 'Omar' } }, { person_id: 'p-2', role: 'manager', people: { name: 'Mona' } }, { person_id: 'p-1', role: 'contributor', people: { name: 'Nour' } }];
+const tableWithPasswords = (userId: string, owner: boolean, makePasswordLink: MakePasswordLink) => <LanguageProvider language="en">
+ <TeamTable company="co-1" members={people} invitations={[]} agents={agents} allowed={new Set()} invitedAllowed={new Set()} userId={userId} owner={owner}
+  save={save} saveInvitation={save} send={vi.fn(async () => ({}))} makePasswordLink={makePasswordLink}/>
+</LanguageProvider>;
+
+test('an Administrator makes a password link for another Member and sees it once to copy', async () => {
+ const make = vi.fn<MakePasswordLink>(async () => ({ link: 'https://app.example.test/password#code=abc' }));
+ const screen = await render(tableWithPasswords('p-0', true, make));
+ expect(document.querySelector('[aria-label="Make a password link for Omar"]')).toBeNull();
+ await expect.element(screen.getByRole('button', { name: 'Make a password link for Mona' })).toBeVisible();
+ await screen.getByRole('button', { name: 'Make a password link for Nour' }).click();
+ expect(make).toHaveBeenCalledWith('p-1');
+ await expect.element(screen.getByRole('heading', { name: /^Password link for Nour/ })).toBeVisible();
+ await expect.element(screen.getByRole('textbox')).toHaveValue('https://app.example.test/password#code=abc');
+ await expect.element(screen.getByText('It works once, for 24 hours, and is shown only now. A newer link for the same Member ends this one.')).toBeVisible();
+ await screen.getByRole('button', { name: 'Done' }).click();
+ expect(document.querySelector('#pwl-link')).toBeNull();
+});
+
+test('a Manager gets no password link for an Administrator, and a refusal says why on the row', async () => {
+ const make = vi.fn<MakePasswordLink>(async () => ({ error: 'passwordLinkNotAllowed' }));
+ const screen = await render(tableWithPasswords('p-2', false, make));
+ expect(document.querySelector('[aria-label="Make a password link for Omar"]')).toBeNull();
+ expect(document.querySelector('[aria-label="Make a password link for Mona"]')).toBeNull();
+ await screen.getByRole('button', { name: 'Make a password link for Nour' }).click();
+ await expect.element(screen.getByRole('row').filter({ hasText: 'Nour' }).getByRole('alert')).toHaveTextContent('A Manager can’t make a password link for an Administrator.');
+ expect(document.querySelector('#pwl-link')).toBeNull();
 });

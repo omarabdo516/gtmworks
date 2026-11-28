@@ -1,5 +1,11 @@
 [
 {
+  "issue": 954,
+  "date": "2026-11-28",
+  "en": { "title": "Password links", "body": "A Member who forgot their password asks an Administrator or a Manager of their Company, who makes a password link from the Team page; it works once for 24 hours, signs them in with the new password and signs out their other devices, and the sign-in page no longer sends a reset email." },
+  "ar": { "title": "لينكات كلمة المرور", "body": "العضو اللي نسي كلمة المرور بيطلب من أدمن أو مدير في شركته، اللي بيعمله لينك كلمة مرور من صفحة الفريق؛ بيشتغل مرة واحدة لمدة 24 ساعة، وبيدخّله بكلمة المرور الجديدة ويخرّج أجهزته التانية، وصفحة الدخول مبقتش تبعت إيميل لتغيير كلمة المرور." }
+},
+{
   "issue": 951,
   "date": "2026-11-28",
   "en": { "title": "Invite links you can see and cancel", "body": "The Team page lists every invite link still waiting for its Person, with the Role it gives, who made it and the day it ends. Cancel stops one at once, and a Person who opens a link that was used, cancelled or ended sees a clear page telling them to ask the Administrator for a new one." },

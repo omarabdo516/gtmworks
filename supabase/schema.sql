@@ -3689,6 +3689,36 @@ end $_$;
 ALTER FUNCTION public.claim_invite_link(link_hash text, person uuid, person_name text, language text) OWNER TO postgres;
 
 --
+-- Name: claim_password_link(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.claim_password_link(link_hash text) RETURNS TABLE(person uuid, email text, slug text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare link public.company_links; target public.member_role;
+begin
+ if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='55000'; end if;
+ select l.* into link from public.company_links l where l.secret_hash=link_hash and l.kind='password' for update;
+ if not found or link.used_at is not null then raise exception 'passwordLinkUsed' using errcode='55000'; end if;
+ if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
+ if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
+ select m.role into target from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null;
+ if target is null then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
+ if target='owner' and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.made_by and m.removed_at is null and m.role='owner') then
+  raise exception 'passwordLinkEnded' using errcode='55000';
+ end if;
+ update public.company_links set used_at=now(),used_by=link.person_id where id=link.id;
+ delete from auth.sessions s where s.user_id=link.person_id;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
+  values(link.company_id,link.person_id,'person',(select name from public.people where id=link.person_id),'member',link.person_id,'password_link_used',
+   jsonb_build_object('person_name',(select name from public.people where id=link.person_id),'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+ return query select link.person_id,u.email::text,c.slug from auth.users u, public.companies c where u.id=link.person_id and c.id=link.company_id;
+end $_$;
+
+ALTER FUNCTION public.claim_password_link(link_hash text) OWNER TO postgres;
+
+--
 -- Name: close_channel_run(bigint, text, text, text, bigint, bigint); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -7607,6 +7637,35 @@ end $_$;
 ALTER FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) OWNER TO postgres;
 
 --
+-- Name: make_password_link(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.make_password_link(c uuid, person uuid, link_hash text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare made uuid; asker public.member_role; target public.member_role; named text;
+begin
+ select m.role into asker from public.members m where m.company_id=c and m.person_id=auth.uid() and m.removed_at is null;
+ if c is null or asker is null or asker not in ('owner','manager') then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
+ select m.role into target from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null;
+ if person is null or target is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
+ if target='owner' and asker<>'owner' then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
+ if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='22023'; end if;
+ update public.company_links set cancelled_at=now()
+  where company_id=c and kind='password' and person_id=person and used_at is null and cancelled_at is null;
+ insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
+  values(c,'password',link_hash,auth.uid(),person,now()+interval '24 hours') returning id into made;
+ select p.name into named from public.people p where p.id=person;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
+  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member',person,'password_link_made',
+   jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+ return made;
+end $_$;
+
+ALTER FUNCTION public.make_password_link(c uuid, person uuid, link_hash text) OWNER TO postgres;
+
+--
 -- Name: manage_hermes_agent(uuid, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -8299,6 +8358,24 @@ CREATE FUNCTION public.own_conversations(c uuid) RETURNS SETOF public.conversati
 $$;
 
 ALTER FUNCTION public.own_conversations(c uuid) OWNER TO postgres;
+
+--
+-- Name: password_link_open(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.password_link_open(link_hash text) RETURNS TABLE(company text, person_name text, email text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select c.name,p.name,u.email::text from public.company_links l
+  join public.companies c on c.id=l.company_id
+  join public.people p on p.id=l.person_id
+  join auth.users u on u.id=l.person_id
+  join public.members m on m.company_id=l.company_id and m.person_id=l.person_id and m.removed_at is null
+ where l.secret_hash=link_hash and l.kind='password' and l.used_at is null and l.cancelled_at is null and l.ends_at>now();
+$$;
+
+ALTER FUNCTION public.password_link_open(link_hash text) OWNER TO postgres;
 
 --
 -- Name: pending_invite_links(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -13044,12 +13121,14 @@ CREATE TABLE public.company_links (
     used_at timestamp with time zone,
     used_by uuid,
     cancelled_at timestamp with time zone,
+    person_id uuid,
     CONSTRAINT company_links_check CHECK (((kind <> 'invite'::text) OR ((label IS NOT NULL) AND (role IS NOT NULL)))),
     CONSTRAINT company_links_check1 CHECK ((ends_at > created_at)),
     CONSTRAINT company_links_check2 CHECK (((used_by IS NULL) OR (used_at IS NOT NULL))),
     CONSTRAINT company_links_check3 CHECK (((used_at IS NULL) OR (cancelled_at IS NULL))),
-    CONSTRAINT company_links_kind_check CHECK ((kind = 'invite'::text)),
+    CONSTRAINT company_links_kind_check CHECK ((kind = ANY (ARRAY['invite'::text, 'password'::text]))),
     CONSTRAINT company_links_label_check CHECK (((label IS NULL) OR ((length(btrim(label)) >= 1) AND (length(btrim(label)) <= 120)))),
+    CONSTRAINT company_links_password_check CHECK (((kind <> 'password'::text) OR ((person_id IS NOT NULL) AND (role IS NULL) AND (label IS NULL)))),
     CONSTRAINT company_links_role_check CHECK ((role = ANY (ARRAY['manager'::text, 'contributor'::text, 'viewer'::text]))),
     CONSTRAINT company_links_secret_hash_check CHECK ((secret_hash ~ '^[a-f0-9]{64}$'::text))
 );
@@ -16797,6 +16876,13 @@ ALTER TABLE ONLY public.company_links
     ADD CONSTRAINT company_links_made_by_fkey FOREIGN KEY (made_by) REFERENCES public.people(id) ON DELETE SET NULL;
 
 --
+-- Name: company_links company_links_person_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_links
+    ADD CONSTRAINT company_links_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.people(id) ON DELETE CASCADE;
+
+--
 -- Name: company_links company_links_used_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -20005,6 +20091,13 @@ REVOKE ALL ON FUNCTION public.claim_invite_link(link_hash text, person uuid, per
 GRANT ALL ON FUNCTION public.claim_invite_link(link_hash text, person uuid, person_name text, language text) TO service_role;
 
 --
+-- Name: FUNCTION claim_password_link(link_hash text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.claim_password_link(link_hash text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_password_link(link_hash text) TO service_role;
+
+--
 -- Name: FUNCTION close_channel_run(message bigint, run text, run_outcome text, reply text, used_input bigint, used_output bigint); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21303,6 +21396,13 @@ REVOKE ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role tex
 GRANT ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) TO authenticated;
 
 --
+-- Name: FUNCTION make_password_link(c uuid, person uuid, link_hash text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.make_password_link(c uuid, person uuid, link_hash text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.make_password_link(c uuid, person uuid, link_hash text) TO authenticated;
+
+--
 -- Name: FUNCTION manage_hermes_agent(c uuid, intent text, a uuid, replacement uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21517,6 +21617,13 @@ GRANT SELECT ON TABLE public.conversations TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION public.own_conversations(c uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION password_link_open(link_hash text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.password_link_open(link_hash text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.password_link_open(link_hash text) TO service_role;
 
 --
 -- Name: FUNCTION pending_invite_links(c uuid); Type: ACL; Schema: public; Owner: postgres

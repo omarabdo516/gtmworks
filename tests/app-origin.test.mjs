@@ -33,7 +33,6 @@ process.env.SETUP_CODE=code;
 const {NextRequest}=await import('next/server');
 const submit=(await import('../app/first-run/submit/route.ts')).POST;
 const callback=(await import('../app/auth/callback/route.ts')).GET;
-const {sendResetLink}=await import('../app/sign-in/actions.ts');
 const {supabase}=await import('../lib/supabase.ts');
 
 // The Auth and database server: answers what setup and sign-in ask and records every request.
@@ -47,7 +46,7 @@ function server() {
   if(url.pathname==='/rest/v1/rpc/setup_is_open') return reply(true);
   if(url.pathname==='/auth/v1/admin/users') return reply({id:'00000000-0000-4000-8000-000000000040',email:'owner@example.test'});
   if(url.pathname==='/rest/v1/rpc/complete_setup') return reply('first-company-0000abcd');
-  if(url.pathname==='/auth/v1/otp' || url.pathname==='/auth/v1/recover') return reply({});
+  if(url.pathname==='/auth/v1/otp') return reply({});
   if(url.pathname==='/auth/v1/token') return reply({access_token:'access',token_type:'bearer',expires_in:3600,expires_at:4102444800,refresh_token:'refresh',user:{id:'00000000-0000-4000-8000-000000000040',aud:'authenticated',email:'owner@example.test'}});
   if(url.pathname==='/rest/v1/rpc/claim_invitations') return reply(null);
   throw new Error(`unexpected request ${init.method||'GET'} ${url}`);
@@ -113,15 +112,6 @@ test('the auth callback tells the person when their invitation could not be clai
  assert.ok(lines.some(line=>line.includes('claimInvitations')&&line.includes('P0001')),'the failed claim is logged');
 });
 
-test('the reset link is built on APP_ORIGIN, not on the forwarded request', async () => {
- process.env.APP_ORIGIN=origin;
- const requests=server();
- assert.equal(await sendResetLink('',form({email:'owner@example.test'})),'checkYourEmailForAResetLink');
- const recover=requests.find(url=>url.pathname==='/auth/v1/recover');
- assert.ok(recover,'the reset email was requested');
- assert.equal(recover.searchParams.get('redirect_to'),`${origin}/auth/reset`);
-});
-
 test('the origin is read from APP_ORIGIN each time a link is built', async () => {
  const {appUrl}=await import('../lib/app-origin.mjs');
  assert.equal(appUrl('/sign-in',{APP_ORIGIN:origin}).href,`${origin}/sign-in`);
@@ -146,21 +136,10 @@ test('no file in app/ or lib/ but the one helper reads the host, origin or forwa
   return entry.isDirectory()?source(path):/\.(?:[cm]?[jt]s|tsx)$/.test(entry.name)?[path]:[];
  });
  const files=[...source('app'),...source('lib'),'middleware.ts'];
- for(const route of ['app/first-run/submit/route.ts','app/auth/callback/route.ts','app/sign-in/actions.ts','app/api/conversations/route.ts']) assert.ok(files.includes(route),`the scan sees ${route}`);
+ for(const route of ['app/first-run/submit/route.ts','app/auth/callback/route.ts','app/password/submit/route.ts','app/api/conversations/route.ts']) assert.ok(files.includes(route),`the scan sees ${route}`);
  assert.ok(files.includes(helper),'the scan sees the helper');
  const forbidden=/['"`](?:host|origin|x-forwarded-host|x-forwarded-proto)['"`]|nextUrl\.(?:origin|host|protocol)\b|\breq(?:uest)?\.url\b/i;
  assert.match(readFileSync(helper,'utf8'),forbidden,'the pattern finds the header names where they are read');
  assert.deepEqual(files.filter(path=>path!==helper&&forbidden.test(readFileSync(path,'utf8'))),[]);
 });
 
-// The auth service answers an address with no account as sent, but a second request for an existing account within its
-// cooldown is refused (429): that answer would tell whether the account exists, so the page says the same as for a
-// sent link. A failure that is the same for every address (the service is down) still says the link was not sent.
-test('a reset request refused for its cooldown answers like a sent link; a failed service says it was not sent', async () => {
- process.env.APP_ORIGIN=origin;
- const answering=status=>{ globalThis.fetch=async()=>new Response(JSON.stringify({code:status===429?'over_email_send_rate_limit':'unexpected_failure',msg:'refused'}),{status,headers:{'Content-Type':'application/json'}}); };
- answering(429);
- assert.equal(await sendResetLink('',form({email:'owner@example.test'})),'checkYourEmailForAResetLink');
- answering(500);
- assert.equal(await sendResetLink('',form({email:'owner@example.test'})),'couldNotSendTheLinkTryAgain');
-});

@@ -151,7 +151,7 @@ Administrator. Setup then closes permanently and the setup link stops working; l
 visits sign in with email and password, and a sign-in lasts 30 days on that
 browser unless you sign out. Public sign-ups stay disabled. No demo people or
 companies are created.
-The local inbox at http://localhost:8025 receives password reset links and invitations.
+The local inbox at http://localhost:8025 receives invitations. A forgotten password is a password link an Administrator or a Manager makes from the Team page; no reset email is sent.
 No SMTP account is needed for it.
 
 The install starts the web app, worker, Postgres,

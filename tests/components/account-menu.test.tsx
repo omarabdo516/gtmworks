@@ -45,6 +45,7 @@ const teamActions = (data = teamData) => ({
  invite: vi.fn(async () => ({})),
  makeLink: vi.fn(async () => ({ link: 'http://127.0.0.1:3000/join#code=' + 'a'.repeat(64) })),
  cancelLink: vi.fn(async () => ''),
+ makePasswordLink: vi.fn(async () => ({})),
 });
 const teamMenu = (language: Language, overrides: Partial<ComponentProps<typeof AccountMenuView>> = {}) => menu(language, {
  company: 'company-1', personId: 'p-omar', canManage: true, team: teamActions(), ...overrides,
