@@ -9,7 +9,7 @@ import { uuid } from '@/lib/conversations';
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
 const refuse=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});
 const encoder=new TextEncoder();
-const line=(value:LiveLine)=>encoder.encode(`${JSON.stringify(value)}\n`);
+const line=(value:LiveLine|{delta:string})=>encoder.encode(`${JSON.stringify(value)}\n`);
 const only=(value:LiveLine)=>new Response(line(value),{headers});
 
 export async function GET(request:NextRequest) {

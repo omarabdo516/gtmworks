@@ -469,9 +469,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
   // The most rows a cron job's run history lists (#535: the pinned Engine lists 100 at most).
-  cronRunsAtMost:100,startDelay:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
+  cronRunsAtMost:100,startDelay:0,stallEvents:false,liveSteps:/** @type {(input:string)=>{tool:string,preview?:string|null,failed?:boolean}[]} */(()=>[]),livePace:10,liveHold:false,
+  release(/** @type {string} */ id) { const run=settings.runs.find(each=>each.id===id); run?.release?.(); },reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -749,6 +750,39 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    {role:'tool',tool_call_id:call,tool_name:'kanban_create',content:JSON.stringify({ok:true,task_id:task.id,status:task.status,workspace_kind:'scratch',workspace_path:null,project_id:null,gated:false,subscribed:!!run.session}),timestamp:at+1},
    {role:'assistant',content:settings.reply(inputText(run.input),[],[]),timestamp:at+1.5});
  };
+ // A Run on a session gtmworks chose (#876; body `session_id`, docs/engine-probes/conversation-read.md answer 1) plays on
+ // its own, as the pinned release's does: the person's message is in the session at once, then each tool call
+ // `liveSteps` gives for its input starts and ends, then its reply is written a word at a time (message.delta), and
+ // the Run completes with its turn stored in the session. `liveHold` keeps a new Run working until `release(run)`, and
+ // `livePace` is the milliseconds between two events. A stopped Run ends cancelled.
+ const play=async run=>{
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const found=settings.sessions.get(run.sessionId)??{profile:run.profile,messages:[]};
+  settings.sessions.set(run.sessionId,found);
+  const at=()=>Date.now()/1000;
+  found.messages.push({role:'user',content:inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
+  if(settings.liveHold) await new Promise(resolve=>{ run.release=resolve; });
+  push(run.id,{event:'run.started'});
+  for(const step of settings.liveSteps(inputText(run.input))) {
+   if(run.stopped) break;
+   const call=`call_${randomUUID().replaceAll('-','').slice(0,12)}`;
+   push(run.id,{event:'tool.started',tool:step.tool,preview:step.preview??null,tool_call_id:call});
+   found.messages.push({role:'assistant',content:'',tool_calls:[{id:call,type:'function',function:{name:step.tool,arguments:'{}'}}],finish_reason:'tool_calls',timestamp:at()});
+   await wait(settings.livePace);
+   push(run.id,{event:'tool.completed',tool:step.tool,tool_call_id:call,error:step.failed===true});
+   found.messages.push({role:'tool',tool_call_id:call,tool_name:step.tool,content:'{"success": true}',timestamp:at()});
+  }
+  const reply=settings.reply(inputText(run.input),[],[]);
+  for(const piece of run.stopped?[]:reply.match(/\S+\s*/g)??[]) {
+   if(run.stopped) break;
+   await wait(settings.livePace);
+   push(run.id,{event:'message.delta',delta:piece});
+  }
+  if(run.stopped) { endEvents(run.id,'run.cancelled'); return; }
+  found.messages.push({role:'assistant',content:reply,finish_reason:'stop',timestamp:at()});
+  run.liveDone=true;
+  endEvents(run.id,'run.completed');
+ };
  // The Engine's notifier (#844): a Card made from a session wakes that session with a user turn naming the Card and its
  // result, which the session's Agent answers; the session's next Run holds it.
  settings.kanban.told=(task,session,summary)=>{
@@ -891,6 +925,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      }
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
      if(run.card) madeCard(run);
+     if(typeof sent.session_id==='string') { run.sessionId=sent.session_id; run.session=sent.session_id; void play(run); }
     }
     // A start whose answer is lost: the run exists, but the connection closes before any answer (loseStarts of them).
     if(settings.loseStarts>0) { settings.loseStarts--; request.socket.destroy(); return; }
@@ -908,6 +943,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     // As measured on the pinned release (#141, the install check): a Run's record has when it was made and nothing of when
     // it ended; its end is in its events.
     const times={created_at:run.created};
+    if(run.sessionId&&!run.stopped) return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveDone?'completed':'running',session_id:run.session,...times,pending_controls:[],...(run.liveDone?{output:settings.reply(inputText(run.input),[],[])}:{})});
     if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times}); }
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
     // choices is marked recommended.

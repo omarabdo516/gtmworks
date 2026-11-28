@@ -13,7 +13,9 @@ import { PrivateLine } from '@/app/private-line';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ConversationSteps } from '@/lib/conversation-steps';
-import type { Send } from '@/lib/sending';
+import { takeSent, type Send } from '@/lib/sending';
+import type { LiveRun } from '@/app/run-activity';
+import type { LiveLine } from '@/lib/live-steps.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
@@ -256,19 +258,83 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    return false;
   } finally { olderRef.current=false; setOlder(false); }
  };
- return {page,mode,failed,older,moreFailed,more,usage,refresh:()=>void refreshRef.current(),hasMore:page?.hasMore??false};
+ return {page,mode,failed,older,moreFailed,more,usage,refresh:()=>refreshRef.current(),hasMore:page?.hasMore??false};
 }
 
-export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean}) {
+// The open Run of a Conversation whose messages are the Engine's, as it happens (#876): read from gtmworks's own live
+// route (app/api/conversation-live), never from the Engine. Its view is the Run's steps so far and the call it makes
+// now, its reply the words written so far. `follow` starts reading it, at once on a page that opened while a Run works
+// and after each send; once the Run's end is seen, `ended` reads the session again, which then holds the reply and its
+// steps, and only then are the live view and the sent message let go, so nothing is drawn twice or goes missing. A read
+// that is cut short is asked again, more slowly each time, while the Run still works.
+function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<void>) {
+ const [view,setView]=useState<LiveRun|null>(null);
+ const [reply,setReply]=useState('');
+ const [working,setWorking]=useState(open);
+ const reading=useRef<AbortController|null>(null);
+ const endedRef=useRef(ended); useEffect(()=>{ endedRef.current=ended; });
+ const follow=useCallback(()=>{
+  if(reading.current) return;
+  const stopped=new AbortController(); reading.current=stopped;
+  setWorking(true);
+  const read=async(failures:number):Promise<void>=>{
+   let end:string|null=null; let said='';
+   try {
+    const response=await fetch(`/api/conversation-live?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}`,{cache:'no-store',signal:stopped.signal});
+    if(response.status===401) { end='none'; }
+    else {
+     if(!response.ok||!response.body) throw new Error('unread');
+     const reader=response.body.pipeThrough(new TextDecoderStream()).getReader();
+     let buffer='';
+     for(;;) {
+      const {done,value}=await reader.read();
+      if(done) break;
+      buffer+=value;
+      for(let at=buffer.indexOf('\n');at>=0;at=buffer.indexOf('\n')) {
+       const line=JSON.parse(buffer.slice(0,at)) as LiveLine|{delta:string}; buffer=buffer.slice(at+1);
+       if('end' in line) end=line.end;
+       else if('delta' in line) { said+=line.delta; setReply(said); }
+       else setView(line);
+      }
+     }
+    }
+   } catch { if(stopped.signal.aborted) return; end='unreachable'; }
+   if(stopped.signal.aborted) return;
+   if(end==='ended'||end==='gone'||end==='none') {
+    await endedRef.current();
+    if(stopped.signal.aborted) return;
+    reading.current=null; setView(null); setReply(''); setWorking(false);
+    return;
+   }
+   // A read cut short replays the Run's events from its start, so the words are drawn again from the first.
+   await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**failures,15000)));
+   if(!stopped.signal.aborted) await read(end==='unreachable'?failures+1:0);
+  };
+  void read(0);
+ },[company,conversation]);
+ useEffect(()=>{ if(open) follow(); return ()=>{ reading.current?.abort(); reading.current=null; }; },[open,follow]);
+ return {view,reply,working,follow};
+}
+
+export function EngineLoaded({initial,steps,team,open=false}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean,open?:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,asked,reread,sending}=useConversationRecord({company,initial,steps});
+ const {record,reread,sending,reading}=useConversationRecord({company,initial,steps});
  const {c}=useConversationText();
  const engine=useEnginePage(company,conversation.id,()=>record.messages.length);
+ // A Run's end reads the session again; the messages sent before it then leave the drawn list, as the session holds them.
+ const run=useEngineRun(company,conversation.id,open,async()=>{ const landed=reading(); await engine.refresh(); landed(); });
+ // The first message of a new Conversation, sent from the Agent's empty chat, is drawn here at once (#876).
+ useEffect(()=>{ const handed=takeSent(conversation.id); if(handed) sending(handed.key,handed.body,[])(null); },[conversation.id]); // eslint-disable-line react-hooks/exhaustive-deps
+ const asked=run.follow;
  // What the transcript draws: the Engine's messages when they were read, else the old record, which a first read that
  // fails leaves in charge (and which the composer and the title read either way). The old record's live states — the
  // working line, Stop, a question or a request to act — wait for #876 to #879, which bring them on this read.
  const shown=useMemo(()=>{
-  const base=engine.page?{...record,messages:engine.page.messages,pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
+  // A message sent is drawn after the Engine's messages until a read of the session holds it (#876): one whose words
+  // the page already holds, said since it was sent, is not drawn twice.
+  const sent=record.messages.filter(message=>message.kind==='sending');
+  const said=(message:ConversationRecord['messages'][number])=>engine.page?.messages.some(drawn=>drawn.author==='person'&&drawn.body===message.body&&Date.parse(drawn.created_at)>=Date.parse(message.created_at)-60000);
+  const base=engine.page?{...record,messages:[...engine.page.messages,...sent.filter(message=>!said(message))],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
  },[record,engine.page,engine.usage]);
@@ -280,7 +346,7 @@ export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,st
   const held=preserve.current;
   if(held) { view.scrollTop=view.scrollHeight-held.height+held.top; preserve.current=null; }
   else if(stick.current) view.scrollTop=view.scrollHeight;
- },[shown.messages.length]);
+ },[shown.messages.length,run.reply,run.view?.steps.length]);
  // A newest page of only tool calls and results can be shorter than the viewport: read the older pages until the
  // transcript scrolls or the history ends, so there is no history a person cannot reach (#875).
  useLayoutEffect(()=>{
@@ -290,6 +356,9 @@ export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,st
   if(!engine.page.messages.length||view.scrollHeight<=view.clientHeight+80) void engine.more();
  },[engine.page?.nextOffset,engine.hasMore,engine.older,engine.moreFailed]); // eslint-disable-line react-hooks/exhaustive-deps
  const welcome=!shown.messages.length&&agent?.main;
+ // A read of the session that already holds the reply the live read is writing draws it once: the stored one (#876).
+ const last=shown.messages.at(-1);
+ const landed=!!run.reply&&last?.author==='agent'&&last.body.trim()===run.reply.trim();
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
   if(view.scrollTop<80&&view.scrollHeight>view.clientHeight+80&&engine.hasMore&&!engine.older) {
@@ -299,7 +368,7 @@ export function EngineLoaded({initial,steps,team}:{initial:ConversationRecord,st
  }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={asked} reread={reread} details={!!agent}/>}
+  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={asked} reread={reread} details={!!agent} live={landed?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working}}/>}
   {engine.failed&&engine.page&&<p className="note convo-status" role="alert" data-outcome="refresh" data-refresh>{c('conversationNoRefresh')} <button type="button" className="link-btn" onClick={engine.refresh}>{c('conversationTryAgain')}</button></p>}
  </div></div>;
 }

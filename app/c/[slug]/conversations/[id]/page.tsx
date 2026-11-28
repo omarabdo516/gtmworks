@@ -31,7 +31,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
  const [{t,language},reader,{data:found}]=await Promise.all([getI18n(),companyOf(slug),
-  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at`).eq('id',id).maybeSingle():{data:null}]);
+  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at,open_run`).eq('id',id).maybeSingle():{data:null}]);
  if(!reader) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
  const {user,company}=reader;
  if(!company||!uuid.test(id)) notFound();
@@ -96,19 +96,20 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={engine}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={engine} open={!!conversation.open_run}/></ConversationView></main>
  </Page>;
 }
 
-// The chat once its record is read, streamed in place of the placeholder. A Conversation with an Engine session reads
+// The chat once its record is read, streamed in place of the placeholder. `open` (#876): its row holds a Run still
+// working, which the chat follows live from the start. A Conversation with an Engine session reads
 // its messages from the Engine on their own request (#875); one without reads what the old record holds, as until its
 // first send gives it a session. The old record is still read here as that fallback and for the frame's other states;
 // #883 switches it off.
-async function Loaded({record,steps,team,engine}:{record:ReturnType<typeof conversationRecord>,steps:Promise<ConversationSteps|null>,team:boolean,engine:boolean}) {
+async function Loaded({record,steps,team,engine,open}:{record:ReturnType<typeof conversationRecord>,steps:Promise<ConversationSteps|null>,team:boolean,engine:boolean,open:boolean}) {
  // Everything outside this boundary is drawn by now, so the page's first bytes leave next.
  markOpen('firstByte');
  // A record that could not be read draws its line with "Try again", never an empty Conversation (#768).
  const read=await record.catch(()=>null);
  if(!read) return <ConversationNotRead/>;
- return engine?<EngineLoaded key={read.conversation.id} initial={read} steps={steps} team={team}/>:<ConversationLoaded initial={read} steps={steps} team={team}/>;
+ return engine?<EngineLoaded key={read.conversation.id} initial={read} steps={steps} team={team} open={open}/>:<ConversationLoaded initial={read} steps={steps} team={team}/>;
 }

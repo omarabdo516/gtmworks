@@ -38,7 +38,9 @@ export type SessionMessagesRead={state:'found',messages:SessionMessage[],prefix:
 // A Run's tool calls as they happen (#646): each call starting (its id, tool and the Engine's preview) or ending (done or
 // failed, by the same id, or none when the Engine gave it none), a loss when older events are gone, and one end last.
 export type RunStepEvent={seq:number,step:{call:string|null,tool:string,preview:string|null,state:'started'|'done'|'failed'}};
-export type RunEvent=RunStepEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
+// A piece of the reply as it is written (#876), read beside the steps.
+export type RunDeltaEvent={seq:number,delta:string};
+export type RunEvent=RunStepEvent|RunDeltaEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
 export type Agent={name:string,instructions:string,model:string|null,ready:boolean,displayName?:string|null,description?:string,descriptionAuto?:boolean,botTitle?:string|null};
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};

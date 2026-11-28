@@ -16,6 +16,7 @@ import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
 import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-messages';
 import { conversationSteps } from '@/lib/conversation-steps';
+import { sendToEngine } from '@/lib/conversation-send';
 import { agentAppStates } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -46,6 +47,13 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  if(!chosen.length&&!body.message.trim()) return refuse('conversationFailed',400);
  const conversation=body.conversation as string;
  const messageKey=body.sendKey as string; const company=body.company as string;
+ // A message with no images in a Conversation whose messages are the Engine's, or in a new one, is one Run on its
+ // Engine session, and nothing of it is stored here (#876). A Conversation the old record still holds goes on below.
+ if(!chosen.length) {
+  const engine=await sendToEngine(db,{company,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey});
+  if(engine.state==='started') return reply({conversation,run:engine.run,engine:true});
+  if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
+ }
  // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
  // the key still holds (#727).
  const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};

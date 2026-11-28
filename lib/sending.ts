@@ -48,3 +48,9 @@ export function useSending(place?:{company:string,conversation:string}):{list:Se
  },[list,pressed,company,conversation]);
  return {list,...calls};
 }
+
+// A new Conversation's first message (#876), handed from the Agent's empty chat to the Conversation the page moves to,
+// so it is drawn there at once while its Run works. Kept in the page's memory for a short time only, never stored.
+const handed=new Map<string,{key:string,body:string}>();
+export function handSent(conversation:string,sent:{key:string,body:string}) { handed.set(conversation,sent); setTimeout(()=>handed.delete(conversation),15000); }
+export function takeSent(conversation:string) { const sent=handed.get(conversation); handed.delete(conversation); return sent??null; }
