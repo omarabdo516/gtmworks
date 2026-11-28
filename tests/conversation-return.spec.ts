@@ -34,7 +34,7 @@ test.beforeAll(async({},testInfo)=>{
  end $$;`);
 });
 test.afterAll(async()=>{ await fake?.close(); });
-test.afterEach(()=>{ Object.assign(fake.settings,{liveHold:false,livePace:10,liveSteps:()=>[],ending:'completed',failure:undefined}); });
+test.afterEach(()=>{ Object.assign(fake.settings,{liveHold:false,livePace:10,liveSteps:()=>[],ending:'completed',failure:undefined,loseStarts:0}); });
 
 // A Conversation already on the Engine, with one exchange in its session.
 const conversationOnEngine=()=>{
@@ -164,4 +164,23 @@ test('a Run the Engine no longer knows is let go, and the Conversation shows wha
  await expect(page.locator('[data-outcome=no-reply]')).toHaveText(/No reply came to this message\./,{timeout:20000});
  await expect(page.locator('li[data-live]')).toHaveCount(0);
  await expect.poll(()=>openRuns(conversation),{timeout:10000}).toEqual([]);
+});
+
+test('Try again whose answer was lost keeps its send key, so pressing it again replays that Run and starts no second',async({page})=>{
+ test.setTimeout(180000);
+ const {conversation,session}=conversationOnEngine();
+ fake.settings.sessions.get(session)!.messages.push({role:'user',content:'And the budget?',timestamp:3});
+ await open(page,conversation);
+ const again=page.locator('[data-outcome=no-reply]').getByRole('button',{name:'Try again'});
+ await expect(again).toBeVisible({timeout:20000});
+ const runs=fake.settings.runs.length;
+ // Every answer to the start is lost: the Run is made, but the send is refused as not known.
+ fake.settings.loseStarts=1_000;
+ await again.click();
+ await expect(page.getByText('Not sent').last()).toBeVisible({timeout:30000});
+ expect(fake.settings.runs.length,'the lost start made its Run').toBe(runs+1);
+ fake.settings.loseStarts=0;
+ await again.click();
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: And the budget\?/,{timeout:30000});
+ expect(fake.settings.runs.length,'the same key replayed that Run').toBe(runs+1);
 });

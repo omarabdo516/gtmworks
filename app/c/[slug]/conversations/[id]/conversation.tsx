@@ -397,13 +397,19 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   return usage===base.usage?base:{...base,usage};
  },[record,engine.page,engine.usage,sent.waiting,ending,cause,owner,run.unfinished]);
  // "Try again" under a reply that did not come sends the person's last words again, as a new Run on the session (#879).
+ // Its send key stays until a send is answered: one whose answer was lost may have started the Run, and pressing again
+ // with the same key replays that Run rather than start a second (lib/conversation-send.ts).
+ const retryKey=useRef<{body:string,key:string}|null>(null);
  const again=useCallback(()=>{
   const body=engine.page?.messages.findLast(message=>message.author==='person')?.body;
   if(!body) return;
-  const key=newId(); const settled=sending(key,body,[]);
+  if(retryKey.current?.body!==body) retryKey.current={body,key:newId()};
+  const {key}=retryKey.current; const settled=sending(key,body,[]);
   void postMessage({company,conversation:conversation.id,message:body,sendKey:key}).then(failure=>{
    settled(failure);
-   if(failure) toast(c('conversationNotSent'),{icon:'alert'}); else run.follow();
+   if(failure) { toast(c('conversationNotSent'),{icon:'alert'}); return; }
+   if(retryKey.current?.key===key) retryKey.current=null;
+   run.follow();
   });
  },[engine.page,sending,company,conversation.id,run.follow,c]); // eslint-disable-line react-hooks/exhaustive-deps
  useLayoutEffect(()=>{ store.set({record:shown,asked:()=>run.follow(),sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
