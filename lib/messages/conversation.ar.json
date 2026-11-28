@@ -12,6 +12,8 @@
   "conversationAnswerNotDelivered": "موصلتش: الوكيل كان بطّل يستنى الإجابة دي. ابعتها تاني في رسالة جديدة.",
   "conversationAddressed": "لـ {0} · الوكيل متسألش",
   "conversationStop": "وقّف {0}",
+  "conversationStoppedMidReply": "وقّفته. {0} وقف في نص الرد",
+  "conversationStoppedBefore": "وقّفته. {0} وقف قبل ما يرد",
   "ruleSaved": "اتحفظت",
   "ruleSavedFor": "قاعدة عند {0} · اتكتبت في السجل",
   "ruleSeeIt": "شوفها",
