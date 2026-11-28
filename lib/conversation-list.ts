@@ -114,7 +114,7 @@ function heldSession(company:string,session:string):SessionListed|null {
 // waiting for its Run), with its newest message under it, by that message's time and its own archived mark, as #875 left a Conversation the old
 // record holds to that record. Null when that read failed.
 const oldPage=100;
-type OldRow={id:string,last_message_at:string,archived_at:string|null,first:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],newest:{body:string}[]};
+type OldRow={id:string,last_message_at:string,archived_at:string|null,first:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],newest:{body:string}[],waiting_files:{name:string}[]};
 async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:string,line:string,at:string,archived:boolean}>|null> {
  if(!ids.length) return new Map();
  // A page of ids at a time, so the read's address stays short however many there are.
@@ -122,12 +122,15 @@ async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:str
   const parts=await Promise.all(Array.from({length:Math.ceil(ids.length/oldPage)},(_,at)=>oldRecord(db,ids.slice(at*oldPage,(at+1)*oldPage))));
   return parts.some(part=>!part)?null:new Map(parts.flatMap(part=>[...part!]));
  }
- const {data,error}=await db.from('conversations').select('id,last_message_at,archived_at,first:conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),newest:conversation_messages(body)').in('id',ids).eq('first.author','person')
+ const {data,error}=await db.from('conversations').select('id,last_message_at,archived_at,first:conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),newest:conversation_messages(body),waiting_files:conversation_attachments(name)').in('id',ids).eq('first.author','person')
+  .is('waiting_files.message_id',null).order('position',{referencedTable:'waiting_files'}).limit(1,{referencedTable:'waiting_files'})
   .neq('newest.body','').is('newest.hand_card',null).order('id',{referencedTable:'newest',ascending:false}).limit(1,{referencedTable:'newest'})
   .order('id',{referencedTable:'first'}).limit(1,{referencedTable:'first'}).order('queued_at',{referencedTable:'conversation_queued_turns'}).limit(1,{referencedTable:'conversation_queued_turns'});
  if(error) return null;
  return new Map(((data||[]) as OldRow[]).map(row=>{ const first=row.first?.[0];
-  const title=(first?.body||row.conversation_queued_turns?.[0]?.message||'').split('\n')[0]||first?.conversation_attachments?.[0]?.name||'';
+  // A first message still waiting for its Run (#764) names it too, by its words or, with images alone, its first file.
+  const waiting=first?undefined:row.conversation_queued_turns?.[0];
+  const title=(first?.body||waiting?.message||'').split('\n')[0]||(first?first.conversation_attachments?.[0]?.name:waiting&&row.waiting_files?.[0]?.name)||'';
   return [row.id,{title,line:row.newest?.[0]?.body??'',at:row.last_message_at,archived:!!row.archived_at}]; }));
 }
 
