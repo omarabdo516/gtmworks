@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(26);
 -- #876: a send is checked before any Run starts. The person is an active Member and not a Viewer, the Conversation is
 -- theirs, and they may talk to its Agent; a new Conversation's row is written first, on the session id gtmworks chose.
 -- RS Learning's Owner (…01), Manager (…02), Contributor (…03) and Viewer (…04).
@@ -26,10 +26,17 @@ select throws_ok($$select public.hold_conversation_run('c8760000-0000-0000-0000-
 reset role;
 select is(public.hold_conversation_run('c8760000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','run_876_1'),true,'the server holds the Run started as the row''s open Run');
 set local role authenticated;
-select is((select open_run from public.conversations where id='c8760000-0000-0000-0000-000000000001'),'run_876_1','the row holds it');
+select is((select open_runs from public.conversations where id='c8760000-0000-0000-0000-000000000001'),array['run_876_1'],'the row holds it');
+reset role;
+select is(public.hold_conversation_run('c8760000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','run_876_2'),true,'a Run started behind it is held after it');
+select is(public.hold_conversation_run('c8760000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','run_876_1'),true,'the same Run held again keeps its place');
+select is((select open_runs from public.conversations where id='c8760000-0000-0000-0000-000000000001'),array['run_876_1','run_876_2'],'in the order they were started');
+set local role authenticated;
 select is(public.end_conversation_run('c8760000-0000-0000-0000-000000000001','run_876_0'),false,'the end of another Run leaves it');
 select is(public.end_conversation_run('c8760000-0000-0000-0000-000000000001','run_876_1'),true,'its own end clears it');
-select is((select open_run from public.conversations where id='c8760000-0000-0000-0000-000000000001'),null,'no Run is open once its end is seen');
+select is((select open_runs from public.conversations where id='c8760000-0000-0000-0000-000000000001'),array['run_876_2'],'the Run behind it is next');
+select is(public.end_conversation_run('c8760000-0000-0000-0000-000000000001','run_876_2'),true,'and its end clears it too');
+select is((select open_runs from public.conversations where id='c8760000-0000-0000-0000-000000000001'),'{}'::text[],'no Run is open once every end is seen');
 select throws_ok($$select public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000002','a8760000-0000-0000-0000-000000000002','gtmworks-c8760000-0000-0000-0000-000000000002','Hi')$$,'P0002',null,'a Member who may not talk to that Agent is refused');
 select is((select count(*)::int from public.conversations where id='c8760000-0000-0000-0000-000000000002'),0,'and no row is written for it');
 select throws_ok($$select public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000009','a8760000-0000-0000-0000-000000000001','gtmworks-c8760000-0000-0000-0000-000000000009','Hi')$$,'P0002',null,'another Member''s Conversation is refused');

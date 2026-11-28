@@ -133,6 +133,7 @@ export function ConversationNotRead() {
 // says it could not refresh. A Conversation with no Engine session, or one whose session the Engine does not answer,
 // falls back to the old record once, as until its first send gives it a session.
 type EnginePage={messages:ConversationRecord['messages'],nextOffset:number,hasMore:boolean};
+type Refreshed='read'|'again'|'stop';
 type EngineRead=(EnginePage&{state:'found'})|{state:'none'|'notSeen'|'missing'|'refused'|'unreachable'|'unread'};
 const engineReads=new Map<string,EnginePage>();
 const engineKey=(company:string,conversation:string)=>`gw-conversation:${company}:${conversation}`;
@@ -168,7 +169,7 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
  const read=async(offset:number):Promise<EngineRead>=>{
   try {
    const response=await fetch(`/api/conversations?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}&intent=read&offset=${offset}&limit=50`,{cache:'no-store'});
-   if(!response.ok) { await response.arrayBuffer().catch(()=>{}); return {state:response.status===404?'notSeen':'unread'}; }
+   if(!response.ok) { await response.arrayBuffer().catch(()=>{}); return {state:response.status===404?'notSeen':response.status===401||response.status===403?'refused':'unread'}; }
    return await response.json() as EngineRead;
   } catch { return {state:'unread'}; }
  };
@@ -181,8 +182,10 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    if(body.usage) setUsage(body.usage);
   } catch { /* The last usage read stays. */ }
  };
- // Answers whether the Engine's read came back, so a Run's end lets go of its live words only once the session holds them.
- const refresh=async():Promise<boolean>=>{
+ // Answers how the Engine's read went: `read`, so a Run's end lets go of its live words only once the session holds them;
+ // `again` for a read that may answer later (the Engine slow or not reached); `stop` for one that never will (signed out,
+ // no longer allowed, the Conversation or its session gone).
+ const refresh=async():Promise<Refreshed>=>{
   const held=rememberedPage(storage);
   if(held&&!pageRef.current) { pageRef.current=held; setPage(held); setMode('engine'); }
   void readUsage();
@@ -209,13 +212,13 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
    else if(oldRef.current()>0) setMode('fallback');
    else { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); setMode('engine'); }
-   return true;
+   return 'read';
   }
   if(pageRef.current||modeRef.current==='engine') setFailed(true);
   else setMode('fallback');
-  return false;
+  return readNow.state==='unread'||readNow.state==='unreachable'?'again':'stop';
  };
- const refreshRef=useRef<()=>Promise<boolean>>(async()=>false);
+ const refreshRef=useRef<()=>Promise<Refreshed>>(async()=>'again');
  useEffect(()=>{ refreshRef.current=refresh; });
  // The last good read this browser kept shows at once, then a read asks the Engine again (and a tab that comes back
  // asks once more). A first read that fails or finds no messages leaves the old record in charge.
@@ -269,18 +272,20 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
 // and after each send; once the Run's end is seen, `ended` reads the session again, which then holds the reply and its
 // steps, and only once that read came back are the live view and the sent message let go, so nothing is drawn twice or
 // goes missing. A read that is cut short, or a session read that fails, is asked again, more slowly each time.
-function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<boolean>) {
+function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<Refreshed>) {
  const [view,setView]=useState<LiveRun|null>(null);
  const [reply,setReply]=useState('');
  const [working,setWorking]=useState(open);
  const reading=useRef<AbortController|null>(null);
  const endedRef=useRef(ended); useEffect(()=>{ endedRef.current=ended; });
- // A message sent while a Run is followed starts its own Run, which the row holds next: it is followed once this one ends.
+ // A message sent while a Run is followed starts its own Run, which the row holds after it: once a Run ends the next one
+ // the row holds is followed, in the order they were started, until the row holds none.
  const again=useRef(false);
- const follow=useCallback(()=>{
+ // `next`: the read that looks for the next Run once one ended, which shows the Agent working only once it finds one.
+ const follow=useCallback((next=false)=>{
   if(reading.current) { again.current=true; return; }
   const stopped=new AbortController(); reading.current=stopped;
-  setWorking(true);
+  if(!next||again.current) setWorking(true);
   const read=async(failures:number):Promise<void>=>{
    let end:string|null=null; let said='';
    try {
@@ -298,22 +303,26 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
       for(let at=buffer.indexOf('\n');at>=0;at=buffer.indexOf('\n')) {
        const line=JSON.parse(buffer.slice(0,at)) as LiveLine|LiveDelta; buffer=buffer.slice(at+1);
        if('end' in line) end=line.end;
-       else if('delta' in line) { said+=line.delta; setReply(said); }
-       else setView(line);
+       else if('delta' in line) { said+=line.delta; setReply(said); setWorking(true); }
+       else { setView(line); setWorking(true); }
       }
      }
     }
    } catch { if(stopped.signal.aborted) return; end='unreachable'; }
    if(stopped.signal.aborted) return;
    if(end==='ended'||end==='gone'||end==='none') {
-    // The live words stay until a read of the session holds the reply: a read that fails is asked again.
-    for(let tries=0;!await endedRef.current();tries++) {
-     if(stopped.signal.aborted) return;
+    // The live words stay until a read of the session holds the reply: a read that may answer later is asked again, one
+    // that never will lets them go.
+    let outcome=await endedRef.current();
+    for(let tries=0;outcome==='again';tries++) {
      await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**tries,15000)));
+     if(stopped.signal.aborted) return;
+     outcome=await endedRef.current();
     }
     if(stopped.signal.aborted) return;
     reading.current=null; setView(null); setReply('');
-    if(again.current) { again.current=false; follow(); } else setWorking(false);
+    // The next Run the row holds, if any: after one that ended, or after a send made meanwhile.
+    if(outcome==='read'&&(end!=='none'||again.current)) { const sent=again.current; again.current=false; if(!sent) setWorking(false); follow(!sent); } else { again.current=false; setWorking(false); }
     return;
    }
    // A read cut short replays the Run's events from its start, so the words are drawn again from the first.
@@ -368,12 +377,12 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
  },[record,engine.page,engine.usage,sent.waiting]);
- useLayoutEffect(()=>{ store.set({record:shown,asked:run.follow,sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
+ useLayoutEffect(()=>{ store.set({record:shown,asked:()=>run.follow(),sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
  // A message sent from the composer before this transcript was drawn has its Run followed once it is (#876), as the old
  // record's transcript asks for its reply.
  const early=useSyncExternalStore(store.subscribe,store.early,()=>0);
  const answeredEarly=useRef(0);
- useEffect(()=>{ if(early>answeredEarly.current) { answeredEarly.current=early; run.follow(); } },[early,run.follow]);
+ useEffect(()=>{ if(early>answeredEarly.current) { answeredEarly.current=early; run.follow(); } },[early,run.follow]); // eslint-disable-line react-hooks/exhaustive-deps
  // The messages sent that a read of the session now holds are drawn from it alone: one still queued behind a working Run,
  // which the session does not hold yet, stays drawn as sent.
  // A message that stood for one send is spent on it, kept as state set while drawing: it never stands for another send
@@ -409,7 +418,7 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={run.follow} reread={reread} details={!!agent} live={stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working}}/>}
+  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} reread={reread} details={!!agent} live={stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working}}/>}
   {engine.failed&&engine.page&&<p className="note convo-status" role="alert" data-outcome="refresh" data-refresh>{c('conversationNoRefresh')} <button type="button" className="link-btn" onClick={engine.refresh}>{c('conversationTryAgain')}</button></p>}
  </div></div>;
 }

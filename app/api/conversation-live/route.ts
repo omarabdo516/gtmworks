@@ -27,12 +27,13 @@ export async function GET(request:NextRequest) {
   if(!company||!uuid.test(company)||!conversation||!uuid.test(conversation)) return refuse('conversationFailed',400);
   if(!await routeAllowed(db,'app/api/conversation-live/route.ts','GET',company,user.id)) return refuse('conversationNotAllowed',403);
   // Only the Conversation's own person: the row is read with their session and named as theirs.
-  const {data:found}=await db.from('conversations').select('id,agent_id,open_run').eq('id',conversation).eq('company_id',company).eq('person_id',user.id).maybeSingle<{id:string,agent_id:string|null,open_run:string|null}>();
+  const {data:found}=await db.from('conversations').select('id,agent_id,open_runs').eq('id',conversation).eq('company_id',company).eq('person_id',user.id).maybeSingle<{id:string,agent_id:string|null,open_runs:string[]|null}>();
   if(!found) return refuse('conversationNotFound',404);
   if(!found.agent_id) return only({end:'none'});
   const target=await agentEngine(db,{company,agent:found.agent_id});
   if(target.state==='missing') return refuse('conversationNotFound',404);
-  const run=found.open_run;
+  // The oldest open Run first: the Engine runs a session's Runs in the order they were started.
+  const run=found.open_runs?.[0];
   if(!run) return only({end:'none'});
   if(target.state!=='found') return only({end:'unreachable'});
   const stopped=new AbortController();

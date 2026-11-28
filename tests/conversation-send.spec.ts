@@ -64,12 +64,12 @@ test('a first message makes the Conversation\'s row on a session gtmworks chose,
  const conversation=page.url().split('/').at(-1)!;
  // The message is drawn at once, while the Run has not begun.
  await expect(page.locator('.msg[data-author=person]')).toHaveText(/Plan the launch/);
- const row=list(`select hermes_session_id,open_run,person_id from public.conversations where id='${conversation}'`)[0];
+ const row=list(`select hermes_session_id,open_runs,person_id from public.conversations where id='${conversation}'`)[0];
  const run=fake.settings.runs.at(-1)!;
  expect(row.hermes_session_id).toMatch(/^gtmworks-[0-9a-f-]{36}$/);
  expect(run.sessionId,'the Run is on the session the row names').toBe(row.hermes_session_id);
  expect(row.person_id).toBe(omar);
- expect(row.open_run,'the row holds the open Run').toBe(run.id);
+ expect(row.open_runs,'the row holds the open Run').toEqual([run.id]);
  expect(run.instructions).toContain('Omar likes short tables.');
  expect(run.instructions,'another Member\'s note never goes').not.toContain('Arabic');
  fake.settings.release(run.id);
@@ -87,7 +87,7 @@ test('a first message makes the Conversation\'s row on a session gtmworks chose,
  await expect(live).toHaveCount(0);
  await expect(reply).toHaveCount(1);
  await expect(reply.locator('.steps__toggle')).toContainText('Used 1 tool');
- await expect.poll(()=>list(`select open_run from public.conversations where id='${conversation}'`)[0].open_run,{timeout:10000}).toBeNull();
+ await expect.poll(()=>list(`select open_runs from public.conversations where id='${conversation}'`)[0].open_runs,{timeout:10000}).toEqual([]);
  await page.reload();
  await expect(page.locator('.msg[data-author=person]')).toHaveText(/Plan the launch/,{timeout:20000});
  await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Reply to: Plan the launch/);
@@ -123,6 +123,35 @@ test('in an open Conversation each message is drawn the moment it is sent, and e
  await expect(page.locator('.msg[data-author=person]').last()).toHaveText(/And the dates\?/);
  fake.settings.release(second);
  await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: And the dates\?/,{timeout:30000});
+ await expect(page.locator('.msg[data-author=person]')).toHaveCount(3);
+ expect(counted()).toEqual(before);
+});
+
+test('three quick sends: each Run is followed live in the order it was started, the middle one included',async({page})=>{
+ test.setTimeout(180000);
+ const conversation=randomUUID(); const session=`gtmworks-${randomUUID()}`;
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
+ fake.settings.sessions.set(session,{profile,messages:[]});
+ const before=counted();
+ await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+ await expect(page.getByLabel('Message',{exact:true})).toBeVisible({timeout:20000});
+ fake.settings.liveHold=true; fake.settings.livePace=600;
+ const starts=fake.settings.counts().runStart??0;
+ for(const [at,words] of [[1,'One'],[2,'Two'],[3,'Three']] as const) {
+  await send(page,words);
+  await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+at);
+ }
+ const runs=fake.settings.runs.slice(-3).map(run=>run.id);
+ expect(list(`select open_runs from public.conversations where id='${conversation}'`)[0].open_runs,'held in the order they were started').toEqual(runs);
+ const writing=page.locator('li[data-live] [data-writing]');
+ fake.settings.release(runs[0]);
+ await expect(page.locator('.msg[data-author=agent]').first()).toHaveText(/Reply to: One/,{timeout:30000});
+ // The middle Run's reply is written live, before the last one starts.
+ fake.settings.release(runs[1]);
+ await expect(writing).toHaveText(/^Reply to:/,{timeout:20000});
+ await expect(page.locator('.msg[data-author=agent]').nth(1)).toHaveText(/Reply to: Two/,{timeout:30000});
+ fake.settings.release(runs[2]);
+ await expect(page.locator('.msg[data-author=agent]').nth(2)).toHaveText(/Reply to: Three/,{timeout:30000});
  await expect(page.locator('.msg[data-author=person]')).toHaveCount(3);
  expect(counted()).toEqual(before);
 });

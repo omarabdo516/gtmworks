@@ -1,9 +1,9 @@
 -- #876 (spec #864, ADR 0033 item 1): a message sent in a Conversation whose messages are the Engine's becomes one Run on
 -- its Engine session, and nothing of the message, the reply or a Step is stored here. The row keeps whose it is, its
--- Agent, the session id gtmworks chose for it, and the id of its open Run while one is open (`open_run`), cleared once
--- the Run's end is seen. A nullable column and three new functions: the previous app version reads the table as before.
-alter table public.conversations add column open_run text
- constraint conversations_open_run check (open_run is null or open_run ~ '^[A-Za-z0-9_.:-]{1,200}$');
+-- Agent, the session id gtmworks chose for it, and the ids of its open Runs in the order they were started (`open_runs`,
+-- the Engine queues them on the session in that order), each let go once its end is seen. A nullable column and three new functions: the previous app version reads the table as before.
+alter table public.conversations add column open_runs text[] not null default '{}'
+ constraint conversations_open_runs check (cardinality(open_runs)<=32 and array_to_string(open_runs,',') ~ '^([A-Za-z0-9_.:-]{1,200}(,|$))*$');
 -- Until the spec's other tickets bring a Conversation's questions, requests to act, files, model choice and the rest to
 -- the Engine (#877 to #882), a Company's new Conversations start on the Engine only once this is on; off, they keep the
 -- old record as today. A Conversation already on the Engine stays there either way. #883 switches the old record off and
@@ -66,7 +66,8 @@ end $$;
 revoke all on function public.open_engine_conversation(uuid,uuid,uuid,text,text) from public;
 grant all on function public.open_engine_conversation(uuid,uuid,uuid,text,text) to authenticated;
 
--- The Run the Engine started for the person's message is the Conversation's open Run until its end is seen. Only the
+-- The Run the Engine started for the person's message joins the Conversation's open Runs, after the ones started before
+-- it, until its end is seen; the same Run held again keeps its place. Only the
 -- server holds it, right after the Engine answered the start it made (lib/conversation-send.ts), for the Conversation's
 -- own person while they may write in its Company: no browser names a Run for the row to hold, so the live read follows
 -- only a Run this Conversation's own send started.
@@ -76,8 +77,8 @@ create or replace function public.hold_conversation_run(conversation uuid, perso
  set search_path to ''
 as $$
  with held as (
-  update public.conversations v set open_run=run
-  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$'
+  update public.conversations v set open_runs=case when run=any(v.open_runs) then v.open_runs else v.open_runs||run end
+  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$' and (run=any(v.open_runs) or cardinality(v.open_runs)<32)
    and exists(select 1 from public.members m where m.company_id=v.company_id and m.person_id=person and m.removed_at is null and m.role<>'viewer')
   returning 1)
  select exists(select 1 from held);
@@ -85,16 +86,16 @@ $$;
 revoke all on function public.hold_conversation_run(uuid,uuid,text) from public, anon, authenticated;
 grant execute on function public.hold_conversation_run(uuid,uuid,text) to service_role;
 
--- The end of that Run was seen (it ended, or the Engine no longer knows it): the row no longer holds it. A later Run the
--- row holds by now is left as it is.
+-- The end of that Run was seen (it ended, or the Engine no longer knows it): the row no longer holds it. The other Runs
+-- it holds stay, in their order.
 create or replace function public.end_conversation_run(conversation uuid, run text)
  returns boolean
  language sql security definer
  set search_path to ''
 as $$
  with ended as (
-  update public.conversations v set open_run=null
-  where v.id=conversation and v.person_id=auth.uid() and v.open_run=run and public.is_member(v.company_id)
+  update public.conversations v set open_runs=array_remove(v.open_runs,run)
+  where v.id=conversation and v.person_id=auth.uid() and run=any(v.open_runs) and public.is_member(v.company_id)
   returning 1)
  select exists(select 1 from ended);
 $$;

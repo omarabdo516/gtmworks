@@ -5392,8 +5392,8 @@ CREATE FUNCTION public.end_conversation_run(conversation uuid, run text) RETURNS
     SET search_path TO ''
     AS $$
  with ended as (
-  update public.conversations v set open_run=null
-  where v.id=conversation and v.person_id=auth.uid() and v.open_run=run and public.is_member(v.company_id)
+  update public.conversations v set open_runs=array_remove(v.open_runs,run)
+  where v.id=conversation and v.person_id=auth.uid() and run=any(v.open_runs) and public.is_member(v.company_id)
   returning 1)
  select exists(select 1 from ended);
 $$;
@@ -6383,8 +6383,8 @@ CREATE FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run
     SET search_path TO ''
     AS $_$
  with held as (
-  update public.conversations v set open_run=run
-  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$'
+  update public.conversations v set open_runs=case when run=any(v.open_runs) then v.open_runs else v.open_runs||run end
+  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$' and (run=any(v.open_runs) or cardinality(v.open_runs)<32)
    and exists(select 1 from public.members m where m.company_id=v.company_id and m.person_id=person and m.removed_at is null and m.role<>'viewer')
   returning 1)
  select exists(select 1 from held);
@@ -8367,11 +8367,11 @@ CREATE TABLE public.conversations (
     session_missing_since timestamp with time zone,
     session_mark_after timestamp with time zone,
     kept_agent_id uuid,
-    open_run text,
+    open_runs text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT conversations_archived_by_archived CHECK (((archived_by IS NULL) OR (archived_at IS NOT NULL))),
     CONSTRAINT conversations_good_morning_day CHECK (((good_morning IS NULL) OR (good_morning_day IS NOT NULL))),
     CONSTRAINT conversations_model_valid CHECK ((public.model_choice_valid(model) AND public.model_choice_valid(model_before))),
-    CONSTRAINT conversations_open_run CHECK (((open_run IS NULL) OR (open_run ~ '^[A-Za-z0-9_.:-]{1,200}$'::text)))
+    CONSTRAINT conversations_open_runs CHECK (((cardinality(open_runs) <= 32) AND (array_to_string(open_runs, ','::text) ~ '^([A-Za-z0-9_.:-]{1,200}(,|$))*$'::text)))
 );
 
 ALTER TABLE public.conversations OWNER TO postgres;
