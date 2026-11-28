@@ -76,7 +76,7 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.open_engine_conversation('10000000-0000-0000-0000-000000000883','c8830000-0000-0000-0000-000000000001',null,'Hi')-'session',
- jsonb_build_object('state','engine','agent','f8830000-0000-0000-0000-000000000001','note',null,'model',null),'a Conversation Lead did not open is told no opening');
+ jsonb_build_object('state','engine','agent','f8830000-0000-0000-0000-000000000001','note',null,'model',null,'model_before',null),'a Conversation Lead did not open is told no opening');
 
 -- The face: a Run the Engine Conversation's row holds sets its Agent working, for every Member who sees the Agent.
 reset role;

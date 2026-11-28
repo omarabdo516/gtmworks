@@ -66,7 +66,7 @@ begin
 end $$;
 
 -- 20270428000000's check of a send, which now also answers the model chosen for the Conversation (#158), for its Run to
--- carry, and, on the Conversation the main Agent opened, the names and the language its opening is said in, so the Owner's answer is
+-- carry, and the one before it, for a send asked again after a new choice, and, on the Conversation the main Agent opened, the names and the language its opening is said in, so the Owner's answer is
 -- told it (lib/conversation-send.ts). That Conversation has no session until its first send gives it one here.
 create or replace function public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text) returns jsonb
 language plpgsql security definer set search_path='' as $$
@@ -119,7 +119,7 @@ begin
  end if;
  return jsonb_build_object('state','engine','agent',agent,'session',held,
   'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()),
-  'model',existing.model)
+  'model',existing.model,'model_before',existing.model_before)
   || case when existing.lead_opening then jsonb_build_object('opening',jsonb_build_object(
    'owner',(select split_part(p.name,' ',1) from public.people p where p.id=auth.uid()),
    'language',(select p.language from public.people p where p.id=auth.uid()),

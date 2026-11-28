@@ -68,7 +68,8 @@ test('closing the page mid-reply and coming back after the Run ended shows the w
  // The page closes while the reply is being written; the Run goes on without it.
  await first.close();
  await expect.poll(()=>fake.settings.runs.find(each=>each.id===run.id)?.liveDone,{timeout:30000}).toBe(true);
- expect(openRuns(conversation),'nobody saw the end yet').toEqual([run.id]);
+ // Nobody saw the end: the row still holds the Run until the next open reads its end, or until the worker, which asks
+ // the Engine how each held Run is once a minute, lets it go (#882). Either way the reply is the session's.
  const back=await browser.newContext(); const again=await back.newPage();
  await open(again,conversation);
  const reply=again.locator('.msg[data-author=agent]');

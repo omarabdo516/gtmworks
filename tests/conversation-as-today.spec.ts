@@ -42,7 +42,7 @@ test.beforeAll(async({},testInfo)=>{
 });
 test.afterAll(async()=>{ await fake?.close(); });
 test.afterEach(()=>{
- fake.settings.liveHold=false; fake.settings.refusedModels.clear();
+ fake.settings.liveHold=false; fake.settings.refusedModels.clear(); fake.settings.loseStarts=0;
  for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id);
 });
 
@@ -129,6 +129,30 @@ test('a model chosen for a Conversation goes with its next Runs and is still cho
  await field(page).press('Enter');
  await expect(page.locator('.msg').filter({hasText:'Reply to: Write the third'})).toBeVisible({timeout:30000});
  expect(chosen('Write the third')).toEqual({provider:'openrouter',model:'openai/gpt-5.5'});
+});
+
+test('a send whose answer was lost, asked again after another model was chosen, replays the Run it made on the model it had',async({page})=>{
+ test.setTimeout(120000);
+ await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
+ await send(page,'Plan the week');
+ await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/,{timeout:30000});
+ await expect(page.locator('.msg').filter({hasText:'Reply to: Plan the week'})).toBeVisible({timeout:30000});
+ await plus(page).click();
+ await menu(page).getByRole('menuitemradio',{name:/^openai\/gpt-5\.5/}).click();
+ await expect(page.locator('.toast')).toHaveText('Lead will think with openai/gpt-5.5');
+ // The Engine takes the Run, but every answer to its start is lost: the words stay in the box with Try again.
+ fake.settings.loseStarts=1000;
+ await send(page,'Draft the agenda');
+ await expect(field(page)).toHaveValue('Draft the agenda',{timeout:30000});
+ await expect(page.locator('.composer-error')).toBeVisible();
+ fake.settings.loseStarts=0;
+ await plus(page).click();
+ await menu(page).getByRole('menuitemradio',{name:/^claude-opus-4-6/}).click();
+ await field(page).press('Enter');
+ await expect(page.locator('.msg').filter({hasText:'Reply to: Draft the agenda'})).toBeVisible({timeout:30000});
+ const made=fake.settings.runs.filter(run=>run.input==='Draft the agenda');
+ expect(made.length,'Try again replays the Run the lost start made, and starts no other').toBe(1);
+ expect(chosen('Draft the agenda')).toEqual({provider:'openrouter',model:'openai/gpt-5.5'});
 });
 
 test('dictation fills the composer and sends as a typed message does, and the Agent\'s face works while its Run does',async({page})=>{

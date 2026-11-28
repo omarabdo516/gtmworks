@@ -31,20 +31,23 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  if(!agent) agent=(await db.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()).data?.id??null;
  const {data:opened,error}=await db.rpc('open_engine_conversation',{c:company,conversation,agent,message});
  if(error) return {state:'refused',code:error.code};
- const checked=opened as {state:'old'}|{state:'engine',agent:string,session:string,note:string|null,model?:ModelChoice|null,opening?:{owner:string|null,language:string|null,lead:string,company:string|null}};
+ const checked=opened as {state:'old'}|{state:'engine',agent:string,session:string,note:string|null,model?:ModelChoice|null,model_before?:ModelChoice|null,opening?:{owner:string|null,language:string|null,lead:string,company:string|null}};
  if(checked.state==='old') return {state:'old'};
  const target=await agentEngine(db,{company,agent:checked.agent});
  if(target.state==='missing') return {state:'refused',error:'conversationNotFound',status:404};
  if(target.state!=='found') return {state:'refused',error:'conversationHermesFailed',status:502};
- const model=typeof checked.model?.provider==='string'&&typeof checked.model?.model==='string'?{provider:checked.model.provider,model:checked.model.model}:null;
+ const choiceOf=(value:ModelChoice|null|undefined)=>typeof value?.provider==='string'&&typeof value?.model==='string'?{provider:value.provider,model:value.model}:null;
+ const model=choiceOf(checked.model);
  const opening=checked.opening?answeringOpening(openingFor(checked.opening)):null;
- const startOf=(told:boolean)=>{
+ const startOf=(told:boolean,on:ModelChoice|null)=>{
   const instructions=[noteInstructions(checked.note),told?opening?.instructions:undefined].filter(Boolean).join('\n\n');
-  return {session:checked.session,input,...(instructions?{instructions}:{}),...(model?{model}:{}),...(told&&opening?{history:opening.history}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+  return {session:checked.session,input,...(instructions?{instructions}:{}),...(on?{model:on}:{}),...(told&&opening?{history:opening.history}:{}),idempotencyKey:`${conversation}:${sendKey}`};
  };
- // The first Run is the one whose session the Engine does not hold yet. A send asked again after its first answer was
- // lost finds the session held: the Engine then says the key was used with the opening, and it is asked with it.
- let told=!!opening&&await target.engine.sessions.held(checked.session)==='missing';
+ // The first Run is the one whose session the Engine does not hold yet; an Engine that cannot say leaves the words in
+ // the box, so the first answer is never sent without the opening.
+ const sessionHeld=opening?await target.engine.sessions.held(checked.session):'found';
+ if(sessionHeld==='unreachable') return {state:'refused',error:'conversationHermesFailed',status:502};
+ const told=sessionHeld==='missing';
  // The same send key is the same Run: a start whose answer was lost is asked again with it, which replays that Run, a
  // few times; one still unknown is refused, and the person's Try again (the same key) replays it rather than start another.
  // The Engine answering "retry" (#877: it runs as many Runs at once as it takes) is asked again when it says, for a short
@@ -53,10 +56,20 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  // the route checked their kind, count and size before anything was sent. The Engine keeps them in the session, and
  // the Conversation reads them back from there: gtmworks keeps no copy.
  const input=images.length?imageInput(message,await Promise.all(images.map(async file=>({content_type:file.type,base64:Buffer.from(await file.arrayBuffer()).toString('base64')})))):message;
- let start=startOf(told);
+ let start=startOf(told,model);
  const began=Date.now(); let lost=false; let unsure=0;
  let run=await target.engine.sessions.send(start);
- if(run&&typeof run==='object'&&run.state==='keyConflict'&&opening&&!told) { told=true; start=startOf(true); run=await target.engine.sessions.send(start); }
+ // The Engine says the key was used with another body: a send asked again after its first answer was lost, which was
+ // sent before the session held anything (with the opening) or before the person chose another model (on the one before
+ // it, or on the Agent's own). Each body it can have been is asked in turn, and the one the Engine took replays its Run.
+ const before=choiceOf(checked.model_before);
+ const bodies:[boolean,ModelChoice|null][]=[[told,model],[told,before],[told,null]];
+ if(opening) bodies.push([!told,model],[!told,before],[!told,null]);
+ const others=[...new Map(bodies.map(([withOpening,on])=>[`${withOpening}:${JSON.stringify(on)}`,startOf(withOpening,on)])).values()].slice(1);
+ for(const other of others) {
+  if(!run||typeof run!=='object'||run.state!=='keyConflict') break;
+  start=other; run=await target.engine.sessions.send(start);
+ }
  for(;;) {
   if(run===null||typeof run!=='object'||run.state==='keyConflict'||run.state==='queueFull') break;
   let wait:number;

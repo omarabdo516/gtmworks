@@ -8561,7 +8561,7 @@ begin
  end if;
  return jsonb_build_object('state','engine','agent',agent,'session',held,
   'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()),
-  'model',existing.model)
+  'model',existing.model,'model_before',existing.model_before)
   || case when existing.lead_opening then jsonb_build_object('opening',jsonb_build_object(
    'owner',(select split_part(p.name,' ',1) from public.people p where p.id=auth.uid()),
    'language',(select p.language from public.people p where p.id=auth.uid()),
