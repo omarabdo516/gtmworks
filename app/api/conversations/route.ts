@@ -63,6 +63,8 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuse(sent.error,sent.status); }
  // A note to a person and an answer to a question store no turn, so nothing can sit under one: their images go.
  if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files);
+ // A send that starts no Run (a note to a Member, an answer) is a write all the same: it clears the mark after the answer.
+ after(()=>unarchive());
  return reply(sent);
 }
 

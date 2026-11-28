@@ -114,6 +114,21 @@ async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:str
   return [row.id,{title,line:row.newest?.[0]?.body??'',at:row.last_message_at,archived:!!row.archived_at}]; }));
 }
 
+/** One Conversation's session as its own page draws it (#881): from the lists' memory when it holds it, else from one
+ * read of its Agent's list, which the lists then keep. That read waits at most as a list's first read does (1.5 s) and
+ * happens once after a restart, so a Conversation opened by its address draws its own title and archived mark.
+ * Null when the Engine cannot say. */
+export async function sessionFor(db:Database,company:string,agent:string|null,session:string|null):Promise<SessionListed|null> {
+ if(!agent||!session) return null;
+ const held=heldSession(company,session);
+ if(held) return held;
+ const [seen,engine]=await Promise.all([seenAgents(db,company),companyEngine(company).catch(()=>null)]);
+ const profile=seen?.find(row=>row.agent===agent)?.profile;
+ if(!profile) return null;
+ const kept=await profileSessions(company,profile,engine?.on(profile)??null,[session],Date.now());
+ return kept?.sessions.get(session)??null;
+}
+
 // Every row of the person's in the Company, read as them a page of 1,000 at a time (the API's own cap per read), so a
 // Conversation made long ago and used today is never left out before the lists sort by the Engine's activity. Null when
 // a page could not be read.
