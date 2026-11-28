@@ -6,9 +6,9 @@ import { signIn } from './sign-in';
 
 // #646: while Lead works on a reply, the line under the transcript names the step it is on now and the turn's steps list
 // fills in, from the Run's own event stream on the lane's fake Hermes (api_server_runs.py _handle_run_events). A reload
-// mid-Run draws the steps so far at once, and the reply that lands carries the session's list in their place, once.
+// mid-Run draws the steps so far at once, and the reply that lands carries the session's list in their place, once. The
+// Conversation is Lead's Engine session (#883).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const profile=`co-${company.replaceAll('-','')}`;
@@ -27,18 +27,19 @@ test.beforeAll(async({},testInfo)=>{
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
  end $$;`);
 });
-test.afterAll(async()=>{ fake.settings.pendingReads=0; await fake?.close(); });
+test.afterAll(async()=>{ if(fake) { fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id); await fake.close(); } });
 
 test('while Lead works, its step now and its steps so far are on screen live, a reload keeps them, and the reply takes their place',async({page})=>{
  test.setTimeout(120000);
- fake.settings.pendingReads=1e9;
+ // The Run is held working on the Conversation's Engine session (#883) until it is let go.
+ fake.settings.liveHold=true;
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
  const text=`Plan the Meta campaign ${Date.now()}`;
  await page.getByLabel('Message',{exact:true}).fill(text);
  await page.getByRole('button',{name:'Send',exact:true}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
- const conversation=page.url().split('/').pop()!;
- const [{run_id:run}]=rows(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person'`) as {run_id:string}[];
+ await expect.poll(()=>fake.settings.runs.length).toBe(1);
+ const {id:run,sessionId:session}=fake.settings.runs[0];
  const line=page.locator('.activity');
  const now=line.locator('.activity__t');
  // The Run has made no call yet.
@@ -60,17 +61,18 @@ test('while Lead works, its step now and its steps so far are on screen live, a 
  await expect(now).toHaveText('Writing the reply…',{timeout:20000});
  await live.locator('.steps__toggle').click();
  await expect(live.locator('.steps__list .step')).toHaveText(['web_search · accounting courses CairoDone','read_fileSkipped']);
- // The reply lands with the session's own record of the Run's steps, drawn once where the live list was.
- const sent=Date.parse(String(rows(`select created_at from public.conversation_messages where conversation_id='${conversation}' and author='person'`)[0].created_at))/1000;
+ // The reply lands with the session's own record of the Run's steps, drawn once where the live list was. The session
+ // holds the person's message four seconds before the reply, and the turn's two calls between.
  const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
- const session=fake.settings.runs.find(each=>each.id===run)?.session as string;
- fake.settings.sessions.set(session,{profile,messages:[
-  {role:'user',content:text,timestamp:sent+0.5},
-  {role:'assistant',content:'',tool_calls:[call('call_1','web_search',{query:'accounting courses Cairo'}),call('call_2','read_file',{path:'campaigns.csv'})],timestamp:sent+1},
+ const held=fake.settings.sessions.get(session!)!;
+ const sent=Date.now()/1000-4;
+ held.messages.at(-1)!.timestamp=sent;
+ held.messages.push(
+  {role:'assistant',content:'',tool_calls:[call('call_1','web_search',{query:'accounting courses Cairo'}),call('call_2','read_file',{path:'campaigns.csv'})],finish_reason:'tool_calls',timestamp:sent+1},
   {role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:sent+2},
-  {role:'tool',tool_call_id:'call_2',tool_name:'read_file',content:'{"success":false,"error":"not found"}',timestamp:sent+3},
-  {role:'assistant',content:`Reply to: ${text}`,timestamp:sent+4}]});
- fake.settings.pendingReads=0;
+  {role:'tool',tool_call_id:'call_2',tool_name:'read_file',content:'{"success":false,"error":"not found"}',timestamp:sent+3});
+ fake.settings.liveHold=false;
+ fake.settings.release(run);
  const reply=page.locator('.turn--agent').filter({hasText:`Reply to: ${text}`});
  await expect(reply).toBeVisible({timeout:30000});
  await expect(live).toHaveCount(0);

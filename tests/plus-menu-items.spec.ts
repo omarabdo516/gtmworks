@@ -37,6 +37,7 @@ test.beforeAll(async({browser},testInfo)=>{
  // Providers and its models are offered (#620).
  fake.settings.profiles.set(`cs-${company.replaceAll('-','')}`,{soul:'',provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{},env:{OPENROUTER_API_KEY:'set'}} as never);
  fake.settings.appTokens.add(`${profile}:klaviyo`);
+ fake.settings.sessions.set(`gtmworks-${inUse}`,{profile,messages:[{role:'user',content:'Plan the week',timestamp:1},{role:'assistant',content:'Reply to: Plan the week',timestamp:2}]});
  query(`update public.people set language='en' where id in ('${omar}','${manager}','${contributor}')`);
  query(`update public.companies set work_mode='team' where id='${company}'`);
  const page=await browser.newPage();
@@ -53,10 +54,7 @@ test.beforeAll(async({browser},testInfo)=>{
    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${lead}'),('${company}','${contributor}','${lead}');
    -- The Company is in use (a Manager wrote to Lead), so Lead's chat is the empty chat these tests open, not the
    -- first Conversation Lead opens on a new Company (#434).
-   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${inUse}','${company}','${manager}','${lead}','Lead');
-   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
-    ('${company}','${inUse}','person','${manager}','مدير','Plan the week','${randomUUID()}','in-use-run');
-   insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${inUse}','in-use-run','completed');
+   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${inUse}','${company}','${manager}','${lead}','Lead','gtmworks-${inUse}');
   end $$;`);
  } finally { await page.close(); }
 });
@@ -73,7 +71,9 @@ async function conversationWith(page:Page,first:string) {
  await page.waitForURL(/\/conversations\/[0-9a-f-]{36}$/);
  return page.url().split('/').pop()!;
 }
-const runsOf=(conversation:string)=>fake.settings.runs.filter(run=>run.session===conversation).map(run=>{ const {provider,model}=JSON.parse(run.body!); return {input:run.input,provider,model}; });
+// The Runs started on the Conversation's own Engine session (#883), each with the model it was sent with.
+const runsOf=(conversation:string)=>{ const session=rows(`select hermes_session_id from public.conversations where id='${conversation}'`)[0]?.hermes_session_id;
+ return fake.settings.runs.filter(run=>run.sessionId===session).map(run=>{ const {provider,model}=JSON.parse(run.body!); return {input:run.input,provider,model}; }); };
 
 test('the Owner\'s menu: New channel opens the channel dialog and gives the focus back to "+", and Connect apps counts the connected app and opens the apps sheet',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);

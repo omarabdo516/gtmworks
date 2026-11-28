@@ -200,12 +200,10 @@ test('a Contributor and a Viewer read the rows On or Off, with nothing to change
 });
 
 test('under a reply in which the Agent made a Routine the Conversation says so, and See it in details opens it on Activity with the focus on its switch',async({page})=>{
- const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`rt-${conversation.slice(0,8)}`;
+ const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-21T10:12:00Z')/1000;
  query(`do $$ begin
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${ads}','Ads','${session}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Send me the cost per lead every Sunday at 9','${randomUUID()}','${run}','2026-11-21T10:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${ads}','Ads','Done. I will send it every Sunday.','${run}','2026-11-21T10:12:20Z');
  end $$;`);
  const call={id:'call_1',type:'function',function:{name:'cronjob_manage',arguments:JSON.stringify({action:'create',name:'Cost per lead',schedule:'0 9 * * 0',prompt:'Send the cost per lead'})}};
  fake.settings.sessions.set(session,{profile:own(ads),messages:[

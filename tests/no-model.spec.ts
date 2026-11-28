@@ -7,7 +7,8 @@ import { signIn } from './sign-in';
 // #422, on the app: a Company with no model at all (no provider key in its shared space, no subscription signed in)
 // says so above the composer before anyone writes, and a reply its Engine fails for that cause (no_provider_configured)
 // says so in the chat instead of offering a retry. The Owner gets the way to Settings, Subscription and models; a
-// Member is told to ask the Owner. Once a key is given, the notice is gone.
+// Member is told to ask the Owner. Once a key is given, the notice is gone. A Conversation's failed Run is read from its
+// Engine Run, which names the cause (#879, #883); nothing of it is stored in gtmworks.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const hex=company.replaceAll('-','');
@@ -23,7 +24,7 @@ test.beforeAll(async({},testInfo)=>{
  fake=await laneHermes();
  // The Company's space and Lead's profile, with no key and no sign-in.
  for(const name of [space,co]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{},env:{}});
- fake.settings.ending='failed'; fake.settings.failure=noProvider; fake.settings.pendingReads=0;
+ fake.settings.ending='failed'; fake.settings.failure=noProvider;
  query(`do $$ begin
   update public.hermes_agents set is_default=false where company_id='${company}' and is_default;
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -50,12 +51,11 @@ test('the Owner sees the notice before writing, and the failed reply links to Su
  await expect(notice(page)).toContainText(line);
  await expect(notice(page).getByRole('link',{name:connect})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
  await expect(notice(page)).not.toContainText(askOwner);
- const conversation=await sendFromEmptyChat(page,'Plan the launch week');
+ await sendFromEmptyChat(page,'Plan the launch week');
  const failed=page.locator('[data-outcome=no-model]');
  await expect(failed).toContainText(line);
  await expect(failed.getByRole('link',{name:connect})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
  await expect(page.getByText('Send the message again to retry.')).toHaveCount(0);
- expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}'`))).toEqual([{outcome:'no_model'}]);
 });
 
 test('a Member sees the same notice and line, telling them to ask the Owner, with no link',async({page})=>{
@@ -83,10 +83,10 @@ test('a channel Run the Engine fails for want of a model says so in the channel,
   where m.channel_id='${general}' and m.body='@Lead plan the channel week'`))).toEqual([{outcome:'no_model'}]);
 });
 
-// #457: a model error a retry cannot fix is closed with its own outcome and says so, and the Owner gets the way to the
+// #457: a model error a retry cannot fix is read with its own outcome and says so, and the Owner gets the way to the
 // Agent's model in Providers.
 const refusedFix='Check the agent’s model in Providers';
-test('a reply the Engine fails for no credit, a refused key or sign-in, or a missing model records why, and says so',async({page})=>{
+test('a reply the Engine fails for no credit, a refused key or sign-in, or a missing model says why',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/chat');
  for(const [failure,outcome,line] of [
   [creditExhaustedError,'no_credit','Lead could not reply: the company’s model key has no credit left.'],
@@ -96,12 +96,11 @@ test('a reply the Engine fails for no credit, a refused key or sign-in, or a mis
  ] as const) {
   fake.settings.failure=failure;
   await page.goto('/c/rs-learning/chat');
-  const conversation=await sendFromEmptyChat(page,`Plan the ${outcome} week`);
+  await sendFromEmptyChat(page,`Plan the ${outcome} week`);
   const failed=page.locator(`[data-outcome="${outcome.replace('_','-')}"]`);
   await expect(failed).toContainText(line);
   await expect(failed.getByRole('link',{name:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
   await expect(page.getByText('Send the message again to retry.')).toHaveCount(0);
-  expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}'`))).toEqual([{outcome}]);
  }
 });
 

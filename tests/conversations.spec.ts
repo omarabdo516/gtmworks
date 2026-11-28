@@ -4,7 +4,7 @@ import { laneHermes } from './lane-hermes';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
 import { idle } from './navigation-measure';
-import { asAdmin, holdPages, watchPlaceholders, whileSlow, wholePages } from './slow-reads';
+import { watchPlaceholders, wholePages } from './slow-reads';
 
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 // Omar signs in as the Owner of RS Learning, who connects and attaches its agents.
@@ -39,10 +39,15 @@ test.use({actionTimeout:15000});
 // signs in, attaches Agents of its own and detaches them, on its lane's own stack, so they spread over the shard's workers.
 test.describe.configure({mode:'parallel'});
 const send=(page:Page,data:object)=>page.request.post('/api/conversations',{data:{company,...data}});
+// The Engine session a Conversation's row names (#883).
+const sessionOf=(conversation:string)=>JSON.parse(query(`select hermes_session_id from public.conversations where id='${conversation}'`))[0]?.hermes_session_id as string;
 
 test('The Owner starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{
  test.setTimeout(120000);
- const fake=await laneHermes(); fake.settings.pendingReads=2;
+ const fake=await laneHermes();
+ // Each Run's reply is written a word at a time, slowly enough that its Agent is seen thinking (#883: the Run is the
+ // Engine's, on the Conversation's own session).
+ fake.settings.livePace=400;
  let agents={};
  const responses:Promise<string>[]=[];
  const placeholders=await watchPlaceholders(page);
@@ -76,7 +81,8 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
   expect(await page.evaluate(()=>(window as unknown as {stayed?:boolean}).stayed)).toBe(true);
   const runs=fake.settings.requests.filter(request=>request.method==='POST'&&request.path?.endsWith('/v1/runs'));
-  expect(runs.map(request=>[request.path,request.session])).toEqual([[`/p/${Nour.profile}/v1/runs`,conversation]]);
+  expect(runs.map(request=>request.path)).toEqual([`/p/${Nour.profile}/v1/runs`]);
+  expect(fake.settings.runs.map(run=>run.sessionId),'the Run is on the Conversation\'s own session').toEqual([sessionOf(conversation)]);
   // A chat that arrives whole shows no placeholder (#172): opened, or reached from the sidebar.
   await page.reload();
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
@@ -97,7 +103,7 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.locator('.msg[data-author=person]')).toContainText('From Home');
   await expect(page.locator('.msg[data-author=agent]')).toContainText('Reply to: From Home');
-  expect(fake.settings.runs.at(-1)!.session).toBe(page.url().split('/').pop());
+  expect(fake.settings.runs.at(-1)!.sessionId).toBe(sessionOf(page.url().split('/').pop()!));
   expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Mona.profile}/v1/runs`);
   // The Hermes key never reaches the browser: no response while sending carries it.
   page.off('requestfinished',record);
@@ -191,7 +197,7 @@ test('A Contributor starts a conversation and gets the reply; nobody else reads 
    await expect(member.locator('.msg[data-author=person]')).toContainText(text);
    await expect(member.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
    await expect(member.getByLabel('Message',{exact:true})).toBeVisible();
-   expect(fake.settings.runs.map(run=>run.session)).toEqual([conversation]);
+   expect(fake.settings.runs.map(run=>run.sessionId)).toEqual([sessionOf(conversation)]);
    expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Mona.profile}/v1/runs`);
    // The company's Owner (Omar here) cannot read it.
    expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
@@ -220,91 +226,53 @@ test('A Viewer has no composer and the server refuses their message',async({page
  } finally { detach(agents); await fake.close(); }
 });
 
-const agentRows=(conversation:string)=>JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent' order by id`));
-const endRows=(conversation:string)=>JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}' order by run_id`));
-
-test('integration: a run unknown to Hermes is recorded as lost and the conversation accepts a new message',async({page})=>{
- const fake=await laneHermes(); fake.settings.pendingReads=1e9; let agents={};
- try {
-  await ownerSignIn(page); agents=attachAgents();
-  const conversation=randomUUID();
-  expect((await send(page,{conversation,message:'First try',sendKey:randomUUID()})).status()).toBe(200);
-  // The message is stored first and its Run starts after the answer (#764).
-  await expect.poll(()=>fake.settings.runs.length).toBe(1);
-  // Hermes forgets the run: it now answers not found for it.
-  fake.settings.runs[0].id='forgotten-by-hermes';
-  const read=async()=>(await (await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).json());
-  // The worker closes it as lost (#767: a read closes nothing).
-  await expect.poll(async()=>(await read()).failed,{timeout:15000}).toBe(true);
-  const lost=await read();
-  expect(lost.pending).toBe(false);
-  expect(lost.failed).toBe(true);
-  expect(lost.messages.map((row:{author:string,lost:boolean})=>[row.author,row.lost])).toEqual([['person',true]]);
-  expect(agentRows(conversation)).toEqual([]);
-  expect(endRows(conversation)).toEqual([{outcome:'lost'}]);
-  await page.goto(`/c/rs-learning/conversations/${conversation}`);
-  await expect(page.locator('[data-outcome=lost]')).toContainText('Lost');
-  fake.settings.pendingReads=0;
-  expect((await send(page,{conversation,message:'Second try',sendKey:randomUUID()})).status()).toBe(200);
-  await expect.poll(async()=>(await read()).messages.at(-1).body).toBe('Reply to: Second try');
-  expect(fake.settings.runs).toHaveLength(2);
- } finally { detach(agents); await fake.close(); }
-});
-
-// Omar's Conversation with Ads, six turns long, each with its end, as the engine leaves them; written with triggers off
-// and taken away after (#172).
-const slowChat=(n:number)=>`6f000000-0000-0000-0000-00000000000${n}`;
+// Omar's Conversation with Ads, six turns long, on its Engine session (#883), whose read the fake Engine holds (#172).
 const omar='20000000-0000-0000-0000-000000000001';
-const slowChatPath=`/c/rs-learning/conversations/${slowChat(3)}`;
-const slowChatRows={
- set:`  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${slowChat(2)}','${company}','${slowChat(1)}','Ads','Runs the ads.','slow-chat');
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${slowChat(3)}','${company}','${omar}','${slowChat(2)}','Ads');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
-   select '${company}','${slowChat(3)}',author,case when author='person' then '${omar}'::uuid end,case when author='agent' then '${slowChat(2)}'::uuid end,
-    case when author='person' then 'Omar' else 'Ads' end,'Turn '||n||E'\\n'||repeat('About the launch week. ',30),case when author='person' then gen_random_uuid() end,
-    'slow-chat-'||n,now()-interval '1 hour'+n*interval '2 minutes'+case when author='agent' then interval '1 minute' else interval '0' end
-   from generate_series(1,6) n cross join unnest(array['person','agent']) author;
-  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at)
-   select '${company}','${slowChat(3)}','slow-chat-'||n,'completed',now()-interval '1 hour'+n*interval '2 minutes'+interval '1 minute' from generate_series(1,6) n;`,
- unset:`delete from public.conversation_run_ends where conversation_id='${slowChat(3)}';
-  delete from public.conversation_messages where conversation_id='${slowChat(3)}';
-  delete from public.conversations where id='${slowChat(3)}';
-  delete from public.hermes_agents where id='${slowChat(2)}';`,
-};
 const where=async(page:Page,selector:string)=>{ const box=(await page.locator(selector).boundingBox())!; return {x:Math.round(box.x),y:Math.round(box.y),width:Math.round(box.width),height:Math.round(box.height)}; };
 
-test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
+test('a Conversation whose messages are slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
+ const fake=await laneHermes();
  const placeholders=await watchPlaceholders(page);
- // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do. Only this
- // chat's record waits: the other chats the sidebar prefetches read theirs at once (tests/slow-reads.ts).
- const held=await holdPages(page,url=>url.pathname===slowChatPath);
- asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
+ const [agent,conversation]=[randomUUID(),randomUUID()]; const profile=`ag-${agent.replaceAll('-','')}`; const session=`gtmworks-${conversation}`;
+ const path=`/c/rs-learning/conversations/${conversation}`;
+ const start=Math.floor(Date.now()/1000)-3600;
+ fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ fake.settings.sessions.set(session,{profile,messages:Array.from({length:6},(_,at)=>[
+  {role:'user',content:`Turn ${at+1}\n${'About the launch week. '.repeat(30)}`,timestamp:start+at*120},
+  {role:'assistant',content:`Turn ${at+1}\n${'About the launch week. '.repeat(30)}`,finish_reason:'stop',timestamp:start+at*120+60}]).flat()});
+ query(`do $$ begin
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${agent}','${company}',true);
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${randomUUID()}','Ads','Runs the ads.','${profile}');
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${agent}','Ads','${session}');
+ end $$;`);
  try {
   await ownerSignIn(page);
-  const link=page.locator(`#sb-recent a[href="${slowChatPath}"]`);
-  await expect(link).toBeVisible();
-  await whileSlow('conversation_run_ends',3,async()=>{
-   await link.click(); held.letGo();
-   const placeholder=page.locator('.chat .transcript[aria-busy="true"]');
-   await expect(placeholder).toBeVisible();
-   await expect(placeholder).toHaveText('Loading the chat');
-   await expect(placeholder.locator('.sk-msg')).toHaveCount(3);
-   await expect(page).toHaveURL(new RegExp(`${slowChatPath}$`));
-   await expect(page.locator('.sidebar')).toBeVisible();
-   await expect(page.locator('.chat .head-pill__title')).toHaveText('Turn 1');
-   await expect(page.locator('.chat .composer-area').getByLabel('Message',{exact:true})).toBeVisible();
-   const frame=[await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')];
-   const messages=page.locator('.chat .turns > .msg');
-   await expect(messages).toHaveCount(12);
-   await expect(placeholder).toHaveCount(0);
-   expect([await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')],'the transcript and the composer keep their places').toEqual(frame);
-   const transcript=page.locator('.chat .transcript');
-   expect(await transcript.evaluate(box=>box.scrollHeight>box.clientHeight),'the messages are taller than the transcript').toBe(true);
-   await expect.poll(()=>transcript.evaluate(box=>box.scrollHeight-box.scrollTop-box.clientHeight)).toBeLessThan(2);
-   await expect(messages.last()).toBeInViewport();
-  },`conversation_id='${slowChat(3)}'`);
+  const link=page.locator(`#sb-recent a[href="${path}"]`);
+  await expect(link).toBeVisible({timeout:15000});
+  fake.settings.sessionDelay=3000;
+  await link.click();
+  const placeholder=page.locator('.chat .transcript[aria-busy="true"]');
+  await expect(placeholder).toBeVisible();
+  await expect(placeholder).toHaveText('Loading the chat');
+  await expect(placeholder.locator('.sk-msg')).toHaveCount(3);
+  await expect(page).toHaveURL(new RegExp(`${path}$`));
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(page.locator('.chat .head-pill__title')).toHaveText('Turn 1');
+  await expect(page.locator('.chat .composer-area').getByLabel('Message',{exact:true})).toBeVisible();
+  const frame=[await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')];
+  const messages=page.locator('.chat .msg');
+  await expect(messages).toHaveCount(12,{timeout:15000});
+  await expect(placeholder).toHaveCount(0);
+  expect([await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')],'the transcript and the composer keep their places').toEqual(frame);
+  const transcript=page.locator('.chat .transcript');
+  expect(await transcript.evaluate(box=>box.scrollHeight>box.clientHeight),'the messages are taller than the transcript').toBe(true);
+  await expect.poll(()=>transcript.evaluate(box=>box.scrollHeight-box.scrollTop-box.clientHeight)).toBeLessThan(2);
+  await expect(messages.last()).toBeInViewport();
   expect(placeholders.seen()).toEqual(['Loading the chat']);
- } finally { held.letGo(); await held.stop(); asAdmin(slowChatRows.unset); }
+ } finally {
+  fake.settings.sessionDelay=0; await fake.close();
+  query(`delete from public.conversations where id='${conversation}'; delete from public.hermes_agents where id='${agent}';`);
+ }
 });
 
 // An Agent's face is alive (#133, #697): a pressed tile's face hops on the page it opens, a hovered tile and the chat
@@ -346,7 +314,7 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
   await page.locator('.sidebar .agent-tile').filter({hasText:'Mona'}).hover();
   await expect.poll(()=>page.locator('.sidebar .agent-tile').filter({hasText:'Mona'}).locator('.face').evaluate(element=>getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, -2)');
   // The Run held open: the chat head's face and the details' face think, their light swirling.
-  fake.settings.pendingReads=1_000_000;
+  fake.settings.liveHold=true;
   const text=`Alive ${Date.now()}`;
   await page.getByLabel('Message',{exact:true}).fill(text);
   await page.getByRole('button',{name:'Send',exact:true}).click();
@@ -364,14 +332,14 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
   // The Run ends: the face is done for 1600ms, its eyes smiling and a hop, timed in the page as it starts and ends.
   await page.evaluate(()=>{ const times:number[]=[]; (window as unknown as {done:number[]}).done=times; const face=document.querySelector<HTMLElement>('#details .fw--lg .face')!;
    new MutationObserver(()=>{ const shown=face.dataset.state==='done'; if(shown!==(times.length%2===1)) times.push(performance.now()); }).observe(face,{attributes:true,attributeFilter:['data-state']}); });
-  fake.settings.pendingReads=0;
+  fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id);
   await expect(face).toHaveAttribute('data-state','done',{timeout:20000});
   await expect(face).toHaveAttribute('data-moment','done');
   await expect(face).not.toHaveAttribute('data-state','done');
   const [added,removed]=await page.evaluate(()=>(window as unknown as {done:number[]}).done);
   expect(removed-added).toBeGreaterThanOrEqual(1550); expect(removed-added).toBeLessThan(1800);
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
- } finally { fake.settings.pendingReads=0; detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
+ } finally { fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id); detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
 });
 
 test('With reduced motion an Agent at work still shows its state and its end, and no face moves',async({page})=>{
@@ -387,7 +355,7 @@ test('With reduced motion an Agent at work still shows its state and its end, an
   await expect(page).toHaveURL(/\/c\/rs-learning\/chat\/[0-9a-f-]{36}$/);
   await tile.hover();
   expect(await tile.locator('.face').evaluate(element=>getComputedStyle(element).transform)).toBe('none');
-  fake.settings.pendingReads=1_000_000;
+  fake.settings.liveHold=true;
   await page.getByLabel('Message',{exact:true}).fill(`Still ${Date.now()}`);
   await page.getByRole('button',{name:'Send',exact:true}).click();
   const pill=page.locator('#btn-details');
@@ -399,7 +367,7 @@ test('With reduced motion an Agent at work still shows its state and its end, an
   const still=await page.evaluate(()=>[...document.querySelectorAll('.face')].every(face=>face.getAnimations({subtree:true}).every(animation=>animation.playState!=='running'))
    &&[...document.querySelectorAll('.face *')].every(element=>getComputedStyle(element).animationName==='none'));
   expect(still).toBe(true);
-  fake.settings.pendingReads=0;
+  fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id);
   await expect(face).toHaveAttribute('data-state','done',{timeout:20000});
- } finally { fake.settings.pendingReads=0; detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
+ } finally { fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id); detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
 });

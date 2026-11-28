@@ -9,8 +9,8 @@ import { serverLogOf } from './lane.mjs';
 
 // #346: a reply's steps are read from the Agent's Hermes session when the chat opens, never kept by gtmworks. RS Learning
 // runs on its own profile in a fake Engine whose management listener serves a session's messages as the pinned release
-// does; Lead keeps that profile. The Conversation holds Omar's message and Lead's reply, and the session holds the turn
-// between them with its tool calls. Opening the chat shows the session's steps within one second (decision 0042).
+// does; Lead keeps that profile. The Conversation is Lead's Engine session (#883): it holds Omar's message, the turn's
+// tool calls and Lead's reply. Opening the chat shows the session's steps within one second (decision 0042).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
@@ -38,12 +38,10 @@ test.beforeAll(async({browser},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows them within one second of opening',async({page})=>{
- const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`steps-${conversation.slice(0,8)}`;
+ const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
  query(`do $$ begin
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Plan the Meta campaign','${randomUUID()}','${run}','2026-11-16T10:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${lead}','Lead','Here is the plan.','${run}','2026-11-16T10:14:00Z');
  end $$;`);
  const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
  fake.settings.sessions.set(session,{profile,messages:[
@@ -74,16 +72,14 @@ test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows t
  expect(fake.settings.managementRequests.some(request=>request.path?.startsWith(`/api/sessions/${session}/messages?profile=${profile}`)),'read from the Agent\'s own profile').toBe(true);
 });
 
-// #766 (ADR 0030): the Conversation's record never waits on the Engine. With the session's read held five seconds, the
-// page's first byte and its messages are not held by it, the steps fill in once it answers, and a read that never
-// answers leaves the messages as they are, with no error line.
-test('a session read held five seconds holds neither the first byte nor the messages, and the steps arrive after',async({page})=>{
- const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`slow-${conversation.slice(0,8)}`;
+// #766 (ADR 0030): the Conversation's page never waits on the Engine. With the session's read held five seconds, the
+// page's first byte and its frame are not held by it, and the messages, read on their own request, arrive with their
+// steps once it answers (#875).
+test('a session read held five seconds holds neither the first byte nor the Conversation\'s frame, and the messages and steps arrive after',async({page})=>{
+ const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T11:12:00Z')/1000;
  query(`do $$ begin
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Draft the ad copy','${randomUUID()}','${run}','2026-11-16T11:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${lead}','Lead','Here is the copy.','${run}','2026-11-16T11:14:00Z');
  end $$;`);
  const call={id:'call_1',type:'function',function:{name:'web_search',arguments:JSON.stringify({query:'ad copy'})}};
  fake.settings.sessions.set(session,{profile,messages:[
@@ -96,23 +92,17 @@ test('a session read held five seconds holds neither the first byte nor the mess
  try {
   const opened=Date.now();
   await page.goto(`/c/rs-learning/conversations/${conversation}`,{waitUntil:'commit'});
-  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
   const took=Date.now()-opened;
   const firstByte=await page.evaluate(()=>Math.round((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).responseStart));
-  console.log(`chat open with a slow session, messages visible: ${took} ms, first byte ${firstByte} ms`);
+  console.log(`chat open with a slow session, composer visible: ${took} ms, first byte ${firstByte} ms`);
   expect(firstByte,'the first byte is not held by the Engine').toBeLessThan(2000);
-  expect(took,'the messages are not held by the Engine').toBeLessThan(4000);
-  // Held five seconds the read passes the server's own five-second limit on it, so those steps never come and nothing
-  // says so; held two, they fill in once it answers.
-  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
+  expect(took,'the Conversation\'s frame is not held by the Engine').toBeLessThan(4000);
+  expect(await page.locator('.msg').count(),'the messages are their own request').toBe(0);
+  // Held two seconds, the messages and their steps fill in once it answers.
   fake.settings.sessionDelay=2000;
   await page.reload({waitUntil:'commit'});
-  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  await expect(page.getByText('Here is the copy.')).toBeVisible({timeout:15000});
   await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 41 sec',{timeout:15000});
-  // A session read that never answers leaves the messages as they are, with no error line in the Conversation.
-  fake.settings.sessionDelay=Infinity;
-  await page.reload({waitUntil:'commit'});
-  await expect(page.getByText('Here is the copy.')).toBeVisible();
-  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
  } finally { fake.settings.sessionDelay=0; }
 });

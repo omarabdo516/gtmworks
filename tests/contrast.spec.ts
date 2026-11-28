@@ -20,7 +20,6 @@ const omar = '20000000-0000-0000-0000-000000000001';
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
-const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
 const routine = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
 const ownProfile = (agent: string) => `ag-${agent.replaceAll('-', '')}`;
 const companyProfile = `co-${rsLearning.replaceAll('-', '')}`;
@@ -79,43 +78,21 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
        ('${busy(4)}','${rsLearning}','${busy(1)}','Lead','General',true,null,null,null,null,'visual-busy-lead'),
        ('${busy(5)}','${rsLearning}','${busy(2)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'2026-06-10T09:01:00Z','${omar}',array['Meta Ads Manager'],'2026-06-10T09:05:00Z','visual-busy-ads');
       insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${busy(8)}','${rsLearning}','${omar}','${busy(4)}','Lead','2026-06-10T09:00:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${busy(8)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${busy(9)}','visual-busy-made','2026-06-10T09:00:00Z'),
-       ('${rsLearning}','${busy(8)}','agent',null,'${busy(4)}','Lead','Done. Meta Ads runs your Meta ads from now on.',null,'visual-busy-made','2026-06-10T09:01:00Z');
       insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${busy(8)}','visual-busy-made','call-0','${rsLearning}','${busy(5)}','2026-06-10T09:01:00Z');
-      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${busy(6)}','${rsLearning}','${omar}','${busy(5)}','Meta Ads','2026-06-12T09:00:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${busy(6)}','person','${omar}','Omar','Plan the June campaign for the new course','${busy(7)}','visual-busy','2026-06-15T11:55:00Z');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at,hermes_session_id,open_runs,last_message_at) values
+       ('${busy(6)}','${rsLearning}','${omar}','${busy(5)}','Meta Ads','2026-06-12T09:00:00Z','gtmworks-${busy(6)}',array['visual-busy'],'2026-06-15T11:55:00Z');
       insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at) values
        ('${rsLearning}','${omar}','person','عمر','agent','${busy(5)}','agent_added','{"agent_name":"Meta Ads"}','hermes_agent_audit',691001,'2026-06-15T11:00:00Z'),
        ('${rsLearning}','${omar}','person','عمر','agent','${busy(5)}','agent_changed','{"agent_name":"Meta Ads"}','hermes_agent_audit',691002,'2026-06-15T10:00:00Z');`,
     unset: `delete from public.company_log where agent_id='${busy(5)}';
       delete from public.lead_made_agents where conversation_id='${busy(8)}';
-      delete from public.conversation_messages where conversation_id in ('${busy(6)}','${busy(8)}');
       delete from public.conversations where id in ('${busy(6)}','${busy(8)}');
       delete from public.hermes_agents where id in ('${busy(4)}','${busy(5)}');`,
   },
-  // Omar's chat with Lead, in which Lead proposed a faster model for Analyst, waiting on his OK (#19).
-  'change-proposal': {
-    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
-       ('${change(1)}','${rsLearning}','${change(5)}','Lead','General',true,'visual-change-lead'),
-       ('${change(2)}','${rsLearning}','${change(6)}','Analyst','Numbers',false,'visual-change-analyst');
-      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${change(3)}','${rsLearning}','${omar}','${change(1)}','Lead','2026-06-10T11:26:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${change(3)}','person','${omar}',null,'عمر','تقرير آخر 90 يوم لسه مخلصش؟ كنت محتاجه قبل اجتماع بكرة.','${change(4)}','visual-change','2026-06-10T11:26:00Z'),
-       ('${rsLearning}','${change(3)}','agent',null,'${change(1)}','Lead','Analyst لسه شغال عليه، والمرة اللي فاتت اتأخر ساعة عن ميعاده. اقترحت نغيّر موديله، ومش هيحصل غير بموافقة المالك.',null,'visual-change','2026-06-10T11:30:00Z');
-      insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,value,reason,created_at) values
-       ('${rsLearning}','${change(3)}','visual-change','call-0','${change(2)}','${change(1)}','${omar}','model','"google/gemini-2.5-pro"',
-        'تقرير الـ 90 يوم بيقرا أرقام كتير وبيتأخر عن ميعاده. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');`,
-    unset: `delete from public.agent_change_proposals where conversation_id='${change(3)}';
-      delete from public.conversation_messages where conversation_id='${change(3)}';
-      delete from public.conversations where id='${change(3)}';
-      delete from public.hermes_agents where id in ('${change(1)}','${change(2)}');`,
-  },
   // Meta Ads's page in Settings: Lead's proposal of a faster model for it waiting on Omar's OK (#178), and after Tools the
   // one standing permission Omar gave it (#166), Always allow on the Meta Ads app's create_campaign, kept in Meta Ads's
-  // own profile in the Engine. One screen holds both. The June campaign's Run and the Run in which
-  // Lead proposed are over, so both Agents are idle (#572, #641).
+  // own profile in the Engine. One screen holds both. No Conversation holds an open Run, so both Agents are idle (#572,
+  // #641).
   'settings-proposal': {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
@@ -124,28 +101,12 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
       insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${rsLearning}','co-${rsLearning.replaceAll('-', '')}',true)
        on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
       insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${standing(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
-      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(3)}','${rsLearning}','${omar}','${standing(2)}','Meta Ads','2026-06-15T11:00:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${standing(3)}','person','${omar}','عمر','اطلق حملة يونيو','${standing(4)}','visual-standing','2026-06-15T11:00:00Z');
-      insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,decided_by,decided_at,allows,created_at) values
-       ('${rsLearning}','${standing(3)}','visual-standing','visual-standing-1','permission','Launch the campaign',
-        '{"description":"Launch the campaign","command":"create_campaign","choices":["once","always","deny"],"choice":"always"}','decided','${omar}','2026-06-15T11:01:00Z',
-        '{mcp:meta-ads/create_campaign}','2026-06-15T11:00:30Z');
-      insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at) values
-       ('${rsLearning}','${standing(3)}','visual-standing','completed','2026-06-15T11:02:00Z');
       insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(7)}','${rsLearning}','${omar}','${standing(1)}','Lead','2026-06-10T11:26:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${standing(7)}','person','${omar}',null,'عمر','حملة يونيو بطيئة في التقارير.','${standing(8)}','visual-standing-change','2026-06-10T11:26:00Z');
       insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,value,reason,created_at) values
        ('${rsLearning}','${standing(7)}','visual-standing-change','call-0','${standing(2)}','${standing(1)}','${omar}','model','"google/gemini-2.5-pro"',
-        'التقارير بتقرا أرقام كتير وبتتأخر عن ميعادها. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');
-      insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at) values
-       ('${rsLearning}','${standing(7)}','visual-standing-change','completed','2026-06-10T11:30:00Z');`,
+        'التقارير بتقرا أرقام كتير وبتتأخر عن ميعادها. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');`,
     unset: `delete from public.agent_change_proposals where conversation_id='${standing(7)}';
-      delete from public.reply_cards where conversation_id='${standing(3)}';
-      delete from public.conversation_run_ends where conversation_id in ('${standing(3)}','${standing(7)}');
-      delete from public.conversation_messages where conversation_id in ('${standing(3)}','${standing(7)}');
-      delete from public.conversations where id in ('${standing(3)}','${standing(7)}');
+      delete from public.conversations where id='${standing(7)}';
       delete from public.agent_profiles where agent_id='${standing(2)}';
       delete from public.company_profile_keepers where agent_id='${standing(1)}';
       delete from public.hermes_agents where id in ('${standing(1)}','${standing(2)}');`,
@@ -164,7 +125,6 @@ const screens: Screen[] = [
   { name: 'members', path: '/c/rs-learning/settings/members', ready: '.member-row' },
   { name: 'numbers', path: '/c/rs-learning/numbers', ready: '.numbers-page' },
   { name: 'approvals', path: '/c/rs-learning/approvals', ready: '.approvals' },
-  { name: 'change-proposal', path: `/c/rs-learning/conversations/${change(3)}`, ready: '.chg-card', state: 'change-proposal' },
   { name: 'routines', path: '/c/rs-learning/settings?section=routines', ready: '.rt-row', state: 'routines' },
   { name: 'settings-proposal', path: `/c/rs-learning/settings?agent=${standing(2)}`, ready: '.sov-pend', state: 'settings-proposal' },
 ];

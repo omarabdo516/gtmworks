@@ -53,17 +53,17 @@ test('a chat shows its Engine session\'s token use, and none while the Engine do
  const [known,unknown]=[randomUUID(),randomUUID()]; const session=`session-${known.slice(0,8)}`;
  for(const [conversation,id] of [[known,session],[unknown,`gone-${unknown.slice(0,8)}`]]) query(`do $$ begin
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${rs}','${omar}','${rsLead}','Lead','${id}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${rs}','${conversation}','person','${omar}','Omar','Plan the launch week','${randomUUID()}','run-${conversation.slice(0,8)}');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id) values ('${rs}','${conversation}','agent','${rsLead}','Lead','Here is the week.','run-${conversation.slice(0,8)}');
  end $$;`);
  // Started long ago, so the usage screens' periods below do not count it.
- fake.settings.sessions.set(session,{profile:profileOf(rs),messages:[],input_tokens:29000,output_tokens:32,started_at:Date.now()/1000-100*86400});
+ fake.settings.sessions.set(session,{profile:profileOf(rs),messages:[{role:'user',content:'Plan the launch week',timestamp:Date.now()/1000-100*86400},{role:'assistant',content:'Here is the week.',timestamp:Date.now()/1000-100*86400+1}],input_tokens:29000,output_tokens:32,started_at:Date.now()/1000-100*86400});
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await page.goto(`/c/rs-learning/conversations/${known}`);
+ await expect(page.getByText('Here is the week.')).toBeVisible();
  await expect(page.locator('[data-usage]')).toHaveText('29,032 tokens used (29,000 in, 32 out)');
  expect(fake.settings.managementRequests.some(request=>request.path===`/api/sessions/${session}?profile=${profileOf(rs)}`),'read from the Agent\'s own profile').toBe(true);
+ // A session the Engine does not know holds no message to read, and no usage line either.
  await page.goto(`/c/rs-learning/conversations/${unknown}`);
- await expect(page.getByText('Here is the week.')).toBeVisible();
+ await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
  await expect(page.locator('[data-usage]'),'usage the Engine cannot read is never shown as zero').toHaveCount(0);
 });
 

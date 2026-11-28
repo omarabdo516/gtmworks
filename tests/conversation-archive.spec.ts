@@ -1,4 +1,4 @@
-import { test, expect, laneRows, type Page } from './fresh-seed';
+import { test, expect, type Page } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
@@ -25,16 +25,14 @@ async function ownerSignIn(page:Page,path:string) {
  query(`update public.people set language='en' where id='${owner}'`);
  await signIn(page,'omar@example.com',path);
 }
-// The Owner's Conversations with Nour, one an hour apart, the last written newest.
-function conversations(agent:string,titles:string[]) {
+// The Owner's Conversations with Nour, each its own Engine session (#883), one an hour apart, the last written newest.
+function conversations(fake:Awaited<ReturnType<typeof laneHermes>>,nour:{id:string,profile:string},titles:string[]) {
+ const now=Math.floor(Date.now()/1000);
  return titles.map((title,index)=>{
-  const id=randomUUID();
-  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id}','${company}','${owner}','${agent}','Nour')`);
-  query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,run_id,send_key,created_at)
-   values ('${company}','${id}','person','${owner}','Omar','${title}','r-${id}',gen_random_uuid(),now()-make_interval(hours=>${titles.length-index}))`);
-  query(`insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at)
-   values ('${company}','${id}','agent','${agent}','Nour','Done: ${title}','r-${id}',now()-make_interval(hours=>${titles.length-index}))`);
-  return id;
+  const id=randomUUID(); const session=`gtmworks-${id}`; const at=now-(titles.length-index)*3600;
+  fake.settings.sessions.set(session,{profile:nour.profile,messages:[{role:'user',content:title,timestamp:at},{role:'assistant',content:`Done: ${title}`,timestamp:at+1}]});
+  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${id}','${company}','${owner}','${nour.id}','Nour','${session}')`);
+  return {id,mark:`${nour.profile}:${session}`};
  });
 }
 test.use({actionTimeout:15000});
@@ -51,9 +49,10 @@ test('A person archives their Conversation from its head while its Agent replies
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
-  // Its first reply names the Engine's session; the next message's Run is still going.
+  // Its first reply is on the Engine's session; the next message's Run is held working.
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${title}`);
-  fake.settings.pendingReads=1e9;
+  const session=String(rows(`select hermes_session_id from public.conversations where id='${conversation}'`)[0].hermes_session_id);
+  fake.settings.liveHold=true;
   await page.getByLabel('Message',{exact:true}).fill('And the budget');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect.poll(()=>fake.settings.runs.length).toBe(2);
@@ -77,7 +76,7 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(page.locator('.toast').filter({hasText:'Nothing was archived'})).toBeVisible();
   await expect(recent).toHaveCount(1);
   await expect(page.locator('.arc-line')).toHaveCount(0);
-  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(false);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${session}`)).toBe(false);
 
   // Once it answers, archiving marks the session at once, and gtmworks keeps no mark of its own.
   fake.settings.sessionMarkStatus=null;
@@ -87,7 +86,7 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(toast).toBeVisible();
   await expect(page.locator('.arc-line')).toHaveText('This conversation is archived. Writing in it brings it back to your recent chats.');
   await expect(recent).toHaveCount(0);
-  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(true);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${session}`)).toBe(true);
   expect(rows(`select archived_at from public.conversations where id='${conversation}'`)[0].archived_at).toBeNull();
 
   // Undo brings it back to the recent chats. It lasts as long as its toast (app/toast.tsx), so it is pressed before the
@@ -97,32 +96,36 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(page.locator('.toast').filter({hasText:'Restored'})).toBeVisible();
   await expect(recent).toHaveCount(1);
   await expect(page.locator('.arc-line')).toHaveCount(0);
-  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(false);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${session}`)).toBe(false);
   // Archived again once its stopped Run has closed, so nothing is left to stop: no confirmation.
-  await expect.poll(()=>rows(`select count(*)::int as n from public.conversation_run_ends where conversation_id='${conversation}'`)[0].n,{timeout:30000}).toBe(2);
+  await expect.poll(()=>rows(`select open_runs from public.conversations where id='${conversation}'`)[0].open_runs,{timeout:30000}).toEqual([]);
   await archiveFromHead();
   await expect(page.locator('.toast').filter({hasText:'Archived'})).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(true);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${session}`)).toBe(true);
   expect(fake.settings.sessionMarks.every(mark=>Object.keys(mark.body).join()==='archived'),'the archived flag alone: nothing else of the session, nor the Agent\'s memory').toBe(true);
 
   // A message written in it brings it back, and the Engine's mark is taken off.
-  fake.settings.pendingReads=0;
+  fake.settings.liveHold=false;
   await page.getByLabel('Message',{exact:true}).fill('Back to it');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page.locator('.toast').filter({hasText:'The conversation is back in your recent chats'})).toBeVisible();
   await expect(page.locator('.arc-line')).toHaveCount(0);
   await expect(recent).toHaveCount(1);
   await expect(page.locator('.msg[data-author=agent]').last()).toContainText('Reply to: Back to it');
-  await expect.poll(()=>fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`),{timeout:30000}).toBe(false);
- } finally { await fake.close(); }
+  await expect.poll(()=>fake.settings.archivedSessions.has(`${nour.profile}:${session}`),{timeout:30000}).toBe(false);
+ } finally { fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id); await fake.close(); }
 });
 
 test('A person archives several Conversations from All conversations and one from the sidebar, with Undo, and restores them from Archived',async({page})=>{
  test.setTimeout(120000);
+ const fake=await laneHermes();
  const nour=attachNour();
+ fake.settings.profiles.set(nour.profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  const mark=randomUUID().slice(0,6); const [june,july,august]=[`Ads for June ${mark}`,`Ads for July ${mark}`,`Ads for August ${mark}`];
- const [first,second,third]=conversations(nour.id,[june,july,august]);
+ const [first,second,third]=conversations(fake,nour,[june,july,august]);
+ const archived=(...which:{mark:string}[])=>which.filter(one=>fake.settings.archivedSessions.has(one.mark)).length;
+ try {
  await ownerSignIn(page,'/c/rs-learning/conversations');
  const list=page.locator('.cv-list .cv-row');
  const titled=(title:string)=>list.filter({hasText:title});
@@ -143,9 +146,8 @@ test('A person archives several Conversations from All conversations and one fro
  await expect(titled(mark)).toHaveCount(1);
  await expect(page.getByRole('button',{name:`Current ${count-2}`})).toBeVisible();
  await expect(page.getByRole('button',{name:`Archived ${before+2}`})).toBeVisible();
- // Read on the lane's database at once (laneRows): Undo lasts only as long as its toast (app/toast.tsx), and a read
- // through the Supabase CLI took up to 8 s on a loaded runner, past it (#746).
- expect(laneRows(`select count(*)::int as n from public.conversations where id in ('${first}','${second}') and archived_by='${owner}'`)[0].n).toBe(2);
+ // Each is its session's own archived mark on the Engine, read before Undo, which lasts only as long as its toast.
+ expect(archived(first,second)).toBe(2);
  await toast.getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast').filter({hasText:'2 restored'})).toBeVisible();
  await expect(titled(mark)).toHaveCount(3);
@@ -160,7 +162,7 @@ test('A person archives several Conversations from All conversations and one fro
  await recent.getByRole('button',{name:`More: ${august}`}).click();
  await page.getByRole('menuitem',{name:'Archive the conversation'}).click();
  await expect(page.locator('#sb-recent .thread-row').filter({hasText:august})).toHaveCount(0);
- expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${third}') and archived_at is not null`)[0].n).toBe(2);
+ await expect.poll(()=>archived(first,third)).toBe(2);
 
  // Archived holds them, newest message first; Restore brings one back, then the other.
  await page.getByRole('button',{name:/^Archived \d+$/}).click();
@@ -176,5 +178,6 @@ test('A person archives several Conversations from All conversations and one fro
  await page.getByRole('button',{name:'Select all shown'}).click();
  await page.getByRole('region',{name:'Selecting conversations'}).getByRole('button',{name:'Restore'}).click();
  await expect(page.getByText('No archived conversations')).toBeVisible();
- expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${second}','${third}') and archived_at is null`)[0].n).toBe(3);
+ await expect.poll(()=>archived(first,second,third)).toBe(0);
+ } finally { await fake.close(); }
 });

@@ -33,9 +33,7 @@ test.beforeAll(async({},testInfo)=>{
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id in ('${omar}','${manager}')`);
- // RS Learning is switched over: its new Conversations start on the Engine (companies.engine_conversations, until #883).
  query(`do $$ begin
-  update public.companies set engine_conversations=true where id='${company}';
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${profile}');
   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;

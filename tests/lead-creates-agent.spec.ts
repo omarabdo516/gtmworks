@@ -2,10 +2,10 @@ import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn, openNavigation } from './sign-in';
 
-// #13, what people see when Lead makes an Agent: the card in the Conversation, the "new" mark until the Agent is
-// opened, when and at whose request on its page, and "New agent" opening Lead's chat ready to type. The rows are
-// written as lead_create_agent writes them (the engine side is proven in tests/engine-conversation.spec.ts): Meta Ads
-// under Lead's reply, and SEO from a run whose reply was nothing but the call, which closed done (#227).
+// #13, what people see when Lead makes an Agent: the "new" mark until the Agent is opened, when and at whose request on
+// its page, and "New agent" opening Lead's chat ready to type. The made Agents are written as lead_create_agent left
+// them: Meta Ads and SEO, both asked for in one Conversation of Omar's. The card under Lead's reply was the old
+// Conversation record's (gone with #883).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
@@ -24,33 +24,14 @@ test.beforeAll(({},testInfo)=>{
   -- The Manager is shown both (#15), so the made line is checked from someone who did not ask.
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}'),('${company}','20000000-0000-0000-0000-000000000002','${seo}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${lead}','Lead');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id) values
-   ('${company}','${conversation}','person','${omar}',null,'Omar','I want someone to handle Meta ads','${id(8)}','made-run-1'),
-   ('${company}','${conversation}','agent',null,'${lead}','Lead','Done. Meta Ads runs your Meta ads from now on.',null,'made-run-1'),
-   ('${company}','${conversation}','person','${omar}',null,'Omar','And someone for the blog','${id(9)}','made-run-2');
-  insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${conversation}','made-run-2','completed');
   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values
    ('${conversation}','made-run-1','call-0','${company}','${ads}','2026-06-10T09:01:00Z'),
    ('${conversation}','made-run-2','call-0','${company}','${seo}','2026-06-11T09:01:00Z');
  end $$;`);
 });
 
-test('the Conversation shows the new Agent\'s card, the list marks it new, and opening it takes the mark away',async({page})=>{
- await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
- const card=page.getByRole('group',{name:'Agent made: Meta Ads'});
- await expect(page.locator('.turn--agent').filter({hasText:'Done. Meta Ads runs'}).locator('.ac-card')).toHaveCount(1);
- await expect(card.locator('.badge--made')).toHaveText('Made · New');
- await expect(card.locator('.card__title')).toHaveText('Meta Ads');
- await expect(card.locator('.kv__row').filter({hasText:'Job'}).locator('dd')).toHaveText('Runs the Meta ads.');
- await expect(card.locator('.kv__row').filter({hasText:'Apps'}).locator('dd')).toHaveText('Meta Ads Manager, Canva');
- await expect(card.locator('.kv__row').filter({hasText:'Won’t do without asking you'}).locator('li')).toHaveText(['Publish anything','Spend money','Message a customer']);
- // A reply that was nothing but the call: the card is Lead's whole turn, after the message that asked.
- const alone=page.locator('.turn--agent[data-kind="made"]');
- await expect(alone.getByRole('group',{name:'Agent made: SEO'})).toBeVisible();
- await expect(alone.locator('.kv__row').filter({hasText:'Apps'}).locator('dd')).toHaveText('No apps: it works on what you send it');
- await expect(page.locator('.turns > li').nth(3)).toHaveAttribute('data-kind','made');
- await expect(page.getByText('The agent could not finish this reply')).toHaveCount(0);
-
+test('the list marks a made Agent new, and opening it takes the mark away',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  await openNavigation(page);
  const tile=(name:string)=>page.locator('.sidebar .agent-tile').filter({hasText:name});
  // Made in June with no work since, it sleeps (#699) until its chat is opened, which wakes it for this person.
@@ -60,7 +41,7 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
  await expect(tile('Lead').locator('.agent-tile__new')).toHaveCount(0);
 
  const opened=page.waitForResponse(response=>response.url().endsWith('/api/agent-opened')&&response.ok());
- await card.getByRole('link',{name:'Open Meta Ads'}).click();
+ await tile('Meta Ads').click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/chat/${ads}$`));
  expect(await (await opened).json()).toEqual({opened:true});
  await page.reload();
@@ -68,8 +49,6 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
  await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads · Runs the Meta ads. · Idle');
  await expect(tile('Meta Ads').locator('.agent-tile__new')).toHaveCount(0);
  await expect(tile('SEO').locator('.agent-tile__new')).toHaveText('New');
- await page.goto(`/c/rs-learning/conversations/${conversation}`);
- await expect(card.locator('.badge--made')).toHaveText('Made · Jun 10');
 });
 
 test('the Agent\'s page and its details say when it was made and at whose request; only the requester sees it new',async({page,browser})=>{
@@ -114,49 +93,4 @@ test('"New agent" opens Lead\'s chat with the composer focused and a hint line, 
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
  await expect(page.locator('.new-hint[role="note"]')).toBeVisible();
-});
-
-// Every tile that takes the flash mark, with the motion it computes at that moment (#134). Set up before the grid changes,
-// so a flash is seen however quickly it ends.
-const watchFlashes=(page:import('@playwright/test').Page)=>page.evaluate(()=>{
- const seen:{agent:string|null,name:string,duration:string,easing:string}[]=[];
- (window as unknown as {flashes:typeof seen}).flashes=seen;
- new MutationObserver(records=>{ for(const record of records) { const tile=record.target as HTMLElement;
-  if(record.attributeName==='class'&&tile.classList?.contains('agent-tile')&&tile.classList.contains('is-flash')&&!(record.oldValue||'').includes('is-flash')) {
-   const style=getComputedStyle(tile); seen.push({agent:tile.dataset.agent??null,name:style.animationName,duration:style.animationDuration,easing:style.animationTimingFunction});
-  } } }).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class'],attributeOldValue:true});
-});
-const flashes=(page:import('@playwright/test').Page)=>page.evaluate(()=>(window as unknown as {flashes:unknown[]}).flashes);
-const tileMotion=(page:import('@playwright/test').Page)=>page.locator('.sidebar .agent-tile[data-agent]').evaluateAll(tiles=>tiles.map(tile=>getComputedStyle(tile).animationName));
-
-test('an Agent Lead makes while the Conversation is open shows in the sidebar, marked new, without a reload, and its tile flashes once',async({page})=>{
- const [analystConnection,analyst]=[10,11].map(id);
- query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${company}','${conversation}','person','${omar}','Omar','And someone for the numbers','${id(12)}','made-run-3')`);
- await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
- await openNavigation(page);
- const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Analyst'});
- await expect(tile).toHaveCount(0);
- // Nothing flashed as the page loaded.
- expect(await page.locator('.sidebar .agent-tile.is-flash').count()).toBe(0);
- expect(new Set(await tileMotion(page))).toEqual(new Set(['none']));
- await watchFlashes(page);
- // Lead's Connection never answers here, so the page keeps asking for the open run while Lead's call lands.
- query(`do $$ begin
-    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,profile) values ('${analyst}','${company}','${analystConnection}','Analyst','Reads the numbers.',false,now(),'${omar}','{}','made-analyst');
-  insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id) values ('${conversation}','made-run-3','call-0','${company}','${analyst}');
- end $$;`);
- await expect(page.getByRole('group',{name:'Agent made: Analyst'})).toBeVisible();
- await expect(tile.locator('.agent-tile__new')).toHaveText('New');
- // Its tile, new to the grid during the visit, flashes once (design-reference: tileFlash); no other tile does, and the
- // mark goes after 1500ms, the "New" mark staying.
- await expect.poll(()=>flashes(page)).toEqual([{agent:analyst,name:'gw-ring-flash',duration:'1.4s',easing:'cubic-bezier(0.2, 0, 0, 1)'}]);
- await expect(tile).not.toHaveClass(/is-flash/,{timeout:3000});
- await expect(tile.locator('.agent-tile__new')).toHaveText('New');
- expect(new Set(await tileMotion(page))).toEqual(new Set(['none']));
- // After a reload nothing flashes.
- await page.reload();
- await openNavigation(page);
- await expect(tile.locator('.agent-tile__new')).toHaveText('New');
- expect(await page.locator('.sidebar .agent-tile.is-flash').count()).toBe(0);
- expect(new Set(await tileMotion(page))).toEqual(new Set(['none']));
 });

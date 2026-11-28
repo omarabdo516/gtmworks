@@ -5,21 +5,18 @@ import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
 // #387: a Company whose Engine is not running says so once in Settings, without a sign-in action that would fail, and a
-// message in a Conversation is stored and stays "Not sent" with Try again (#764). When the Engine answers again, Try
-// again sends the same message with no reload.
+// message in a Conversation stays in the box, not sent, with Try again: the Conversation is its Agent's Engine session
+// (#877, #883). When the Engine answers again, Try again sends the same message with no reload.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=<T>(sql:string):T[]=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as T[]; };
 const company='10000000-0000-0000-0000-000000000001';
 const profile=`co-${company.replaceAll('-','')}`;
 const omar='20000000-0000-0000-0000-000000000001';
-// The person's messages: the Agent's reply to the send that goes may or may not be in yet, and is not what is counted.
-const messages=()=>rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where company_id='${company}' and author='person'`)[0].n;
 
-test('an Engine that is not running says so once in Settings, keeps a message not sent without recording a Run, and Try again sends it when it answers',async({page})=>{
+test('an Engine that is not running says so once in Settings, keeps a message in the box not sent without starting a Run, and Try again sends it when it answers',async({page})=>{
  const fake=await laneHermes();
  const agent=randomUUID();
  const hadProfile=rows<{profile:string}>(`select profile from public.company_profiles where company_id='${company}'`).length>0;
- const before=messages();
  try {
   query(`update public.people set language='en' where id='${omar}'`);
   query(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
@@ -43,22 +40,20 @@ test('an Engine that is not running says so once in Settings, keeps a message no
   const send=page.getByRole('button',{name:'Send',exact:true});
   await field.fill('Are you there?');
   await send.click();
-  // #764: the message is stored first, so it stays in its Conversation, "Not sent", with Try again; the box is empty and
-  // no Run is recorded.
-  await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
-  const notSent=page.locator('.msg[data-author=person]').filter({hasText:'Are you there?'}).locator('[data-outcome="not-sent"]');
-  await expect(notSent).toHaveText('Not sent Try again',{timeout:20000});
-  await expect(composer.getByLabel('Message',{exact:true})).toHaveValue('');
+  // The message stays in the box with why it was not sent and Try again; nothing is drawn as sent and no Run started.
+  const line=composer.locator('.composer-error');
+  await expect(line).toHaveText(/not sent/i,{timeout:20000});
+  await expect(field).toHaveValue('Are you there?');
+  await expect(page.locator('.msg[data-author=person]')).toHaveCount(0);
   expect(fake.settings.runs.length).toBe(0);
-  expect(messages()).toBe(before);
 
   // The Engine answers again: Try again sends the same message, with no reload and no second message.
-  fake.settings.status=200;
-  await notSent.getByRole('button',{name:'Try again'}).click();
+  fake.settings.status=200; fake.settings.managementStatus=200;
+  await line.getByRole('button',{name:'Try again'}).click();
   await expect.poll(()=>fake.settings.runs.length,{timeout:20000}).toBe(1);
-  await expect.poll(()=>messages(),{timeout:20000}).toBe(before+1);
-  await expect(page.locator('[data-outcome="not-sent"]')).toHaveCount(0,{timeout:20000});
+  await expect(page.locator('.msg[data-author=agent]')).toContainText('Reply to: Are you there?',{timeout:30000});
   await expect(page.locator('.msg[data-author=person]').filter({hasText:'Are you there?'})).toHaveCount(1);
+  await expect(composer.locator('.composer-error')).toHaveCount(0);
  } finally {
   query(`delete from public.hermes_agents where id='${agent}'`);
   if(!hadProfile) query(`delete from public.company_profiles where company_id='${company}'`);

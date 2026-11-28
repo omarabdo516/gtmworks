@@ -52,12 +52,10 @@ test('Settings names a work sandbox that is not running in English and Arabic, a
 });
 
 test('a reply whose command could not run because the sandbox is down says so under the reply, and a reply that needed no tool does not',async({page})=>{
- const conversation=randomUUID(); const session=`sandbox-${conversation.slice(0,8)}`; const run=`sandbox-run-${conversation.slice(0,8)}`;
+ const conversation=randomUUID(); const session=`sandbox-${conversation.slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
  query(`do $$ begin
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Trim the clip','${randomUUID()}','${run}','2026-11-16T10:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${lead}','Lead','I could not run that.','${run}','2026-11-16T10:14:00Z');
  end $$;`);
  fake.settings.sessions.set(session,{profile,messages:[
   {role:'user',content:'Trim the clip',timestamp:sent+1},
@@ -71,11 +69,9 @@ test('a reply whose command could not run because the sandbox is down says so un
  await expect(page.locator('[data-outcome=sandbox]')).toHaveText(english);
 
  // A message that needs no tool is answered as usual, with no such line.
- const plain=randomUUID(); const plainSession=`plain-${plain.slice(0,8)}`; const plainRun=`plain-run-${plain.slice(0,8)}`;
+ const plain=randomUUID(); const plainSession=`plain-${plain.slice(0,8)}`;
  query(`do $$ begin
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${plain}','${company}','${omar}','${lead}','Lead','${plainSession}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${plain}','person','${omar}','Omar','Say hello','${randomUUID()}','${plainRun}','2026-11-16T11:12:00Z');
-  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${plain}','agent','${lead}','Lead','Hello.','${plainRun}','2026-11-16T11:12:02Z');
  end $$;`);
  fake.settings.sessions.set(plainSession,{profile,messages:[
   {role:'user',content:'Say hello',timestamp:Date.parse('2026-11-16T11:12:00Z')/1000+1},

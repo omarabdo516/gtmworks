@@ -5,8 +5,8 @@ import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
 // #782: a Conversation's Run and session reads reach the Engine through the handle, on the Agent's profile as the reader
-// may see it. For each Role, the reader an Agent is shown to reads their Conversation's steps from its session and asks
-// for its live Steps; once the Agent is hidden from them, both answer "not found", and the Engine is not asked. The
+// may see it. For each Role, the reader an Agent is shown to reads their Conversation's messages and usage from its
+// session and asks for its live Run (#883: every Conversation is its Agent's Engine session); once the Agent is hidden from them, both answer "not found", and the Engine is not asked. The
 // Owner sees every Agent. The database side of who sees an Agent is proven in supabase/tests/member_agent_visibility.sql.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
@@ -40,16 +40,20 @@ test.beforeAll(async({},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 for(const role of Object.keys(people) as (keyof typeof people)[]) {
- test(`the ${role} reads the steps of a Conversation with an Agent shown to them, and an Agent hidden from them is not found`,async({page})=>{
+ test(`the ${role} reads the messages of a Conversation with an Agent shown to them, and an Agent hidden from them is not found`,async({page})=>{
   const talk=talks[role];
   await signIn(page,people[role][0],'/c/rs-learning/chat');
-  const steps=()=>page.request.get(`/api/conversations?company=${company}&conversation=${talk}&intent=steps`);
-  const live=()=>page.request.get(`/api/run-steps?company=${company}&conversation=${talk}`);
+  const steps=()=>page.request.get(`/api/conversations?company=${company}&conversation=${talk}&intent=read`);
+  const usage=()=>page.request.get(`/api/conversations?company=${company}&conversation=${talk}&intent=usage`);
+  const live=()=>page.request.get(`/api/conversation-live?company=${company}&conversation=${talk}`);
   const sessionReads=()=>fake.settings.managementRequests.filter(request=>request.path?.startsWith(`/api/sessions/s-${talk}/messages`)).length;
 
   const read=await steps();
   expect(read.status()).toBe(200);
-  expect((await read.json()).usage).toMatchObject({input:40,output:4});
+  expect(JSON.stringify(await read.json())).toContain(`Plan the week (${role})`);
+  const used=await usage();
+  expect(used.status()).toBe(200);
+  expect((await used.json()).usage).toMatchObject({input:40,output:4});
   expect(sessionReads(),'the session is read on the Agent\'s profile').toBeGreaterThan(0);
   const open=await live();
   expect(open.status()).toBe(200);

@@ -5,7 +5,7 @@ import { signIn } from './sign-in';
 
 // #697 (spec #694): the faces' cost, measured as the spec says, with the machine to itself (project `alone`): sixteen
 // Agents in the sidebar, each a 56px face moving, two of them working, on a CPU slowed four times, for ten seconds, the
-// pointer resting near them. The page keeps 50 frames a second or more, and the faces add no long task: the same ten
+// pointer resting near them (a working Agent's Conversation holds its open Engine Run, #883). The page keeps 50 frames a second or more, and the faces add no long task: the same ten
 // seconds with the faces taken off the page have as many long tasks or more.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
@@ -23,9 +23,8 @@ test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CP
   update public.hermes_agents set is_default=false where company_id='${company}' and is_default;
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ${agents.map((agent,index)=>`('${agent.id}','${company}','${agent.connection}','${agent.name}','Marketing',${index===0},'frames-${index}')`).join(',\n   ')};
-  ${working.map(({agent,conversation})=>`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${agent.id}','${agent.name}');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
-   ('${company}','${conversation}','person','${omar}','Omar','Plan the June campaign','${randomUUID()}','frames-${agent.id}',now());`).join('\n  ')}
+  ${working.map(({agent,conversation})=>`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,open_runs,last_message_at) values
+   ('${conversation}','${company}','${omar}','${agent.id}','${agent.name}','gtmworks-${conversation}',array['run-frames-${agent.id}'],now());`).join('\n  ')}
  end $$;`);
  await page.setViewportSize({width:1440,height:1500});
  await signIn(page,'omar@example.com','/c/rs-learning/home');
@@ -67,6 +66,5 @@ test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CP
  console.log(`Face frames (CPU slowed 4x, ${seconds}s): ${numbers}`);
  expect(moving.fps,numbers).toBeGreaterThanOrEqual(50);
  expect(moving.longTasks,numbers).toBeLessThanOrEqual(without.longTasks);
- // The next file starts from the seed again (tests/fresh-seed.ts), so nothing is taken away here: a Conversation's
- // messages are append-only.
+ // The next file starts from the seed again (tests/fresh-seed.ts), so nothing is taken away here.
 });

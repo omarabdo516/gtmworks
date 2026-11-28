@@ -1,6 +1,5 @@
 import { test, expect, freshSeed, type Locator, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { signIn } from './sign-in';
 import { laneHermes } from './lane-hermes';
@@ -14,8 +13,7 @@ const id=(n:number)=>`69000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [leadConnection,adsConnection,seoConnection,lead,ads,seo,conversation]=[1,2,3,4,5,6,7].map(id);
 // Copy (#184) has a question in its Conversation waiting on Omar, and the Contributor and the Viewer are shown it.
 const [copyConnection,copy]=[12,13].map(id);
-// The files (#21): one in Omar's own Conversation with Meta Ads and one in the Contributor's.
-const paths={mine:`${company}/conversations/${conversation}/${randomUUID()}.csv`,theirs:`${company}/conversations/${id(11)}/${randomUUID()}.txt`};
+// A file the Agent handed over in a channel (#715); a Conversation's files are its Engine session's since #880.
 const bytes=Buffer.from('June audiences\n');
 // Its Cards are on the Company's Engine board (spec #831, #846), on each Agent's own Engine profile.
 const profileOf=(agent:string)=>`ag-${agent.replaceAll('-','')}`;
@@ -45,14 +43,11 @@ test.beforeAll(async({},testInfo)=>{
   insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','${rsProfile}',true)
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
-   ('${company}','${id(9)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${id(10)}','details-made','2026-06-10T09:00:00Z'),
-   ('${company}','${id(9)}','agent',null,'${lead}','Lead','Done.',null,'details-made','2026-06-10T09:01:00Z');
   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${id(9)}','details-made','call-0','${company}','${ads}','2026-06-10T09:01:00Z');
-  insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${ads}');
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Meta Ads');
-  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
-   ('${company}','${conversation}','person','${omar}','Omar',E'Plan the June campaign\\nwith three ads','${id(8)}','details-run',now()-interval '5 minutes');
+  insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${ads}'),('${company}','${reviewer}','${ads}');
+  -- Omar's Conversation with Meta Ads holds its open Engine Run (#883), begun with his last message.
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,open_runs,last_message_at) values
+   ('${conversation}','${company}','${omar}','${ads}','Meta Ads','gtmworks-${conversation}',array['details-run'],now()-interval '5 minutes');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(18)}','${company}','${omar}','${copy}','Copy');
   insert into public.waiting_items(company_id,person_id,kind,title,conversation_id) values ('${company}','${omar}','question','Which tone for spring?','${id(18)}');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
@@ -69,19 +64,6 @@ const serviceStorage=async()=>{
  return createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false}}).storage.from('creatives');
 };
 test.afterAll(async()=>{ await fake?.close(); });
-test.beforeAll(async()=>{
- const storage=await serviceStorage();
- for(const path of Object.values(paths)) expect((await storage.upload(path,bytes,{contentType:'text/plain',upsert:true})).error).toBeNull();
- query(`do $$ begin
-  insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${reviewer}','${ads}');
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(11)}','${company}','${reviewer}','${ads}','Meta Ads');
-  insert into public.conversation_attachments(company_id,conversation_id,name,content_type,size,path,created_at) values
-   ('${company}','${conversation}','audiences.csv','text/csv',18432,'${paths.mine}','2026-06-12T09:00:00Z'),
-   ('${company}','${id(11)}','reviewer-notes.txt','text/plain',300,'${paths.theirs}','2026-06-13T09:00:00Z');
- end $$;`);
-});
-const fileId=(name:string)=>JSON.parse(query(`select id from public.conversation_attachments where name='${name}'`))[0].id as number;
-
 async function openDetails(page:Page,email:string,agent:string,name:string) {
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,email,`/c/rs-learning/chat/${agent}`);
@@ -107,7 +89,8 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards o
  const rows=panel.locator('.panel-row');
  await expect(rows).toHaveCount(2);
  await expect(rows.nth(0).locator('.panel-row__t')).toHaveText('Working now');
- await expect(rows.nth(0).locator('.panel-row__d').first()).toHaveText('On your request: Plan the June campaign');
+ // The Run is of the reader's own Conversation, so no teammate's request is named; what it asked is the Engine's.
+ await expect(rows.nth(0)).not.toContainText('teammate');
  await expect(rows.nth(0).locator('time')).toHaveText(/^(Today|Yesterday) · \d{1,2}:\d{2}\s[AP]M$/);
  await expect(rows.nth(1).locator('.panel-row__t')).toHaveText('عمر added the agent “Meta Ads”');
  await expect(panel).not.toContainText('changed the agent');
@@ -150,42 +133,6 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards o
  await expect(page.getByRole('dialog')).toContainText('June campaign');
 });
 
-test('the Files tab lists the reader\'s own Conversation file with the Agent, and opens it, and no old Card\'s file',async({page})=>{
- const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
- await tab(details,'Files').click();
- const panel=details.getByRole('tabpanel');
- await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-files');
- await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 1');
- const rows=panel.locator('.panel-row');
- await expect(rows.locator('.panel-row__t')).toHaveText(['audiences.csv']);
- await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign']);
- await expect(panel).not.toContainText('reviewer-notes.txt');
- const links=await rows.getByRole('link').evaluateAll(anchors=>anchors.map(anchor=>anchor.getAttribute('href')));
- expect(links).toEqual([`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`]);
- for(const link of links) {
-  const opened=await page.request.get(link!);
-  expect(opened.status()).toBe(200);
-  expect(opened.headers()['content-disposition']).toMatch(/^attachment;/);
-  expect(await opened.body()).toEqual(bytes);
- }
- expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('reviewer-notes.txt')}`)).status(),'another Member\'s Conversation file is not found').toBe(404);
- // An address opens the panel on that tab, beside a Conversation too.
- await page.goto(`/c/rs-learning/conversations/${conversation}?tab=files`);
- await expect(tab(details,'Files')).toHaveAttribute('aria-selected','true');
- await expect(panel.locator('.panel-row__t')).toHaveText(['audiences.csv']);
-});
-
-test('a Contributor sees their own Conversation file, never another Member\'s',async({page})=>{
- const details=await openDetails(page,'reviewer@example.com',ads,'Meta Ads');
- await tab(details,'Files').click();
- const panel=details.getByRole('tabpanel');
- await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 1');
- await expect(panel.locator('.panel-row__t')).toHaveText(['reviewer-notes.txt']);
- await expect(panel).not.toContainText('audiences.csv');
- expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('reviewer-notes.txt')}`)).status()).toBe(200);
- expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('audiences.csv')}`)).status()).toBe(404);
-});
-
 test('a Viewer\'s panel has only the gear and Close as actions, and no other person\'s request',async({page})=>{
  const details=await openDetails(page,'viewer@example.com',ads,'Meta Ads');
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
@@ -200,21 +147,6 @@ test('a Viewer\'s panel has only the gear and Close as actions, and no other per
  await expect(panel.locator('a.panel-row .panel-row__t')).toHaveText(['Retargeting ads','June campaign']);
  await tab(details,'Log').click();
  await expect(panel.locator('.lg-row')).toHaveCount(2);
-});
-
-test('every file of the Agent is listed, past fifty, and the heading counts what the list holds',async({page})=>{
- query(`do $$ begin
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(19)}','${company}','${omar}','${seo}','SEO');
-  insert into public.conversation_attachments(company_id,conversation_id,name,content_type,size,path,created_at)
-   select '${company}','${id(19)}','file-'||n||'.txt','text/plain',10,'${company}/conversations/${id(19)}/'||n||'.txt',timestamptz '2026-06-01T09:00:00Z'+n*interval '1 minute' from generate_series(1,51) n;
- end $$;`);
- const details=await openDetails(page,'omar@example.com',seo,'SEO');
- await tab(details,'Files').click();
- const panel=details.getByRole('tabpanel');
- await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 51');
- await expect(panel.locator('.panel-row')).toHaveCount(51);
- await expect(panel.locator('.panel-row__t').first()).toHaveText('file-51.txt');
- await expect(panel.locator('.panel-row__t').last()).toHaveText('file-1.txt');
 });
 
 // A file the Agent handed over in a channel (#715) is every Member's of that channel: the Owner and the Contributor in the

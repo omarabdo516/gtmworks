@@ -6,7 +6,7 @@ import { signIn } from './sign-in';
 // #434, on the app with the fake Engine: Lead opens a new Company's first Conversation, in its Owner's language, once
 // the Company has a model; before that the #422 notice shows and nothing is opened. It happens once: a reload, a second
 // visit to Lead's chat, or signing out and in again opens nothing more. The Owner's answer is met with the first Agent
-// to make and the "Make it?" chips, and "Make it" makes it.
+// to make and the "Make it?" chips.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const omar='20000000-0000-0000-0000-000000000001';
 const companies={en:{id:'10000000-0000-0000-0000-000000000001',slug:'rs-learning',lead:'e4340000-0000-0000-0000-000000000001'},
@@ -23,12 +23,9 @@ test.beforeAll(async({},testInfo)=>{
  // Each Company's space and Lead's profile; RS Learning starts with no key, RS Consultations with one.
  for(const [language,{id}] of Object.entries(companies)) for(const name of Object.values(profilesOf(id)))
   fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{},env:language==='ar'?{...key}:{}});
- fake.settings.pendingReads=0;
- // The Owner's answer is met with the first Agent to make, asked with the Owner's chips; "Make it" makes it.
+ // The Owner's answer is met with the first Agent to make, asked with the Owner's chips.
  fake.settings.questions=input=>input.startsWith('We sell')?[{question,choices:['Make it','Not now']}]:[];
- fake.settings.reply=(input:string,answers:(string|null)[]=[])=>answers[0]==='Make it'
-  ?`Course Writer is on the team now.\n\n\`\`\`gtmworks-tool\n${JSON.stringify({name:'create_agent',arguments:{name:'Course Writer',job:'Writes the course posts.',apps:[]}})}\n\`\`\``
-  :`Reply to: ${input}`;
+ fake.settings.reply=(input:string,answers:(string|null)[]=[])=>answers[0]==='Make it'?'Course Writer is on the team now.':`Reply to: ${input}`;
  query(`do $$ begin
   update public.hermes_agents set is_default=false where company_id in ('${companies.en.id}','${companies.ar.id}') and is_default;
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -44,7 +41,8 @@ test.beforeAll(async({},testInfo)=>{
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
-const openings=(company:string)=>JSON.parse(query(`select v.id,v.person_id from public.conversation_messages m join public.conversations v on v.id=m.conversation_id where m.company_id='${company}' and m.run_id='lead-opening'`));
+// The Conversation Lead opened is marked on its row (#883: its words are the Engine session's first Run's, never stored).
+const openings=(company:string)=>JSON.parse(query(`select v.id,v.person_id from public.conversations v where v.company_id='${company}' and v.lead_opening`));
 const conversationCount=(company:string)=>JSON.parse(query(`select count(*)::int as n from public.conversations where company_id='${company}'`))[0].n;
 const leadTurns=(page:Page)=>page.locator('.turns > li[data-author="agent"]');
 
@@ -83,7 +81,7 @@ test('without a model the notice shows and nothing opens; once a key is there, L
  expect(conversationCount(id)).toBe(1);
 });
 
-test('the Owner\'s answer is met with the first Agent to make and the Make it chips; Make it makes the Agent',async({page})=>{
+test('the Owner\'s answer is met with the first Agent to make and the Make it chips, and the answered opening leaves Lead\'s chat empty',async({page})=>{
  test.setTimeout(120000);
  const {id,slug}=companies.en;
  const [{id:conversation}]=openings(id);
@@ -98,8 +96,7 @@ test('the Owner\'s answer is met with the first Agent to make and the Make it ch
  expect(run.instructions).toContain('What does RS Learning sell?');
  expect(run.instructions).toContain('propose the first two or three agents to make for this company');
  await asked.getByRole('button',{name:'Make it'}).click();
- await expect(page.getByRole('group',{name:'Agent made: Course Writer'})).toBeVisible({timeout:30000});
- expect(JSON.parse(query(`select name,speciality from public.hermes_agents where company_id='${id}' and name='Course Writer'`))).toEqual([{name:'Course Writer',speciality:'Writes the course posts.'}]);
+ await expect(page.locator('.msg[data-author=agent]').last()).toContainText('Course Writer is on the team now.',{timeout:30000});
  // Answered, Lead's chat is an empty chat again: a second Conversation starts there, and nothing is opened again.
  await page.goto(`/c/${slug}/chat`);
  await expect(page).toHaveURL(`/c/${slug}/chat`);

@@ -78,9 +78,10 @@ test('one request goes on on the next account switched on: one reply, no word of
  await expect(page.locator('.turn--agent').filter({hasText:'Reply to:'})).toHaveCount(1);
  const said=await page.locator('main').innerText();
  for(const word of ['ChatGPT','quota','account','c0dex']) expect(said).not.toContain(word);
- expect(rows<{author:string,body:string}>(`select author,body from public.conversation_messages where conversation_id='${conversation}'
-  and id>=(select min(id) from public.conversation_messages where conversation_id='${conversation}' and author='person') order by id`))
-  .toEqual([{author:'person',body:'Plan the launch'},{author:'agent',body:'Reply to: Plan the launch'}]);
+ // The Conversation's Engine session holds the same: the message and the one reply (#883).
+ const session=String(rows<{hermes_session_id:string}>(`select hermes_session_id from public.conversations where id='${conversation}'`)[0].hermes_session_id);
+ const held=fake.settings.sessions.get(session)!.messages.filter(message=>message.role==='user'||message.role==='assistant').map(message=>[message.role,message.content]);
+ expect(held.slice(held.findIndex(([,content])=>content==='Plan the launch'))).toEqual([['user','Plan the launch'],['assistant','Reply to: Plan the launch']]);
  await testInfo.attach('chat-one-reply',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 
  // The worker copies the move into the Company's log once, as gtmworks's own entry, by the accounts' names in Settings.
@@ -119,9 +120,8 @@ test('the next request runs on the account that answered and logs nothing; one w
  await page.waitForURL(/\/conversations\/[0-9a-f-]{36}$/);
  await expect.poll(()=>fake.settings.runs.length,{timeout:30000}).toBe(before+1);
  const failed=fake.settings.runs.at(-1)!.id;
- // The app closed the Run as out of access (#622), with no reply, before anything else is read.
- await expect.poll(()=>rows<{outcome:string}>(`select outcome from public.conversation_run_ends where run_id='${failed}'`),{timeout:30000}).toEqual([{outcome:'no_access'}]);
- expect(rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where author='agent' and run_id='${failed}'`)).toEqual([{n:0}]);
+ // The Run ended out of access (#622), with no reply: the chat says so, read from the Engine's Run (#883).
+ await expect(page.locator('[data-outcome=no-access]')).toBeVisible({timeout:30000});
  expect(callsOf(failed)).toEqual(['c0dex3']);
  await expect(page.locator('.turn--agent').filter({hasText:'Reply to: Draft the email'})).toHaveCount(0);
  expect(fake.settings.switches).toHaveLength(1);

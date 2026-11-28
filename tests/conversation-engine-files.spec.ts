@@ -29,7 +29,6 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id='${omar}'`);
  query(`do $$ begin
-  update public.companies set engine_conversations=true where id='${company}';
   update public.hermes_agents set is_default=false where company_id='${company}' and is_default;
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${profile}');
   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'

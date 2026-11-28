@@ -31,8 +31,6 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.profiles.set(`cs-${hex}`,{soul:'',provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{},env:{OPENROUTER_API_KEY:'set'}} as never);
  query(`do $$ begin
   update public.people set language='en' where id='${omar}';
-  -- RS Learning is switched over: its Conversations are the Engine's (companies.engine_conversations, until #883).
-  update public.companies set engine_conversations=true where id='${company}';
   update public.hermes_agents set is_default=false where company_id='${company}' and is_default;
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${profile}');
   insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) select id,'${profile}',true,true from public.companies where id='${company}'

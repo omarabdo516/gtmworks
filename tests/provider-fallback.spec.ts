@@ -63,11 +63,9 @@ const callsOf=(run:string)=>fake.settings.modelCalls.filter(call=>call.run===run
 const onFallback=(run:string)=>{ const calls=callsOf(run); expect(calls.at(-1)).toBe('anthropic:c1aude'); expect(calls.slice(0,-1).every(call=>call.startsWith('openai-codex:'))).toBe(true); };
 const fallbacksOf=(run:string)=>fake.settings.fallbacks.filter(entry=>entry.run===run).map(entry=>`${entry.provider}/${entry.model}`);
 const chainAt=(profile:string)=>fake.settings.profiles.get(profile)?.config?.fallback_providers;
-const endOf=(run:string)=>rows<{outcome:string}>(`select outcome from public.conversation_run_ends where run_id='${run}'`);
 const moves=()=>rows<{actor_kind:string,actor_id:string|null,details:Record<string,string>}>(
  `select actor_kind,actor_id,details from public.company_log where company_id='${company}' and action='fallback_model_used' order by id`);
 const moved={actor_kind:'system',actor_id:null,details:{from_provider:'openai-codex',from_model:'gpt-5.5',to_provider:'anthropic',to_model:'claude-sonnet-4-6'}};
-const replies=(run:string)=>rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where author='agent' and run_id='${run}'`)[0].n;
 async function send(page:Page,agent:string,text:string) {
  const before=fake.settings.runs.length;
  await page.goto(`/c/rs-learning/chat/${agent}`);
@@ -77,17 +75,19 @@ async function send(page:Page,agent:string,text:string) {
  await expect.poll(()=>fake.settings.runs.length,{timeout:30000}).toBe(before+1);
  return fake.settings.runs.at(-1)!.id;
 }
-// The chat's one out-of-access line, with nothing left waiting and no reply drawn.
-async function outOfAccess(page:Page,run:string) {
- await expect.poll(()=>endOf(run),{timeout:30000}).toEqual([{outcome:'no_access'}]);
+// The chat's one out-of-access line, with nothing left waiting and no reply drawn: the Run's end and its cause are the
+// Engine's (#883), read by the page.
+async function outOfAccess(page:Page) {
  const line=page.locator('.convo-status[role="alert"]');
  await expect(line).toHaveCount(1,{timeout:30000});
  await expect(line).toHaveAttribute('data-outcome','no-access');
  await expect(line).toContainText('Lead could not reply: every account it can use has run out of usage for now.');
  await expect(line.getByRole('link',{name:'Add an account or choose a fallback model in Providers'})).toBeVisible();
  await expect(page.locator('.thinking.convo-status')).toHaveCount(0);
- expect(replies(run)).toBe(0);
+ await expect(page.locator('.msg[data-author=agent]').filter({hasText:'Reply to:'})).toHaveCount(0);
 }
+// When the line says the usage resets, from its time's own stamp.
+const resetsAt=async(page:Page)=>Date.parse(String(await page.locator('.convo-status[role="alert"] time').getAttribute('datetime')));
 
 test('with None, a request that ran out of every ChatGPT account asks no other kind of provider and says so once', async({page},testInfo)=>{
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=models');
@@ -98,32 +98,26 @@ test('with None, a request that ran out of every ChatGPT account asks no other k
  expect(rows(`select 1 from public.company_fallback_models where company_id='${company}'`)).toEqual([]);
 
  const run=await send(page,lead,'Plan the launch');
- await outOfAccess(page,run);
+ await outOfAccess(page);
  // Both ChatGPT accounts were asked once each; Claude never was, and no fallback was walked.
  expect(callsOf(run)).toEqual(['openai-codex:c0dex1','openai-codex:c0dex2']);
  expect(fallbacksOf(run)).toEqual([]);
  expect(fake.settings.modelCalls.some(call=>call.provider==='anthropic')).toBe(false);
  expect(moves()).toEqual([]);
  // #642: the Engine's text named when the usage resets (in 120h 58m, as measured), so the line says so, in the reader's own zone.
- const resets=rows<{resets_at:string}>(`select resets_at from public.conversation_run_resets where run_id='${run}'`);
- expect(resets).toHaveLength(1);
- expect(Math.abs(Date.parse(resets[0].resets_at)-Date.now()-(120*60+58)*60_000)).toBeLessThan(5*60_000);
  await expect(page.locator('.convo-status[role="alert"] time')).toContainText('The usage resets on');
+ expect(Math.abs(await resetsAt(page)-Date.now()-(120*60+58)*60_000)).toBeLessThan(5*60_000);
  // #731: the Engine's pool marked both ChatGPT accounts exhausted, so the line names them as Settings › Providers does:
  // the first by its kind's name, the second by the name the Owner gave it.
- expect(rows<{provider:string,account:string,place:number}>(`select provider,account,place from public.conversation_run_ran_out where run_id='${run}' order by place`))
-  .toEqual([{provider:'openai-codex',account:'c0dex1',place:1},{provider:'openai-codex',account:'c0dex2',place:2}]);
  await expect(page.locator('.convo-status[role="alert"]')).toContainText('ChatGPT and Omar’s ChatGPT ran out of usage.');
  await testInfo.attach('chat-out-of-access',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  // #642: the next message, with both accounts already marked exhausted, makes no model call: the Engine fails it at once
  // with its usage-limit line, and the chat says the same, with when the usage resets (~121h), not "could not finish".
  const again=await send(page,lead,'Plan it again');
- await outOfAccess(page,again);
+ await outOfAccess(page);
  expect(callsOf(again)).toEqual([]);
- const later=rows<{resets_at:string}>(`select resets_at from public.conversation_run_resets where run_id='${again}'`);
- expect(Math.abs(Date.parse(later[0].resets_at)-Date.now()-121*3600_000)).toBeLessThan(5*60_000);
- const time=page.locator('.convo-status[role="alert"] time');
- await expect(time).toHaveAttribute('datetime',new Date(later[0].resets_at).toISOString());
+ await expect(page.locator('.convo-status[role="alert"] time')).toContainText('The usage resets on');
+ expect(Math.abs(await resetsAt(page)-Date.now()-121*3600_000)).toBeLessThan(5*60_000);
  await expect(page.locator('.convo-status[role="alert"]')).toContainText('ChatGPT and Omar’s ChatGPT ran out of usage.');
  await expect(page.getByText('Send the message again to retry.')).toHaveCount(0);
  await testInfo.attach('chat-out-of-usage-again',{body:await page.locator('.convo-status[role="alert"]').screenshot(),contentType:'image/png'});
@@ -148,11 +142,9 @@ test('with Claude Sonnet as the Fallback model, the same request completes on it
 
  const run=await send(page,lead,'Write the teaser');
  await expect(page.locator('.turn--agent').filter({hasText:'Reply to: Write the teaser'})).toHaveCount(1,{timeout:30000});
- await expect.poll(()=>endOf(run),{timeout:30000}).toEqual([{outcome:'completed'}]);
  // Only once the ChatGPT accounts had run out did the request move to Claude, through the fallback, once.
  onFallback(run);
  expect(fallbacksOf(run)).toEqual(['anthropic/claude-sonnet-4-6']);
- expect(replies(run)).toBe(1);
  await expect(page.locator('.convo-status[role="alert"]')).toHaveCount(0);
  await testInfo.attach('chat-fallback-reply',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  // The move is one entry in Activity, by gtmworks, from Lead's own model to the one that answered; the chat says nothing of it.
@@ -183,7 +175,7 @@ test('once the Fallback model runs out too, a request asks it once, never loops,
  fake.settings.outOfQuota.add('c1aude');
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
  const run=await send(page,lead,'Plan the webinar');
- await outOfAccess(page,run);
+ await outOfAccess(page);
  expect(callsOf(run)).toEqual(['anthropic:c1aude']);
  expect(fallbacksOf(run)).toEqual(['anthropic/claude-sonnet-4-6']);
  // A while later the request is still one Run, with one line and no reply.
