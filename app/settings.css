@@ -181,6 +181,11 @@
 .gw :is(.sov, .modal.team-dlg) .inv-open { justify-self: start; --od-icon-size: 16px; }
 .gw :is(.sov, .modal.team-dlg) .inv-sec .dp-label { padding-inline-start: 0; }
 .gw :is(.sov, .modal.team-dlg) .ta-pending { justify-self: start; margin-top: 4px; height: 20px; --od-icon-size: 12px; color: var(--gw-text-2); }
+/* A pending Invite link (#951): its label, Role, maker and end, and Cancel at the row's end. */
+.gw :is(.sov, .modal.team-dlg) .ta-link { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.gw :is(.sov, .modal.team-dlg) .ta-link .ta-who { min-width: 0; }
+.gw :is(.sov, .modal.team-dlg) .ta-link-act { display: inline-flex; align-items: center; gap: var(--s2); }
+.gw :is(.sov, .modal.team-dlg) .ta-link-act .link-btn { flex: none; }
 /* The invitation form: the button lines up with the fields under their labels. */
 .gw :is(.sov, .modal.team-dlg) .inv { display: grid; gap: var(--s2); }
 .gw :is(.sov, .modal.team-dlg) .inv select.set-input { appearance: auto; padding-inline-end: 6px; }

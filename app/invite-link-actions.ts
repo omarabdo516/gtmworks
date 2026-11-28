@@ -27,3 +27,18 @@ export const makeInviteLink=withActionLog('makeInviteLink',async function makeIn
  }
  return {link:inviteLink(appUrl('/').origin,secret)};
 });
+
+// An Administrator cancels a pending Invite link from the Team table (#951): cancel_invite_link checks the Administrator
+// again, marks only a link still unused and not cancelled, and writes the Company log. A link already used or cancelled
+// changes nothing, so a second press is not an error. The answer is an error's catalogue key, or nothing.
+export const cancelInviteLink=withActionLog('cancelInviteLink',async function cancelInviteLink(company:string,link:string):Promise<string> {
+ const db=await supabase();
+ if(!await actionAllowed(db,'cancelInviteLink',company)) return 'inviteLinkCancelFailed';
+ if(!uuid.test(link)) return 'inviteLinkCancelFailed';
+ const {error}=await db.rpc('cancel_invite_link',{c:company,link});
+ if(error) {
+  logActionFailure('cancelInviteLink',{code:error.code,message:'cancel_invite_link refused'});
+  return 'inviteLinkCancelFailed';
+ }
+ return '';
+});

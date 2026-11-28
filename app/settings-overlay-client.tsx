@@ -8,10 +8,10 @@ import { saveLanguage } from './language-actions';
 import AccountChoicesView from './account-choices-view';
 import { setAgentVisible, setInvitationAgentVisible } from './agent-visibility-actions';
 import { inviteMember } from './invite-actions';
-import { makeInviteLink } from './invite-link-actions';
+import { makeInviteLink, cancelInviteLink } from './invite-link-actions';
 import { InviteLinkSection } from './invite-link-section';
 import { InviteSection, type InviteRole } from './invite-section';
-import { TeamTable, type TeamAgent, type TeamInvitation, type TeamMember } from './team-table';
+import { TeamTable, PendingLinks, type TeamAgent, type TeamInvitation, type TeamLink, type TeamMember } from './team-table';
 import { useSaidWhen } from './agent-made';
 import { toast } from './toast';
 
@@ -85,17 +85,48 @@ export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:s
  return <InviteSection mode={mode} roles={roles} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 
-// "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action.
+// "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action. The page
+// reads the section again after a successful make, so the new link joins the pending list above it at once (#951).
 export function InviteLink({company,agents}:{company:string,agents:TeamAgent[]}) {
- return <InviteLinkSection agents={agents.filter(agent=>!agent.is_default)} make={(label,role,chosen)=>makeInviteLink(company,label,role,chosen)}/>;
+ const router=useRouter();
+ const make=async(label:string,role:string,chosen:string[])=>{
+  const answer=await makeInviteLink(company,label,role,chosen);
+  if(answer.link) router.refresh();
+  return answer;
+ };
+ return <InviteLinkSection agents={agents.filter(agent=>!agent.is_default)} make={make}/>;
+}
+
+// The pending Invite links of a Company worked alone (#951), cancelled through the Administrator's action; the page reads
+// the section again after a cancel, so the row leaves at once.
+export function PendingInviteLinks({company,links}:{company:string,links:TeamLink[]}) {
+ const router=useRouter();
+ const cancelLink=async(link:string)=>{
+  const failure=await cancelInviteLink(company,link);
+  if(!failure) router.refresh();
+  return failure;
+ };
+ return <PendingLinks links={links} cancelLink={cancelLink}/>;
 }
 
 // The Team table (#187), with its switches and its Owner invite bound to the server actions that check the Role again.
-// The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx).
-export function SettingsTeamTable({company,slug,members,invitations,agents,allowed,invitedAllowed,userId,owner}:{company:string,slug:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean}) {
+// The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx). A pending Invite link (#951) is
+// made and cancelled through the Administrator's actions; the page reads the table again after either.
+export function SettingsTeamTable({company,slug,members,invitations,links,agents,allowed,invitedAllowed,userId,owner}:{company:string,slug:string,members:TeamMember[],invitations:TeamInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean}) {
+ const router=useRouter();
  const save=(c:string,target:{member:string}|{invitation:string},agent:string,visible:boolean)=>'member' in target?setAgentVisible(c,target.member,agent,visible):setInvitationAgentVisible(c,target.invitation,agent,visible);
- return <TeamTable company={company} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} hint={false}
-  save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)} makeLink={(label,role,chosen)=>makeInviteLink(company,label,role,chosen)}/>;
+ const makeLink=async(label:string,role:string,chosen:string[])=>{
+  const answer=await makeInviteLink(company,label,role,chosen);
+  if(answer.link) router.refresh();
+  return answer;
+ };
+ const cancelLink=async(link:string)=>{
+  const failure=await cancelInviteLink(company,link);
+  if(!failure) router.refresh();
+  return failure;
+ };
+ return <TeamTable company={company} members={members} invitations={invitations} links={links} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} hint={false}
+  save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)} makeLink={makeLink} cancelLink={cancelLink}/>;
 }
 
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the

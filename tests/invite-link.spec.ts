@@ -2,6 +2,7 @@ import { test, expect, freshSeed, laneRows, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { signIn, openNavigation } from './sign-in';
+import type { Locator } from '@playwright/test';
 
 // #950, ADR 0019: an Administrator makes an Invite link in the Team dialog with the Person's name, a Role and the
 // Agents they will see, and copies it once. Opening the link, as a chat app's preview does, uses nothing; the Person
@@ -46,6 +47,17 @@ async function join(page:Page,person:typeof joiner) {
  await page.getByLabel('Confirm password').fill(person.password);
  await page.getByRole('button',{name:'Join and sign in'}).click();
 }
+async function makeLink(page:Page,dialog:Locator,label:string,role:string,agent:string) {
+ await dialog.getByRole('button',{name:'Make an invite link'}).click();
+ await page.locator('#lnk-label').fill(label);
+ await page.locator('#lnk-role').selectOption(role);
+ await dialog.getByRole('switch',{name:agent,exact:true}).click();
+ await dialog.getByRole('button',{name:'Make the link'}).click();
+ const field=dialog.getByLabel(`Invite link for ${label}`);
+ await expect(field).toHaveValue(/\/join#code=[a-f0-9]{64}$/);
+ return field.inputValue();
+}
+const refusedPage='This invite link can’t be used any more. Ask your Administrator for a new one.';
 
 test('the Administrator makes an Invite link, a preview leaves it unused, and the new Person joins once, seeing only the chosen Agents',async({page,browser,context})=>{
  await context.grantPermissions(['clipboard-read','clipboard-write']);
@@ -115,4 +127,112 @@ test('two sends of one link at the same moment: one Person joins and the other i
  expect(answers.map(answer=>answer.status()).sort()).toEqual([303,410]);
  expect(laneRows(`select count(*)::int n from auth.users where email like 'racer-%-950@example.test'`)).toEqual([{n:1}]);
  expect(laneRows(`select count(*)::int n from public.members m join auth.users u on u.id=m.person_id where m.company_id='${company}' and u.email like 'racer-%-950@example.test'`)).toEqual([{n:1}]);
+});
+
+test('pending links list their label, Role, maker and end; Cancel stops one at once; a cancelled or ended link opens the clear page; a new link for the same Person after one is cancelled joins',async({page,browser})=>{
+ const mona={name:'Mona Adel',email:'mona-951@example.test',password:'mona-adel-password'};
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const dialog=await openTeam(page);
+ // The table starts with no link waiting: the links the earlier tests made are used.
+ await expect(dialog.getByText('Invite link',{exact:true})).toHaveCount(0);
+ const first=await makeLink(page,dialog,'Mona Adel','viewer','SEO');
+ // The made panel closes, and the table lists the link with its label, Role, maker and end.
+ await dialog.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ const row=dialog.getByRole('row').filter({hasText:'Mona Adel'});
+ await expect(row).toHaveCount(1);
+ await expect(row).toContainText('Viewer');
+ await expect(row).toContainText('Made by عمر');
+ await expect(row).toContainText(/Ends \w{3} \d{1,2}/);
+ await expect(row.getByText('Invite link',{exact:true})).toBeVisible();
+ // Cancel stops it at once, takes it out of the table and is written in the Company log.
+ await row.getByRole('button',{name:'Cancel Mona Adel’s invite link'}).click();
+ await expect(page.getByText('The invite link for Mona Adel was cancelled.')).toBeVisible();
+ await expect(dialog.getByRole('row').filter({hasText:'Mona Adel'})).toHaveCount(0);
+ expect(laneRows(`select count(*)::int n from public.company_links where label='Mona Adel' and cancelled_at is not null and used_at is null`)).toEqual([{n:1}]);
+ expect(laneRows(`select actor_id,details->>'label' label,details->>'role' role from public.company_log where action='invite_link_cancelled'`)).toEqual([{actor_id:omar,label:'Mona Adel',role:'viewer'}]);
+ // The Person holding it is told what to do, and a send is refused without making an account.
+ const secret=first.split('#code=')[1];
+ const dead=await (await browser.newContext()).newPage();
+ await dead.goto(first);
+ await expect(dead.getByRole('main').getByRole('alert')).toHaveText(refusedPage);
+ await expect(dead.getByLabel('Your name')).toHaveCount(0);
+ const refused=await dead.request.post('/join/submit',{form:{code:secret,language:'en',name:'Mona',email:`late-${mona.email}`,password:mona.password,confirm:mona.password},maxRedirects:0});
+ expect(refused.status()).toBe(410);
+ expect(laneRows(`select count(*)::int n from auth.users where email='late-${mona.email}'`)).toEqual([{n:0}]);
+ // A link past its 7 days is refused the same way, its page saying so too.
+ const ended=randomBytes(32).toString('hex');
+ query(`insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,created_at,ends_at) values ('${company}','invite','${hash(ended)}','${omar}','Mona Adel','viewer',now()-interval '8 days',now()-interval '1 day')`);
+ await dead.goto(`${new URL(first).origin}/join#code=${ended}`);
+ await expect(dead.getByRole('main').getByRole('alert')).toHaveText(refusedPage);
+ await expect(dead.getByLabel('Your name')).toHaveCount(0);
+ const late=await dead.request.post('/join/submit',{form:{code:ended,language:'en',name:'Mona',email:`late-${mona.email}`,password:mona.password,confirm:mona.password},maxRedirects:0});
+ expect(late.status()).toBe(410);
+ expect(laneRows(`select count(*)::int n from auth.users where email='late-${mona.email}'`)).toEqual([{n:0}]);
+ // The Administrator makes a new link for the same Person after the cancelled one, and it works.
+ const second=await makeLink(page,dialog,'Mona Adel','viewer','SEO');
+ expect(second).not.toBe(first);
+ await dialog.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ await expect(dialog.getByRole('row').filter({hasText:'Mona Adel'})).toHaveCount(1);
+ const fresh=await browser.newContext();
+ const person=await fresh.newPage();
+ await person.goto(second);
+ await expect(person.getByText('You’re joining RS Learning as Viewer.')).toBeVisible();
+ await join(person,mona);
+ await expect(person).toHaveURL(/\/c\/rs-learning\/home$/);
+ await expect(names(person)).toHaveText(['Lead','SEO']);
+ await fresh.close();
+ // The used link leaves the list and the Person shows as a Member.
+ await dialog.getByRole('button',{name:'Done'}).click();
+ const again=await openTeam(page);
+ const member=again.getByRole('row').filter({hasText:'Mona Adel'});
+ await expect(member).toHaveCount(1);
+ await expect(member).toContainText('Viewer');
+ await expect(member.getByText('Invite link',{exact:true})).toHaveCount(0);
+ expect(laneRows(`select m.role,p.name from public.members m join public.people p on p.id=m.person_id join auth.users u on u.id=m.person_id where m.company_id='${company}' and u.email='${mona.email}'`)).toMatchObject([{role:'viewer',name:'Mona Adel'}]);
+ expect(laneRows(`select used_at is not null used from public.company_links where secret_hash='${hash(second.split('#code=')[1])}'`)).toEqual([{used:true}]);
+});
+
+test('a Company worked alone lists its pending Invite link in the Team dialog and in Members settings, cancels it in both, and a link made in settings joins the list at once',async({page})=>{
+ const soloCompany='10000000-0000-0000-0000-000000000002', solo='rs-consultations';
+ query(`do $$ begin
+   update public.companies set work_mode='alone' where id='${soloCompany}';
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile)
+    values ('${id(20)}','${soloCompany}','${id(21)}','SEO','Writes for search.',false,'team-seo') on conflict (id) do nothing;
+  end $$;`);
+ await signIn(page,'omar@example.com',`/c/${solo}/home`);
+ const dialog=await openTeam(page);
+ const first=await makeLink(page,dialog,'Solo Person','viewer','SEO');
+ expect(first).toMatch(/\/join#code=[a-f0-9]{64}$/);
+ await dialog.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ const list=dialog.getByRole('list',{name:'Invite links'});
+ await expect(list).toHaveCount(1);
+ await expect(list).toContainText('Solo Person');
+ await expect(list).toContainText('Made by عمر');
+ await list.getByRole('button',{name:'Cancel Solo Person’s invite link'}).click();
+ await expect(page.getByText('The invite link for Solo Person was cancelled.')).toBeVisible();
+ await expect(dialog.getByRole('list',{name:'Invite links'})).toHaveCount(0);
+ // Members settings, worked alone, shows the same list and cancels the link there too.
+ await makeLink(page,dialog,'Solo Person','viewer','SEO');
+ await dialog.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ await page.goto(`/c/${solo}/settings?section=members`);
+ const settingsList=page.getByRole('list',{name:'Invite links'});
+ await expect(settingsList).toHaveCount(1);
+ await expect(settingsList).toContainText('Solo Person');
+ await settingsList.getByRole('button',{name:'Cancel Solo Person’s invite link'}).click();
+ await expect(page.getByText('The invite link for Solo Person was cancelled.')).toBeVisible();
+ await expect(page.getByRole('list',{name:'Invite links'})).toHaveCount(0);
+ // A link made right here in Members settings joins the pending list above it at once.
+ await page.getByRole('button',{name:'Make an invite link'}).click();
+ await page.locator('#lnk-label').fill('Settings Person');
+ await page.locator('#lnk-role').selectOption('viewer');
+ await page.getByRole('switch',{name:'SEO',exact:true}).click();
+ await page.getByRole('button',{name:'Make the link'}).click();
+ await expect(page.getByLabel('Invite link for Settings Person')).toHaveValue(/\/join#code=[a-f0-9]{64}$/);
+ await page.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ const made=page.getByRole('list',{name:'Invite links'});
+ await expect(made).toContainText('Settings Person');
+ await made.getByRole('button',{name:'Cancel Settings Person’s invite link'}).click();
+ await expect(page.getByText('The invite link for Settings Person was cancelled.')).toBeVisible();
+ await expect(page.getByRole('list',{name:'Invite links'})).toHaveCount(0);
+ expect(laneRows(`select count(*)::int n from public.company_links where company_id='${soloCompany}' and label in ('Solo Person','Settings Person') and cancelled_at is not null and used_at is null`)).toEqual([{n:3}]);
 });
