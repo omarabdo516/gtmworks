@@ -12,6 +12,7 @@ import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepMainAgentPlugins } from '../lib/main-agent-plugin.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
 import { keepKanbanCards } from '../lib/kanban-card-rows.mjs';
+import { keepConversationRows } from '../lib/conversation-drift.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 import { keepProviderAccounts } from '../lib/provider-switches.mjs';
 import { keepFallbackModels } from '../lib/fallback-model.mjs';
@@ -60,6 +61,9 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // A row kept beside a Card whose task is gone from its Company's Engine is forgotten by the slow check for drift, every
  // five minutes and never on a page read (#836, ADR 0031 item 4): any install whose Companies have Engines.
  loop('Card rows',()=>keepKanbanCards(db,{}),60000),
+ // A Conversation's row whose session is gone from its Engine, as when its Agent was deleted, is forgotten by the same
+ // slow check for drift, every five minutes (#881).
+ loop('Conversation rows',()=>keepConversationRows(db,{}),60000),
  // gtmworks's plugin of each main Agent's profile, whose tool makes an Agent (#884): written when the profile lacks this
  // release's, and its Engine restarted once to load it (lib/main-agent-plugin.mjs).
  selfHosted&&loop('Main Agent plugin',()=>keepMainAgentPlugins(db,{kept:mainAgentPlugins}),15000),

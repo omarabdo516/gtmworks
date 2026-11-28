@@ -14,6 +14,7 @@ select fn,body ~ '\yarchived_at\y' as asks from source where body ~ 'public\.cha
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('asks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'asks','lists current channels only, or archived ones only, or archives, restores or refuses by archived_at' from unnest(array[
+  'public.channel_list(uuid,boolean)',
   'public.channel_sidebar(uuid)','public.archived_channels(uuid)','public.channel_archive_stops(uuid)','public.archive_channel(uuid,uuid)',
   'public.restore_channel(uuid,uuid)','public.refuse_archived_channel_message()','public.keep_archived_channel_people()','public.set_channel_person(uuid,uuid,boolean)',
   'public.stop_named_channel_run(public.channel_runs,text)',

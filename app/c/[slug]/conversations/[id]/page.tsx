@@ -11,6 +11,7 @@ import ConversationView, { ConversationLoaded, ConversationNotRead, EngineLoaded
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
+import { sessionFor } from '@/lib/conversation-list';
 import { conversationRecord } from '@/lib/conversation-record';
 import { conversationSteps, type ConversationSteps } from '@/lib/conversation-steps';
 import { agentAppStates } from '@/lib/company-app-items';
@@ -64,7 +65,8 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
  // A first message that still waits for its Run (#764) names the chat as well, with the files sent with it.
- const [{data:stored},{data:waiting},{data:agent},roleRead,{count:storedCount}]=await Promise.all([
+ // The session's own title and archived mark (#881), from the lists' memory, else one bounded read of its Agent's list.
+ const [{data:stored},{data:waiting},{data:agent},roleRead,{count:storedCount},held]=await Promise.all([
   db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
   db.from('conversation_queued_turns').select('message,send_key').eq('conversation_id',id).order('queued_at').limit(1).maybeSingle(),
   agentRead,
@@ -73,6 +75,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
   // The old record's row count: a Conversation it still holds opens as it always has, and the Engine's read (#875) is
   // for one whose messages are the Engine's alone — a Conversation made after this read, as #876 sends them.
   db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id),
+  sessionFor(db,company.id,conversation.agent_id,conversation.hermes_session_id??null).catch(()=>null),
  ]);
  const person=roleRead?.person, role=roleRead?.role||'', writer=!!roleRead?.canWrite;
  // A Conversation whose own record holds nothing and whose Engine session exists reads its messages from the Engine on
@@ -92,11 +95,16 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  }
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
- const title=conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
+ // The title and the archived mark are the session's own (#881), as the lists' last read of the Engine holds them; a
+ // session it holds nothing of yet is named as the old record names it, by its first message.
+ const named=held?.title||held?.preview;
+ const sessionTitle=held?.title||(conversation.good_morning_day?null:named);
+ const title=sessionTitle||conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
+ const archived=held?held.archived:!!conversation.archived_at;
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={engine} open={!!conversation.open_runs?.length}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} titled={!!held?.title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={archived}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={engine} open={!!conversation.open_runs?.length}/></ConversationView></main>
  </Page>;
 }
 

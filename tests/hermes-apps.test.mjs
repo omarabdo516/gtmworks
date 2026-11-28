@@ -9,7 +9,7 @@ import { fakeHermes } from './fake-hermes.mjs';
 
 // The app driver (#30, #458) against a fake of the pinned release's MCP routes: the catalogued apps, a ready-made remote
 // server, a server the Owner added, the three sign-in kinds and removal. No config it writes carries a tool filter, and
-// nothing it answers carries the Engine's text, a path or a token.
+// no answer carries the Engine's text, a path or a token, but the reason a failed Test gives, redacted by the Engine (#947).
 const company='10000000-0000-0000-0000-000000000002';
 const back=key=>`http://127.0.0.1:3000/api/apps/callback/${key}`;
 async function companyEngine() {
@@ -133,16 +133,35 @@ test('a ready-made remote server is added through the Engine’s server route, s
  } finally { await fake.close(); }
 });
 
-test('Test answers the tools the server lists, by name only', async () => {
+test('Test answers the tools the server lists, by name only, and the Engine’s own reason when it does not answer', async () => {
  const {fake,target}=await companyEngine();
  try {
   fake.settings.appTools['meta-ads']=['get_campaigns','create_campaign'];
   fake.settings.appTokens.add(`${target.profile}:meta-ads`);
   await prepareApp(target,'meta-ads',back('meta-ads'));
-  assert.deepEqual(await testServer(target,'meta-ads'),{state:'connected',tools:['get_campaigns','create_campaign']});
-  fake.settings.appsUnreachable.add('meta-ads');
-  assert.deepEqual(await testServer(target,'meta-ads'),{state:'attention',tools:[]});
+  const listed=await testServer(target,'meta-ads');
+  assert.deepEqual(listed,{state:'connected',tools:['get_campaigns','create_campaign']});
+  assert.equal('reason' in listed,false,'an answer that connected carries no reason');
+  fake.settings.appErrors['meta-ads']='Unsupported MCP-Protocol-Version: 2025-11-25';
+  assert.deepEqual(await testServer(target,'meta-ads'),{state:'attention',tools:[],reason:'Unsupported MCP-Protocol-Version: 2025-11-25'});
   assert.deepEqual(await testServer(target,'not a key'),{state:'failed',tools:null});
+ } finally { await fake.close(); }
+});
+
+test('a reason longer than a card shows is cut between words, and empty words leave no reason', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  await prepareApp(target,'meta-ads',back('meta-ads'));
+  fake.settings.appErrors['meta-ads']='Unsupported MCP-Protocol-Version: 2025-11-25. '+'detail '.repeat(200);
+  const tested=await testServer(target,'meta-ads');
+  assert.equal(tested.state,'attention');
+  assert.match(tested.reason,/^Unsupported MCP-Protocol-Version: 2025-11-25\. detail/);
+  assert.ok(tested.reason.length<=200,`${tested.reason.length} characters`);
+  assert.equal(tested.reason,tested.reason.trim());
+  fake.settings.appErrors['meta-ads']='   ';
+  assert.deepEqual(await testServer(target,'meta-ads'),{state:'attention',tools:[]},'nothing to say leaves no reason line');
+  fake.settings.appErrors['meta-ads']='x'.repeat(500);
+  assert.deepEqual(await testServer(target,'meta-ads'),{state:'attention',tools:[]},'a word longer than the card is dropped whole, never cut to its prefix');
  } finally { await fake.close(); }
 });
 

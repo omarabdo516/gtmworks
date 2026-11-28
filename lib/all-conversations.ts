@@ -1,10 +1,12 @@
+import 'server-only';
 import type { supabase } from './supabase';
-import { conversationTitle } from './conversation-title.mjs';
+import { personConversations, type PersonConversation } from './conversation-list';
+import { searchFold } from './arabic-search.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Translate=(key:string,...values:unknown[])=>string;
 
-// All conversations (#673): the reader's own Conversations and the channels they are in, newest message first. `tab`
+// All conversations (#673): the reader's own Conversations and the channels they are in, newest activity first. `tab`
 // is which list: `current`, or `archived` (#674).
 export type ConversationTab='current'|'archived';
 export type ListedChat={kind:'conversation'|'channel',id:string,title:string,line:string,at:string,face:{id:string,name:string}|null};
@@ -13,30 +15,46 @@ export type ConversationPage={items:ListedChat[],next:ConversationCursor|null};
 export type ConversationCounts={current:number,archived:number};
 const conversationPageSize=50;
 
-type Row={kind:'conversation'|'channel',id:string,agent_id:string|null,agent_name:string|null,title:string|null,good_morning_day:string|null,channel_kind:string|null,last_at:string,last_body:string|null};
+type ChannelRow={id:string,kind:string,name:string|null,last_at:string,last_body:string|null};
+const oneLine=(text:string|null|undefined)=>(text||'').replace(/\s+/g,' ').trim();
 
-// One page, read by conversation_list as the signed-in person: the database decides what is theirs and does the title
-// search (search_fold, as lib/arabic-search.mjs reads it), so a search reads every title, not only the rows shown. A
-// morning's Conversation (#183) and the general channel are named in the reader's language, here and in the search.
-// A failed read is null.
-export async function conversationPage(db:Database,company:string,{tab='current',q='',after=null}:{tab?:ConversationTab,q?:string,after?:ConversationCursor|null},t:Translate,language:string):Promise<ConversationPage|null> {
- const general=t('shellGeneralChannel');
- const {data,error}=await db.rpc('conversation_list',{c:company,q:q.trim()||null,archived:tab==='archived',after_at:after?.at??null,after_id:after?.id??null,
-  lim:conversationPageSize+1,morning:t('goodMorningTitle',''),general});
+// The channels the reader is in, current or archived, with their newest message (channel_list); null when unread.
+// Channels keep their own record (ADR 0033 item 3).
+async function channelsOf(db:Database,company:string,archived:boolean,general:string):Promise<ListedChat[]|null> {
+ const {data,error}=await db.rpc('channel_list',{c:company,archived});
  if(error) return null;
- const rows=(data||[]) as Row[];
- const shown=rows.slice(0,conversationPageSize);
- const items=shown.map((row):ListedChat=>({kind:row.kind,id:row.id,at:row.last_at,line:(row.last_body||'').replace(/\s+/g,' ').trim(),
-  title:row.kind==='channel'?(row.channel_kind==='team'&&row.title?row.title:general):conversationTitle({morningDay:row.good_morning_day,body:row.title,agent:row.agent_name||''},t,language),
-  face:row.kind==='conversation'?{id:row.agent_id||'',name:row.agent_name||''}:null}));
- const last=shown.at(-1);
- return {items,next:rows.length>conversationPageSize&&last?{at:last.last_at,id:last.id}:null};
+ return ((data||[]) as ChannelRow[]).map(row=>({kind:'channel',id:row.id,title:row.kind==='team'&&row.name?row.name:general,line:oneLine(row.last_body),at:new Date(row.last_at).toISOString(),face:null}));
+}
+const listedOf=(chat:PersonConversation):ListedChat=>({kind:'conversation',id:chat.id,title:chat.title,line:oneLine(chat.line),at:chat.at,face:{id:chat.agent,name:chat.agentName}});
+const newestFirst=(a:ListedChat,b:ListedChat)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id);
+
+// The whole of one list: the person's Conversations from their rows and their sessions in the Engine
+// (lib/conversation-list.ts) and their channels, narrowed by a search of titles and previews in the reader's own
+// folding (lib/arabic-search.mjs). Null when either could not be read.
+async function listOf(db:Database,company:string,tab:ConversationTab,q:string,t:Translate,language:string):Promise<ListedChat[]|null> {
+ const archived=tab==='archived';
+ const [conversations,channels]=await Promise.all([personConversations(db,company,t,language).catch(()=>null),channelsOf(db,company,archived,t('shellGeneralChannel'))]);
+ if(!conversations||!channels) return null;
+ const wanted=searchFold(q);
+ const found=(chat:ListedChat)=>!wanted||searchFold(chat.title).includes(wanted)||chat.kind==='conversation'&&searchFold(chat.line).includes(wanted);
+ return [...conversations.filter(chat=>chat.archived===archived).map(listedOf),...channels].filter(found).sort(newestFirst);
+}
+
+// One page of fifty, the next after `after`. A failed read is null.
+export async function conversationPage(db:Database,company:string,{tab='current',q='',after=null}:{tab?:ConversationTab,q?:string,after?:ConversationCursor|null},t:Translate,language:string):Promise<ConversationPage|null> {
+ const list=await listOf(db,company,tab,q,t,language);
+ if(!list) return null;
+ const from=after?list.findIndex(chat=>newestFirst(chat,{kind:'channel',id:after.id,at:after.at,title:'',line:'',face:null})>0):0;
+ const rest=from<0?[]:list.slice(from);
+ const items=rest.slice(0,conversationPageSize); const last=items.at(-1);
+ return {items,next:rest.length>conversationPageSize&&last?{at:last.at,id:last.id}:null};
 }
 
 // The two lists' counts, or null when they could not be read: the toolbar then shows none rather than a zero.
-export async function conversationCounts(db:Database,company:string):Promise<ConversationCounts|null> {
- const {data,error}=await db.rpc('conversation_counts',{c:company});
- if(error||!data) return null;
- const counts=data as Partial<ConversationCounts>;
- return {current:counts.current??0,archived:counts.archived??0};
+export async function conversationCounts(db:Database,company:string,t:Translate,language:string):Promise<ConversationCounts|null> {
+ const general=t('shellGeneralChannel');
+ const [conversations,current,archived]=await Promise.all([personConversations(db,company,t,language).catch(()=>null),channelsOf(db,company,false,general),channelsOf(db,company,true,general)]);
+ if(!conversations||!current||!archived) return null;
+ const shelved=conversations.filter(chat=>chat.archived).length;
+ return {current:conversations.length-shelved+current.length,archived:shelved+archived.length};
 }
