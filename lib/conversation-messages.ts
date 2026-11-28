@@ -1,10 +1,12 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { supabase } from './supabase';
-import type { ConversationMessage, RunStep } from './conversations';
+import type { ConversationMessage, MessageFile, RunStep } from './conversations';
 import type { SessionMessage, SessionUsage } from './engine.mjs';
 import { agentEngine, companyEngine, seenAgents, stepsBetween, takeToolCalls } from './engine/handle.mjs';
-import { takeFileTags } from './media-tags.mjs';
+import { fileTagName, takeFileTags } from './media-tags.mjs';
+import { ownWorkFile } from './reply-files.mjs';
+import { pictureType } from './file-preview.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null};
@@ -39,20 +41,47 @@ const startsTurn=(message?:SessionMessage)=>message?.role==='user'&&(message.dis
 // An assistant message that made a call is no reply, even when it carries narrative words: the Engine marks it
 // finish_reason tool_calls, and the turn's reply comes after its results.
 const toolTurn=(message?:SessionMessage)=>message?.role==='assistant'&&(message.finish_reason==='tool_calls'||(Array.isArray(message.tool_calls)&&message.tool_calls.length>0&&message.finish_reason!=='stop'));
-// The words of an Agent's stored message as a person reads them: gtmworks's own tool blocks are taken out as the Run
-// record's reply takes them (lib/engine/runs.mjs takeToolCalls), and a MEDIA: tag is taken out with no file named until
-// #880 reads the Engine's files. An image part is asked for but not drawn yet either.
+// The words of a stored message as a person reads them, and what it carries (#880). An Agent's: gtmworks's own tool
+// blocks taken out as the Run record's reply takes them (lib/engine/runs.mjs takeToolCalls), and each MEDIA: tag (ADR
+// 0028) taken out and kept as the path of a file it names, each path once. A person's: the page holds no image (lib/
+// engine/sessions.mjs readSessionMessages), only the `[image]` line the Engine writes for each, at the end of the words
+// as the Run's input put them after the text; those lines are counted and taken out.
+// shortcut: a person who ends their own words with a line that is exactly `[image]` reads one image more, which then
+// cannot be opened; upgrade by reading the images' count from the Engine if it ever says it.
+const imageLine='[image]';
 /** @param {SessionMessage} [message] */
-function replyText(message?:SessionMessage):string {
- const content=message?.role==='assistant'?takeToolCalls(textOf(message.content)).reply:textOf(message?.content);
- return message?.role==='assistant'?takeFileTags(content).body:content;
+function messageParts(message?:SessionMessage):{body:string,paths:string[],images:number} {
+ if(message?.role==='assistant') { const {body,paths}=takeFileTags(takeToolCalls(textOf(message.content)).reply); return {body,paths:[...new Set(paths)],images:0}; }
+ const lines=textOf(message?.content).split('\n'); let images=0;
+ while(lines.length&&lines.at(-1)===imageLine) { lines.pop(); images++; }
+ return {body:images?lines.join('\n').trimEnd():textOf(message?.content),paths:[],images};
+}
+const replyText=(message?:SessionMessage)=>messageParts(message).body;
+// Whether an Agent's message is a reply a person reads: words, or a file it names.
+const hasReply=(message?:SessionMessage)=>{ const {body,paths}=messageParts(message); return !!body.trim()||paths.length>0; };
+// A Conversation's file (#880) is told by the message it is in and its place there: `i<message>-<n>` a person's n-th
+// image, `f<message>-<n>` the n-th file the Agent's reply names. The address names no path; each read finds the message
+// again in the Engine's session and reads the file from there.
+const fileKey=/^([if])(\d{1,15})-(\d{1,2})$/;
+// A file an Agent named is read from its own work folder in the Company's work sandbox (lib/reply-files.mjs
+// ownWorkFile): one a tag names anywhere else is told as not attached, by its name, and never read.
+/** @param {SessionMessage} message @param {number} id @param {string} profile */
+function namedFiles(message:SessionMessage,id:number,profile:string):{files:MessageFile[],missed:string[]} {
+ const {paths,images}=messageParts(message);
+ const files:MessageFile[]=Array.from({length:images},(_,n)=>({id:n,name:'',image:true,key:`i${id}-${n}`}));
+ const missed:string[]=[];
+ paths.forEach((path,n)=>{ const name=fileTagName(path);
+  if(!ownWorkFile(path,profile)) { missed.push(name); return; }
+  files.push({id:n,name,...(pictureType(name)?{image:true as const}:{}),key:`f${id}-${n}`});
+ });
+ return {files,missed};
 }
 // The page's messages as the transcript draws them (#875): the person's words as theirs, one reply for each turn — its
 // last assistant message with words, the interim narration dropped — with the tool calls that turn made beside it (never
 // matched by time), and the Engine's compaction summary as the Engine's. Tool results are read for their step's end and
 // drawn under the reply. `prefix` is the page before, when the page starts in the middle of a turn.
-/** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {SessionMessage[]} suffix @param {string} agentName */
-function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:SessionMessage[],agentName:string):PageMessage[] {
+/** @param {SessionMessage[]} page @param {SessionMessage[]} prefix @param {SessionMessage[]} suffix @param {string} agentName @param {string} profile */
+function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:SessionMessage[],agentName:string,profile:string):PageMessage[] {
  const all=[...prefix,...page,...suffix];
  const shown:PageMessage[]=[];
  // The turn a message belongs to, by its first message's own key, so a page read later names the same turn.
@@ -63,7 +92,7 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:Sessi
  let turn=0;
  for(let index=0;index<all.length;index++) {
   if(startsTurn(all[index])) turn=index;
-  if(all[index]?.role==='assistant'&&!toolTurn(all[index])&&replyText(all[index]).trim()) lastText.set(turn,index);
+  if(all[index]?.role==='assistant'&&!toolTurn(all[index])&&hasReply(all[index])) lastText.set(turn,index);
  }
  turn=0;
  for(let index=0;index<prefix.length;index++) if(startsTurn(all[index])) turn=index;
@@ -74,12 +103,15 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:Sessi
   if(message?.role==='user') {
    if(summary.test(body)) { shown.push({id:idOf(message),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary',turn:turnKey(turn)}); continue; }
    if(message.display_kind==='hidden') continue;
-   if(body.trim()) shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn)});
+   const {files}=namedFiles(message,idOf(message),profile);
+   if(body.trim()||files.length) shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn),...(files.length?{files}:{})});
    continue;
   }
-  if(message?.role==='assistant'&&lastText.get(turn)===index&&body.trim()) {
+  if(message?.role==='assistant'&&lastText.get(turn)===index&&hasReply(message)) {
    const steps=stepsBetween(all,turn,index);
-   shown.push({id:idOf(message),author:'agent',author_name:agentName,body,created_at:atOf(message),turn:turnKey(turn),steps:{list:steps?.list??[],seconds:steps?.seconds??null}});
+   const {files,missed}=namedFiles(message,idOf(message),profile);
+   shown.push({id:idOf(message),author:'agent',author_name:agentName,body,created_at:atOf(message),turn:turnKey(turn),steps:{list:steps?.list??[],seconds:steps?.seconds??null},
+    ...(files.length?{files}:{}),...(missed.length?{missed}:{})});
   }
  }
  return shown;
@@ -118,7 +150,11 @@ export async function conversationMessagesPage(db:Database,company:string,found:
  if(target.state!=='found') return {state:'unreachable'};
  const read=await target.engine.sessions.messages(found.hermes_session_id,{offset,limit});
  if(read.state!=='found') return {state:read.state};
- const messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name);
+ let messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name,target.engine.profile);
+ // A file an Agent named is listed whether or not its work sandbox runs; while it is stopped the file says it cannot be
+ // read now. The sandbox is asked once, and only for a page that names one.
+ if(messages.some(message=>message.author==='agent'&&message.files?.length)&&(await target.engine.files.sandbox().catch(()=>null))?.state!=='running')
+  messages=messages.map(message=>message.author==='agent'&&message.files?{...message,files:message.files.map(file=>({...file,state:'notNow' as const}))}:message);
  const made=messages.some(message=>message.steps?.list.some(step=>step.card));
  let named=messages as ConversationMessage[];
  if(made) {
@@ -135,4 +171,37 @@ export async function conversationUsage(db:Database,company:string,found:Found):
  if(!found.agent_id||!found.hermes_session_id) return null;
  const target=await agentEngine(db,{company,agent:found.agent_id});
  return target.state==='found'?target.engine.sessions.tokenUse(found.hermes_session_id):null;
+}
+
+// One file of a Conversation (#880), by its key, read from the Engine each time and kept nowhere: a person's image from
+// the message in the session that carried it to the Agent, or a file the Agent's reply names from that Agent's own work
+// folder in the Company's work sandbox, through the Engine's file routes. Only the Conversation's own person reads it
+// (the row is read with their session and named as theirs). `notNow` is an Engine or a work sandbox that cannot be read
+// now, never a file that is gone.
+export async function readConversationFile(db:Database,{company,person,conversation,file}:{company:string,person:string,conversation:string,file:string}):Promise<{state:'found',name:string,type:string,body:Uint8Array<ArrayBuffer>}|{state:'missing'|'notNow'|'tooLarge'}> {
+ const key=fileKey.exec(file);
+ if(!key) return {state:'missing'};
+ const id=Number(key[2]); const n=Number(key[3]);
+ const {data:found,error}=await db.from('conversations').select('agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle<{agent_id:string|null,hermes_session_id:string|null}>();
+ if(error) return {state:'notNow'};
+ if(!found?.agent_id||!found.hermes_session_id) return {state:'missing'};
+ const target=await agentEngine(db,{company,agent:found.agent_id});
+ if(target.state==='missing'||target.state==='noEngine'||target.state==='invalid') return {state:'missing'};
+ if(target.state!=='found') return {state:'notNow'};
+ const {sessions}=target.engine; const session=found.hermes_session_id;
+ if(key[1]==='i') {
+  const read=await sessions.image(session,(each:SessionMessage)=>each.role==='user'&&idOf(each)===id&&n<messageParts(each).images,n);
+  if(read.state==='found') return {state:'found',name:`image-${n+1}.${read.type.slice('image/'.length).replace('jpeg','jpg')}`,type:read.type,body:new Uint8Array(read.body)};
+  return {state:read.state==='missing'||read.state==='tooLarge'?read.state:'notNow'};
+ }
+ const reply=await sessions.find(session,(each:SessionMessage)=>each.role==='assistant'&&idOf(each)===id);
+ if(reply.state!=='found') return {state:reply.state==='missing'?'missing':'notNow'};
+ const path=messageParts(reply.message).paths[n];
+ const at=path?ownWorkFile(path,target.engine.profile):null;
+ if(!at) return {state:'missing'};
+ const read=await target.engine.files.download({...at,root:'work'});
+ // The work sandbox stopped, or its Engine not answering, is a file that cannot be read now, never one that is gone.
+ if(read.state==='found') return {state:'found',name:read.name,type:pictureType(read.name)||'application/octet-stream',body:read.body};
+ if(read.state==='tooLarge') return {state:'tooLarge'};
+ return {state:read.state==='unreachable'||read.state==='refused'?'notNow':'missing'};
 }
