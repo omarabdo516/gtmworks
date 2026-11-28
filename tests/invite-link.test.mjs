@@ -39,6 +39,28 @@ test('only the hash reaches the database: the action sends it with the Administr
  assert.doesNotMatch(route,/link_hash:secret\b/);
 });
 
+test('a Person with an account signs in on the join page and the signed-in session sends the form (#952)', () => {
+ // The page swaps to a sign-in form that keeps the link's secret in the body and marks itself, so the server reads the
+ // Person from the session the browser just made instead of making an account. The password never goes in that form.
+ assert.match(form,/signInWithPassword/);
+ assert.match(form,/signedInForm\.current\?\.submit\(\)/);
+ assert.match(form,/ref=\{signedInForm\}[\s\S]{0,300}name="mode" value="signin"/);
+ assert.doesNotMatch(form,/ref=\{signedInForm\}[\s\S]{0,300}name="password"/);
+ assert.match(route,/form\.get\('mode'\)==='signin'/);
+ assert.match(route,/auth\.getUser\(\)/);
+ assert.match(route,/rpc\('claim_invite_link',\{link_hash:hash,person:user\.id,person_name:null,language\}\)/);
+ // An active Member is told so by the page's own check of the still-unused link (#775).
+ assert.match(route,/alreadyMember/);
+ assert.match(route,/#code=\$\{secret\}/);
+ assert.doesNotMatch(route,/already=1/);
+ // A failed signed-in join comes back in sign-in mode, so its error sits under the sign-in form (#952).
+ assert.match(route,/invalid=signIn&mode=signin/);
+ assert.match(route,/invalid=1&mode=signin/);
+ // The page asks whether the signed-in person is already a Member without spending the link.
+ assert.match(route,/rpc\('invite_link_member',\{link_hash:hash,person:user\.id\}\)/);
+ assert.match(form,/checked\.member/);
+});
+
 test('the join page asks for a name, email and password, and nothing about the Company or the Role', () => {
  const values={name:' نور ',email:' Nour@Example.com ',language:'ar',password:'long-enough-1',confirm:'long-enough-1'};
  const read=entries=>({get:name=>Object.hasOwn(entries,name)?entries[name]:null});
