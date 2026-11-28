@@ -1,9 +1,10 @@
 import { test, expect, type Page, type BrowserContext } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { signIn, emailLink, seededPassword } from './sign-in';
 import { inbox } from './lane.mjs';
+import { totp } from './totp';
 
 // Signing in with an email and a password (#41). Passwords go only to the auth service (GoTrue).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -18,11 +19,6 @@ async function attempt(page:Page,email:string,password:string) {
  return response;
 }
 const alertWith=(page:Page,text:string)=>page.getByRole('alert').filter({hasText:text});
-// The current six-digit code for an authenticator secret (RFC 6238, SHA-1, 30 seconds).
-function totp(secret:string) {
- const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits=''; for(const c of secret.replace(/=+$/,'').toUpperCase()) bits+=alphabet.indexOf(c).toString(2).padStart(5,'0');
- const key=Buffer.from(bits.match(/.{8}/g)?.map(b=>parseInt(b,2)) || []); const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000))); const hash=createHmac('sha1',key).update(counter).digest(); const offset=hash[19]&15; return String((hash.readUInt32BE(offset)&0x7fffffff)%1000000).padStart(6,'0');
-}
 
 test('the right email and password reach the Company home; a wrong password and an unknown email get the same answer and no session',async({page,context})=>{
  await page.goto('/sign-in');
@@ -43,49 +39,8 @@ test('the right email and password reach the Company home; a wrong password and 
  expect((await sessionCookies(context)).length).toBeGreaterThan(0);
 });
 
-test('Forgot password emails a link that opens only the set-password page, works once, and the new password signs in',async({page,context})=>{
- const value=status();
- const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
- const email=`reset-${Date.now()}@example.com`;
- const {data:{user},error:created}=await service.auth.admin.createUser({email,password:'old-password-41',email_confirm:true});
- expect(created).toBeNull();
- // Every account gtmworks makes has its person (first run, invitations); a signed-in page reads its language there.
- query(`insert into public.people(id,name) values ('${user!.id}','Reset person')`);
- await page.request.delete(inbox);
- await page.goto('/sign-in');
- await page.getByRole('link',{name:'Forgot password?'}).click();
- await expect(page).toHaveURL(/\/forgot-password\?language=en$/);
- await page.getByLabel('Email',{exact:true}).fill(email);
- await page.getByRole('button',{name:'Send reset link'}).click();
- await expect(page.getByRole('status').filter({hasText:'If an account uses this email, a link to set a new password is on its way.'})).toHaveText('If an account uses this email, a link to set a new password is on its way.');
- const link=await emailLink(page,email);
- // The link works without anything the asking browser kept: it may be opened on another device.
- await context.clearCookies();
- await page.goto(link);
- await expect(page).toHaveURL(/\/reset-password$/);
- await expect(page.getByRole('heading',{name:'Set a new password'})).toBeVisible();
- await page.getByLabel('New password').fill('too-short');
- await page.getByLabel('Confirm password').fill('too-short');
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(alertWith(page,'Use at least 10 characters for your password.')).toBeVisible();
- await page.getByLabel('New password').fill('new-password-41');
- await page.getByLabel('Confirm password').fill('new-password-41');
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/no-company$/);
- await context.clearCookies();
- await signIn(page,email,'/sign-in','new-password-41');
- await expect(page).toHaveURL(/\/no-company$/);
- // The same link a second time is refused and does not open the set-password page.
- await context.clearCookies();
- await page.goto(link);
- await expect(page).toHaveURL(/\/forgot-password\?link=invalid$/);
- await expect(alertWith(page,'This link is invalid, expired or already used. Ask for a new one.')).toBeVisible();
- await expect(page.getByLabel('New password')).toHaveCount(0);
- expect(await sessionCookies(context)).toEqual([]);
-});
-
-// A password sign-in, or a reset link, opens a first-level (aal1) session. With a verified authenticator the auth service
-// itself refuses a password change from it, whatever a client sends; the set-password page asks for the code first.
+// A password sign-in opens a first-level (aal1) session. With a verified authenticator the auth service itself refuses a
+// password change from it, whatever a client sends; the set-password form asks for the code first.
 test('with a verified authenticator the password changes only after the second step in that session',async({page,context})=>{
  const value=status();
  const options={auth:{persistSession:false,autoRefreshToken:false}};
@@ -111,54 +66,43 @@ test('with a verified authenticator the password changes only after the second s
  expect(refused.error?.code).toBe('insufficient_aal');
  expect((await direct.auth.signInWithPassword({email,password:'changed-at-aal1'})).error?.code).toBe('invalid_credentials');
 
- // The reset link opens an aal1 session too: the page asks for the code, refuses a wrong one, and saves after the right one.
- await page.request.delete(inbox);
- await page.goto('/forgot-password?language=en');
- await page.getByLabel('Email',{exact:true}).fill(email);
- await page.getByRole('button',{name:'Send reset link'}).click();
- await expect(page.getByRole('status').filter({hasText:'If an account uses this email, a link to set a new password is on its way.'})).toHaveText('If an account uses this email, a link to set a new password is on its way.');
- const link=await emailLink(page,email);
+ // Signed in with a password in the browser too, the Settings form asks for the code, refuses a wrong one, and saves
+ // after the right one.
+ query(`insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000001','${user!.id}','viewer')`);
  await context.clearCookies();
- await page.goto(link);
- await expect(page).toHaveURL(/\/reset-password$/);
- await page.getByLabel('New password').fill('new-password-aal2');
- await page.getByLabel('Confirm password').fill('new-password-aal2');
- await page.getByRole('button',{name:'Save password'}).click();
+ await signIn(page,email,'/c/rs-learning/settings?section=account','old-password-41');
+ const panel=page.locator('section').filter({has:page.getByRole('heading',{name:'Change password'})});
+ await panel.getByLabel('New password').fill('new-password-aal2');
+ await panel.getByLabel('Confirm password').fill('new-password-aal2');
+ await panel.getByRole('button',{name:'Save password'}).click();
  await expect(alertWith(page,'Your account uses two-step verification: enter the code from your authenticator app to change your password.')).toBeVisible();
  expect((await direct.auth.signInWithPassword({email,password:'new-password-aal2'})).error?.code).toBe('invalid_credentials');
- await page.getByLabel('Verification code').fill(totp(factor!.totp.secret)==='000000'?'111111':'000000');
- await page.getByRole('button',{name:'Save password'}).click();
+ await panel.getByLabel('Verification code').fill(totp(factor!.totp.secret)==='000000'?'111111':'000000');
+ await panel.getByRole('button',{name:'Save password'}).click();
  await expect(alertWith(page,'Incorrect code. Try again.')).toBeVisible();
  expect((await direct.auth.signInWithPassword({email,password:'new-password-aal2'})).error?.code).toBe('invalid_credentials');
  // A code is used once: wait for the next one after the code that verified the authenticator.
  if(Math.floor(Date.now()/30000)===window) await page.waitForTimeout(30000-Date.now()%30000+500);
- await page.getByLabel('Verification code').fill(totp(factor!.totp.secret));
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/no-company$/);
- await context.clearCookies();
- await signIn(page,email,'/sign-in','new-password-aal2');
- await expect(page).toHaveURL(/\/no-company$/);
+ await panel.getByLabel('Verification code').fill(totp(factor!.totp.secret));
+ await panel.getByRole('button',{name:'Save password'}).click();
+ await expect(panel.getByRole('status')).toHaveText('Password saved.');
+ expect((await direct.auth.signInWithPassword({email,password:'new-password-aal2'})).error).toBeNull();
 });
 
-test('an invited Member sets a password from the invitation and signs in with it later',async({page,context})=>{
- const email=`password-invited-${Date.now()}@example.com`;
- // Only the Owner invites (#775).
- await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
- await page.request.delete(inbox);
- await page.getByRole('button',{name:'Invite a member'}).click();
- await page.getByLabel('Member’s email').fill(email);
- await page.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(page.getByText(`Invite sent to ${email}`)).toBeVisible();
- const link=await emailLink(page,email);
+// #953: a Person who joins with an Invite link chose a password there, and it signs them in later. Email invitations
+// are gone; the link is the way in.
+test('a Person who joins with an Invite link signs in with the password they chose',async({page,context,baseURL})=>{
+ const email=`password-link-${Date.now()}@example.com`, secret=randomBytes(32).toString('hex'), hash=createHash('sha256').update(secret).digest('hex');
+ query(`insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values ('10000000-0000-0000-0000-000000000001','invite','${hash}','20000000-0000-0000-0000-000000000001','Password Person','viewer',now()+interval '7 days')`);
+ await page.goto(`${baseURL}/join#code=${secret}`);
+ await page.getByLabel('Your name').fill('Password Person');
+ await page.getByLabel('Email').fill(email);
+ await page.getByLabel('Password',{exact:true}).fill('link-password-41');
+ await page.getByLabel('Confirm password').fill('link-password-41');
+ await page.getByRole('button',{name:'Join and sign in'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
  await context.clearCookies();
- await page.goto(link);
- await expect(page.getByRole('heading',{name:'Set a new password'})).toBeVisible();
- await page.getByLabel('New password').fill('invited-password-41');
- await page.getByLabel('Confirm password').fill('invited-password-41');
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/);
- await context.clearCookies();
- await signIn(page,email,'/c/rs-learning/home','invited-password-41');
+ await signIn(page,email,'/c/rs-learning/home','link-password-41');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
 });
 

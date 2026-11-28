@@ -6,14 +6,13 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { saveTheme } from './theme-actions';
 import { saveLanguage } from './language-actions';
 import AccountChoicesView from './account-choices-view';
-import { setAgentVisible, setInvitationAgentVisible } from './agent-visibility-actions';
-import { inviteMember } from './invite-actions';
+import { setAgentVisible } from './agent-visibility-actions';
 import { makeInviteLink, cancelInviteLink } from './invite-link-actions';
+import { makePasswordLink } from './password-link-actions';
 import { addMemberFromCompany } from './add-member-actions';
 import { InviteLinkSection } from './invite-link-section';
 import { AddMemberSection } from './add-member-section';
-import { InviteSection, type InviteRole } from './invite-section';
-import { TeamTable, PendingLinks, type TeamAgent, type TeamCandidate, type TeamInvitation, type TeamLink, type TeamMember } from './team-table';
+import { TeamTable, PendingLinks, type TeamAgent, type TeamCandidate, type TeamEndedInvitation, type TeamLink, type TeamMember } from './team-table';
 import { useSaidWhen } from './agent-made';
 import { toast } from './toast';
 
@@ -82,11 +81,6 @@ export function CompanyName({company,name}:{company:string,name:string}) {
  </form>;
 }
 
-// "Invite a member" (#185), its send bound to the Owner's server action, which checks the Owner again.
-export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:string,slug:string,roles:InviteRole[]}) {
- return <InviteSection mode={mode} roles={roles} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
-}
-
 // "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action. The page
 // reads the section again after a successful make, so the new link joins the pending list above it at once (#951).
 export function InviteLink({company,agents}:{company:string,agents:TeamAgent[]}) {
@@ -117,13 +111,12 @@ export function AddMember({company,candidates,agents}:{company:string,candidates
  return <AddMemberSection people={candidates} agents={agents.filter(agent=>!agent.is_default)} add={(person,role,chosen)=>addMemberFromCompany(company,person,role,chosen)}/>;
 }
 
-// The Team table (#187), with its switches and its Owner invite bound to the server actions that check the Role again.
-// The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx). A pending Invite link (#951) is
-// made and cancelled through the Administrator's actions; the page reads the table again after either. A Person from
-// another Company the Administrator administers is added through its action (#952).
-export function SettingsTeamTable({company,slug,members,invitations,links,agents,allowed,invitedAllowed,userId,owner,candidates}:{company:string,slug:string,members:TeamMember[],invitations:TeamInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,candidates:TeamCandidate[]}) {
+// The Team table (#187), with its switches and its Administrator's Invite links bound to the server actions that check
+// the Role again. The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx). A pending Invite
+// link (#951) is made and cancelled through the Administrator's actions; the page reads the table again after either. A
+// Person from another Company the Administrator administers is added through its action (#952).
+export function SettingsTeamTable({company,members,ended,links,agents,allowed,userId,owner,candidates}:{company:string,members:TeamMember[],ended:TeamEndedInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,userId:string,owner:boolean,candidates:TeamCandidate[]}) {
  const router=useRouter();
- const save=(c:string,target:{member:string}|{invitation:string},agent:string,visible:boolean)=>'member' in target?setAgentVisible(c,target.member,agent,visible):setInvitationAgentVisible(c,target.invitation,agent,visible);
  const makeLink=async(label:string,role:string,chosen:string[])=>{
   const answer=await makeInviteLink(company,label,role,chosen);
   if(answer.link) router.refresh();
@@ -134,8 +127,8 @@ export function SettingsTeamTable({company,slug,members,invitations,links,agents
   if(!failure) router.refresh();
   return failure;
  };
- return <TeamTable company={company} members={members} invitations={invitations} links={links} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} hint={false}
-  save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)} makeLink={makeLink} cancelLink={cancelLink} add={(person,role,chosen)=>addMemberFromCompany(company,person,role,chosen)} candidates={candidates}/>;
+ return <TeamTable company={company} members={members} ended={ended} links={links} agents={agents} allowed={allowed} userId={userId} owner={owner} hint={false}
+  save={setAgentVisible} makeLink={makeLink} cancelLink={cancelLink} add={(person,role,chosen)=>addMemberFromCompany(company,person,role,chosen)} candidates={candidates} makePasswordLink={person=>makePasswordLink(company,person)}/>;
 }
 
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the

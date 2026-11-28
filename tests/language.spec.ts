@@ -208,11 +208,9 @@ test('anonymous sign-in defaults to English and can render Arabic including its 
  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
  await expect(page.getByRole('heading',{level:1})).toHaveText(t('signIn'));
  await expect(page.getByLabel(t('password'),{exact:true})).toBeVisible();
- // The confirmation the sign-in screens give is the reset-link one (#41); the chosen language carries over to that page.
+ // "Forgot password?" says whom to ask for a password link (#954); the chosen language carries over to that page.
  await page.getByRole('link',{name:t('forgotPassword')}).click();
  await expect(page).toHaveURL(/\/forgot-password\?language=ar$/);
  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
- await page.getByLabel(t('email'),{exact:true}).fill('viewer@example.com');
- await page.getByRole('button',{name:t('sendResetLink')}).click();
- await expect(page.getByRole('status').filter({hasText:t('checkYourEmailForAResetLink')})).toHaveText(t('checkYourEmailForAResetLink'));
+ await expect(page.getByRole('status').filter({hasText:t('forgotPasswordAsk')})).toHaveText(t('forgotPasswordAsk'));
 });

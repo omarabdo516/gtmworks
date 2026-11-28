@@ -1,3 +1,5 @@
+-- #952's migration moved from 20270425000000 to 20270425000001: #960's conversation_list_from_engine took that version first
+-- and neither had reached a release, so both apply now.
 -- #952, ADR 0019: a Person who already has an account joins by an Invite link by signing in on its page, instead of
 -- making a second account, and an Administrator adds a Person who is a Member of another Company they administer from
 -- the Team page, with a Role and Agents and no link. Neither path changes a Person who is already an active Member

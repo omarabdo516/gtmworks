@@ -2,22 +2,21 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { leave } from '@/lib/motion';
-import { inviteRoles } from '@/lib/member-roles.mjs';
 import { ShellIcon } from '@/components/shell-icon';
-import { InviteSection } from './invite-section';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
+import type { MakePasswordLink } from './password-link-section';
 import { AddMemberSection, type AddMember } from './add-member-section';
-import { TeamTable, PendingLinks, type SendInvite, type SaveSwitch, type TeamData } from './team-table';
+import { TeamTable, PendingLinks, EndedInvitations, type SaveSwitch, type TeamData } from './team-table';
 import './settings.css';
 import './team-dialog.css';
 
 // The Team dialog (#187; design-reference: teamDlgHTML, teamSoloHTML, openTeamDlg): the account menu's "Team" opens it
 // over whatever page is open. It is the reference's native dialog, so Escape and a press outside close it; "Done" and
-// the x do too. The table is the one Settings, Company draws (app/team-table.tsx), and the Owner alone invites from it.
-// A Company worked alone gets the narrower form: the Owner's own row, the invite form already open and the note on what
-// joining turns on. The data is read by the server for an Owner or a Manager only, so the dialog holds nothing else; a
-// refused read closes it.
-export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,saveInvitation:SaveSwitch,invite:SendInvite,makeLink:MakeLink,cancelLink:(link:string)=>Promise<string>,add:AddMember};
+// the x do too. The table is the one Settings, Company draws (app/team-table.tsx), and the Owner alone makes Invite
+// links from it (#950, #953: an invitation is never emailed), and adds a Person from another Company (#952). A Company
+// worked alone gets the narrower form: the Owner's own row, the link form and the note on what joining turns on. The
+// data is read by the server for an Owner or a Manager only, so the dialog holds nothing else; a refused read closes it.
+export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,makeLink:MakeLink,cancelLink:(link:string)=>Promise<string>,add:AddMember,makePasswordLink:MakePasswordLink};
 
 const leaveMs=190;
 
@@ -33,11 +32,11 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
   actions.load(company).then(found=>{ if(live) { if(found) setData(found); else close(); } },()=>{ if(live) close(); });
   return ()=>{ live=false; };
  },[company]); // eslint-disable-line react-hooks/exhaustive-deps -- one read per opening, not per redraw of its answer
- // Opening moves the focus in as the reference does: the first switch, or the email field when working alone. It waits
+ // Opening moves the focus in as the reference does: the first switch, or the link form when working alone. It waits
  // for the read so the first switch exists when the focus arrives.
  useEffect(()=>{
   if(!data||closing) return;
-  (alone?document.getElementById('inv-email'):box.current?.querySelector<HTMLElement>('.switch'))?.focus();
+  (alone?document.getElementById('lnk-toggle'):box.current?.querySelector<HTMLElement>('.switch'))?.focus();
  },[data,alone,closing]);
  useEffect(()=>()=>stop.current(),[]);
  const finish=()=>{ stop.current(); const dialog=box.current; if(dialog?.open) dialog.close(); };
@@ -45,14 +44,8 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
  // A press on the dialog's own surface (the space around the panel) closes it, but only when it starts and ends there: a
  // selection dragged out of the panel ends on that same surface, and the browser aims the click at the dialog they share.
  const pressed=useRef(false);
- const allowed=new Set(data?.allowed||[]); const invitedAllowed=new Set(data?.invitedAllowed||[]);
- // An invitation sent from the dialog joins the table at once, as the reference redraws its own (sendInvite).
- const invite:SendInvite=async(email,role)=>{
-  const answer=await actions.invite(email,role);
-  if(!answer.error) { const found=await actions.load(company).catch(()=>null); if(found) setData(found); }
-  return answer;
- };
- // A made or cancelled Invite link (#951) joins or leaves the table at once, as the invitation above does.
+ const allowed=new Set(data?.allowed||[]);
+ // A made or cancelled Invite link (#951) joins or leaves the table at once.
  const makeLink:MakeLink=async(label,role,agents)=>{
   const answer=await actions.makeLink(label,role,agents);
   if(answer.link) { const found=await actions.load(company).catch(()=>null); if(found) setData(found); }
@@ -84,13 +77,13 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
    {alone?<div className="modal__body ta ta--solo">
     <ul className="panel-card" aria-label={t('teamSoloMembers')}><li className="panel-row"><span className="me__av pp-av" aria-hidden="true">{(personName.trim().slice(0,1)||'?').toUpperCase()}</span>
      <span className="panel-row__text"><span className="panel-row__t"><bdi>{personName}</bdi> <span className="ch-you">{t('settingsYouMark')}</span></span><span className="panel-row__d">{role} · {t('teamSoloOwnerD')}</span></span></li></ul>
+    {owner&&data&&data.ended.length>0&&<EndedInvitations ended={data.ended}/>}
     {owner&&data&&data.links.length>0&&<PendingLinks links={data.links} cancelLink={cancelLink}/>}
-    {owner&&<InviteSection mode="alone" roles={inviteRoles(t)} send={invite}/>}
     {owner&&data&&<InviteLinkSection agents={data.agents.filter(agent=>!agent.is_default)} make={makeLink}/>}
     {owner&&data&&<AddMemberSection people={data.candidates} agents={data.agents.filter(agent=>!agent.is_default)} add={addMember}/>}
     <p className="inv-note"><ShellIcon name="team"/><span>{t('settingsModeAloneD')}</span></p>
    </div>
-   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} invitations={data.invitations} links={data.links} agents={data.agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} save={actions.save} saveInvitation={actions.saveInvitation} send={invite} makeLink={makeLink} cancelLink={cancelLink} add={addMember} candidates={data.candidates}/>}</div>}
+   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} ended={data.ended} links={data.links} agents={data.agents} allowed={allowed} userId={userId} owner={owner} save={actions.save} makeLink={makeLink} cancelLink={cancelLink} add={addMember} candidates={data.candidates} makePasswordLink={actions.makePasswordLink}/>}</div>}
    <footer className="modal__foot modal__foot--end"><button type="button" className={alone?'btn btn--secondary':'btn btn--primary'} onClick={requestClose}>{t('teamDone')}</button></footer>
   </div>
  </dialog>;

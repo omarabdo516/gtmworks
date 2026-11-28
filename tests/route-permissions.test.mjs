@@ -52,7 +52,7 @@ export function unguarded(files, read) {
       const levels = new Set(Object.values(routePermissions[file] || { any: 'owner' }));
       if (levels.has('setupCode')) { if (!/setupCodeMatches\(/.test(source)) problems.push(file); }
       else if (levels.has('ownerLink')) { if (!/ownerSecretHash\(/.test(source)) problems.push(file); }
-      else if (levels.has('inviteLink')) { if (!/linkSecretHash\(/.test(source)) problems.push(file); }
+      else if (levels.has('inviteLink') || levels.has('passwordLink')) { if (!/linkSecretHash\(/.test(source)) problems.push(file); }
       else if (![...levels].every(level => level === 'public') && !(/\b(routeAllowed|routePermission)\(/.test(source) && source.includes(`'${file}'`))) problems.push(file);
     } else for (const action of exportedActions(source)) if (requiredFor(actionPermissions, action) !== 'public' && !source.includes(`actionAllowed(db,'${action}'`)) problems.push(`${file} ${action}`);
   }
@@ -87,6 +87,9 @@ test('a route or action added without a table entry is reported, and needs Owner
   // An Invite link the same way (#950).
   assert.equal(requiredFor(routePermissions, 'app/join/submit/route.ts', 'POST'), 'inviteLink');
   assert.deepEqual(unguarded(['app/join/submit/route.ts'], () => 'export async function POST() {}'), ['app/join/submit/route.ts']);
+  // And a password link (#954).
+  assert.equal(requiredFor(routePermissions, 'app/password/submit/route.ts', 'POST'), 'passwordLink');
+  assert.deepEqual(unguarded(['app/password/submit/route.ts'], () => 'export async function POST() {}'), ['app/password/submit/route.ts']);
   // An action whose kinds each need their own level is read by its kind, and an unnamed kind by its default.
   const kinds = { someAction: { default: 'contributor', settings: 'manager' } };
   assert.equal(requiredFor(kinds, 'someAction', 'settings'), 'manager');

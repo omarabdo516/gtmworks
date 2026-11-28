@@ -1,1 +1,0 @@
-| `invite.test.mjs` | An email to invite is refused when empty, not a full address, or already invited or a Member in any letter case; an invited person is called by the first word of their email until they join. (#185) | 0.1 s | supabase/tests/member_invites.sql (the same refusals in the database), components/invite-section.test.tsx (the form showing them) | new |

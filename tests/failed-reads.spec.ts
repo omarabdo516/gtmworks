@@ -110,7 +110,7 @@ test('a Company that cannot be read shows could not be read on every page, never
 
 test('an Owner whose membership cannot be read is not shown the page without their controls', async ({ page }) => {
  await signIn(page, 'omar@example.com', '/c/rs-learning/settings/members');
- await expect(page.getByRole('button', { name: 'Invite a member' })).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Save' }).first()).toBeVisible();
  const members = failing('members'); members.on();
  const opened = await page.goto('/c/rs-learning/settings/members');
  expect(opened?.status()).toBe(500);
@@ -118,7 +118,7 @@ test('an Owner whose membership cannot be read is not shown the page without the
  await expect(page.getByRole('heading', { name: 'Team members' })).toHaveCount(0);
  members.off();
  await page.getByRole('button', { name: 'Try again' }).click();
- await expect(page.getByRole('button', { name: 'Invite a member' })).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Save' }).first()).toBeVisible();
 });
 
 test('a person who is not a Member of a Company still gets not found, with nothing that tells them it exists', async ({ page }) => {

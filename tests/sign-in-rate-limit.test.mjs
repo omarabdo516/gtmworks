@@ -58,7 +58,8 @@ test('the browser signs in straight to the auth service, not through a server ac
  assert.match(form,/browserSupabase\(\)\)\.auth\.signInWithPassword\(/);
  assert.match(form,/signInMessage\(/);
  assert.doesNotMatch(form,/import \{[^}]*\bsignIn\b[^}]*\} from '\.\/actions'/);
- assert.doesNotMatch(readFileSync('app/sign-in/actions.ts','utf8'),/signInWithPassword/);
+ // The sign-in screens have no server action at all since "Forgot password?" sends no email (#954).
+ assert.equal(existsSync('app/sign-in/actions.ts'),false);
  // After signing in the browser opens only the page the server already passed through safeNext, never one from the URL.
  assert.match(readFileSync('app/sign-in/page.tsx','utf8'),/next=\{safeNext\(next \|\| null\)\}/);
  assert.match(form,/if\(!error\) \{window\.location\.assign\(next\);return;\}/);

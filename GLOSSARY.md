@@ -123,6 +123,10 @@ _Avoid_: auto-updater service, update daemon
 A link an Administrator makes to bring one new Person into a Company, with the Role they will hold and the Agents they will see. It works once, ends after 7 days, and can be cancelled before it is used. It never gives the Administrator role: an Administrator makes an existing Member an Administrator.
 _Avoid_: invitation email, magic link
 
+**Password link / لينك كلمة المرور**:
+A link an Administrator or a Manager makes for a Member of their Company who forgot their password. It works once, ends after 24 hours, and ends every other session of the Member when it is used. A Manager never makes one for an Administrator. A password opens every Company the Member is in, so its maker needs that authority in each of them; the install owner's comes only from the server command. For an account with an authenticator it asks for its code before it sets the password. A newer password link for the same Member ends the earlier one.
+_Avoid_: reset email, recovery link
+
 **Connection / ربط**:
 A company's link to an outside account or tool, such as Facebook, Google Ads, Odoo or an MCP tool. It belongs to one company and is made by a member allowed to connect accounts. Keys are encrypted and never shown to agents; model credentials stay outside gtmworks.
 _Avoid_: integration, account, credential, token
