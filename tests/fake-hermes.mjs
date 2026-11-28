@@ -633,6 +633,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   sessionTitles:/** @type {Map<string,string>} */(new Map()),
   // The status the list of a profile's sessions answers with instead (#881): an Engine busy or stopped.
   sessionListStatus:/** @type {number|null} */(null),
+  // Sessions the list leaves out while the Engine still holds them (#881): one that moved to a page already read while a
+  // paged list was taken.
+  listSkips:/** @type {Set<string>} */(new Set()),
   // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value. A key in revealFail is
   // answered 500, as an Engine that could not read the .env.
   reveals:/** @type {{profile:string,key:string}[]} */([]),revealFail:/** @type {Set<string>} */(new Set()),
@@ -1165,7 +1168,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const words=typeof first?.content==='string'?first.content.replace(/\s+/g,' ').trim():'';
      return {id,title:settings.sessionTitles.get(`${profile}:${id}`)??null,preview:words.length>63?`${words.slice(0,63)}...`:words,started_at:started,
       last_active:Math.max(started,...times),message_count:session.messages.length,archived:settings.archivedSessions.has(`${profile}:${id}`),pinned:false};
-    }).filter(row=>archived==='include'||(archived==='only')===row.archived);
+    }).filter(row=>(archived==='include'||(archived==='only')===row.archived)&&!settings.listSkips.has(row.id));
     if(url.searchParams.get('order')==='recent') rows.sort((a,b)=>b.last_active-a.last_active||b.started_at-a.started_at||(a.id<b.id?1:-1));
     else rows.sort((a,b)=>b.started_at-a.started_at||(a.id<b.id?1:-1));
     return send(response,200,{sessions:rows.slice(offset,offset+limit),total:rows.length,limit,offset,storage:{}});
@@ -1204,8 +1207,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    const sessionDetail=url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
    if(sessionDetail&&request.method==='GET') {
-    const id=decodeURIComponent(sessionDetail[1]); const found=settings.sessions.get(id);
-    if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
+    const id=decodeURIComponent(sessionDetail[1]); const asked=url.searchParams.get('profile')||'default';
+    // A Run on a session makes it (#881), as on the list.
+    const ran=settings.runs.find(run=>run.session===id&&(run.profile||'default')===asked);
+    const found=settings.sessions.get(id)??(ran&&{profile:asked,messages:[]});
+    if(!found||found.profile!==asked) return send(response,404,{detail:'Session not found'});
     return send(response,200,{id,profile:found.profile,started_at:found.started_at??Date.now()/1000,message_count:found.messages.length,input_tokens:found.input_tokens??0,output_tokens:found.output_tokens??0});
    }
    // A profile list that answers with this status instead (an Engine busy or going away).

@@ -8,3 +8,4 @@ export function readUsage(connection:import('../engine.mjs').EngineConnection,da
 export function isSilentReply(reply:unknown):boolean;
 export function titleSession(connection:{address:string,profile:string,key:string},session:string,title:string):Promise<'marked'|'missing'|'invalid'|'refused'|'unreachable'>;
 export function readSessionList(connection:import('../engine.mjs').EngineConnection,page?:{offset?:number,limit?:number}):Promise<import('../engine.mjs').SessionListRead>;
+export function sessionHeld(connection:import('../engine.mjs').EngineConnection,session:string):Promise<'found'|'missing'|'unreachable'>;

@@ -33,7 +33,21 @@ test('a row whose session is gone from the Engine is forgotten; one still there,
   assert.deepEqual(await keepConversationRows(db,fresh()),{forgotten:2});
   assert.deepEqual(db.forgotten,[{c:rs,sessions:['agent-gone']},{c:rs,sessions:['gone']}]);
   const asked=fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/sessions'));
-  assert.deepEqual(asked.map(request=>`${request.method} ${request.path}`),[`GET /api/sessions?profile=${profile}&order=recent&archived=include&limit=100&offset=0`],'the list is only read');
+  assert.deepEqual(asked.map(request=>`${request.method} ${request.path}`),[`GET /api/sessions?profile=${profile}&order=recent&archived=include&limit=100&offset=0`,`GET /api/sessions/gone?profile=${profile}`],'the list is read, and the one session it did not show is asked for on its own: nothing is written');
+ } finally { await fake.close(); }
+});
+
+test('a session the paged list missed while the Engine still holds it is asked for on its own, and its row stays',async()=>{
+ const fake=await engineServing(rs);
+ try {
+  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+  fake.settings.sessions.set('moved',{profile,messages:said('Busy while the list was read')});
+  fake.settings.listSkips.add('moved');
+  const db=database([{company_id:rs,profile,sessions:['moved','gone']}]);
+  assert.deepEqual(await keepConversationRows(db,fresh()),{forgotten:1});
+  assert.deepEqual(db.forgotten,[{c:rs,sessions:['gone']}]);
+  const asked=fake.settings.managementRequests.filter(request=>/^\/api\/sessions\/(moved|gone)\?/.test(String(request.path))).map(request=>String(request.path).split('?')[0]).sort();
+  assert.deepEqual(asked,['/api/sessions/gone','/api/sessions/moved'],'each session the list did not show is read on its own');
  } finally { await fake.close(); }
 });
 
