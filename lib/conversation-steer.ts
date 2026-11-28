@@ -58,7 +58,8 @@ export async function answerEngineRun(db:Database,steer:Steer&{question:string,a
  forgetAnswer(steer.run,steer.question);
  return delivered==='unreachable'?{error:'conversationEngineNotReached',status:502}:{error:'questionClosed',status:409};
 }
-const earlier=({run,question}:{run:string,question:string})=>{ const kept=answerOf(run,question); return kept&&typeof kept==='object'&&'answer' in kept?{state:'answered' as const,answer:kept.answer}:null; };
+// Another tab's answer still on its way is refused as taken; the card's live read settles it once delivered.
+const earlier=({run,question}:{run:string,question:string})=>{ const kept=answerOf(run,question); return kept==='claimed'?{error:'questionTaken',status:409}:kept&&'answer' in kept?{state:'answered' as const,answer:kept.answer}:null; };
 
 // A choice on the request the Run waits on, one the Engine offered and the person's Role may send. A request the Engine
 // no longer waits on answers the choice another tab made, or, with none, not allowed: the Engine refuses an action
@@ -69,14 +70,16 @@ export async function permitEngineRun(db:Database,steer:Steer&{permission:string
  if(!((may as PermissionChoice[]|null)??[]).includes(steer.choice)) return {error:'conversationNotAllowed',status:403};
  const open=await openRun(db,steer);
  const at=new Date().toISOString();
- const lapsed=():PermitOutcome=>{ const kept=answerOf(steer.run,steer.permission); return {state:'decided',choice:kept&&typeof kept==='object'&&'choice' in kept?kept.choice:'deny',at,first:false}; };
+ // Another tab's choice still on its way is not yet an outcome: the press is refused to be pressed again, and the
+ // card's live read settles it once that delivery is known.
+ const lapsed=():PermitOutcome|Refused=>{ const kept=answerOf(steer.run,steer.permission); return kept==='claimed'?{error:'permissionFailed',status:409}:{state:'decided',choice:kept&&'choice' in kept?kept.choice:'deny',at,first:false}; };
  if('error' in open) return open.error==='conversationNotRunning'?{error:'permissionClosed',status:409}:open;
  const read=await open.engine.runs.read(steer.run);
  if(read.state==='unreachable') return {error:'conversationEngineNotReached',status:502};
  const asked=read.state==='running'?read.permission:null;
  if(asked?.id!==steer.permission) return lapsed();
  if(!asked.choices.includes(steer.choice)) return {error:'conversationFailed',status:400};
- if(!claimAnswer(steer.run,steer.permission,{choice:steer.choice})) return answerOf(steer.run,steer.permission)==='claimed'?{error:'permissionFailed',status:409}:lapsed();
+ if(!claimAnswer(steer.run,steer.permission,{choice:steer.choice})) return lapsed();
  const delivered=await open.engine.runs.permit(steer.run,steer.permission,steer.choice);
  if(delivered==='answered') { confirmAnswer(steer.run,steer.permission); return {state:'decided',choice:steer.choice,at,first:true}; }
  forgetAnswer(steer.run,steer.permission);
