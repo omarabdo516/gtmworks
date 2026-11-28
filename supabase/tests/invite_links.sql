@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(70);
 -- #950, ADR 0019: an Administrator makes an Invite link with a label, a Role and the Agents the new Person will see. Only
 -- its secret's hash is kept, in a table no Member reads; the link ends after 7 days and never gives the Administrator
 -- role. Sending its form claims it once, in one transaction, and the new Member sees the chosen Agents and the main one.
@@ -153,5 +153,45 @@ set local role authenticated;
 select throws_ok($$select public.make_invite_links('10000000-0000-0000-0000-000000000001',array['Batch Three','Batch Four'],array['viewer','viewer'],array[repeat('9c',32),repeat('9c',32)])$$,'23505',null,'a later row that fails is refused');
 reset role;
 select is((select count(*)::int from public.company_links where label in ('Batch Three','Batch Four')),0,'and leaves none of the batch made');
+
+-- #952: a Person who already has an account joins with it, without a second account or a name sent again.
+insert into auth.users(id,email) values ('a9500000-0000-0000-0000-000000000013','account-950@example.test');
+insert into public.people(id,name) values ('a9500000-0000-0000-0000-000000000013','Account Person');
+insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values
+ ('10000000-0000-0000-0000-000000000001','invite',repeat('12',32),'20000000-0000-0000-0000-000000000001','Account','viewer',now()+interval '7 days');
+insert into public.company_link_agents(company_id,link_id,agent_id) select '10000000-0000-0000-0000-000000000001',id,'a9500000-0000-0000-0000-000000000003' from public.company_links where secret_hash=repeat('12',32);
+set local role service_role;
+select lives_ok($$select public.claim_invite_link(repeat('12',32),'a9500000-0000-0000-0000-000000000013',null,null)$$,'signing in with an existing account joins it, with the link''s Role and Agents');
+reset role;
+select ok((select m.role='viewer' and p.name='Account Person' from public.members m join public.people p on p.id=m.person_id
+ where m.company_id='10000000-0000-0000-0000-000000000001' and m.person_id='a9500000-0000-0000-0000-000000000013'),'the existing Person joins with the link''s Role, and keeps their name');
+select ok(public.agent_visible_to('10000000-0000-0000-0000-000000000001','a9500000-0000-0000-0000-000000000013','a9500000-0000-0000-0000-000000000003')
+ and not public.agent_visible_to('10000000-0000-0000-0000-000000000001','a9500000-0000-0000-0000-000000000013','a9500000-0000-0000-0000-000000000002'),'they see the link''s Agent and not another');
+select ok((select used_by='a9500000-0000-0000-0000-000000000013' and used_at is not null from public.company_links where secret_hash=repeat('12',32)),'the link is used by that account');
+select is((select actor_id::text||' '||person_id::text||' '||(details->>'label') from public.company_log where action='invite_link_used' and person_id='a9500000-0000-0000-0000-000000000013'),
+ 'a9500000-0000-0000-0000-000000000013 a9500000-0000-0000-0000-000000000013 Account','and joining is written in the log under that Person');
+
+-- An account made before this release may have no Person row yet: the claim names it from its email, as claim_invitations does.
+insert into auth.users(id,email) values ('a9500000-0000-0000-0000-000000000014','bare-950@example.test');
+insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values
+ ('10000000-0000-0000-0000-000000000001','invite',repeat('34',32),'20000000-0000-0000-0000-000000000001','Bare','contributor',now()+interval '7 days');
+set local role service_role;
+select lives_ok($$select public.claim_invite_link(repeat('34',32),'a9500000-0000-0000-0000-000000000014',null,null)$$,'an account with no Person row joins, named from its email');
+reset role;
+select ok((select name='bare-950' and language='en' from public.people where id='a9500000-0000-0000-0000-000000000014'),'the Person row is named from the account''s email in English');
+
+-- An active Member who opens a link keeps their Role and Agents, and the link is left unused (#775, #952).
+insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a9500000-0000-0000-0000-000000000002') on conflict do nothing;
+insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values
+ ('10000000-0000-0000-0000-000000000001','invite',repeat('56',32),'20000000-0000-0000-0000-000000000001','Existing','contributor',now()+interval '7 days');
+insert into public.company_link_agents(company_id,link_id,agent_id) select '10000000-0000-0000-0000-000000000001',id,'a9500000-0000-0000-0000-000000000003' from public.company_links where secret_hash=repeat('56',32);
+set local role service_role;
+select throws_ok($$select public.claim_invite_link(repeat('56',32),'20000000-0000-0000-0000-000000000002',null,null)$$,'23505','alreadyMember','an active Member is refused');
+reset role;
+select ok((select m.role='manager' from public.members m where m.company_id='10000000-0000-0000-0000-000000000001' and m.person_id='20000000-0000-0000-0000-000000000002')
+ and exists(select 1 from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000002' and agent_id='a9500000-0000-0000-0000-000000000002')
+ and not exists(select 1 from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000002' and agent_id='a9500000-0000-0000-0000-000000000003'),'their Role and Agents do not change');
+select ok((select used_at is null and cancelled_at is null from public.company_links where secret_hash=repeat('56',32)),'the link is left unused');
+select ok(public.invite_link_member(repeat('56',32),'20000000-0000-0000-0000-000000000002') and not public.invite_link_member(repeat('56',32),'a9500000-0000-0000-0000-000000000012'),'the page is told the signed-in Member is already in, and anyone else is not');
 select * from finish();
 rollback;

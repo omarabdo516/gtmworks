@@ -6,6 +6,7 @@ import { AgentFace } from '@/components/agent-face';
 import { inviteeName } from '@/lib/invitee-name.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
+import { AddMemberSection, type AddMember } from './add-member-section';
 import { toast } from './toast';
 
 // The Team table (#15, #185, #187; design-reference: teamTableHTML): one row per Member, the main Agent shown to all,
@@ -16,7 +17,10 @@ export type TeamAgent={id:string,connection_id:string,name:string,is_default?:bo
 export type TeamMember={person_id:string,role:string,people:{name:string|null}|null};
 export type TeamEndedInvitation={id:string,email:string,role:string};
 export type TeamLink={id:string,label:string,role:string,made_by_name:string|null,ends_at:string};
-export type TeamData={members:TeamMember[],ended:TeamEndedInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:string[]};
+// A Person the Administrator may add from another Company they administer (#952): the Company they come from is shown
+// beside their name, as two People may share one.
+export type TeamCandidate={person_id:string,name:string,company:string};
+export type TeamData={members:TeamMember[],ended:TeamEndedInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:string[],candidates:TeamCandidate[]};
 export type SaveSwitch=(company:string,target:string,agent:string,visible:boolean)=>Promise<string>;
 export type CancelLink=(link:string)=>Promise<string>;
 
@@ -106,7 +110,7 @@ export function PendingLinks({links,cancelLink}:{links:TeamLink[],cancelLink:Can
  </ul>;
 }
 
-export function TeamTable({company,members,ended,links=[],agents,allowed,userId,owner,save,makeLink,cancelLink,hint=true}:{company:string,members:TeamMember[],ended:TeamEndedInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,makeLink?:MakeLink,cancelLink?:CancelLink,hint?:boolean}) {
+export function TeamTable({company,members,ended,links=[],agents,allowed,userId,owner,save,makeLink,cancelLink,add,candidates,hint=true}:{company:string,members:TeamMember[],ended:TeamEndedInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,makeLink?:MakeLink,cancelLink?:CancelLink,add?:AddMember,candidates?:TeamCandidate[],hint?:boolean}) {
  const {t}=useI18n();
  const who=(member:TeamMember)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{t(member.role)}</span></span></span>;};
  const others=agents.filter(agent=>!agent.is_default);
@@ -122,7 +126,9 @@ export function TeamTable({company,members,ended,links=[],agents,allowed,userId,
    {/* An Invite link (#951) still waiting for its Person: its label, Role, maker, end, and Cancel. */}
    {owner&&cancelLink&&links.map(link=><InviteLinkRow key={link.id} link={link} cancelLink={cancelLink} cols={agents.length+1}/>)}
   </tbody></table></div>
-  {hint&&<p className="set-hint ta-hint">{t('settingsTeamHint')}</p>}
-  {/* An Invite link (#950): the Administrator's way in for a new Person, with the Agents they will see. */}
-  {owner&&makeLink&&<InviteLinkSection agents={others} make={makeLink}/>}</>;
+ {hint&&<p className="set-hint ta-hint">{t('settingsTeamHint')}</p>}
+ {/* An Invite link (#950): the Administrator's way in for a new Person, with the Agents they will see. */}
+ {owner&&makeLink&&<InviteLinkSection agents={others} make={makeLink}/>}
+ {/* A Person from another Company the Administrator administers, with a Role and Agents and no link (#952). */}
+ {owner&&add&&candidates&&candidates.length>0&&<AddMemberSection people={candidates} agents={others} add={add}/>}</>;
 }

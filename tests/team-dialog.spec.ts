@@ -1,4 +1,4 @@
-import { test, expect, freshSeed, type Page } from './fresh-seed';
+import { test, expect, freshSeed, laneRows, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn, openNavigation } from './sign-in';
 
@@ -9,10 +9,13 @@ import { signIn, openNavigation } from './sign-in';
 // member_agent_visibility.sql.
 const company='10000000-0000-0000-0000-000000000001';
 const alone='10000000-0000-0000-0000-000000000002';
+const aleem='10000000-0000-0000-0000-000000000003';
 const omar='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const id=(n:number)=>`67000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [lead,ads]=[1,2].map(n=>id(10+n));
+// #952: a Person in another Company Omar administers, and one in a Company he does not.
+const mona=id(30), outsider=id(31);
 const names=(page:Page)=>page.locator('.sidebar .agent-tile:not(.agent-tile--new) .agent-tile__name');
 
 test.describe.configure({mode:'serial'});
@@ -26,6 +29,11 @@ test.beforeAll(({},testInfo)=>{
    ('${lead}','${company}','${id(1)}','Lead','General',true,'team-lead'),
    ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads')
   on conflict (id) do nothing;
+  insert into public.company_engines(id,address,key_encrypted) values ('${id(90)}','http://127.0.0.1:8642','seed');
+  insert into public.companies(id,slug,name,engine_id) values ('19000000-0000-0000-0000-000000000952','elsewhere-952','Elsewhere','${id(90)}');
+  insert into auth.users(id,email) values ('${mona}','mona-952@example.test'),('${outsider}','outsider-952@example.test');
+  insert into public.people(id,name) values ('${mona}','Mona Selim'),('${outsider}','Outsider');
+  insert into public.members(company_id,person_id,role) values ('${aleem}','${mona}','contributor'),('19000000-0000-0000-0000-000000000952','${outsider}','owner');
  end $$;`);
 });
 
@@ -59,11 +67,12 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
  await expect(toggle).toHaveAttribute('aria-checked','true');
  await expect(toggle).toBeEnabled();
 
- // The same switch in Settings, Members, read after the change.
+ // The same switch in Settings, Members, read after the change; the Owner's add from another Company is there too (#952).
  await page.goto('/c/rs-learning/settings?section=members');
  const settingsTable=page.getByRole('dialog',{name:'Settings'}).locator('.ta-table');
  const inSettings=settingsTable.locator('tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · Meta Ads'});
  await expect(inSettings).toHaveAttribute('aria-checked','true');
+ await expect(page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:'Add someone from another company'})).toBeVisible();
 
  // The second Member finds the Agent in their sidebar.
  const context=await browser.newContext(); const member=await context.newPage();
@@ -79,7 +88,32 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
  await expect(inSettings).toHaveAttribute('aria-checked','false');
 });
 
+// #952: the Owner adds a Person who is a Member of another Company they administer, with a Role and Agents and no link;
+// a Person from a Company they do not administer is not offered.
+test('the Owner adds a Person from another Company they administer, with a Role and an Agent and no link',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const {dialog}=await openTeam(page);
+ await dialog.getByRole('button',{name:'Add someone from another company'}).click();
+ const person=dialog.getByLabel('Person');
+ const offered=await person.locator('option').evaluateAll(options=>options.map(option=>({value:(option as HTMLOptionElement).value,text:option.textContent})));
+ expect(offered).toEqual([{value:mona,text:'Mona Selim · Aleem'}]);
+ expect(offered.some(option=>option.text?.includes('Outsider')),'a Person outside the Administrator’s Companies is not offered').toBe(false);
+ await person.selectOption(mona);
+ await dialog.locator('#addm-role').selectOption('contributor');
+ await dialog.getByRole('switch',{name:'Mona Selim · Meta Ads'}).click();
+ await dialog.getByRole('button',{name:'Add member'}).click();
+ await expect(page.locator('.toast')).toHaveText('Mona Selim was added to the team.');
+ // The table shows the new Member at once, with no link made for her.
+ await expect(dialog.locator('.ta-table tbody tr').filter({hasText:'Mona Selim'})).toBeVisible();
+ expect(laneRows(`select m.role from public.members m join auth.users u on u.id=m.person_id where m.company_id='${company}' and u.email='mona-952@example.test'`)).toEqual([{role:'contributor'}]);
+ expect(laneRows(`select agent_id from public.member_agent_access where company_id='${company}' and person_id='${mona}'`)).toEqual([{agent_id:ads}]);
+ expect(laneRows(`select actor_id,person_id,details->>'new_role' new_role from public.company_log where company_id='${company}' and action='member_added' and person_id='${mona}'`))
+  .toEqual([{actor_id:omar,person_id:mona,new_role:'contributor'}]);
+ expect(laneRows(`select count(*)::int n from public.company_links`)).toEqual([{n:0}]);
+});
+
 test('a Manager holds the Team table and can turn a switch, and makes no Invite link',async({page})=>{
+
  // A Manager's table holds the Agents shown to them, as Settings, Company does (hermes_agents_read): Meta Ads is shown
  // to them here, so its column is theirs to switch for another Member.
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}') on conflict do nothing`);
@@ -88,6 +122,8 @@ test('a Manager holds the Team table and can turn a switch, and makes no Invite 
  await expect(dialog.locator('.ta-table')).toBeVisible();
  await expect(dialog.getByRole('button',{name:'Make an invite link'})).toHaveCount(0);
  await expect(dialog.locator('#lnk-label')).toHaveCount(0);
+ // Adding a Person from another Company is the Administrator's alone (#952).
+ await expect(dialog.getByRole('button',{name:'Add someone from another company'})).toHaveCount(0);
  const toggle=dialog.locator('.ta-table tbody tr').filter({hasText:'عضو'}).getByRole('switch',{name:'عضو · Meta Ads'});
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await toggle.click();
