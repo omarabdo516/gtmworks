@@ -286,6 +286,7 @@
   "conversationNotAllowed": "Your role cannot start or write in a conversation.",
   "conversationNotFound": "Conversation or agent not found.",
   "conversationHermesFailed": "The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it.",
+  "conversationEngineNotReached": "The agent engine could not be reached. Try again.",
   "conversationFailed": "Could not send the message. Try again.",
   "attachRemove": "Remove {0}",
   "attachOpen": "Open {0}",

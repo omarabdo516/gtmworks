@@ -9,6 +9,8 @@
   "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.",
   "conversationAddressed": "To {0} · the agent wasn’t asked",
   "conversationStop": "Stop {0}",
+  "conversationStoppedMidReply": "Stopped. {0} stopped mid-reply",
+  "conversationStoppedBefore": "Stopped. {0} stopped before replying",
   "ruleSaved": "Saved",
   "ruleSavedFor": "A rule for {0} · written in the log",
   "ruleSeeIt": "See it",

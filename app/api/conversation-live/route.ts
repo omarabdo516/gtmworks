@@ -4,13 +4,18 @@ import { agentEngine } from '@/lib/engine/handle.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { liveLines, type LiveDelta, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
+import { conversationLines, type LiveAskingLine } from '@/lib/conversation-live.mjs';
+import type { PermissionChoice } from '@/lib/engine.mjs';
 
 // The open Run of a Conversation whose messages are the Engine's, as it happens (#876): gtmworks's web server follows the
 // Run's event stream on the Engine and relays it to the Conversation's own person, one JSON line each, as it carries the
 // Screen's stream (ADR 0011: no browser reaches the Engine or holds its key). A view line is the Run's steps so far and
 // the call it makes now; a `{delta}` line is the next words of the reply as the model writes them; the last line says
 // how it ended. Once the Run's end is seen the row no longer holds it (end_conversation_run). Nothing of it is kept.
-type Line=LiveLine|LiveDelta;
+// Between them (#878), what the Run waits on its person for, a question or a request to act, with the choices of the
+// request this person's Role may send (permission_choices: "Always allow" for an Owner and a Manager only), and how it
+// settled (lib/conversation-live.mjs).
+type Line=LiveLine|LiveDelta|LiveAskingLine;
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
 const refuse=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});
@@ -38,7 +43,9 @@ export async function GET(request:NextRequest) {
   if(target.state!=='found') return only({end:'unreachable'});
   const stopped=new AbortController();
   request.signal.addEventListener('abort',()=>stopped.abort(),{once:true});
-  const lines=liveLines(run,target.engine.sessions.follow(run,{signal:stopped.signal}),{reply:true})[Symbol.asyncIterator]();
+  const {data:may}=await db.rpc('permission_choices',{c:company});
+  const engine=target.engine;
+  const lines=conversationLines(run,liveLines(run,engine.sessions.follow(run,{signal:stopped.signal}),{reply:true}),{read:()=>engine.runs.read(run),may:(may as PermissionChoice[]|null)??[]})[Symbol.asyncIterator]();
   return new Response(new ReadableStream({
    async pull(controller) {
     try {

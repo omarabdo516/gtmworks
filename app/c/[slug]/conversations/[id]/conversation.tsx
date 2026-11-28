@@ -16,9 +16,13 @@ import type { ConversationSteps } from '@/lib/conversation-steps';
 import { takeSent, type Send } from '@/lib/sending';
 import type { LiveRun } from '@/app/run-activity';
 import type { LiveDelta, LiveLine } from '@/lib/live-steps.mjs';
+import type { LiveAsking, LiveAskingLine, LiveSettled } from '@/lib/conversation-live.mjs';
+import { ReplyCard } from '@/app/reply-card';
+import type { ReplyCard as Card } from '@/lib/conversations';
+import { postMessage } from '@/app/conversation-composer';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
-import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
+import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type Steer, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
 import { MoreMenu } from '@/app/more-menu';
@@ -28,7 +32,7 @@ import { toast } from '@/app/toast';
 import { useRouter } from 'next/navigation';
 
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
-type Live={record:ConversationRecord,asked:()=>void,sending:Send,engine?:true};
+type Live={record:ConversationRecord,asked:()=>void,sending:Send,engine?:true,steer?:Steer};
 // The record, and the sends made before it arrived, reach the title, the corner and the composer through this store,
 // not through this frame's state or its context value: the transcript arrives while the page still streams in, and a
 // render of this frame then would make React draw the transcript again in the browser, leaving the streamed copy hidden
@@ -105,7 +109,7 @@ function ChatComposer({company,conversation,writer,box,archived,restored}:{compa
  const live=useSyncExternalStore(store.subscribe,store.get,()=>undefined);
  const sent=()=>{ if(!archived) return; restored(); router.refresh(); toast(t('conversationBack'),{icon:'restore'}); };
  return <div className="composer-area">{archived&&<p className="arc-line"><ShellIcon name="archive"/><span>{t(writer?'conversationArchivedLine':'conversationArchivedLineRead')}</span></p>}
-  <ConversationComposer company={company} conversation={conversation} record={live?.record??null} writer={writer} asked={live?.asked??store.earlier} sending={live?.sending} box={box} usage sent={sent}/></div>;
+  <ConversationComposer company={company} conversation={conversation} record={live?.record??null} writer={writer} asked={live?.asked??store.earlier} sending={live?.sending} box={box} usage sent={sent} steer={live?.steer}/></div>;
 }
 
 // The transcript's boundary renders only when the transcript itself changes. This frame renders again while it
@@ -275,10 +279,16 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
 // and after each send; once the Run's end is seen, `ended` reads the session again, which then holds the reply and its
 // steps, and only once that read came back are the live view and the sent message let go, so nothing is drawn twice or
 // goes missing. A read that is cut short, or a session read that fails, is asked again, more slowly each time.
+// What the Run waits on its person for (#878) is on the same read: `asking` is the card while it is open and once it
+// settled (answered here or in another tab, or no longer waited on), until the Run's end; `stopped` says the Run its
+// person stopped ended so, mid-reply or before it wrote any, until the next send.
+type Asking={card:LiveAsking,settled:LiveSettled|null};
 function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<Refreshed>) {
  const [view,setView]=useState<LiveRun|null>(null);
  const [reply,setReply]=useState('');
  const [working,setWorking]=useState(open);
+ const [asking,setAsking]=useState<Asking|null>(null);
+ const [stopped,setStopped]=useState<'reply'|'before'|null>(null);
  const reading=useRef<AbortController|null>(null);
  const endedRef=useRef(ended); useEffect(()=>{ endedRef.current=ended; });
  // A message sent while a Run is followed starts its own Run, which the row holds after it: once a Run ends the next one
@@ -288,9 +298,9 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
  const follow=useCallback((next=false)=>{
   if(reading.current) { again.current=true; return; }
   const stopped=new AbortController(); reading.current=stopped;
-  if(!next||again.current) setWorking(true);
+  if(!next||again.current) { setWorking(true); setStopped(null); }
   const read=async(failures:number):Promise<void>=>{
-   let end:string|null=null; let said='';
+   let end:string|null=null; let how:string|undefined; let said='';
    try {
     const response=await fetch(`/api/conversation-live?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}`,{cache:'no-store',signal:stopped.signal});
     // Signed out, no longer allowed, or the Conversation or its Agent gone: no later read can answer, so the read ends.
@@ -304,9 +314,11 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
       if(done) break;
       buffer+=value;
       for(let at=buffer.indexOf('\n');at>=0;at=buffer.indexOf('\n')) {
-       const line=JSON.parse(buffer.slice(0,at)) as LiveLine|LiveDelta; buffer=buffer.slice(at+1);
-       if('end' in line) end=line.end;
+       const line=JSON.parse(buffer.slice(0,at)) as LiveLine|LiveDelta|LiveAskingLine; buffer=buffer.slice(at+1);
+       if('end' in line) { end=line.end; how=line.outcome; }
        else if('delta' in line) { said+=line.delta; setReply(said); setWorking(true); }
+       else if('asking' in line) { const card=line.asking; setAsking(now=>now?.card.id===card.id?now:{card,settled:null}); }
+       else if('settled' in line) { const settled=line.settled; setAsking(now=>now?.card.id===settled.id?{...now,settled}:now); }
        else { setView(line); setWorking(true); }
       }
      }
@@ -323,19 +335,63 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
      outcome=await endedRef.current();
     }
     if(stopped.signal.aborted) return;
-    reading.current=null; setView(null); setReply('');
+    reading.current=null; setView(null); setReply(''); setAsking(null);
+    if(how==='stopped') setStopped(said.trim()?'reply':'before');
     // The next Run the row holds, if any: after one that ended, or after a send made meanwhile.
     if(outcome==='read'&&(end!=='none'||again.current)) { const sent=again.current; again.current=false; if(!sent) setWorking(false); follow(!sent); } else { again.current=false; setWorking(false); }
     return;
    }
-   // A read cut short replays the Run's events from its start, so the words are drawn again from the first.
+   // A read cut short replays the Run's events from its start, so the words are drawn again from the first, and the
+   // card it waits on, if any, again from the Run's record.
    await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**failures,15000)));
    if(!stopped.signal.aborted) await read(end==='unreachable'?failures+1:0);
   };
   void read(0);
  },[company,conversation]);
  useEffect(()=>{ if(open) follow(); return ()=>{ reading.current?.abort(); reading.current=null; }; },[open,follow]);
- return {view,reply,working,follow};
+ return {view,reply,working,follow,asking,stopped,settle:(settled:LiveSettled)=>setAsking(now=>now?.card.id===settled.id?{...now,settled}:now)};
+}
+
+// The card the open Run waits on (#878), as the old record's cards are drawn (app/reply-card.tsx): a question, or a
+// request to act with the choices this person may send. Its id on the page is the Engine's own id's number, for the card's
+// place; a press goes to the Run's own route through gtmworks, naming the Run and the Engine's id. Settled, it shows the
+// answer or the choice, or a question as closed and a request the Engine stopped waiting on as not allowed.
+const cardNumber=(id:string)=>{ let hash=0; for(const char of id) hash=(hash*31+char.charCodeAt(0))|0; return Math.abs(hash)%2147483646+1; };
+function askingCard({card,settled}:Asking):Card {
+ const id=cardNumber(card.id);
+ if(card.kind==='question') {
+  const asked={id,kind:'question' as const,title:card.text,question:card.text,choices:card.choices,multiple:card.multiple};
+  return !settled?{...asked,state:'open'}:'answer' in settled?{...asked,state:'answered',answer:settled.answer}:{...asked,state:'closed'};
+ }
+ const asked={id,kind:'permission' as const,title:card.description.trim()||card.command,description:card.description,command:card.command,choices:card.choices};
+ return settled&&'choice' in settled?{...asked,state:'decided',choice:settled.choice,at:new Date().toISOString()}:{...asked,state:'open'};
+}
+function AskingCard({company,conversation,asking,writer,chips,settle}:{company:string,conversation:string,asking:Asking,writer:boolean,chips:boolean,settle:(settled:LiveSettled)=>void}) {
+ const [at]=useState(()=>new Map<string,string>());
+ const card=askingCard(asking);
+ // The time a request settled stays the first one this page saw.
+ if(card.kind==='permission'&&card.state==='decided'&&asking.settled) { if(!at.has(asking.card.id)) at.set(asking.card.id,card.at); card.at=at.get(asking.card.id)!; }
+ const {run,id}=asking.card;
+ const post=async(body:object)=>{
+  try {
+   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation,run,...body})});
+   return {ok:response.ok,body:await response.json() as Record<string,unknown>};
+  } catch { return {ok:false,body:{}}; }
+ };
+ return <ReplyCard card={card} fresh chips={chips} may={asking.card.kind==='permission'?asking.card.choices:[]}
+  answer={writer?async(_card,choice)=>{
+   const {ok,body}=await post({intent:'answer',question:id,choice});
+   if(!ok) return typeof body.error==='string'?body.error:'conversationFailed';
+   if(body.answer!==undefined) settle({kind:'question',id,answer:body.answer as string|string[]});
+   return null;
+  }:undefined}
+  decide={writer?async(_card,choice)=>{
+   const {ok,body}=await post({intent:'permit',permission:id,choice});
+   if(!ok||body.state!=='decided'||typeof body.choice!=='string'||typeof body.at!=='string') return {error:typeof body.error==='string'?body.error:'conversationFailed'};
+   const decided=body.choice as typeof choice;
+   settle({kind:'permission',id,choice:decided});
+   return {state:'decided',choice:decided,at:body.at,first:body.first===true};
+  }:undefined}/>;
 }
 
 export function EngineLoaded({initial,steps,team,open=false}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean,open?:boolean}) {
@@ -376,11 +432,28 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   return {waiting,held};
  },[record.messages,engine.page,before,spent]); // eslint-disable-line react-hooks/exhaustive-deps
  const shown=useMemo(()=>{
-  const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
+  // A Run waiting on its question is not working for the box (#138), which keeps its send arrow: the typed words answer it.
+  const questioning=run.asking?.card.kind==='question'&&!run.asking.settled;
+  const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:questioning?true as const:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
- },[record,engine.page,engine.usage,sent.waiting]);
- useLayoutEffect(()=>{ store.set({record:shown,asked:()=>run.follow(),sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
+ },[record,engine.page,engine.usage,sent.waiting,run.asking]);
+ // Stop and a typed answer go to the Run the page follows (#878): only its person writes here (`writer`).
+ const followed=run.view?.run??run.asking?.card.run??null;
+ const waiting=run.asking&&!run.asking.settled?run.asking.card:null;
+ const steer=useMemo(():Steer|undefined=>{
+  if(!writer||!followed) return undefined;
+  const post=async(body:object)=>postMessage({company,conversation:conversation.id,run:followed,...body});
+  return {
+   ...(run.working&&!(waiting?.kind==='question')?{stop:()=>post({intent:'stop'})}:{}),
+   ...(waiting?.kind==='question'?{answer:async(text:string)=>{
+    const failure=await post({intent:'answer',question:waiting.id,text});
+    if(!failure) run.settle({kind:'question',id:waiting.id,answer:text});
+    return failure;
+   }}:{}),
+  };
+ },[writer,followed,run.working,waiting,company,conversation.id]); // eslint-disable-line react-hooks/exhaustive-deps
+ useLayoutEffect(()=>{ store.set({record:shown,asked:()=>run.follow(),sending,engine:true,steer}); },[shown,steer]); // eslint-disable-line react-hooks/exhaustive-deps
  // A message sent from the composer before this transcript was drawn has its Run followed once it is (#876), as the old
  // record's transcript asks for its reply.
  const early=useSyncExternalStore(store.subscribe,store.early,()=>0);
@@ -421,7 +494,8 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} reread={reread} details={!!agent} live={stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working}}/>}
+  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} reread={reread} details={!!agent} live={stored?{view:null,reply:'',working:false,stopped:run.stopped}:{view:run.view,reply:run.reply,working:run.working,stopped:run.stopped,
+   card:run.asking?<AskingCard key={run.asking.card.id} company={company} conversation={conversation.id} asking={run.asking} writer={writer} chips={agent?.main===true} settle={run.settle}/>:undefined}}/>}
   {engine.failed&&engine.page&&<p className="note convo-status" role="alert" data-outcome="refresh" data-refresh>{c('conversationNoRefresh')} <button type="button" className="link-btn" onClick={engine.refresh}>{c('conversationTryAgain')}</button></p>}
  </div></div>;
 }

@@ -44,7 +44,9 @@ export type SessionMessagesRead={state:'found',messages:SessionMessage[],prefix:
 export type RunStepEvent={seq:number,step:{call:string|null,tool:string,preview:string|null,state:'started'|'done'|'failed'}};
 // A piece of the reply as it is written (#876), read beside the steps.
 export type RunDeltaEvent={seq:number,delta:string};
-export type RunEvent=RunStepEvent|RunDeltaEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
+// A Run that ended says how (#878), when its terminal event was seen: completed, failed, or stopped (cancelled or interrupted).
+export type RunOutcome='completed'|'failed'|'stopped';
+export type RunEvent=RunStepEvent|RunDeltaEvent|{lost:true}|{end:'ended',outcome?:RunOutcome}|{end:'closed'|'gone'|'unreachable'};
 export type Agent={name:string,instructions:string,model:string|null,ready:boolean,displayName?:string|null,description?:string,descriptionAuto?:boolean,botTitle?:string|null};
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};

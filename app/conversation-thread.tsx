@@ -226,7 +226,9 @@ export function ChatPlaceholder() {
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
 // `live` (#876): a Conversation whose messages are the Engine's draws its open Run from its own live read, the reply as
 // it is written and its steps, in place of the old record's steps read (app/api/run-steps).
-export type EngineLive={view:LiveRun|null,reply:string,working:boolean};
+// `card` is what the Run waits on its person for (#878), drawn in its live turn; `stopped` says the Run was stopped,
+// mid-reply or before it wrote any, until the next message is sent.
+export type EngineLive={view:LiveRun|null,reply:string,working:boolean,card?:ReactNode,stopped?:'reply'|'before'|null};
 export function ConversationTurns({slug,company,record,writer,asked,reread,details=false,live:engineLive}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean,live?:EngineLive}) {
  const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
@@ -341,7 +343,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // after it, done once it ended well in front of the reader. A Run waiting on its person's answer (#138) has ended for
  // the face, as the reference's has when its question card is drawn, and waits on them; one that failed or was stopped
  // shows the state the sidebar reads for it.
- useReportRun(conversation.agent_id,working?(steps&&(steps.steps.length||steps.now)?'working':'thinking'):failed||record.asking?'ended':'well');
+ // On the Engine's live read (#878) the Run waiting on its question stays the live turn that draws the card, and the face
+ // waits on its person as the old record's does.
+ const waitsOnPerson=!!engineLive&&record.asking===true;
+ useReportRun(conversation.agent_id,waitsOnPerson?'ended':working?(steps&&(steps.steps.length||steps.now)?'working':'thinking'):failed||record.asking?'ended':'well');
  const live=landing.view;
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
@@ -387,8 +392,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:step.card?[<CardLine key={at} slug={slug} card={step.card} rise={rise(index)}/>]:[])}</Fragment>)}
-   {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled} reply={engineLive?.reply}/>}</ol>
-  {working&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
+   {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled} reply={engineLive?.reply}>{engineLive?.card}</LiveTurn>}</ol>
+  {working&&!waitsOnPerson&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
+  {/* A Run its person stopped (#878; design-reference: stopRun's note): it stopped mid-reply, or before it replied. */}
+  {!working&&engineLive?.stopped&&<p className="note note--icon convo-status" data-outcome="stopped"><ShellIcon name="stop" className="note__icon"/><span>{cb(engineLive.stopped==='reply'?'conversationStoppedMidReply':'conversationStoppedBefore',conversation.agent_name)}</span></p>}
   {/* The record could not be read three times in a row (#768): what was drawn stays above, and Try again reads it now. */}
   {record.unread&&<p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')}{reread&&<> <button type="button" className="link-btn" onClick={()=>void reread()}>{c('conversationTryAgain')}</button></>}</p>}
   {failed&&(modelCause
@@ -405,7 +412,11 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
 // already takes a message, with no stop square, and keeps the usage line's place.
 // A message sent is drawn in the transcript at once (`sending`, #756), so the box lets it go as it is sent and takes it
 // back if the send is refused.
-export function ConversationComposer({company,conversation,record,writer,asked,sending,box,usage,sent}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,sending?:Send,box?:Ref<MessageBoxHandle>,usage:boolean,sent?:()=>void}) {
+// A Conversation whose messages are the Engine's steers its open Run through `steer` (#878): its stop square stops the
+// Run the page follows, and while the Run waits on a question the person's typed words answer it (`answer`) rather than
+// start another Run; a refused answer stays in the box.
+export type Steer={stop?:()=>Promise<string|null>,answer?:(text:string)=>Promise<string|null>};
+export function ConversationComposer({company,conversation,record,writer,asked,sending,box,usage,sent,steer}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,sending?:Send,box?:Ref<MessageBoxHandle>,usage:boolean,sent?:()=>void,steer?:Steer}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
  // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
  const working=record?.asking?null:record?.working; const canStop=record?.canStop;
@@ -413,11 +424,12 @@ export function ConversationComposer({company,conversation,record,writer,asked,s
  // A waiting message the Engine refused for the Conversation's model (#158) is told as a sent one is, while it is the latest.
  const last=record?.messages.at(-1); const refused=last?.kind==='queued'&&last.failed&&last.model_refused?{key:`${last.created_at}:${last.body}`,text:last.body}:undefined;
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} to={conversation.agent_id} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} to={conversation.agent_id} refused={refused} stop={steer?.stop?{label:c('conversationStop',conversation.agent_name),run:steer.stop}:working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;
-  }}:undefined} drawn={!!sending} send={async(message,sendKey,files)=>{
+  }}:undefined} drawn={!!sending&&!steer?.answer} send={async(message,sendKey,files)=>{
+   if(steer?.answer&&!files.length) return await steer.answer(message);
    const settled=sending?.(sendKey,message,files);
    const failure=files.length?await postMessageWithFiles({company,conversation:conversation.id,message,sendKey},files):await postMessage({company,conversation:conversation.id,message,sendKey});
    settled?.(failure);

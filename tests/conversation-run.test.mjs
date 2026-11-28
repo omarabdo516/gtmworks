@@ -30,7 +30,7 @@ test('a message is a Run on the session gtmworks chose, its reply streamed as wr
   const views=lines.filter(line=>'steps' in line);
   assert.deepEqual(views.at(-1),{run,steps:[{tool:'web_search',preview:'accounting courses Cairo',state:'done'}],now:null});
   assert.ok(views.some(view=>view.now?.tool==='web_search'),'the step shows as it starts');
-  assert.deepEqual(lines.at(-1),{end:'ended'});
+  assert.deepEqual(lines.at(-1),{end:'ended',outcome:'completed'});
   // Once it ended, the session holds the turn: the person's words, the call, its result and the reply.
   const read=await readSessionMessages(connection(fake),session,{offset:0,limit:50});
   assert.equal(read.state,'found');
