@@ -25,7 +25,7 @@ async function rpc(method,params={}) {
  return await new Promise((resolve,reject)=>{
   const timer=setTimeout(()=>{ socket.close(); reject(new Error(`${method}: no answer on /api/ws in 30 s`)); },30000);
   socket.onopen=()=>socket.send(JSON.stringify({jsonrpc:'2.0',id:1,method,params}));
-  socket.onmessage=frame=>{ const data=JSON.parse(frame.data); if(data.id!==1) return; clearTimeout(timer); socket.close(); data.error?reject(new Error(`${method}: ${JSON.stringify(data.error)}`)):resolve(data.result); };
+  socket.onmessage=frame=>{ const data=JSON.parse(frame.data); if(data.id!==1) return; clearTimeout(timer); socket.close(); if(data.error) reject(new Error(`${method}: ${JSON.stringify(data.error)}`)); else resolve(data.result); };
   socket.onerror=()=>{ clearTimeout(timer); reject(new Error(`${method}: the socket failed`)); };
  });
 }
