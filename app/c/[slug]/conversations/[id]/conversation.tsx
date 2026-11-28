@@ -21,6 +21,7 @@ import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
 import { MoreMenu } from '@/app/more-menu';
 import { useConversationArchive } from '@/app/conversation-archive';
+import { useConversationRename } from '@/app/conversation-rename';
 import { toast } from '@/app/toast';
 import { useRouter } from 'next/navigation';
 
@@ -47,7 +48,7 @@ function newLive():LiveStore {
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
 // the record is read. `archived` (#674): the Conversation is archived; its head's menu restores it, and a line
 // over the composer says so, and that writing in it brings it back.
-export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,first,invites,archived=false,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,first?:'alone'|'team',invites?:number,archived?:boolean,children:ReactNode}) {
+export default function ConversationView({slug,agent,details,tab,company,conversation,title,titled=false,writer,first,invites,archived=false,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,titled?:boolean,writer:boolean,first?:'alone'|'team',invites?:number,archived?:boolean,children:ReactNode}) {
  const panel=useDetailsPanel();
  const [isArchived,setArchived]=useState(archived);
  // This chat's own archive and restore show at once; the server's answer, read again after one from elsewhere (the
@@ -60,7 +61,7 @@ export default function ConversationView({slug,agent,details,tab,company,convers
  const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),live}),[slug,agent,company,conversation,writer,live]);
  const fill=useCallback((text:string)=>composer.current?.fill(text),[]);
  return <ChatView value={view}>{first&&<FirstRunToast mode={first} agent={conversation.agent_name} invites={invites}/>}<div className="convo"><div className="chat">
-  <ChatHead panel={panel} agent={agent} conversation={conversation} title={title}/>
+  <ChatHead panel={panel} agent={agent} conversation={conversation} title={title} titled={titled}/>
   <ChatMore company={company} conversation={conversation} title={title} archived={isArchived} changed={setArchived}/>
   <Transcript>{children}</Transcript>
   <ChatComposer company={company} conversation={conversation} writer={writer} box={composer} archived={isArchived} restored={()=>setArchived(false)}/>
@@ -70,26 +71,28 @@ export default function ConversationView({slug,agent,details,tab,company,convers
 // The chat's floating title, as the loaded transcript keeps it (#297): it subscribes to the frame's store, so the record
 // arriving redraws it and never the page around the transcript. The reference's corner pill named the chat's Card on the
 // old board, which is switched off (#846); a Card an Agent makes from a chat is its own row in the transcript (#844).
-function ChatHead({panel,agent,conversation,title}:{panel:DetailsPanel,agent:DetailsAgent|null,conversation:ThreadConversation,title:string}) {
+// `titled`: the title is the session's own (#881, renamed or titled by the Engine), which the record's first words never replace.
+function ChatHead({panel,agent,conversation,title,titled}:{panel:DetailsPanel,agent:DetailsAgent|null,conversation:ThreadConversation,title:string,titled:boolean}) {
  const {live:store}=useView(); const {t,language}=useI18n();
  const live=useSyncExternalStore(store.subscribe,store.get,()=>undefined);
  const record=live?.record;
  // The head's face shows the Agent's state as the sidebar's tile does (app/sidebar-live), with what this chat knows.
  const state=useAgentState(conversation.agent_id??'');
  // The Engine's messages are a page of the end, not the Conversation's first words: its title stays the database's.
- const named=record&&!live?.engine;
+ const named=record&&!live?.engine&&!titled;
  return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={named?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto"/></>;
 }
 
-// The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or
-// restore it while it is archived. Its person tidies their own, whatever their Role.
+// The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): rename the Conversation (#881),
+// and archive it, or restore it while it is archived. Its person tidies their own, whatever their Role.
 function ChatMore({company,conversation,title,archived,changed}:{company:string,conversation:ThreadConversation,title:string,archived:boolean,changed:(archived:boolean)=>void}) {
  const {t}=useI18n();
  const chat={id:conversation.id,title};
  const {archive,restore,confirm}=useConversationArchive(company,(_ids,nowArchived)=>changed(nowArchived));
- return <div className="chat__start"><MoreMenu label={t('conversationMore')} items={[archived
+ const {rename,dialog}=useConversationRename(company);
+ return <div className="chat__start"><MoreMenu label={t('conversationMore')} items={[{key:'rename',icon:'pencil',label:t('conversationRename'),run:()=>rename(chat)},archived
   ?{key:'restore',icon:'restore',label:t('conversationRestore'),run:()=>void restore([chat])}
-  :{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([chat])}]}/>{confirm}</div>;
+  :{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([chat])}]}/>{confirm}{dialog}</div>;
 }
 
 // The composer, told the record when it is there and given the send made before it as the transcript asks for its reply

@@ -108,6 +108,13 @@ async function askServer(body:Record<string,unknown>) {
 }
 // A sign-in Hermes keeps for fifteen minutes is followed at most that long.
 const pollEvery=2000, pollFor=15*60*1000;
+// A step that was added but did not connect: the fixed line, and the Engine's own reason under it when its test gave one
+// (#947). The reason is the Engine's words, redacted there, so it is drawn in its own direction and never translated.
+type Failure={key:string,reason:string};
+const failureKey=(failure:string|Failure)=>typeof failure==='string'?failure:failure.key;
+const failureReason=(failure:string|Failure)=>typeof failure==='string'?'':failure.reason;
+const reasonIn=(body:Record<string,unknown>)=>typeof body.reason==='string'?body.reason:'';
+const Why=({said}:{said:string})=>said?<><br/><span dir="auto">{said}</span></>:null;
 
 // The sign-ins the Owner asked for, one Agent at a time: the browser opens the vendor's window only at a click, so each
 // Agent after the first waits for its own click. `following` is the Agent whose window is open; `done` those connected.
@@ -120,7 +127,7 @@ export function AppDetail(props:{place:AppsPlace,company:string,owner:boolean,rt
 }
 function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFor}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean,agent?:string}) {
  const say=sayer(text); const router=useRouter(); const reader=useAppsReader(company); const {language}=reader;
- const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
+ const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState<string|Failure>(failed?'signInFailed':'');
  const [token,setToken]=useState(''); const [values,setValues]=useState<Record<string,string>>({});
  const own=item.agents.filter(agent=>agent.own);
  // The Agent that asked for the app (a connect card, its Connected tools) is the one picked, else the main Agent.
@@ -203,7 +210,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
    for(const id of queue) {
     const answer=await ask({...body,agent:id});
     if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); if(doneNow.length) refreshApps(); return; }
-    if(answer.body.status!=='connected') { setError('connectAttention'); if(doneNow.length) refreshApps(); return; }
+    if(answer.body.status!=='connected') { setError({key:'connectAttention',reason:reasonIn(answer.body)}); if(doneNow.length) refreshApps(); return; }
     doneNow.push(id);
    }
    setToken(''); setRun(idle); refreshApps();
@@ -294,7 +301,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
        <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div>
      <span className="set-err" id="app-pick-err" hidden={!pickError}>{say('pickOne')}</span></section>}
    {waiting&&<p className="set-hint" role="status">{named(say('waiting'),item.name)}</p>}
-   {error&&<p className="set-err" role="alert">{say(error,item.name)}</p>}
+   {error&&<p className="set-err" role="alert">{say(failureKey(error),item.name)}<Why said={failureReason(error)}/></p>}
    {/* A server the Owner added keeps Remove while it is off for every Agent: it is still in their profiles. */}
    {owner&&(on||custom)&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(custom?'removeAsk':having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
      <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" id="app-off-cancel" disabled={pending} onClick={()=>setAsking(false)}>{say('cancel')}</button>
@@ -337,8 +344,9 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  // One argument per line, each exactly as typed; an empty line is not an argument.
  const serverOf=()=>sandboxed?{kind,command:command.trim(),args:argLines.replace(/\r/g,'').split('\n').filter(line=>line!=='')}:{url:address,kind,token:kind==='header'?token:''};
  const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [queue,setQueue]=useState<string[]>([]);
- const [tools,setTools]=useState<string[]|null>(null); const [tested,setTested]=useState('');
- const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
+ const [tools,setTools]=useState<string[]|null>(null); const [tested,setTested]=useState<{state:string,reason:string}|null>(null);
+ const [failed,setFailed]=useState<{agent:string,reason:string}[]>([]);
+ const [error,setError]=useState<string|Failure>(''); const [busy,setBusy]=useState(false);
  const [following,setFollowing]=useState<{key:string,agent:string}|null>(null);
  const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
  const vendor=useRef<Window|null>(null); const left=useRef(following);
@@ -368,7 +376,9 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
     const rest=queue.slice(1);
     if(rest.length) { setQueue(rest); setToken(''); return; }
     setQueue([]); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
-   } else setError('connectAttention');
+   // A sign-in that did not finish has no Engine test answer to show: its own line, never a guessed reach (#947); a
+   // failed request keeps the code its route answered, as every app's poll does.
+   } else setError(answer.ok?'signInFailed':`error.${String(answer.body.error||'appsFailed')}`);
   };
   timer=setTimeout(poll,pollEvery);
   return ()=>{ stopped=true; clearTimeout(timer); };
@@ -383,24 +393,28 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
   const popup=action==='add'&&kind==='oauth'?window.open('about:blank','_blank'):null;
   if(action==='add'&&kind==='oauth'&&!popup) { setError('popupBlocked'); return; }
   void (async()=>{
-   setBusy(true); setError(''); setTools(null); setTested('');
+   setBusy(true); setError(''); setTools(null); setTested(null); setFailed([]);
    const targets=action==='test'||kind!=='oauth'?picks:(queue.length?queue:picks);
    if(action==='test') {
-    let shown:{state?:unknown,tools?:unknown}|null=null;
+    let shown:Record<string,unknown>|null=null; const unanswered:{agent:string,reason:string}[]=[];
     for(const agent of targets) {
      const answer=await askServer({company,agent,action,name,...serverOf()});
      if(!answer.ok) { setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+     if(answer.body.state!=='connected') unanswered.push({agent,reason:reasonIn(answer.body)});
      if(!shown||(shown.state!=='connected'&&answer.body.state==='connected')) shown=answer.body;
     }
     setTools(Array.isArray(shown?.tools)?shown.tools as string[]:[]);
-    setTested(String(shown?.state||'')); setToken(''); setBusy(false); return;
+    // A connected Agent's tools stand beside the Agents that did not answer, one line and its reason each; with none
+    // connected, the one line under the tools says it, and its own reason.
+    setTested({state:String(shown?.state||''),reason:reasonIn(shown??{})});
+    setFailed(shown?.state==='connected'?unanswered:[]);
+    setToken(''); setBusy(false); return;
    }
    for(const agent of targets) {
     const answer=await askServer({company,agent,action,name,...serverOf()});
     if(!answer.ok) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
-    // Added, but the engine did not reach it (an address that does not answer, a token it refused): the form stays with
-    // the reason, and its card shows Needs attention.
-    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError(sandboxed?'commandAttention':'connectAttention'); refreshApps(); return; }
+    // Added, but the engine did not reach it: the form stays, and the Engine's own reason stands under the line.
+    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError({key:'connectAttention',reason:reasonIn(answer.body)}); refreshApps(); return; }
     if(kind==='oauth') {
      const url=typeof answer.body.url==='string'?answer.body.url:null;
      if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
@@ -412,6 +426,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
    toast(say('ownAdded',name.trim())); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
   })();
  };
+ const errorKey=failureKey(error);
  return <>
   <header className="apps-head">
    <div className="sheet__top"><To place={place} step={{back:item.key}} stay={busy} className="circle-btn" id="apps-back" aria-label={say('back')}><SettingsIcon name="back" rtl={rtl}/></To>
@@ -422,15 +437,15 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
    {preset&&<div className="app-hero"><AppTile app={item} size="lg"/><p>{item.can}</p></div>}
    {item.docs&&<Guide href={item.docs} name={item.name} say={say}/>}
    <div className="panel-card own-form">
-    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={(error==='ownRequired'||error==='commandRequired')&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
+    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={(errorKey==='ownRequired'||errorKey==='commandRequired')&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
     <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>{ setKind(event.target.value as 'oauth'|'header'|'none'|'command'); setError(''); }}>
      <option value="oauth">{say('kindOauth')}</option><option value="header">{say('kindHeader')}</option><option value="none">{say('kindNone')}</option><option value="command">{say('kindCommand')}</option></select></label>
     {sandboxed?<>
-     <label className="set-field"><span>{say('command')}</span><input id="own-command" type="text" dir={command?'ltr':undefined} autoComplete="off" spellCheck={false} placeholder={say('commandHint')} aria-invalid={error==='commandRequired'&&!command.trim()||undefined} aria-describedby="own-command-hint own-err" value={command} onChange={event=>setCommand(event.target.value)}/></label>
+     <label className="set-field"><span>{say('command')}</span><input id="own-command" type="text" dir={command?'ltr':undefined} autoComplete="off" spellCheck={false} placeholder={say('commandHint')} aria-invalid={errorKey==='commandRequired'&&!command.trim()||undefined} aria-describedby="own-command-hint own-err" value={command} onChange={event=>setCommand(event.target.value)}/></label>
      <label className="set-field"><span>{say('args')}</span><textarea id="own-args" dir={argLines?'ltr':undefined} rows={3} autoComplete="off" spellCheck={false} aria-describedby="own-args-hint" value={argLines} onChange={event=>setArgLines(event.target.value)}/><span className="set-hint" id="own-args-hint">{say('argsHint')}</span></label>
      <p className="set-hint" id="own-command-hint">{say('commandNote')}</p>
-    </>:<label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} aria-invalid={error==='ownRequired'&&!address.trim()||undefined} aria-describedby="own-err" value={address} onChange={event=>setAddress(event.target.value)}/></label>}
-    {kind==='header'&&<label className="set-field"><span>{say('token')}</span><input id="own-token" type="password" autoComplete="off" aria-invalid={error==='tokenNeeded'||undefined} aria-describedby="own-token-hint own-err" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint" id="own-token-hint">{say('tokenNote')}</span></label>}
+    </>:<label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} aria-invalid={errorKey==='ownRequired'&&!address.trim()||undefined} aria-describedby="own-err" value={address} onChange={event=>setAddress(event.target.value)}/></label>}
+    {kind==='header'&&<label className="set-field"><span>{say('token')}</span><input id="own-token" type="password" autoComplete="off" aria-invalid={errorKey==='tokenNeeded'||undefined} aria-describedby="own-token-hint own-err" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint" id="own-token-hint">{say('tokenNote')}</span></label>}
    </div>
    {owner&&<section className="apps-sec" aria-labelledby="own-pick-h"><h4 className="apps-sec__h" id="own-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>
     <div className="panel-card" role="group" aria-labelledby="own-pick-h">{own.map(agent=>{ const picked=picks.includes(agent.id);
@@ -438,10 +453,11 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
       {face(agent)}<span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span></span>
       <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div></section>}
    {following&&<p className="set-hint" role="status">{say('waiting',name.trim())}</p>}
-   {error&&<p className="set-err" role="alert" id="own-err">{say(error)}</p>}
+   {error&&<p className="set-err" role="alert" id="own-err">{say(errorKey)}<Why said={failureReason(error)}/></p>}
    {tools&&<section className="apps-sec" aria-labelledby="own-tools-h"><h4 className="apps-sec__h" id="own-tools-h">{say('toolsListed')} <span className="num muted">{tools.length}</span></h4>
     <div className="panel-card">{tools.length?<ul className="own-tools">{tools.map(tool=><li key={tool}><code>{tool}</code></li>)}</ul>
-     :<p className="panel-empty">{tested==='connected'?say('toolsNone'):say('toolsFailed')}</p>}</div></section>}
+     :<p className="panel-empty">{tested?.state==='connected'?say('toolsNone'):say('toolsFailed')}<Why said={tested?.reason??''}/></p>}
+     {failed.map(failure=><p key={failure.agent} className="set-err" id={`own-test-fail-${failure.agent}`}>{named(say('testFailedFor'),nameOf(failure.agent))}<Why said={failure.reason}/></p>)}</div></section>}
   </div>
   <footer className="modal__foot modal__foot--end">
    <button type="button" className="btn btn--secondary" id="own-test" aria-disabled={busy||following!==null||undefined} onClick={()=>{ if(!busy&&!following) submit('test'); }}>{busy?say('testing'):say('test')}</button>

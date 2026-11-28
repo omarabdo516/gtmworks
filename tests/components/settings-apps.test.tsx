@@ -371,6 +371,66 @@ test('the own-tool card keeps its form when the engine cannot reach the server i
   await expect.element(screen.getByRole('heading', { name: 'Your own tool (MCP)' })).toBeVisible();
 });
 
+// #947: a test that fails shows the Engine's own reason under the fixed line, in its own direction.
+test('the own-tool card shows the Engine’s own reason under the line when the server does not answer', async () => {
+  const reason = 'Unsupported MCP-Protocol-Version: 2025-11-25';
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify(body.action === 'test' ? { key: 'my-crm', state: 'attention', tools: [], reason } : { key: 'my-crm', state: 'attention', reason }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How it connects' }).element() as HTMLSelectElement, 'none');
+  await screen.getByRole('button', { name: 'Test' }).click();
+  const listed = screen.getByRole('region', { name: /^Tools it lists/ });
+  await expect.poll(() => listed.element().querySelector('[dir="auto"]')?.textContent).toBe(reason);
+  expect(listed.element().textContent).toContain(text.toolsFailed);
+  await screen.getByRole('button', { name: 'Add' }).click();
+  const alert = screen.getByRole('alert');
+  await expect.poll(() => alert.element().querySelector('[dir="auto"]')?.textContent).toBe(reason);
+  expect(alert.element().textContent).toContain(text.connectAttention);
+});
+
+// #947: a Test over several Agents keeps the tools a connected one listed, and shows each one that did not answer with
+// the Engine's own reason.
+test('a Test with mixed answers keeps the tools and shows the failed Agent’s reason', async () => {
+  const reason = 'Unsupported MCP-Protocol-Version: 2025-11-25';
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); sent.push(body);
+      return Promise.resolve(new Response(JSON.stringify(body.agent === writer ? { key: 'my-crm', state: 'attention', tools: [], reason } : { key: 'my-crm', state: 'connected', tools: ['get_records'] }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How it connects' }).element() as HTMLSelectElement, 'none');
+  await screen.getByRole('checkbox', { name: 'Writer' }).click();
+  await screen.getByRole('button', { name: 'Test' }).click();
+  await expect.element(screen.getByText('get_records')).toBeVisible();
+  expect(sent.map(body => body.agent)).toEqual([lead, writer]);
+  await expect.poll(() => document.getElementById(`own-test-fail-${writer}`)?.querySelector('[dir="auto"]')?.textContent).toBe(reason);
+  expect(document.getElementById(`own-test-fail-${writer}`)?.textContent).toContain('It did not answer for Writer.');
+});
+
+// #947: the one-press connect of a catalogue app draws the Engine's reason under the line too.
+test('a catalogue app turned on but not answered shows the Engine’s own reason under the line', async () => {
+  const reason = 'Unsupported MCP-Protocol-Version: 2025-11-25';
+  const sent = answers([200, { status: 'attention', reason }]);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('deepwiki')} text={text} failed={false}/>);
+  await screen.getByRole('button', { name: 'Connect', exact: true }).click();
+  const alert = screen.getByRole('alert');
+  await expect.poll(() => alert.element().querySelector('[dir="auto"]')?.textContent).toBe(reason);
+  expect(alert.element().textContent).toContain(text.connectAttention);
+  expect(sent).toEqual([{ company: 'c-1', app: 'deepwiki', action: 'connect', agent: lead }]);
+});
+
 // #458: a server the Owner added is an app like any other: its own page has the per-Agent switches and Reconnect, and
 // turning it on for another Agent sends the key alone (the service reads the address from the Engine).
 test('a made server has the per-Agent switches and turns on for another Agent', async () => {
@@ -422,7 +482,7 @@ test('the own-tool OAuth queue retries a failed Agent first and finishes after e
   await screen.getByRole('textbox', { name: /Address/ }).fill('https://oauth.example/mcp');
   await screen.getByRole('checkbox', { name: 'Writer' }).click();
   await screen.getByRole('button', { name: 'Add' }).click();
-  await expect.element(screen.getByRole('alert')).toHaveTextContent(text.connectAttention);
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(text.signInFailed);
   await expect.element(screen.getByRole('button', { name: 'Add for Lead' })).toBeVisible();
   await screen.getByRole('button', { name: 'Add for Lead' }).click();
   await expect.element(screen.getByRole('button', { name: 'Add for Writer' })).toBeVisible();

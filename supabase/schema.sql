@@ -2732,6 +2732,25 @@ $$;
 ALTER FUNCTION public.channel_handovers(ch uuid) OWNER TO postgres;
 
 --
+-- Name: channel_list(uuid, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.channel_list(c uuid, archived boolean DEFAULT false) RETURNS TABLE(id uuid, kind text, name text, last_at timestamp with time zone, last_body text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select k.id, k.kind, k.name,
+  coalesce((select m.created_at from public.channel_messages m where m.channel_id=k.id order by m.id desc limit 1),k.created_at),
+  (select m.body from public.channel_messages m where m.channel_id=k.id and m.body<>'' and m.hand_card is null order by m.id desc limit 1)
+ from public.channels k
+ where k.company_id=c and auth.uid() is not null and public.in_channel(k.id) and (k.archived_at is not null)=channel_list.archived
+ order by 4 desc, k.id desc
+ limit 500;
+$$;
+
+ALTER FUNCTION public.channel_list(c uuid, archived boolean) OWNER TO postgres;
+
+--
 -- Name: channel_live_run(uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -4539,6 +4558,23 @@ $$;
 ALTER FUNCTION public.conversation_counts(c uuid) OWNER TO postgres;
 
 --
+-- Name: conversation_drift(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.conversation_drift() RETURNS TABLE(company_id uuid, profile text, sessions text[])
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select v.company_id, a.profile, array_agg(v.hermes_session_id order by v.hermes_session_id)
+ from public.conversations v left join public.hermes_agents a on a.id=v.agent_id and a.company_id=v.company_id
+ where v.hermes_session_id is not null and v.created_at<now()-interval '1 hour' and (a.id is null or a.profile is not null)
+ group by v.company_id, a.profile
+ order by v.company_id, a.profile nulls first;
+$$;
+
+ALTER FUNCTION public.conversation_drift() OWNER TO postgres;
+
+--
 -- Name: conversation_handover_agents(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -5642,6 +5678,28 @@ begin
 end $$;
 
 ALTER FUNCTION public.forget_company_profile(engine_profile text) OWNER TO postgres;
+
+--
+-- Name: forget_conversations(uuid, text[]); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.forget_conversations(c uuid, sessions text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v uuid; n integer:=0;
+begin
+ for v in select x.id from public.conversations x where x.company_id=c and x.hermes_session_id=any(sessions) and x.created_at<now()-interval '1 hour' order by x.id loop
+  begin
+   delete from public.conversations x where x.id=v;
+   n:=n+1;
+  exception when foreign_key_violation then null;
+  end;
+ end loop;
+ return n;
+end $$;
+
+ALTER FUNCTION public.forget_conversations(c uuid, sessions text[]) OWNER TO postgres;
 
 --
 -- Name: forget_kanban_cards(uuid, text[]); Type: FUNCTION; Schema: public; Owner: postgres
@@ -7225,6 +7283,28 @@ begin
 end $$;
 
 ALTER FUNCTION public.log_conversation_archive(v uuid, archived boolean, actor uuid) OWNER TO postgres;
+
+--
+-- Name: log_conversations_archived(uuid, uuid[], boolean); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.log_conversations_archived(c uuid, chats uuid[], archived boolean) RETURNS SETOF uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v uuid;
+begin
+ if auth.uid() is null or not public.is_member(c) then raise exception 'conversationArchiveNotAllowed' using errcode='42501'; end if;
+ for v in select o.id from public.own_conversations(c) o where o.id=any(chats) order by o.id loop
+  perform 1 from public.conversations x where x.id=v for update;
+  if archived then perform public.stop_conversation_work(v); end if;
+  update public.conversations x set archived_at=null, archived_by=null, session_archived=null where x.id=v;
+  perform public.log_conversation_archive(v,archived,auth.uid());
+  return next v;
+ end loop;
+end $$;
+
+ALTER FUNCTION public.log_conversations_archived(c uuid, chats uuid[], archived boolean) OWNER TO postgres;
 
 --
 -- Name: log_engine_dashboard(uuid, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -19737,6 +19817,13 @@ REVOKE ALL ON FUNCTION public.channel_handovers(ch uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.channel_handovers(ch uuid) TO authenticated;
 
 --
+-- Name: FUNCTION channel_list(c uuid, archived boolean); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.channel_list(c uuid, archived boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.channel_list(c uuid, archived boolean) TO authenticated;
+
+--
 -- Name: FUNCTION channel_live_run(ch uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20258,6 +20345,13 @@ REVOKE ALL ON FUNCTION public.conversation_counts(c uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.conversation_counts(c uuid) TO authenticated;
 
 --
+-- Name: FUNCTION conversation_drift(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.conversation_drift() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.conversation_drift() TO service_role;
+
+--
 -- Name: FUNCTION conversation_handover_agents(conversation uuid, message_key uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20596,6 +20690,13 @@ GRANT ALL ON FUNCTION public.forget_agent_profile_leftovers(c uuid, profiles tex
 
 REVOKE ALL ON FUNCTION public.forget_company_profile(engine_profile text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.forget_company_profile(engine_profile text) TO service_role;
+
+--
+-- Name: FUNCTION forget_conversations(c uuid, sessions text[]); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.forget_conversations(c uuid, sessions text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.forget_conversations(c uuid, sessions text[]) TO service_role;
 
 --
 -- Name: FUNCTION forget_kanban_cards(c uuid, tasks text[]); Type: ACL; Schema: public; Owner: postgres
@@ -21187,6 +21288,13 @@ GRANT ALL ON FUNCTION public.log_company_knowledge(c uuid, part text, cleared bo
 --
 
 REVOKE ALL ON FUNCTION public.log_conversation_archive(v uuid, archived boolean, actor uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION log_conversations_archived(c uuid, chats uuid[], archived boolean); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.log_conversations_archived(c uuid, chats uuid[], archived boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.log_conversations_archived(c uuid, chats uuid[], archived boolean) TO authenticated;
 
 --
 -- Name: FUNCTION log_engine_dashboard(c uuid, act text, page text, kind text); Type: ACL; Schema: public; Owner: postgres

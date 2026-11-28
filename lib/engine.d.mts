@@ -27,6 +27,10 @@ export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'fai
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};
+// One session of a profile as the Engine's list gives it (#881): its title (null until the Engine titles it), its
+// preview, its last activity (ISO) and its archived mark.
+export type SessionListed={id:string,title:string|null,preview:string,at:string|null,archived:boolean};
+export type SessionListRead={state:'found',sessions:SessionListed[],total:number}|{state:'missing'|'refused'|'unreachable',sessions:null,total:0};
 // One stored message of a session, as the Engine's messages route returns it: a person's message, the Agent's tool call,
 // the tool's answer or its reply, and the Engine's own compaction summary (a user message that starts with
 // `[CONTEXT COMPACTION`). The fields gtmworks reads are named; the Engine may send more.
