@@ -29,6 +29,7 @@ const teamData = {
   { person_id: 'p-nour', role: 'contributor', people: { name: 'Nour' } },
  ],
  invitations: [],
+ links: [],
  agents: [
   { id: 'a-lead', connection_id: 'c-lead', name: 'Lead', is_default: true },
   { id: 'a-ads', connection_id: 'c-ads', name: 'Ads', is_default: false },
@@ -42,6 +43,8 @@ const teamActions = (data = teamData) => ({
  save: vi.fn(async () => ''),
  saveInvitation: vi.fn(async () => ''),
  invite: vi.fn(async () => ({})),
+ makeLink: vi.fn(async () => ({ link: 'http://127.0.0.1:3000/join#code=' + 'a'.repeat(64) })),
+ cancelLink: vi.fn(async () => ''),
 });
 const teamMenu = (language: Language, overrides: Partial<ComponentProps<typeof AccountMenuView>> = {}) => menu(language, {
  company: 'company-1', personId: 'p-omar', canManage: true, team: teamActions(), ...overrides,
