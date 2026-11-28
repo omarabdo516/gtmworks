@@ -110,6 +110,8 @@ test('an expired session is refreshed and the rotated cookies survive another re
 test('members controls, the Role list, viewer access, and no all-companies list',async({page,context})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
  await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
+ // #953: the legacy Members page keeps an Owner's way in, an Invite link form instead of the email invite.
+ await expect(page.getByRole('button',{name:"Make an invite link"})).toBeVisible();
  const owner=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^عمر$/})}); await owner.getByRole('button',{name:"Remove"}).click(); await expect(page.getByRole('status').filter({hasText:'The last Administrator'})).toContainText('The last Administrator');
  const viewer=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); const roles=await viewer.getByRole('combobox',{name:"Member role",exact:true}).locator('option').evaluateAll(options=>options.map(option=>(option as HTMLOptionElement).value)); expect(roles).toEqual(['owner','manager','contributor','viewer']); await expect(viewer.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0); await viewer.getByRole('combobox',{name:"Member role",exact:true}).selectOption('contributor'); await viewer.getByLabel("Publishing").check(); await viewer.getByRole('button',{name:"Save"}).click(); await expect(page.getByRole('status').filter({hasText:'Change saved.'})).toContainText('Change saved.'); const changed=page.locator('.member-row').filter({has:page.locator('strong',{hasText:/^مشاهد$/})}); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('contributor'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0); await changed.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer'); await changed.getByLabel("Publishing").uncheck(); await changed.getByRole('button',{name:"Save"}).click(); await expect(changed.getByRole('combobox',{name:"Member role",exact:true})).toHaveValue('viewer'); await expect(changed.getByRole('combobox',{name:"Agent role",exact:true})).toHaveCount(0);
  expect((await page.goto('/all-brands'))?.status()).toBe(404);
@@ -124,6 +126,7 @@ test('a Manager has no control on an Owner\'s row or their own, and still change
  const row=(name:string)=>page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${name}$`)})});
  for(const name of ['عمر','مدير']) { await expect(row(name).getByRole('button',{name:"Remove"})).toHaveCount(0); await expect(row(name).getByRole('combobox')).toHaveCount(0); await expect(row(name).getByRole('checkbox')).toHaveCount(0); }
  await expect(row('عمر')).toContainText('Administrator');
+ await expect(page.getByRole('button',{name:"Make an invite link"})).toHaveCount(0);
  await page.goto('/c/rs-learning/settings?section=members');
  await expect(page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:"Make an invite link"})).toHaveCount(0);
  // The editable Members page is the standalone one; the overlay draws the Team table without its row forms.

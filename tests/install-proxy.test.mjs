@@ -13,7 +13,7 @@ const slug='proxy-company-1';
 // checksCode and closes: first run opens only with the setup code and only once (issue #50), unless a fault is staged.
 const setupCode='5e7c0de'.padEnd(64,'0');
 function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,checksCode=true,closes=true}) {
- const mailbox=[];
+ const mailbox=[], links=[];
  let setUp=false;
  const server=createServer(async (request,response)=>{
   const base=`http://127.0.0.1:${server.address().port}`, url=new URL(request.url,base);
@@ -39,9 +39,17 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
   if(url.pathname==='/sign-in') return send(200);
   if(url.pathname==='/mail/api/v1/messages') return json({messages:mailbox.map(({ID,To})=>({ID,To}))});
   if(url.pathname.startsWith('/mail/api/v1/message/')) return json(mailbox.find(message=>message.ID===url.pathname.split('/').pop()));
-  if(url.pathname==='/auth/v1/invite' && request.method==='POST' && request.headers.authorization==='Bearer service' && request.headers.apikey==='service') {
-   mail(JSON.parse(body).email,base,'invite',url.searchParams.get('redirect_to'));
-   return json({id:'invited'});
+  if(url.pathname==='/rest/v1/companies' && request.method==='GET' && request.headers.apikey==='service' && url.searchParams.get('slug')===`eq.${slug}`) return json([{id:'10000000-0000-0000-0000-000000000001'}]);
+  if(url.pathname==='/rest/v1/company_links' && request.method==='POST' && request.headers.apikey==='service') {
+   const row=JSON.parse(body); assert.equal(row.kind,'invite'); assert.match(row.secret_hash,/^[a-f0-9]{64}$/);
+   links.push(row); return send(201);
+  }
+  if(url.pathname==='/rest/v1/company_links' && request.method==='GET' && request.headers.apikey==='service') return json(links.map(row=>({used_at:row.used_at ?? '2026-11-28T00:00:00Z'})));
+  if(url.pathname==='/join') return send(200,{},'<main>Join</main>');
+  if(url.pathname==='/join/submit' && request.method==='POST') {
+   const form=new URLSearchParams(body);
+   assert.match(form.get('code') || '',/^[a-f0-9]{64}$/); assert.ok(form.get('email'));
+   return send(303,{location:`${base}/c/${slug}/home`,'set-cookie':'session=s; Path=/'});
   }
   if(url.pathname==='/auth/v1/otp' && request.method==='POST' && request.headers.apikey==='anon') {
    const forwarded=request.headers['x-forwarded-host'];
@@ -52,7 +60,7 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
    mail(JSON.parse(body).email,base,'recovery',url.searchParams.get('redirect_to'));
    return json({});
   }
-  if(url.pathname==='/auth/v1/verify' && ['invite','recovery'].includes(url.searchParams.get('type'))) return send(303,{location:`${url.searchParams.get('redirect_to')}#access_token=a&refresh_token=r&type=${url.searchParams.get('type')}`});
+  if(url.pathname==='/auth/v1/verify' && url.searchParams.get('type')==='recovery') return send(303,{location:`${url.searchParams.get('redirect_to')}#access_token=a&refresh_token=r&type=${url.searchParams.get('type')}`});
   if(url.pathname==='/auth/v1/verify') return send(303,{location:`${url.searchParams.get('redirect_to')}&code=c`});
   if(url.pathname==='/auth/accept' || url.pathname==='/auth/reset') return send(200);
   if(url.pathname===`/c/${slug}/home` && cookie.includes('session=s')) return send(200,{},'<h1>Proxy Company</h1>');
@@ -71,11 +79,11 @@ async function check(server) {
  return {status,output};
 }
 
-test('the proxied install check follows the password first run to the Company home and the emailed links back to the app', async () => {
+test('the proxied install check follows the password first run to the Company home, joins a Person by Invite link, and takes the emailed links back to the app', async () => {
  const {status,output}=await check(await install({signInAt:base=>base}));
  assert.equal(status,0,output);
  assert.match(output,new RegExp(`Reached http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
- assert.match(output,new RegExp(`Invitation returned to http://127\\.0\\.0\\.1:\\d+/auth/accept\\?next=${encodeURIComponent(`/c/${slug}/settings/members`)}`));
+ assert.match(output,new RegExp(`Invite link joined proxy-joined@example\\.com in http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
  assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
  assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
 });
@@ -104,10 +112,10 @@ test('the proxied install check fails when a redirect leaves the public origin f
  assert.match(output,new RegExp(`stays on http://127\\.0\\.0\\.1:\\d+: http://inside\\.internal:8080/c/${slug}/home`));
 });
 
-test('the proxied install check fails, naming the link, when the emailed link misses the Auth path behind the gateway', async () => {
+test('the proxied install check fails, naming the link, when the reset link misses the Auth path behind the gateway', async () => {
  const {status,output}=await check(await install({signInAt:base=>base,verifyAt:'/verify'}));
  assert.equal(status,1);
- assert.match(output,/the invitation link opens Auth behind the gateway: http:\/\/127\.0\.0\.1:\d+\/verify\?token=t&type=invite&redirect_to=/);
+ assert.match(output,/the reset link opens Auth behind the gateway: http:\/\/127\.0\.0\.1:\d+\/verify\?token=t&type=recovery&redirect_to=/);
 });
 
 // Auth builds an emailed link by resolving its path against API_EXTERNAL_URL; an absolute path replaces the URL's own
