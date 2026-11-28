@@ -223,7 +223,7 @@ for(const [mode,language] of [['alone','en'],['team','ar']] as const) test(`firs
  if(mode==='team') {
   await dialog.getByRole('button',{name:language==='ar'?'كمّل':'Continue'}).click();
   await expect(dialog.getByRole('heading',{name:language==='ar'?'مين معاك في التيم؟':'Who’s on your team?'})).toBeVisible();
-  await expect(dialog.locator('#fr-email-0')).toBeFocused();
+  await expect(dialog.locator('#fr-label-0')).toBeFocused();
  }
  await open.click();
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}(\\?first=${mode})?$`));
@@ -276,11 +276,11 @@ async function newOwner(page:Page) {
  await expect(page).toHaveURL(/\/c\/first-company-[a-f0-9]{8}\/home$/);
  return new URL(page.url()).pathname.split('/')[2];
 }
-const invitations=(baseURL:string)=>localQuery(`select email,role from public.member_invitations order by email`,baseURL);
-const invitedLog=(baseURL:string)=>localQuery(`select details->>'email' email, details->>'role' role from public.company_log where action='member_invited' order by id`,baseURL);
+const links=(baseURL:string)=>localQuery(`select label,role from public.company_links order by label`,baseURL);
+const linkLog=(baseURL:string)=>localQuery(`select details->>'label' label, details->>'role' role from public.company_log where action='invite_link_made' order by id`,baseURL);
 
-test('"Open the workspace" with two filled rows makes two invitations with their Roles and two log rows, saves team, and lands in the Owner\'s Conversation with Lead; the mailbox holds both emails (#186)',async({page,baseURL})=>{
- const stamp=Date.now(), first=`nour-${stamp}@example.com`, second=`karim-${stamp}@example.com`;
+test('"Open the workspace" with two named rows makes two Invite links with their Roles, shows each once to copy, and two log rows, saves team, and lands in the Owner\'s Conversation with Lead; no email is sent (#186, #953)',async({page,baseURL})=>{
+ const labelOne='Nour Salah', labelTwo='Karim Adel';
  const slug=await newOwner(page);
  await expect(page.getByRole('dialog',{name:question.en})).toBeVisible();
  // Step 2 names the dialog by its own title (aria-labelledby fr-title), so it is held as the page's one dialog.
@@ -292,21 +292,34 @@ test('"Open the workspace" with two filled rows makes two invitations with their
  await dialog.getByRole('radio',{name:'With a team'}).check();
  await dialog.getByRole('button',{name:'Continue'}).click();
  await dialog.getByRole('button',{name:'Add a member'}).click();
- await dialog.locator('#fr-email-0').fill(first);
+ await dialog.locator('#fr-label-0').fill(labelOne);
  await dialog.locator('#fr-role-0').selectOption('manager');
- await dialog.locator('#fr-email-1').fill(second);
+ await dialog.locator('#fr-label-1').fill(labelTwo);
  await dialog.locator('#fr-role-1').selectOption('viewer');
  await dialog.getByRole('button',{name:'Open the workspace'}).click();
 
+ // The links are shown once, in full, before the workspace opens.
+ await expect(page.getByRole('dialog',{name:'Your invite links'})).toBeVisible();
+ const [first,second]=await dialog.locator('.fr-row input[type=text]').evaluateAll(fields=>fields.map(field=>(field as HTMLInputElement).value));
+ expect(first).toMatch(/\/join#code=[a-f0-9]{64}$/);
+ expect(second).toMatch(/\/join#code=[a-f0-9]{64}$/);
+ expect(dialog.getByLabel(`Invite link for ${labelOne}`)).toBeVisible();
+ const secrets=[first,second].map(link=>link.split('#code=')[1]);
+ expect(localQuery(`select count(*)::int n from public.company_links where used_at is null and cancelled_at is null`,baseURL)[0]).toEqual({n:2});
+ for(const secret of secrets) expect(localQuery(`select count(*)::int n from public.company_links l where l::text like '%${secret}%'`,baseURL)[0]).toEqual({n:0});
+ await dialog.getByRole('button',{name:'Open the workspace'}).click();
+
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}`));
- await expect(page.locator('.toast')).toHaveText('Sent 2 invites · start with Lead and ask it for your first agent');
+ await expect(page.locator('.toast')).toHaveText('Made 2 invite links · start with Lead and ask it for your first agent');
  await expect.poll(()=>new URL(page.url()).search).not.toContain('first=');
  expect(workspace(baseURL!)).toEqual([{work_mode:'team',agents:'Lead:true',conversations:1,cards:0}]);
- // Ordered by email, as the query reads them: karim-… before nour-….
- expect(invitations(baseURL!)).toEqual([{email:second,role:'viewer'},{email:first,role:'manager'}]);
- expect(invitedLog(baseURL!)).toEqual([{email:first,role:'manager'},{email:second,role:'viewer'}]);
+ // Ordered by label, as the query reads them: Karim before Nour.
+ expect(links(baseURL!)).toEqual([{label:labelTwo,role:'viewer'},{label:labelOne,role:'manager'}]);
+ expect(linkLog(baseURL!)).toEqual([{label:labelOne,role:'manager'},{label:labelTwo,role:'viewer'}]);
+ // No email left the app: the old invitation table took no row, and the mailbox stays empty.
+ expect(localQuery(`select count(*)::int n from public.member_invitations`,baseURL)[0]).toEqual({n:0});
  const mailbox=await (await page.request.get(inbox)).json();
- expect((mailbox.messages ?? []).map((message:{To:{Address:string}[]})=>message.To[0].Address).sort()).toEqual([first,second].sort());
+ expect(mailbox.messages ?? []).toHaveLength(0);
 });
 
 test('"Back" and Escape return to the question with the team chosen and nothing saved; "Skip" saves team with no invitation (#186)',async({page,baseURL})=>{
@@ -335,8 +348,8 @@ test('"Back" and Escape return to the question with the team chosen and nothing 
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}`));
  await expect(page.locator('.toast')).toHaveText('The workspace is open · start with Lead and ask it for your first agent');
  expect(workspace(baseURL!)).toEqual([{work_mode:'team',agents:'Lead:true',conversations:1,cards:0}]);
- expect(invitations(baseURL!)).toEqual([]);
- expect(invitedLog(baseURL!)).toEqual([]);
+ expect(links(baseURL!)).toEqual([]);
+ expect(linkLog(baseURL!)).toEqual([]);
 });
 
 // #130: once the answer is saved the question leaves with the dialog's exit (design-reference: closeDlg, .fr.is-closing)

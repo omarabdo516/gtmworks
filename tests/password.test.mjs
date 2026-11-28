@@ -58,7 +58,7 @@ test('the README install section describes the password first run and what the l
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
  const install=readme.split('## Install')[1].split('## Update')[0];
  assert.ok(install.includes('On a fresh install, enter your name, email, a password of at least 10 characters (twice) and your first company name; you are signed in at once, with no email step.'));
- assert.ok(install.includes('The local inbox at http://localhost:8025 receives password reset links and invitations.'));
+ assert.ok(install.includes('The local inbox at http://localhost:8025 receives password reset links.'));
  assert.doesNotMatch(install,/follow the sign-in link/);
 });
 

@@ -2839,7 +2839,7 @@ CREATE FUNCTION public.channel_members(ch uuid) RETURNS TABLE(person uuid, name 
   select null::uuid as person, public.invitee_name(v.email) as name, v.role::text as role, v.id as invitation,
          case when public.can_manage_company(k.company_id) then v.email end as email
   from public.channels k
-   join public.member_invitations v on v.company_id=k.company_id and v.claimed_at is null
+   join public.member_invitations v on v.company_id=k.company_id and v.claimed_at is null and v.ended_at is null
   where k.id=ch and public.in_channel(ch)
    and (k.kind='general' or exists(select 1 from public.channel_invitees i where i.channel_id=k.id and i.invitation_id=v.id))
    and not exists(select 1 from public.members m join auth.users u on u.id=m.person_id
@@ -3682,7 +3682,7 @@ begin
  select email into mail from auth.users where id=auth.uid();
  if mail is null then return; end if;
  insert into public.people(id,name) values(auth.uid(),split_part(mail,'@',1)) on conflict(id) do nothing;
- for inv in select * from public.member_invitations where lower(email)=lower(mail) and claimed_at is null for update loop
+ for inv in select * from public.member_invitations where lower(email)=lower(mail) and claimed_at is null and ended_at is null for update loop
   joined := false;
   insert into public.members(company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) values(inv.company_id,auth.uid(),inv.role,inv.grant_publishing,inv.grant_money_figures,inv.grant_customer_data) on conflict (company_id,person_id) do update set role=excluded.role, grant_publishing=excluded.grant_publishing, grant_money_figures=excluded.grant_money_figures, grant_customer_data=excluded.grant_customer_data, removed_at=null where public.members.removed_at is not null
    returning true into joined;
@@ -5061,7 +5061,7 @@ begin
   raise exception 'memberNotFound' using errcode='P0002'; end if;
  for chosen in select distinct unnest(coalesce(invitees,'{}')) loop
   select * into open_invite from public.member_invitations v
-   where v.id=chosen and v.company_id=c and v.claimed_at is null for share;
+   where v.id=chosen and v.company_id=c and v.claimed_at is null and v.ended_at is null for share;
   if open_invite.id is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
  end loop;
  if exists(select 1 from unnest(coalesce(agents,'{}')) a where not exists(select 1 from public.hermes_agents h where h.company_id=c and h.id=a)
@@ -6056,7 +6056,7 @@ begin
     raise exception 'ownGrantsUnchangeable' using errcode = '42501';
    end if;
   end if;
-  if new.role = 'owner' and (tg_op = 'INSERT' or old.role <> 'owner' or old.removed_at is not null) and not public.can_assign_owner(new.company_id) and not exists(select 1 from public.member_invitations where company_id=new.company_id and role='owner' and claimed_at is null and lower(email)=lower((select email from auth.users where id=auth.uid()))) then raise exception 'only an owner can assign owner'; end if;
+  if new.role = 'owner' and (tg_op = 'INSERT' or old.role <> 'owner' or old.removed_at is not null) and not public.can_assign_owner(new.company_id) and not exists(select 1 from public.member_invitations where company_id=new.company_id and role='owner' and claimed_at is null and ended_at is null and lower(email)=lower((select email from auth.users where id=auth.uid()))) then raise exception 'only an owner can assign owner'; end if;
   if tg_op <> 'INSERT' and old.role = 'owner' and old.removed_at is null and (new.role <> 'owner' or new.removed_at is not null) then
    perform pg_advisory_xact_lock(hashtextextended(old.company_id::text,0));
    if (select count(*) from public.members where company_id=old.company_id and role='owner' and removed_at is null) <= 1 then raise exception 'last owner cannot be removed or demoted'; end if;
@@ -6543,27 +6543,10 @@ ALTER FUNCTION public.invite_link_open(link_hash text) OWNER TO postgres;
 CREATE FUNCTION public.invite_member(c uuid, mail text, member_role text, check_only boolean DEFAULT false) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $_$
-declare address text := lower(btrim(coalesce(mail,''), E' \t\r\n')); invitation uuid;
+    AS $$
 begin
- if not public.is_company_owner(c) then raise exception 'inviteNotAllowed' using errcode='42501'; end if;
- if address='' then raise exception 'inviteEmailEmpty' using errcode='22023'; end if;
- if address !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]{2,}$' then raise exception 'inviteEmailMalformed' using errcode='22P02'; end if;
- if member_role is null or member_role not in ('manager','contributor','viewer') then raise exception 'inviteRoleNotAllowed' using errcode='22004'; end if;
- perform pg_advisory_xact_lock(hashtextextended('invite:'||c::text||':'||address,0));
- if exists(select 1 from public.member_invitations where company_id=c and lower(email)=address and claimed_at is null)
-  or exists(select 1 from public.members m join auth.users u on u.id=m.person_id where m.company_id=c and m.removed_at is null and lower(u.email)=address) then
-  raise exception 'inviteEmailTaken' using errcode='23505'; end if;
- if check_only then return null; end if;
- update public.member_invitations set email=address, role=member_role::public.member_role, grant_publishing=false, grant_money_figures=false, grant_customer_data=false, claimed_at=null, created_at=now()
-  where id=(select id from public.member_invitations where company_id=c and lower(email)=address order by email=address desc, created_at desc limit 1)
-  returning id into invitation;
- if invitation is null then
-  insert into public.member_invitations(company_id,email,role) values(c,address,member_role::public.member_role) returning id into invitation;
- end if;
- return invitation;
-end;
-$_$;
+ raise exception 'inviteEmailRetired' using errcode='42501';
+end $$;
 
 ALTER FUNCTION public.invite_member(c uuid, mail text, member_role text, check_only boolean) OWNER TO postgres;
 
@@ -7763,6 +7746,28 @@ begin
 end $_$;
 
 ALTER FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) OWNER TO postgres;
+
+--
+-- Name: make_invite_links(uuid, text[], text[], text[]); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) RETURNS uuid[]
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare i int; made uuid[]:='{}';
+begin
+ if labels is null or cardinality(labels)>50
+  or cardinality(labels) is distinct from cardinality(link_roles)
+  or cardinality(labels) is distinct from cardinality(hashes) then
+  raise exception 'inviteLinkInvalid' using errcode='22023'; end if;
+ for i in 1..cardinality(labels) loop
+  made:=made||public.make_invite_link(c,labels[i],link_roles[i],'{}'::uuid[],hashes[i]);
+ end loop;
+ return made;
+end $$;
+
+ALTER FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) OWNER TO postgres;
 
 --
 -- Name: manage_hermes_agent(uuid, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -11105,7 +11110,7 @@ begin
  if present is null or invitation is null then raise exception 'channelFailed' using errcode='22023'; end if;
  if not present then delete from public.channel_invitees where channel_id=ch and invitation_id=invitation; return; end if;
  select * into open_invite from public.member_invitations v
-  where v.id=invitation and v.company_id=k.company_id and v.claimed_at is null for share;
+  where v.id=invitation and v.company_id=k.company_id and v.claimed_at is null and v.ended_at is null for share;
  if open_invite.id is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
  insert into public.channel_invitees(channel_id, company_id, invitation_id, added_by) values (ch, k.company_id, invitation, auth.uid())
   on conflict (channel_id, invitation_id) do nothing;
@@ -13820,7 +13825,8 @@ CREATE TABLE public.member_invitations (
     grant_money_figures boolean DEFAULT false NOT NULL,
     grant_customer_data boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    claimed_at timestamp with time zone
+    claimed_at timestamp with time zone,
+    ended_at timestamp with time zone
 );
 
 ALTER TABLE public.member_invitations OWNER TO postgres;
@@ -21510,6 +21516,13 @@ REVOKE ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role tex
 GRANT ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) TO authenticated;
 
 --
+-- Name: FUNCTION make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) TO authenticated;
+
+--
 -- Name: FUNCTION manage_hermes_agent(c uuid, intent text, a uuid, replacement uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -23368,9 +23381,8 @@ GRANT ALL ON SEQUENCE public.member_audit_id_seq TO service_role;
 -- Name: TABLE member_invitations; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON TABLE public.member_invitations TO anon;
-GRANT ALL ON TABLE public.member_invitations TO authenticated;
 GRANT ALL ON TABLE public.member_invitations TO service_role;
+GRANT SELECT ON TABLE public.member_invitations TO authenticated;
 
 --
 -- Name: TABLE member_notes; Type: ACL; Schema: public; Owner: postgres

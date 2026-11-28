@@ -49,7 +49,6 @@ function server() {
   if(url.pathname==='/rest/v1/rpc/complete_setup') return reply('first-company-0000abcd');
   if(url.pathname==='/auth/v1/otp' || url.pathname==='/auth/v1/recover') return reply({});
   if(url.pathname==='/auth/v1/token') return reply({access_token:'access',token_type:'bearer',expires_in:3600,expires_at:4102444800,refresh_token:'refresh',user:{id:'00000000-0000-4000-8000-000000000040',aud:'authenticated',email:'owner@example.test'}});
-  if(url.pathname==='/rest/v1/rpc/claim_invitations') return reply(null);
   throw new Error(`unexpected request ${init.method||'GET'} ${url}`);
  };
  return requests;
@@ -88,29 +87,13 @@ test('first run takes the setup code only from the submitted body, never from th
 test('the auth callback redirects on APP_ORIGIN after the code is exchanged and when it is not', async () => {
  process.env.APP_ORIGIN=origin;
  const requests=server();
- // An invitation email leaves its code verifier in the browser's cookies; the callback needs it to exchange the code.
+ // A sign-in email leaves its code verifier in the browser's cookies; the callback needs it to exchange the code.
  await (await supabase()).auth.signInWithOtp({email:owner.email,options:{emailRedirectTo:`${origin}/auth/callback`}});
  const signedIn=await callback(new NextRequest(`http://gateway:8080/auth/callback?code=one-time&next=${encodeURIComponent('/c/first-company-0000abcd/home')}`,{headers:inside}));
  assert.ok(requests.some(url=>url.pathname==='/auth/v1/token'),'the code was exchanged');
  assert.equal(signedIn.headers.get('location'),`${origin}/c/first-company-0000abcd/home`);
  const noCode=await callback(new NextRequest('http://gateway:8080/auth/callback',{headers:inside}));
  assert.equal(noCode.headers.get('location'),`${origin}/sign-in`);
-});
-
-// #775: a claim that fails is told on the sign-in page and logged, never passed over to the page the link names.
-test('the auth callback tells the person when their invitation could not be claimed', async () => {
- process.env.APP_ORIGIN=origin;
- server();
- const answer=globalThis.fetch;
- globalThis.fetch=async (input,init)=>new URL(input instanceof Request?input.url:String(input)).pathname==='/rest/v1/rpc/claim_invitations'
-  ?new Response(JSON.stringify({code:'P0001',message:'boom'}),{status:400,headers:{'Content-Type':'application/json'}}):answer(input,init);
- await (await supabase()).auth.signInWithOtp({email:owner.email,options:{emailRedirectTo:`${origin}/auth/callback`}});
- const lines=[]; const write=console.error; console.error=line=>lines.push(String(line));
- try {
-  const response=await callback(new NextRequest(`http://gateway:8080/auth/callback?code=one-time&next=${encodeURIComponent('/c/first-company-0000abcd/home')}`,{headers:inside}));
-  assert.equal(response.headers.get('location'),`${origin}/sign-in?invitation=failed`);
- } finally { console.error=write; }
- assert.ok(lines.some(line=>line.includes('claimInvitations')&&line.includes('P0001')),'the failed claim is logged');
 });
 
 test('the reset link is built on APP_ORIGIN, not on the forwarded request', async () => {
