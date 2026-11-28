@@ -264,25 +264,27 @@ grant execute on function public.held_conversation_runs() to service_role;
 
 -- A Run that did not finish (it failed or was stopped) is kept as the row's unseen Run until its person's next open reads
 -- its end, so the Conversation says why it did not finish rather than only that no reply came (app/api/conversation-live);
--- the face no longer counts it as work.
+-- the face no longer counts it as work. Only the last Run that ended is told: a later one that ended, seen by the worker
+-- or by its person, takes an earlier one's place.
 alter table public.conversations add column unseen_run text
  constraint conversations_unseen_run check (unseen_run ~ '^[A-Za-z0-9_.:-]{1,200}$');
 
 create function public.let_go_conversation_run(conversation uuid, run text, unfinished boolean) returns boolean language sql security definer set search_path='' as $$
  with ended as (update public.conversations v set open_runs=array_remove(v.open_runs,run),
-   unseen_run=case when unfinished then run else v.unseen_run end
+   unseen_run=case when unfinished then run end
   where v.id=conversation and run=any(v.open_runs) returning 1)
  select exists(select 1 from ended);
 $$;
 revoke all on function public.let_go_conversation_run(uuid,text,boolean) from public,anon,authenticated,service_role;
 grant execute on function public.let_go_conversation_run(uuid,text,boolean) to service_role;
 
--- 20270428000000's end of a Run its person saw, which now also lets go of the unseen Run once its end was read.
+-- 20270428000000's end of a Run its person saw, which now also lets go of the unseen Run: its own end was read, or a
+-- later Run's end supersedes it.
 create or replace function public.end_conversation_run(conversation uuid, run text) returns boolean
 language sql security definer set search_path='' as $$
  with ended as (
   update public.conversations v set open_runs=array_remove(v.open_runs,run),
-   unseen_run=case when v.unseen_run=run then null else v.unseen_run end
+   unseen_run=null
   where v.id=conversation and v.person_id=auth.uid() and (run=any(v.open_runs) or v.unseen_run=run) and public.is_member(v.company_id)
   returning 1)
  select exists(select 1 from ended);

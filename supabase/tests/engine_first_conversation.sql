@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(30);
 -- #882: on a Company switched over to the Engine (engine_conversations), the main Agent opens its Owner's first
 -- Conversation once, as on the old record, but writes no message: the row marks it, and its first send gives it its
 -- session and tells the Run the opening's names. A send also answers the model chosen for the Conversation, and an
@@ -98,6 +98,12 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select is(public.end_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_1'),true,'its person''s open reads its end');
 reset role;
 select is((select unseen_run from public.conversations where id='c8820000-0000-0000-0000-000000000001'),null,'and lets it go');
+update public.conversations set open_runs=array['run_882_2','run_882_3'] where id='c8820000-0000-0000-0000-000000000001';
+set local role service_role;
+select public.let_go_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_2',true);
+select is(public.let_go_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_3',false),true,'a later Run that finished well is let go');
+reset role;
+select is((select unseen_run from public.conversations where id='c8820000-0000-0000-0000-000000000001'),null,'and an earlier one that did not finish is no longer told after it');
 set local role authenticated;
 select is((select state from public.agent_face_states('10000000-0000-0000-0000-000000000882') where agent='f8820000-0000-0000-0000-000000000001'),'idle',
  'and idle once its end is seen');

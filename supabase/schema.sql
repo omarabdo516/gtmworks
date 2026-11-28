@@ -5525,7 +5525,7 @@ CREATE FUNCTION public.end_conversation_run(conversation uuid, run text) RETURNS
     AS $$
  with ended as (
   update public.conversations v set open_runs=array_remove(v.open_runs,run),
-   unseen_run=case when v.unseen_run=run then null else v.unseen_run end
+   unseen_run=null
   where v.id=conversation and v.person_id=auth.uid() and (run=any(v.open_runs) or v.unseen_run=run) and public.is_member(v.company_id)
   returning 1)
  select exists(select 1 from ended);
@@ -7177,7 +7177,7 @@ CREATE FUNCTION public.let_go_conversation_run(conversation uuid, run text, unfi
     SET search_path TO ''
     AS $$
  with ended as (update public.conversations v set open_runs=array_remove(v.open_runs,run),
-   unseen_run=case when unfinished then run else v.unseen_run end
+   unseen_run=case when unfinished then run end
   where v.id=conversation and run=any(v.open_runs) returning 1)
  select exists(select 1 from ended);
 $$;
