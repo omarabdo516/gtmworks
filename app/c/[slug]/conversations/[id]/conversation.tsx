@@ -339,17 +339,29 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  // What the transcript draws: the Engine's messages when they were read, else the old record, which a first read that
  // fails leaves in charge (and which the composer and the title read either way). The old record's live states — the
  // working line, Stop, a question or a request to act — wait for #876 to #879, which bring them on this read.
+ // The person's messages the page held when each sent message was first drawn: only a message the session holds beyond
+ // those can be that send, so the same words said before (a second "Yes") never stand in for it. Kept as state, set while
+ // drawing the first time a sent message is seen.
+ const [before,setBefore]=useState<ReadonlyMap<number,ReadonlySet<number>>>(new Map());
+ const people=(engine.page?.messages??[]).filter(message=>message.author==='person');
+ const drawnSent=record.messages.filter(message=>message.kind==='sending');
+ if(drawnSent.some(message=>!before.has(message.id))) {
+  const next=new Map(before);
+  for(const message of drawnSent) if(!next.has(message.id)) next.set(message.id,new Set(people.map(drawn=>drawn.id)));
+  setBefore(next);
+ }
  const sent=useMemo(()=>{
-  // A message sent is drawn after the Engine's messages until a read of the session holds it (#876). A read that already
-  // holds it draws it once: each of the person's messages with the same words, said since a minute before it was sent,
-  // stands for one sent message, so the same words sent twice are drawn twice.
-  const held=new Map<string,number>();
-  const sent=record.messages.filter(message=>message.kind==='sending');
-  const since=Math.min(...sent.map(message=>Date.parse(message.created_at)))-60000;
-  for(const drawn of engine.page?.messages??[]) if(drawn.author==='person'&&Date.parse(drawn.created_at)>=since) held.set(drawn.body,(held.get(drawn.body)??0)+1);
-  const waiting=sent.filter(message=>{ const left=held.get(message.body)??0; if(!left) return true; held.set(message.body,left-1); return false; });
-  return {waiting,held:sent.filter(message=>!waiting.includes(message)).map(message=>message.id)};
- },[record.messages,engine.page]);
+  // A message sent is drawn after the Engine's messages until a read of the session holds it (#876): one of the person's
+  // messages with the same words, not on the page when it was sent, stands for it, and each stands for one send.
+  const used=new Set<number>(); const held:number[]=[];
+  const waiting=drawnSent.filter(message=>{
+   const seen=before.get(message.id)??new Set(people.map(drawn=>drawn.id));
+   const found=people.find(drawn=>drawn.body===message.body&&!seen.has(drawn.id)&&!used.has(drawn.id));
+   if(!found) return true;
+   used.add(found.id); held.push(message.id); return false;
+  });
+  return {waiting,held};
+ },[record.messages,engine.page,before]); // eslint-disable-line react-hooks/exhaustive-deps
  const shown=useMemo(()=>{
   const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
