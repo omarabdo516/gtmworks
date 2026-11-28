@@ -282,7 +282,8 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
 // What the Run waits on its person for (#878) is on the same read: `asking` is the card while it is open and once it
 // settled (answered here or in another tab, or no longer waited on), until the Run's end; `stopped` says the Run its
 // person stopped ended so, mid-reply or before it wrote any, until the next send.
-type Asking={card:LiveAsking,settled:LiveSettled|null};
+// `at`: when this page first saw it settle, the time a settled request shows.
+type Asking={card:LiveAsking,settled:LiveSettled|null,at:string|null};
 function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<Refreshed>) {
  const [view,setView]=useState<LiveRun|null>(null);
  const [reply,setReply]=useState('');
@@ -294,6 +295,8 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
  // A message sent while a Run is followed starts its own Run, which the row holds after it: once a Run ends the next one
  // the row holds is followed, in the order they were started, until the row holds none.
  const again=useRef(false);
+ // A card settles once: the first word on it (this page's press, or the live read's) stays.
+ const settle=useCallback((settled:LiveSettled)=>setAsking(now=>now?.card.id===settled.id&&!now.settled?{...now,settled,at:new Date().toISOString()}:now),[]);
  // `next`: the read that looks for the next Run once one ended, which shows the Agent working only once it finds one.
  const follow=useCallback((next=false)=>{
   if(reading.current) { again.current=true; return; }
@@ -317,8 +320,8 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
        const line=JSON.parse(buffer.slice(0,at)) as LiveLine|LiveDelta|LiveAskingLine; buffer=buffer.slice(at+1);
        if('end' in line) { end=line.end; how=line.outcome; }
        else if('delta' in line) { said+=line.delta; setReply(said); setWorking(true); }
-       else if('asking' in line) { const card=line.asking; setAsking(now=>now?.card.id===card.id?now:{card,settled:null}); }
-       else if('settled' in line) { const settled=line.settled; setAsking(now=>now?.card.id===settled.id?{...now,settled}:now); }
+       else if('asking' in line) { const card=line.asking; setAsking(now=>now?.card.id===card.id?now:{card,settled:null,at:null}); }
+       else if('settled' in line) settle(line.settled);
        else { setView(line); setWorking(true); }
       }
      }
@@ -347,9 +350,9 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
    if(!stopped.signal.aborted) await read(end==='unreachable'?failures+1:0);
   };
   void read(0);
- },[company,conversation]);
+ },[company,conversation,settle]);
  useEffect(()=>{ if(open) follow(); return ()=>{ reading.current?.abort(); reading.current=null; }; },[open,follow]);
- return {view,reply,working,follow,asking,stopped,settle:(settled:LiveSettled)=>setAsking(now=>now?.card.id===settled.id?{...now,settled}:now)};
+ return {view,reply,working,follow,asking,stopped,settle};
 }
 
 // The card the open Run waits on (#878), as the old record's cards are drawn (app/reply-card.tsx): a question, or a
@@ -357,20 +360,17 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
 // place; a press goes to the Run's own route through gtmworks, naming the Run and the Engine's id. Settled, it shows the
 // answer or the choice, or a question as closed and a request the Engine stopped waiting on as not allowed.
 const cardNumber=(id:string)=>{ let hash=0; for(const char of id) hash=(hash*31+char.charCodeAt(0))|0; return Math.abs(hash)%2147483646+1; };
-function askingCard({card,settled}:Asking):Card {
+function askingCard({card,settled,at}:Asking):Card {
  const id=cardNumber(card.id);
  if(card.kind==='question') {
   const asked={id,kind:'question' as const,title:card.text,question:card.text,choices:card.choices,multiple:card.multiple};
   return !settled?{...asked,state:'open'}:'answer' in settled?{...asked,state:'answered',answer:settled.answer}:{...asked,state:'closed'};
  }
  const asked={id,kind:'permission' as const,title:card.description.trim()||card.command,description:card.description,command:card.command,choices:card.choices};
- return settled&&'choice' in settled?{...asked,state:'decided',choice:settled.choice,at:new Date().toISOString()}:{...asked,state:'open'};
+ return settled&&'choice' in settled&&at?{...asked,state:'decided',choice:settled.choice,at}:{...asked,state:'open'};
 }
 function AskingCard({company,conversation,asking,writer,chips,settle}:{company:string,conversation:string,asking:Asking,writer:boolean,chips:boolean,settle:(settled:LiveSettled)=>void}) {
- const [at]=useState(()=>new Map<string,string>());
  const card=askingCard(asking);
- // The time a request settled stays the first one this page saw.
- if(card.kind==='permission'&&card.state==='decided'&&asking.settled) { if(!at.has(asking.card.id)) at.set(asking.card.id,card.at); card.at=at.get(asking.card.id)!; }
  const {run,id}=asking.card;
  const post=async(body:object)=>{
   try {
@@ -445,7 +445,7 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   if(!writer||!followed) return undefined;
   const post=async(body:object)=>postMessage({company,conversation:conversation.id,run:followed,...body});
   return {
-   ...(run.working&&!(waiting?.kind==='question')?{stop:()=>post({intent:'stop'})}:{}),
+   ...(run.working?{stop:()=>post({intent:'stop'})}:{}),
    ...(waiting?.kind==='question'?{answer:async(text:string)=>{
     const failure=await post({intent:'answer',question:waiting.id,text});
     if(!failure) run.settle({kind:'question',id:waiting.id,answer:text});

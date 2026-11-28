@@ -171,5 +171,18 @@ test('a card answered in one tab closes in the person\'s other tab',async({page,
  await here.getByRole('button',{name:'Allow once'}).click();
  await expect(there.locator('.card__outcome')).toContainText('Allowed once',{timeout:20000});
  await expect(there.getByRole('button')).toHaveCount(0);
+ // A question too: picked in this tab, its card shows the pick in the other.
+ fake.settings.approvals=()=>[];
+ fake.settings.questions=input=>input.includes('city')?[{question:'Which city?',choices:['Cairo','Giza']}]:[];
+ await expect(reply(page)).toHaveText(/Reply to: Please clean up/,{timeout:30000});
+ await send(page,'Pick a city');
+ await expect.poll(()=>fake.settings.runs.at(-1)?.input).toBe('Pick a city');
+ await other.reload();
+ fake.settings.release(fake.settings.runs.at(-1)!.id);
+ const asked=other.getByRole('group',{name:'Which city?'});
+ await expect(asked).toBeVisible({timeout:20000});
+ await page.getByRole('group',{name:'Which city?'}).getByRole('button',{name:/Cairo/}).click();
+ await expect(asked).toHaveAttribute('aria-label','Which city?: Answered',{timeout:20000});
+ await expect(asked).toContainText('Cairo');
  await other.close();
 });

@@ -7,4 +7,4 @@
 | `conversation-steer.spec.ts` "a request to act offers "Allow once" and "Don't allow", "Always allow" to an Owner; each reaches the Run" | stays | New (#878): the Owner's three buttons, and the Run's reply written with each choice. |
 | `conversation-steer.spec.ts` ""Always allow" is not offered to a Contributor and is refused on the server" | stays | New (#878): the Contributor's two buttons, and an "always" posted by hand refused 403 before the Engine is asked. |
 | `conversation-steer.spec.ts` "a request left unanswered until the Engine stops waiting shows as not allowed, and a question as closed" | stays | New (#878): the fake Engine's time limits passing, read as not allowed and as closed. |
-| `conversation-steer.spec.ts` "a card answered in one tab closes in the person's other tab" | stays | New (#878): two tabs on one Run; one allows, the other's card closes with that choice. |
+| `conversation-steer.spec.ts` "a card answered in one tab closes in the person's other tab" | stays | New (#878): two tabs on one Run; one allows a request and picks an answer to a question, and the other's cards close with that choice and that answer. |
