@@ -27,7 +27,7 @@ export type PersonConversation={id:string,agent:string,agentName:string,title:st
 // was never asked for is not taken for gone.
 // `missing`: sessions the Engine answered not found for on their own read; the paged list's absence alone proves nothing,
 // since a session that moved between pages while it was read is missing from it.
-type Kept={at:number,began:number,tried:number,sessions:Map<string,SessionListed>,complete:boolean,gone:boolean,missing:Set<string>,wanted:Map<string,number>,reading:Promise<void>|null,noted:Map<string,{at:number,change:Partial<SessionListed>}>};
+type Kept={at:number,began:number,tried:number,sessions:Map<string,SessionListed>,complete:boolean,gone:boolean,missing:Set<string>,confirmed:Set<string>,wanted:Map<string,number>,reading:Promise<void>|null,noted:Map<string,{at:number,change:Partial<SessionListed>}>};
 const memory=((globalThis as {[key:symbol]:unknown})[Symbol.for('gtmworks.sessionLists')]??=new Map<string,Kept>()) as Map<string,Kept>;
 const freshFor=15000;
 // A list waits for a first read of an Agent this long, and for a read that may hold a Conversation just started (one
@@ -59,14 +59,19 @@ async function readList(kept:Kept,on:Profile) {
  }
  // Each session asked for that a whole read did not show is asked for on its own, a few at a time; only a session the
  // Engine answers not found for is missing. One it still holds is drawn from its row until a read shows it.
- const missing=new Set<string>();
+ // A session confirmed missing stays missing (the Engine does not bring one back), and one confirmed held is not asked
+ // again this round, so each read asks the next batch; once every unseen session has been asked, a new round begins.
+ const missing=new Set<string>(); let confirmed=kept.confirmed;
  if(complete&&!gone) {
-  const unseen=[...kept.wanted.keys()].filter(id=>!sessions.has(id)).slice(0,confirmAtMost);
-  const answers=await Promise.all(unseen.map(async id=>[id,await on.sessions.held(id).catch(()=>'unreachable')] as const));
-  for(const [id,answer] of answers) if(answer==='missing') missing.add(id);
+  const unseen=[...kept.wanted.keys()].filter(id=>!sessions.has(id));
+  for(const id of unseen) if(kept.missing.has(id)) missing.add(id);
+  let next=unseen.filter(id=>!missing.has(id)&&!confirmed.has(id));
+  if(!next.length) { confirmed=new Set(); next=unseen.filter(id=>!missing.has(id)); }
+  const answers=await Promise.all(next.slice(0,confirmAtMost).map(async id=>[id,await on.sessions.held(id).catch(()=>'unreachable')] as const));
+  for(const [id,answer] of answers) if(answer==='missing') missing.add(id); else if(answer==='found') confirmed.add(id);
  }
  for(const [id,{at,change}] of kept.noted) { if(at<began) kept.noted.delete(id); else { const held=sessions.get(id); if(held) Object.assign(held,change); } }
- Object.assign(kept,{at:Date.now(),began,sessions,complete,gone,missing});
+ Object.assign(kept,{at:Date.now(),began,sessions,complete,gone,missing,confirmed});
 }
 
 // The sessions of one Agent's profile that `wanted` names, from the last good read, read again when it is stale or does
@@ -74,7 +79,7 @@ async function readList(kept:Kept,on:Profile) {
 async function profileSessions(company:string,profile:string,on:Profile|null,wanted:string[],now:number):Promise<Kept|null> {
  const key=keyOf(company,profile);
  let kept=memory.get(key);
- if(!kept) { kept={at:0,began:0,tried:0,sessions:new Map(),complete:false,gone:false,missing:new Set(),wanted:new Map(),reading:null,noted:new Map()}; memory.set(key,kept); }
+ if(!kept) { kept={at:0,began:0,tried:0,sessions:new Map(),complete:false,gone:false,missing:new Set(),confirmed:new Set(),wanted:new Map(),reading:null,noted:new Map()}; memory.set(key,kept); }
  const unheld=wanted.filter(id=>!kept.wanted.has(id));
  for(const id of unheld) kept.wanted.set(id,now);
  const good=kept.at>0;
