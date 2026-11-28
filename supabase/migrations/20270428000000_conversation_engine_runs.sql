@@ -12,10 +12,11 @@ alter table public.companies add column engine_conversations boolean not null de
 
 -- A send, checked before any Run starts: the person is an active Member and not a Viewer, the Conversation is theirs, in
 -- this Company, and they may talk to its Agent (agent_visible_to, today's rule). A new Conversation's row is written
--- first, on the session id gtmworks chose (`session`, `gtmworks-<uuid>`). A Conversation not made on the Engine, a new one
+-- first, on a session id the database chooses here (`gtmworks-<uuid>`), never one the caller names, so no Member can point
+-- a row of theirs at another's session. A Conversation not made on the Engine, a new one
 -- in a Company not switched over (engine_conversations), and a new one whose message is addressed to a Member answer `old`: those go on through queue_conversation_turn until #883 switches the old record
 -- off. Otherwise the answer is `engine` with the Agent, the session, and the sender's own note, never another Member's.
-create or replace function public.open_engine_conversation(c uuid, conversation uuid, agent uuid, session text, message text)
+create or replace function public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text)
  returns jsonb
  language plpgsql security definer
  set search_path to ''
@@ -23,7 +24,7 @@ as $$
 declare existing public.conversations; chosen public.hermes_agents; held text;
 begin
  if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
- if conversation is null or session is null or session !~ '^gtmworks-[0-9a-f-]{36}$' or message is null then raise exception 'conversationNotFound' using errcode='22023'; end if;
+ if conversation is null or message is null then raise exception 'conversationNotFound' using errcode='22023'; end if;
  perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
  select * into existing from public.conversations where id=conversation;
  if found then
@@ -40,8 +41,8 @@ begin
    return jsonb_build_object('state','old');
   end if;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,last_message_at)
-   values(conversation,c,auth.uid(),agent,chosen.name,session,now());
-  held := session;
+   values(conversation,c,auth.uid(),agent,chosen.name,'gtmworks-'||gen_random_uuid()::text,now())
+   returning hermes_session_id into held;
  else
   -- Only a Conversation this path made is on the Engine: it has its session and nothing on the old record. Any other
   -- (one the old record holds, or a row made without a session, such as the Owner's empty first Conversation) stays there.
@@ -63,8 +64,8 @@ begin
  return jsonb_build_object('state','engine','agent',agent,'session',held,
   'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()));
 end $$;
-revoke all on function public.open_engine_conversation(uuid,uuid,uuid,text,text) from public;
-grant all on function public.open_engine_conversation(uuid,uuid,uuid,text,text) to authenticated;
+revoke all on function public.open_engine_conversation(uuid,uuid,uuid,text) from public;
+grant all on function public.open_engine_conversation(uuid,uuid,uuid,text) to authenticated;
 
 -- The Run the Engine started for the person's message joins the Conversation's open Runs, after the ones started before
 -- it, until its end is seen; the same Run held again keeps its place. Only the

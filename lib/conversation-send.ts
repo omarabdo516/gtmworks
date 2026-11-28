@@ -1,5 +1,4 @@
 import 'server-only';
-import { randomUUID } from 'node:crypto';
 import type { supabase } from './supabase';
 import { agentEngine } from './engine/handle.mjs';
 import { mentionedAgent } from './composer-mentions.mjs';
@@ -13,7 +12,7 @@ export type EngineSend={state:'started',conversation:string,run:string}|{state:'
 
 // A person's message in a Conversation whose messages are the Engine's (#876, ADR 0033 item 1): checked on the server
 // (open_engine_conversation: an active Member, not a Viewer, their own Conversation, an Agent they may talk to), a new
-// Conversation's row written first on the session id gtmworks chooses, then one Run started on that session with the
+// Conversation's row written first on a session id the database chooses, then one Run started on that session with the
 // message, the sender's own note as its instructions, and the send key as its idempotency key. The row then holds the
 // Run's id until its end is seen (app/api/conversation-live). Nothing of the message is stored in gtmworks: who wrote it
 // is the row's person, the signed-in one of `db`, as the Engine's session keeps no author (ADR 0033). A new Conversation's first message that calls another Agent the sender
@@ -23,7 +22,7 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  let agent=chosen??null;
  if(chosen) agent=mentionedAgent(message,(await db.from('hermes_agents').select('id,name,is_default').eq('company_id',company)).data||[])||chosen;
  if(!agent) agent=(await db.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()).data?.id??null;
- const {data:opened,error}=await db.rpc('open_engine_conversation',{c:company,conversation,agent,session:`gtmworks-${randomUUID()}`,message});
+ const {data:opened,error}=await db.rpc('open_engine_conversation',{c:company,conversation,agent,message});
  if(error) return {state:'refused',code:error.code};
  const checked=opened as {state:'old'}|{state:'engine',agent:string,session:string,note:string|null};
  if(checked.state==='old') return {state:'old'};
