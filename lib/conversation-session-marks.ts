@@ -1,7 +1,7 @@
 import 'server-only';
 import type { supabase } from './supabase';
 import { agentEngine } from './engine/handle.mjs';
-import { heldArchived, noteSession } from './conversation-list';
+import { noteSession } from './conversation-list';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Found={id:string,agent_id:string|null,hermes_session_id:string|null};
@@ -45,14 +45,13 @@ export async function titleConversation(db:Database,company:string,id:string,tit
 }
 
 /** Writing in an archived Conversation brings it back (#881): its session's mark is cleared before the send goes on,
- * unless the lists' last read holds it current (a read that holds nothing clears it all the same). Nothing is logged:
- * the person wrote, they did not restore. */
+ * always, since another tab may have archived it since the lists' last read. Nothing is logged: the person wrote, they
+ * did not restore. */
 export async function unarchiveOnWrite(db:Database,company:string,id:string) {
  const rows=await rowsOf(db,company,[id]);
  const row=rows?.[0];
  if(!row?.agent_id||!row.hermes_session_id) return;
  const target=await agentEngine(db,{company,agent:row.agent_id});
  if(target.state!=='found') return;
- if(heldArchived(company,target.agent.profile,row.hermes_session_id)===false) return;
  if(await target.engine.sessions.mark(row.hermes_session_id,false)==='marked') noteSession(company,target.agent.profile,row.hermes_session_id,{archived:false});
 }

@@ -97,7 +97,8 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // session it holds nothing of yet is named as the old record names it, by its first message.
  const held=conversation.hermes_session_id?heldSession(company.id,conversation.hermes_session_id):null;
  const named=held?.title||held?.preview;
- const title=!conversation.good_morning_day&&named?named:conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
+ const sessionTitle=held?.title||(conversation.good_morning_day?null:named);
+ const title=sessionTitle||conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
  const archived=held?held.archived:!!conversation.archived_at;
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
