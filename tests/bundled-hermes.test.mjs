@@ -485,7 +485,7 @@ test('a Company names its Engine in one place: the record names no Company (#378
 
 test('the threat model names every service-role holder the Engine work added (#378, X5)', () => {
  const doc=readFileSync('docs/threat-model.md','utf8');
- for(const name of ['lib/company-engine.mjs','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/install-engine.mjs']) {
+ for(const name of ['lib/company-engine.mjs','app/first-owner/submit/route.ts','scripts/company-add.mjs','scripts/company-list.mjs','scripts/company-password-link.mjs','scripts/install-engine.mjs']) {
   assert.ok(doc.includes(name),name);
  }
  assert.match(doc,/service-role call site listed above/);

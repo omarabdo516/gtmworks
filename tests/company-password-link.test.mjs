@@ -139,6 +139,11 @@ test('the command refuses an unknown Company, an ambiguous name, an unknown emai
  }
 });
 
+test('the runtime image carries the command, as it carries the other Company commands', () => {
+ const dockerfile=readFileSync('Dockerfile','utf8');
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install-engine\.mjs \/app\/scripts\/company-add\.mjs \/app\/scripts\/company-list\.mjs \/app\/scripts\/company-password-link\.mjs \.\/scripts\/$/m);
+});
+
 test('the command\'s source logs no secret and sends only the hash to the one server function', () => {
  const source=readFileSync('scripts/company-password-link.mjs','utf8');
  assert.match(source,/linkSecretHash\(secret\)/);
