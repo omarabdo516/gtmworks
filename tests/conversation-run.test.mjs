@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { readRunEvents, startSessionRun } from '../lib/engine/runs.mjs';
+import { readRun, readRunEvents, startSessionRun } from '../lib/engine/runs.mjs';
 import { readSessionMessages } from '../lib/engine/sessions.mjs';
 import { liveLines } from '../lib/live-steps.mjs';
 
@@ -63,5 +63,49 @@ test('a start whose answers were lost is unknown, and asking again with the same
   const found=await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'send-4',retry:true});
   assert.equal(typeof found,'string');
   assert.equal(fake.settings.runs.length,1,'one Run, never two');
+ } finally { await fake.close(); }
+});
+
+// #877: the Engine takes so many Runs at once (gateway.api_server.max_concurrent_runs) and answers "retry" for the next,
+// 429 rate_limit_exceeded with Retry-After; a session holds so many waiting Runs and refuses the next, 409 queue_full; a
+// Run started while another works on its session reads `queued` until its turn. None of the refused is a Run.
+test('a start the Engine is too busy for is "busy", and goes through once the Engine takes it',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true; fake.settings.runsAtOnce=1;
+  const other=await startSessionRun({...connection(fake),session:`gtmworks-${crypto.randomUUID()}`,input:'Working',idempotencyKey:'busy-1'});
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  assert.deepEqual(await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'busy-2'}),{state:'busy',retryAfter:1});
+  assert.equal(fake.settings.runs.length,1,'no Run was made for it');
+  fake.settings.release(/** @type {string} */(other));
+  await new Promise(resolve=>setTimeout(resolve,300));
+  assert.equal(typeof await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'busy-2'}),'string');
+ } finally { await fake.close(); }
+});
+
+test('a session whose queue is full refuses the next message as "queueFull"',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true; fake.settings.sessionQueueLimit=1;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  await startSessionRun({...connection(fake),session,input:'One',idempotencyKey:'full-1'});
+  await startSessionRun({...connection(fake),session,input:'Two',idempotencyKey:'full-2'});
+  assert.deepEqual(await startSessionRun({...connection(fake),session,input:'Three',idempotencyKey:'full-3'}),{state:'queueFull'});
+  assert.equal(fake.settings.runs.length,2);
+ } finally { await fake.close(); }
+});
+
+test('a Run started while another works on its session reads queued until its turn',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  const first=/** @type {string} */(await startSessionRun({...connection(fake),session,input:'One',idempotencyKey:'queue-1'}));
+  const second=/** @type {string} */(await startSessionRun({...connection(fake),session,input:'Two',idempotencyKey:'queue-2'}));
+  assert.equal((await readRun({...connection(fake),run:first})).queued,undefined,'the working one is not queued');
+  assert.equal((await readRun({...connection(fake),run:second})).queued,true);
+  fake.settings.release(first);
+  await new Promise(resolve=>setTimeout(resolve,300));
+  assert.equal((await readRun({...connection(fake),run:second})).queued,undefined,'its turn came');
  } finally { await fake.close(); }
 });

@@ -2,6 +2,7 @@
   "conversationWorkingForPerson": "Working for {0}",
   "conversationQueued": "It’ll read this after the current reply",
   "conversationNotSent": "Not sent",
+  "conversationNoReply": "No reply",
   "conversationUnread": "This Conversation couldn’t be read.",
   "conversationNoRefresh": "Couldn’t refresh. Showing what was last read.",
   "conversationEngineSummary": "The Engine’s summary of earlier messages",

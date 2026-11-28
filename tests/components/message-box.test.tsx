@@ -124,8 +124,46 @@ test('when the server cannot reach the agent engine the box keeps the text and s
  const screen = await box({ send: (message, sendKey) => postMessage({ company: 'co-1', conversation: 'cv-1', message, sendKey }) });
  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Are you there?');
  await screen.getByRole('button', { name: 'Send' }).click();
- await expect.element(screen.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it.');
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it. Try again');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Are you there?');
+});
+
+// #877: a message the Engine could not take stays in the box, says why, and Try again sends it once more under the same
+// send key, so a Run the Engine did start is replayed rather than started twice; a refusal of gtmworks's own offers none.
+test('a send the Engine had no room for stays in the box, not sent, and Try again sends it once with the same key', async () => {
+ const sent: string[] = [];
+ let answer = (): Response => Response.json({ error: 'conversationEngineBusy' }, { status: 503 });
+ vi.stubGlobal('fetch', vi.fn(async (_path: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body)).sendKey); return answer(); }));
+ const screen = await box({ send: (message, sendKey) => postMessage({ company: 'co-1', conversation: 'cv-1', message, sendKey }) });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Hold on');
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Not sent: the agent engine is already working on as many replies as it takes. Your message is still in the box. Try again');
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Hold on');
+ answer = () => Response.json({ conversation: 'cv-1', run: 'run-1', engine: true });
+ await screen.getByRole('button', { name: 'Try again' }).click();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+ await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
+ expect(sent).toHaveLength(2);
+ expect(sent[1]).toBe(sent[0]);
+});
+
+test('a refusal of gtmworks\'s own leaves the text in the box with no Try again', async () => {
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'conversationNotAllowed' }, { status: 403 })));
+ const screen = await box({ send: (message, sendKey) => postMessage({ company: 'co-1', conversation: 'cv-1', message, sendKey }) });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Hello');
+ await screen.getByRole('button', { name: 'Send' }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Your role cannot start or write in a conversation.');
+ await expect.element(screen.getByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Hello');
+});
+
+test('a double press sends one message', async () => {
+ let calls = 0;
+ const screen = await box({ send: async () => { calls++; await new Promise(resolve => setTimeout(resolve, 200)); return null; } });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Once');
+ await screen.getByRole('button', { name: 'Send' }).dblClick();
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+ expect(calls).toBe(1);
 });
 
 test('on a phone the send arrow is the reference\'s 28px circle, and a tap anywhere in the 44px square around it lands on it', async () => {

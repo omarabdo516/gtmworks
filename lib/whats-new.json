@@ -1,5 +1,11 @@
 [
  {
+  "issue": 877,
+  "date": "2026-11-28",
+  "en": { "title": "A message the engine can’t take stays in your box", "body": "When the agent engine is busy, has too many messages waiting, or can’t be reached, your message stays in the box with why it wasn’t sent and Try again, and a message you send while the agent works shows that it’s waiting its turn." },
+  "ar": { "title": "الرسالة اللي المحرك مياخدهاش بتفضل في المربع", "body": "لما محرك الوكلاء يبقى مشغول، أو فيه رسايل كتير مستنية، أو مش عارف توصله، رسالتك بتفضل في المربع ومعاها سبب إنها ما اتبعتتش و«حاول مرة أخرى»، والرسالة اللي بتبعتها والوكيل شغال بتبيّن إنها مستنية دورها." }
+ },
+ {
   "issue": 947,
   "date": "2026-11-28",
   "en": { "title": "A tool that fails its test says why", "body": "When a tool you added does not answer the engine, its page now says so and shows the engine's own reason under the line, in the direction it was written, instead of guessing at the address or the token." },

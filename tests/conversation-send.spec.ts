@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { startSessionRun } from '../lib/engine/runs.mjs';
 
 // #876: a sent message becomes one Run on the Conversation's own Engine session, and its reply arrives live. The send is
 // checked on the server, a new Conversation's row is written first on a session id gtmworks chose, the Member's own note
@@ -44,7 +45,10 @@ test.beforeAll(async({},testInfo)=>{
  end $$;`);
 });
 test.afterAll(async()=>{ await stopFake(); });
-test.afterEach(()=>{ fake.settings.liveHold=false; fake.settings.livePace=10; fake.settings.liveSteps=()=>[]; });
+test.afterEach(()=>{
+ fake.settings.liveHold=false; fake.settings.livePace=10; fake.settings.liveSteps=()=>[]; fake.settings.runsAtOnce=0; fake.settings.sessionQueueLimit=32;
+ for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id);
+});
 
 const send=async(page:Page,text:string)=>{ const box=page.getByLabel('Message',{exact:true}); await box.fill(text); await box.press('Enter'); };
 
@@ -156,6 +160,129 @@ test('three quick sends: each Run is followed live in the order it was started, 
  expect(counted()).toEqual(before);
 });
 
+// #877: a message sent while the Agent works waits its turn in the Engine's own queue, and one the Engine cannot take is
+// never lost: it stays in the box with why it was not sent and Try again.
+const openConversation=async(page:Page,messages:{role:string,content:string,timestamp:number}[]=[])=>{
+ const conversation=randomUUID(); const session=`gtmworks-${randomUUID()}`;
+ query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
+ fake.settings.sessions.set(session,{profile,messages});
+ await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+ await expect(page.getByLabel('Message',{exact:true})).toBeVisible({timeout:20000});
+ return {conversation,session};
+};
+// Another Conversation's Run, held working, so the Engine's cap of Runs at once is reached.
+const blocker=async()=>{
+ const run=await startSessionRun({address:fake.address,profile,key:fake.settings.key,session:`gtmworks-${randomUUID()}`,input:'Elsewhere',idempotencyKey:randomUUID()});
+ if(typeof run!=='string') throw new Error('no blocking Run');
+ return run;
+};
+const runsOf=(input:string)=>fake.settings.runs.filter(run=>run.input===input).length;
+const person=(page:Page)=>page.locator('.msg[data-author=person]');
+const waiting='It’ll read this after the current reply';
+
+test('two messages sent while the Agent works run in order, and each shows waiting until its turn',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page);
+ fake.settings.liveHold=true;
+ const starts=fake.settings.counts().runStart??0;
+ await send(page,'First');
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+1);
+ await send(page,'Second');
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+2);
+ await send(page,'Third');
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+3);
+ const [first,second,third]=fake.settings.runs.slice(-3).map(run=>run.id);
+ await expect(person(page).filter({hasText:'First'})).not.toContainText(waiting);
+ await expect(person(page).filter({hasText:'Second'})).toContainText(waiting,{timeout:10000});
+ await expect(person(page).filter({hasText:'Third'})).toContainText(waiting);
+ fake.settings.release(first);
+ await expect(page.locator('.msg[data-author=agent]').first()).toHaveText(/Reply to: First/,{timeout:30000});
+ await expect(person(page).filter({hasText:'Second'})).not.toContainText(waiting,{timeout:20000});
+ await expect(person(page).filter({hasText:'Third'})).toContainText(waiting);
+ fake.settings.release(second);
+ await expect(page.locator('.msg[data-author=agent]').nth(1)).toHaveText(/Reply to: Second/,{timeout:30000});
+ await expect(person(page).filter({hasText:'Third'})).not.toContainText(waiting,{timeout:20000});
+ fake.settings.release(third);
+ await expect(page.locator('.msg[data-author=agent]').nth(2)).toHaveText(/Reply to: Third/,{timeout:30000});
+ await expect(person(page)).toHaveCount(3);
+ await expect(page.getByText(waiting)).toHaveCount(0);
+});
+
+test('a send the Engine answers "retry" for is tried again, and goes through once the Engine takes it',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page);
+ fake.settings.liveHold=true; fake.settings.runsAtOnce=1;
+ const other=await blocker();
+ await send(page,'Are you there?');
+ await expect(person(page).last()).toHaveText(/Are you there\?/,{timeout:3000});
+ await page.waitForTimeout(2500);
+ expect(runsOf('Are you there?'),'no Run while the Engine has no room').toBe(0);
+ fake.settings.release(other); fake.settings.liveHold=false;
+ await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Reply to: Are you there\?/,{timeout:30000});
+ expect(runsOf('Are you there?')).toBe(1);
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
+ await expect(page.locator('.composer-error')).toHaveCount(0);
+});
+
+test('a send the Engine answers "retry" for past the short time stays in the box, not sent, and Try again sends it once',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page);
+ fake.settings.liveHold=true; fake.settings.runsAtOnce=1;
+ const other=await blocker();
+ await send(page,'Hold on');
+ const line=page.locator('.composer-error');
+ await expect(line).toHaveText(/Not sent: the agent engine is already working on as many replies as it takes/,{timeout:30000});
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Hold on');
+ await expect(person(page),'nothing is drawn as sent').toHaveCount(0);
+ expect(runsOf('Hold on')).toBe(0);
+ fake.settings.release(other); fake.settings.liveHold=false;
+ await line.getByRole('button',{name:'Try again'}).click();
+ await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Reply to: Hold on/,{timeout:30000});
+ await expect(person(page)).toHaveCount(1);
+ expect(runsOf('Hold on'),'sent once').toBe(1);
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
+});
+
+test('the Engine\'s own queue limit, once reached, leaves the message not sent and says why',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page);
+ fake.settings.liveHold=true; fake.settings.sessionQueueLimit=1;
+ const starts=fake.settings.counts().runStart??0;
+ await send(page,'One');
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+1);
+ await send(page,'Two');
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+2);
+ await send(page,'Three');
+ const line=page.locator('.composer-error');
+ await expect(line).toHaveText(/Not sent: too many messages are already waiting for this agent/,{timeout:20000});
+ await expect(line.getByRole('button',{name:'Try again'})).toBeVisible();
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Three');
+ await expect(person(page)).toHaveCount(2);
+ expect(runsOf('Three')).toBe(0);
+});
+
+test('a double press sends one message',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page);
+ await page.getByLabel('Message',{exact:true}).fill('Only once');
+ await page.getByRole('button',{name:'Send',exact:true}).dblclick();
+ await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Reply to: Only once/,{timeout:30000});
+ await page.waitForTimeout(1500);
+ await expect(person(page)).toHaveCount(1);
+ expect(runsOf('Only once')).toBe(1);
+});
+
+test('a Conversation whose last message is the person\'s, with no Run open, says no reply, and Try again asks again',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Plan the week',timestamp:3}]);
+ const line=page.locator('[data-outcome=no-reply]');
+ await expect(line).toHaveText(/No reply/,{timeout:20000});
+ await line.getByRole('button',{name:'Try again'}).click();
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Plan the week/,{timeout:30000});
+ await expect(line).toHaveCount(0);
+ expect(runsOf('Plan the week')).toBe(1);
+});
+
 test('a Viewer, another Member\'s Conversation and an Agent the sender may not talk to are refused on the server, and no Run starts',async({browser})=>{
  test.setTimeout(180000);
  const conversation=randomUUID(); const session=`gtmworks-${randomUUID()}`;
@@ -173,4 +300,19 @@ test('a Viewer, another Member\'s Conversation and an Agent the sender may not t
  expect(list(`select count(*)::int as n from public.conversations where id='${fresh}'`)[0].n).toBe(0);
  await member.context.close();
  expect(fake.settings.counts().runStart??0,'no Run started').toBe(starts);
+});
+
+// Last: it stops the fake Engine.
+test('with the Engine stopped, the text stays in the box and nothing is drawn as sent',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2}]);
+ await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Hi Omar\./,{timeout:20000});
+ await stopFake();
+ await send(page,'Still there?');
+ const line=page.locator('.composer-error');
+ await expect(line).toHaveText(/could not be reached\. Your message was not sent/,{timeout:30000});
+ await expect(line.getByRole('button',{name:'Try again'})).toBeVisible();
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Still there?');
+ await expect(person(page)).toHaveCount(1);
+ await expect(person(page)).toHaveText(/Hello/);
 });

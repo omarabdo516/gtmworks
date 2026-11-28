@@ -18,6 +18,7 @@ import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
 import { conversationFilesProblem, imageTypes, maxFiles } from '@/lib/attachments.mjs';
 import { useComposerDictation, type DictationTarget } from './composer-mic';
 import { toast } from './toast';
+import type { Accepted } from '@/lib/sending';
 
 // Loaded when drawn, so a composer outside a Company's pages loads neither.
 const NewChannel=lazy(()=>import('./new-channel-dialog'));
@@ -144,6 +145,9 @@ export type ModelTarget={company:string,conversation:string,agent:string};
 // Why a chosen image, or a set of them, cannot go with this message: the one line under the box (design-reference has
 // no such line, since it takes any file; the Engine reads images only).
 const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
+// The refusals of a send that a later one can get through (#877): the Engine not reached, at its cap of Runs at once, or
+// with its session's queue full. A refusal of gtmworks's own (a Viewer, a Conversation not theirs) has no Try again.
+const notSent=new Set(['conversationHermesFailed','conversationEngineBusy','conversationQueueFull']);
 export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,to,drawn=false,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,to?:string|null,drawn?:boolean,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  // The Agent being written to listens while the field holds words (#700, lib/live-runs): the chat's own Agent (`to`), or
@@ -160,7 +164,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  // The reference's one picker (#file-input): opened from the menu, it appends to what is already chosen.
  const picker=useRef<HTMLInputElement>(null);
  const canSend=!!text.trim()||files.length>0;
- const sendButton=useRef<HTMLButtonElement>(null); const flights=useSendFlights();
+ const sendButton=useRef<HTMLButtonElement>(null); const flights=useSendFlights(); const flying=useRef(false);
  // design-reference: syncComposer's is-morph. When the button turns between the send arrow and the stop square, the new
  // icon pops in, once; typing with the button unchanged, and the first draw, play nothing. The mark goes once it has
 // played, so the next change is the only thing that plays it again.
@@ -240,14 +244,16 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  useEffect(()=>{ const take=()=>{ if(field.current&&!field.current.closest('[inert]')&&takeComposerFocus(search?`${pathname}?${search}`:pathname)) field.current.focus(); }; take(); return onComposerFocus(take); },[pathname,search]);
  async function submit() {
   if(dictation.recording) dictation.finish(false);
-  if(!canSend||busy) return;
+  // A second press before the first one's draw sends nothing more (#877): one press, one message.
+  if(!canSend||busy||flying.current) return;
   const problem=conversationFilesProblem(files,text);
   if(problem) { setError(refusalOf(problem)); return; }
+  flying.current=true;
   setBusy(true); setError(''); setRefusalLine(false); setList(null);
   flights.fly(sendButton.current);
   const said=text; const carried=files;
   if(drawn) { setText(''); setFiles([]); }
-  const failure=await send(said,key,carried);
+  const failure=await send(said,key,carried).finally(()=>{ flying.current=false; });
   setBusy(false);
   if(failure) { setError(failure); if(drawn) { setText(said); setFiles(carried); } } else { setText(''); setFiles([]); setKey(newId()); }
  }
@@ -271,7 +277,10 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
    {stop&&shape==='stop'?<button ref={sendButton} type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)} onAnimationEnd={()=>setMorphed(false)}><svg key="stop" className={`gw-icon ${morph}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
    :<button ref={sendButton} type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!canSend||busy} onClick={()=>void submit()} onAnimationEnd={()=>setMorphed(false)}><ShellIcon key="send" name="send" className={morph}/></button>}
   </div>
-  {error&&<p role="alert" className="composer-error">{t(error,maxFiles)}</p>}
+  {/* A message the Engine could not take stays in the box (#877): the line says why it was not sent, and Try again
+     sends it again with the same key, so a Run the Engine did start is the one it replays. */}
+  {error&&<p role="alert" className="composer-error" data-outcome={notSent.has(error)?'not-sent':undefined}>{t(error,maxFiles)}
+   {notSent.has(error)&&canSend&&<> <button type="button" className="link-btn" disabled={busy} onClick={()=>void submit()}>{t('tryAgain')}</button></>}</p>}
   {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}{dictation.help}</p>}
   {flights.drawn}
  </div>;
@@ -370,10 +379,16 @@ function useModels(target:ModelTarget|undefined) {
 }
 
 export async function postMessage(body:object,path='/api/conversations') {
+ return (await postMessageAnswer(body,path)).failure;
+}
+// The same post, with what an accepted one answered: a message the Engine took names its Run, and whether the Engine
+// queued it behind another (#877).
+export async function postMessageAnswer(body:object,path='/api/conversations'):Promise<{failure:string|null,answer:Accepted|null}> {
  try {
   const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  return response.ok?null:((await response.json()).error as string)||'conversationFailed';
- } catch { return 'conversationFailed'; }
+  if(!response.ok) return {failure:((await response.json()).error as string)||'conversationFailed',answer:null};
+  return {failure:null,answer:await response.json().catch(()=>null) as Accepted|null};
+ } catch { return {failure:'conversationFailed',answer:null}; }
 }
 
 // A message that carries images goes as a form, the images themselves beside the fields a text-only send posts (#155):
