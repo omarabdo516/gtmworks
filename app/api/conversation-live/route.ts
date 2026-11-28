@@ -8,6 +8,9 @@ import { runEnd, type RunEnd } from '@/lib/run-outcome.mjs';
 import { ranOutAccounts } from '@/lib/ran-out-accounts.mjs';
 import { placedName, readProviderNames } from '@/lib/provider-names.mjs';
 import { conversationLines, type LiveAskingLine } from '@/lib/conversation-live.mjs';
+import { logFallbackMove } from '@/lib/fallback-model.mjs';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 
 // The open Run of a Conversation whose messages are the Engine's, as it happens (#876): gtmworks's web server follows the
@@ -65,7 +68,13 @@ export async function GET(request:NextRequest) {
    return {...end,ranOut:rows.map(row=>placedName(names,row.provider,row.account,row.place))};
   } catch { return end; }
  };
- const told=async()=>{ try { return await named(runEnd(await engine.runs.read(run))); } catch { return null; } };
+ // A Run the Company's Fallback model answered is logged in Activity once (#644), as the server, which alone writes it;
+ // the worker's pass over held Runs logs one nobody watched, and the database keeps the first.
+ const logged=async(read:Awaited<ReturnType<typeof engine.runs.read>>)=>{
+  if(read.state!=='completed') return;
+  await logFallbackMove(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),{company,run,result:read,engine:{models:()=>engine.models.read()}});
+ };
+ const told=async()=>{ try { const read=await engine.runs.read(run); const end=runEnd(read); if(end) await logged(read); return await named(end); } catch { return null; } };
   const settled=await told();
   if(settled) { await db.rpc('end_conversation_run',{conversation,run}); return only(settled); }
   const stopped=new AbortController();

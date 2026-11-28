@@ -1009,6 +1009,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveFailed?'failed':run.liveDone?'completed':approval?'waiting_for_approval':run.turnStarted?'running':'queued',session_id:run.session,...times,
       pending_controls:question?[{kind:'clarify',prompt_id:question.prompt_id,execution_generation:1,question:`${question.question}\nReply "skip" to skip this question.`,choices:question.choices.map((choice,index)=>index===0&&question.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:question.multi_select}]:[],
       ...(approval?{last_event:'approval.request',approval:{command:approval.command,description:approval.description,pattern_key:approval.patternKeys[0],pattern_keys:approval.patternKeys,request_id:approval.request_id,timeout_s:300,event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:approval.choices}}:{}),
+      // The pair that answered a finished Run (api_server_runs.py _served_runtime), as on a Run with no session.
+      ...(run.liveDone&&run.served?{runtime:{...run.served,route_source:run.requested?'raw_request':'global',...(run.requested?{requested:run.requested}:{})}}:{}),
       ...(run.liveDone?{output:run.output??settings.reply(inputText(run.input),[],[])}:{}),...(run.liveFailed&&run.outOfAccounts?{output:settings.modelCalls.some(call=>call.run===run.id)?settings.noAccountText:settings.usageLimitText}:run.liveFailed&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{})});
     }
     if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times}); }
@@ -1040,7 +1042,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const run=settings.runs.find(run=>run.id===runAction[1]);
     if(runAction[2]==='stop') {
      if(!run) return send(response,404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
-     run.stopped=true; return send(response,200,{run_id:run.id,status:'stopping'});
+     // A Run held before it began stops there too: the session's next Run goes on, as the Engine's does.
+     run.stopped=true; run.release?.(); return send(response,200,{run_id:run.id,status:'stopping'});
     }
     let body=null; try { body=JSON.parse(raw); } catch { body=null; }
     if(runAction[2]==='approval') {

@@ -50,7 +50,8 @@ test.beforeAll(async({},testInfo)=>{
    ('${conversation}','${company}','${omar}','${ads}','Meta Ads','gtmworks-${conversation}',array['details-run'],now()-interval '5 minutes');
   -- Copy's mention of Omar in the general channel waits on him alone; a question of a Conversation's Run on the old record
   -- waits on nobody since #883.
-  with said as (insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body) values ('${company}','69000000-0000-0000-0000-000000000001','agent','${copy}','Copy','@Omar which tone for spring?') returning id)
+  with asked as (insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values ('${company}','69000000-0000-0000-0000-000000000001','person','${omar}','Omar','@Copy the spring copy','${id(19)}') returning id),
+   said as (insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body,reply_to) select '${company}','69000000-0000-0000-0000-000000000001','agent','${copy}','Copy','@Omar which tone for spring?',id from asked returning id)
   insert into public.waiting_items(company_id,person_id,kind,title,channel_message_id) select '${company}','${omar}','channel_mention','Which tone for spring?',id from said;
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
   -- Two earlier changes of Meta Ads in the company log, as log_agent_event writes them, dated in the past.

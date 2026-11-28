@@ -10,6 +10,8 @@ select json_build_object(
   and position('conversation_run_ends' in pg_get_functiondef('public.agent_work(uuid)'::regprocedure))=0,
  'open_run_from_the_row',position('open_runs' in pg_get_functiondef('public.agent_open_run(uuid,uuid)'::regprocedure))>0
   and position('conversation_messages' in pg_get_functiondef('public.agent_open_run(uuid,uuid)'::regprocedure))=0,
+ 'archive_stops_open_runs',position('open_runs' in pg_get_functiondef('public.conversation_work_stops(uuid)'::regprocedure))>0
+  and position('conversation_queued_turns' in pg_get_functiondef('public.conversation_work_stops(uuid)'::regprocedure))=0,
  'no_screen_hands',position('where false' in pg_get_functiondef('public.screen_hands(uuid)'::regprocedure))>0,
  'face_leaves_out_old_cards',position('''question'',''hand'',''permission''' in pg_get_functiondef('public.agent_face_states(uuid)'::regprocedure))>0,
  'grants_kept',has_function_privilege('authenticated','public.open_engine_conversation(uuid,uuid,uuid,text)','execute')

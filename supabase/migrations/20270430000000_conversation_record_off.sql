@@ -238,3 +238,13 @@ create or replace function public.screen_hands(c uuid) RETURNS TABLE(card bigint
 language sql stable security definer set search_path='' as $$
  select null::bigint,null::uuid,null::uuid,null::text,null::text,null::text,null::text,null::timestamptz where false;
 $$;
+
+-- What archiving a Conversation stops (#674), which its one confirmation names: the Runs its row holds, which archiving
+-- stops on the Engine (lib/conversation-session-marks.ts), and a Handover started from it that is still moving. The old
+-- record's open Run, waiting turns and open cards are no work of anyone's any more.
+create or replace function public.conversation_work_stops(conversation uuid) RETURNS TABLE(kind text, agent_id uuid, agent_name text)
+language sql stable set search_path='' as $$
+ select 'run'::text, v.agent_id, v.agent_name from public.conversations v
+ where v.id=conversation and (cardinality(v.open_runs)>0
+  or exists(select 1 from public.agent_handovers h where h.conversation_id=v.id and h.state not in ('done','failed')));
+$$;

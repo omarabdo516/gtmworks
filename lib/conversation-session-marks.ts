@@ -4,7 +4,7 @@ import { agentEngine } from './engine/handle.mjs';
 import { noteSession } from './conversation-list';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
-type Found={id:string,agent_id:string|null,hermes_session_id:string|null};
+type Found={id:string,agent_id:string|null,hermes_session_id:string|null,open_runs?:string[]|null};
 export type SessionWrite='marked'|'missing'|'invalid'|'refused'|'unreachable';
 
 // A Conversation's title and archived mark are its session's own (#881, spec #864): they are written on the Engine,
@@ -12,7 +12,7 @@ export type SessionWrite='marked'|'missing'|'invalid'|'refused'|'unreachable';
 // The rows are read as the reader, so only their own Conversations are written; one with no session yet (its first Run
 // not started) has no mark to write, and is `missing`.
 async function rowsOf(db:Database,company:string,ids:string[]) {
- const {data,error}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('company_id',company).in('id',ids);
+ const {data,error}=await db.from('conversations').select('id,agent_id,hermes_session_id,open_runs').eq('company_id',company).in('id',ids);
  return error?null:(data||[]) as Found[];
 }
 async function write(db:Database,company:string,row:Found,change:{archived:boolean}|{title:string}):Promise<SessionWrite> {
@@ -33,6 +33,12 @@ export async function markConversations(db:Database,company:string,ids:string[],
  const rows=await rowsOf(db,company,ids);
  if(!rows) return null;
  const answers=await Promise.all(rows.map(async row=>[row.id,await write(db,company,row,{archived}).catch(()=>'unreachable' as const)] as const));
+ // Archiving stops the work its confirmation named (#674): each Run the row holds is stopped on its Agent's profile, and
+ // the row lets it go once its end is seen, as any stopped Run. A Run the Engine cannot stop now goes on.
+ if(archived) await Promise.all(rows.filter(row=>row.agent_id&&row.open_runs?.length&&answers.some(([id,answer])=>id===row.id&&answer==='marked')).map(async row=>{
+  const target=await agentEngine(db,{company,agent:row.agent_id}).catch(()=>null);
+  if(target?.state==='found') await Promise.all((row.open_runs??[]).map(run=>target.engine.runs.stop(run).catch(()=>false)));
+ }));
  return {marked:answers.flatMap(([id,answer])=>answer==='marked'?[id]:[]),unstarted:answers.flatMap(([id,answer])=>answer==='missing'?[id]:[])};
 }
 

@@ -112,7 +112,7 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(page.locator('.toast').filter({hasText:'The conversation is back in your recent chats'})).toBeVisible();
   await expect(page.locator('.arc-line')).toHaveCount(0);
   await expect(recent).toHaveCount(1);
-  await expect(page.locator('.msg[data-author=agent]').last()).toContainText('Reply to: Back to it');
+  await expect(page.locator('.msg[data-author=agent]:not([data-live])').filter({hasText:'Reply to: Back to it'})).toBeVisible({timeout:20000});
   await expect.poll(()=>fake.settings.archivedSessions.has(`${nour.profile}:${session}`),{timeout:30000}).toBe(false);
  } finally { fake.settings.liveHold=false; for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id); await fake.close(); }
 });
@@ -131,6 +131,10 @@ test('A person archives several Conversations from All conversations and one fro
  const titled=(title:string)=>list.filter({hasText:title});
  await expect(titled(mark)).toHaveCount(3);
  const counted=async(name:'Current'|'Archived')=>Number((await page.getByRole('button',{name:new RegExp(`^${name} \\d+$`)}).getAttribute('aria-label'))!.split(' ')[1]);
+ // The lists draw the Engine's last read, fresh for 15 seconds (lib/conversation-list.ts): the counts are read once a
+ // read began after the test before this one changed its own Conversation's mark.
+ await page.waitForTimeout(16000); await page.reload(); await expect(titled(mark)).toHaveCount(3);
+ await expect.poll(async()=>(await counted('Current'))+(await counted('Archived'))).toBeGreaterThan(0);
  const count=await counted('Current'); const before=await counted('Archived');
 
  // Several at once: select two, archive them, then Undo.
