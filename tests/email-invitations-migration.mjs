@@ -4,8 +4,8 @@ import { testDb } from './pgtap.mjs';
 // #953: the first step only adds, so the previous release still makes and claims email invitations while it serves; the
 // cutover ends every invitation left pending (the previous release's too), closes the table and makes the maker refuse.
 // Both steps replay over the migrated schema, and every change rolls back.
-const first=readFileSync('supabase/migrations/20270425000000_email_invitations_end.sql','utf8');
-const cutover=readFileSync('supabase/migrations/20270425000001_email_invitations_end_cutover.sql','utf8');
+const first=readFileSync('supabase/migrations/20270426000000_email_invitations_end.sql','utf8');
+const cutover=readFileSync('supabase/migrations/20270426000001_email_invitations_end_cutover.sql','utf8');
 // The previous release's own maker, as 20270108000000 wrote it, put back so the update window is real.
 const invites=readFileSync('supabase/migrations/20270108000000_member_invites.sql','utf8');
 const maker=invites.slice(invites.indexOf('create function public.invite_member'),invites.indexOf('revoke all on function public.invite_member')).replace('create function','create or replace function');

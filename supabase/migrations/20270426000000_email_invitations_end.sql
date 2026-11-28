@@ -1,7 +1,7 @@
 -- #953, ADR 0019, first step (ADR 0023): an email invitation carries an end, and the claim, the channel readers and the
 -- owner guard skip an ended one. Nothing is taken away here: the release this one replaces still makes and claims email
 -- invitations during the update, and every row it writes has ended_at null. The cutover
--- (20270425000001_email_invitations_end_cutover.sql) ends the invitations left pending, closes the maker and the table
+-- (20270426000001_email_invitations_end_cutover.sql) ends the invitations left pending, closes the maker and the table
 -- once this release serves.
 alter table public.member_invitations add column if not exists ended_at timestamptz;
 

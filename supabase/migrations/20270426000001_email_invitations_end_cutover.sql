@@ -2,7 +2,7 @@
 -- path leaves for good. Every invitation still pending is ended, the Team table reads it as ended and makes an Invite
 -- link for that Person instead; the table takes no write from a Member and the maker refuses. The release replaced never
 -- reaches this step: scripts/install.sh applies it once this release's app and worker answer, and a failed update leaves
--- that release serving on the first step's schema (20270425000000_email_invitations_end.sql).
+-- that release serving on the first step's schema (20270426000000_email_invitations_end.sql).
 --
 -- The table and its functions stay because the earlier migrations' checks hold their shape, the ended rows are read
 -- once, and the channel invitee rows a Company already holds keep their foreign key; they leave with Channels (#921).
@@ -12,7 +12,7 @@
 -- release it runs keeps serving on the schema it was built for.
 do $$ begin
  if to_regclass('gtmworks_install.schema_migrations') is not null then
-  if exists(select 1 from gtmworks_install.schema_migrations m where m.name='20270425000000_email_invitations_end.sql' and m.xmin=pg_current_xact_id()::xid) then
+  if exists(select 1 from gtmworks_install.schema_migrations m where m.name='20270426000000_email_invitations_end.sql' and m.xmin=pg_current_xact_id()::xid) then
    raise exception 'This update is finished by the installer it downloaded: run sh scripts/install.sh update again. The database and the running release were not changed.';
   end if;
  end if;
