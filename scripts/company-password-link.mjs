@@ -30,19 +30,21 @@ const personByEmail=async email=>{
 try {
  if(!company||!email) sayError('Usage: company-password-link.mjs --company <Company> --email <email>');
  else {
+  // The install owner's own command reads the install's Companies and accounts, as `company add` does, to name the one
+  // Company and the one Person it is given; it is the server's command, not a Member's request.
   const companies=await press(service.from('companies').select('id,name'));
-  const named=companies.filter(one=>one.id===company||one.name.toLowerCase()===company.toLowerCase());
-  if(!named.length) sayError(`No Company in this install is named ${company}. Pass the Company's id or its exact name.`);
-  else if(named.length>1) sayError(`More than one Company in this install is named ${company}. Pass the Company's id instead.`);
+  const matches=companies.filter(one=>one.id===company||one.name.toLowerCase()===company.toLowerCase());
+  if(!matches.length) sayError(`No Company in this install is named ${company}. Pass the Company's id or its exact name.`);
+  else if(matches.length>1) sayError(`More than one Company in this install is named ${company}. Pass the Company's id instead.`);
   else {
    const person=await personByEmail(email);
    if(!person) sayError(`No Person on this install has the email ${email}. Nothing was changed.`);
    else {
     const secret=generateLinkSecret();
-    const {error}=await service.rpc('make_administrator_password_link',{c:named[0].id,person:person.id,link_hash:linkSecretHash(secret)});
-    if(error) sayError(error.message==='passwordLinkNotAdministrator'?`${person.email} is not an Administrator of "${named[0].name}". Nothing was changed.`
-      :`The password link for ${person.email} in "${named[0].name}" could not be made: ${error.message}`);
-    else process.stdout.write(`Password link for ${person.email} in "${named[0].name}": ${passwordLink(appUrl('/').origin,secret)}\n`);
+    const {error}=await service.rpc('make_administrator_password_link',{c:matches[0].id,person:person.id,link_hash:linkSecretHash(secret)});
+    if(error) sayError(error.message==='passwordLinkNotAdministrator'?`${person.email} is not an Administrator of "${matches[0].name}". Nothing was changed.`
+      :`The password link for ${person.email} in "${matches[0].name}" could not be made: ${error.message}`);
+    else process.stdout.write(`Password link for ${person.email} in "${matches[0].name}": ${passwordLink(appUrl('/').origin,secret)}\n`);
    }
   }
  }

@@ -149,5 +149,5 @@ test('the command\'s source logs no secret and sends only the hash to the one se
  assert.match(source,/linkSecretHash\(secret\)/);
  assert.doesNotMatch(source,/link_hash:\s*secret\b/);
  assert.doesNotMatch(source,/console\.log/,'the link is written once, to stdout, and nowhere else');
- assert.match(source,/process\.stdout\.write\(`Password link for \$\{person\.email\} in "\$\{named\[0\]\.name\}": \$\{passwordLink\(appUrl\('\/'\)\.origin,secret\)\}/);
+ assert.match(source,/process\.stdout\.write\(`Password link for \$\{person\.email\} in "\$\{matches\[0\]\.name\}": \$\{passwordLink\(appUrl\('\/'\)\.origin,secret\)\}/);
 });
