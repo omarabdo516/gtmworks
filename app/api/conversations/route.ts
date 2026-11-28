@@ -1,25 +1,19 @@
-import { randomUUID } from 'node:crypto';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { answerQuestion, closeOpenRuns, decidePermission, retryTurn, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
 import { companyEngine } from '@/lib/engine/handle.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { readModelAccess, offeredModels, modelEnabled } from '@/lib/provider-models.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { conversationColumns, uuid } from '@/lib/conversations';
+import { uuid } from '@/lib/conversations';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
-import { discardConversationFiles, keepConversationFiles, type ConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
-import { conversationRecord } from '@/lib/conversation-record';
 import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-messages';
 import { unarchiveOnWrite } from '@/lib/conversation-session-marks';
-import { conversationSteps } from '@/lib/conversation-steps';
 import { sendToEngine } from '@/lib/conversation-send';
 import { answerEngineRun, permitEngineRun, stopEngineRun } from '@/lib/conversation-steer';
-import { agentAppStates } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -34,15 +28,12 @@ const runId=(value:unknown):value is string=>typeof value==='string'&&/^[\w.:-]{
 const askedId=(value:unknown):value is string=>typeof value==='string'&&/^[\w@-]{1,120}$/.test(value);
 const steered=(done:object)=>'error' in done?refuse(String(done.error),Number((done as {status?:unknown}).status)||500):reply(done);
 
-// A message is checked and stored by lib/conversation-runs.mjs (ADR 0029, #764): the answer goes once it is stored, and
-// its Run starts after it, through the one starter of turns (after(), and the worker's pass over waiting turns). This
-// route only checks the request's shape and turns refusals into answers. Who wrote it is the signed-in person: no field
-// of the request names an author, and any such field is ignored.
-// A message names no Card: the old board's sheet, whose first message started a Card's chat (#145), is switched off
-// (#846), and a send that names one is refused.
-// Images go with the message (#155): the check runs before anything is sent, uploaded or stored. On the Engine they go in
-// the Run's input and are kept nowhere here (#880); on the old record they are kept with the turn before it is stored,
-// so its Run reads them from the Conversation's files (lib/conversation-files.ts). Nothing of the request is logged.
+// A message is one Run on its Conversation's Engine session (#876, ADR 0033 item 1), started by lib/conversation-start.mjs
+// once the database checked the send; nothing of it is stored here. This route only checks the request's shape and turns
+// refusals into answers. Who wrote it is the signed-in person: no field of the request names an author, and any such
+// field is ignored. A message names no Card (#846), and a send that names one is refused. Images go with the message
+// (#155): the check runs before anything is sent, and they go in the Run's input and are kept nowhere here (#880).
+// Nothing of the request is logged.
 async function send(db:Database,person:string,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined) return refuse('conversationFailed',400);
@@ -60,9 +51,6 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
  if(!chosen.length&&!body.message.trim()) return refuse('conversationFailed',400);
  const conversation=body.conversation as string;
  const messageKey=body.sendKey as string; const company=body.company as string;
- // A message in a Conversation whose messages are the Engine's, or in a new one, is one Run on its Engine session, its
- // images in the Run's input, and nothing of it is stored here (#876, #880). A Conversation the old record still holds
- // goes on below.
  const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen,rerun,messageId});
  // A rerun whose message is no longer the Conversation's last: the page reads the session again, where the reply or
  // the newer message is.
@@ -72,111 +60,34 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
   after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
   return reply({conversation,...(engine.run?{run:engine.run}:{}),engine:true,...(engine.queued?{queued:true}:{})});
  }
- if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
- // A rerun has no old-record shape: the Conversation is on the Engine, or nothing is left unanswered.
- if(rerun) return refuse('conversationNoReply',409);
- // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
- // the key still holds (#727).
- const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
- const keepFiles=chosen.length?()=>keepConversationFiles(db,service(),{...files,files:chosen}):undefined;
- // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer,
- // with the send's own work and before its Run starts, so the stored turn's acknowledgement never waits on the Engine.
- // An Engine that does not answer leaves it in the archive, and the message is sent all the same.
- const clearing=unarchiveOnWrite(db,company,conversation).catch(()=>null);
- let unarchived:Promise<void>|null=null;
- const unarchive=()=>unarchived??=clearing.then(clear=>clear?.()).catch(()=>{});
- const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.agent as string|undefined,message:body.message,keepFiles,later:work=>after(async()=>{ await unarchive(); await work(); })});
- // Refused before the turn was stored: nothing was, so the images kept for it go too, and the words go back to the box.
- if('code' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuseFor(sent.code); }
- if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuse(sent.error,sent.status); }
- // A note to a person and an answer to a question store no turn, so nothing can sit under one: their images go.
- if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files);
- // A send that starts no Run (a note to a Member, an answer) is a write all the same: it clears the mark after the answer.
- after(()=>unarchive());
- return reply(sent);
+ return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
 }
 
-// Stop works for the person who started the open run, or a Manager or Owner of the Company (the database decides).
-// On a Conversation whose messages are the Engine's (#878), the browser names the Run it follows, and only its person
-// stops it, with the Run's own stop.
+// Stop (#878): the browser names the Run it follows, and only the Conversation's person stops it, with the Run's own
+// stop (lib/conversation-steer.ts checks the Run against the row and the Run's own record).
 async function stop(db:Database,body:Record<string,unknown>) {
- if(typeof body.conversation!=='string'||!uuid.test(body.conversation)) return refuse('conversationFailed',400);
- if(body.run!==undefined) return runId(body.run)?steered(await stopEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run})):refuse('conversationFailed',400);
- const stopped=await stopConversationRun(db,{company:body.company as string,conversation:body.conversation});
- if('code' in stopped) return stopped.message==='conversationNothingToStop'?reply({stopped:false}):refuseFor(stopped.code);
- if('error' in stopped) return refuse(stopped.error,stopped.status);
- // The stopped run is closed after the answer, and a turn waiting behind it may start then (the worker does both too).
- const conversation=body.conversation;
- after(async()=>{
-  try { await closeOpenRuns(service(),{conversation}); await startQueuedTurns(service(),{conversation}); }
-  catch { logActionFailure('conversation',new Error('Stopped run not closed yet')); }
- });
- return reply(stopped);
+ if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)) return refuse('conversationFailed',400);
+ return steered(await stopEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run}));
 }
 
-// A pick on the question the Agent waits on (#138): the card and the choice's index, never its text, or on a question
-// where several may be picked the picked choices' indexes (#648), and one key per card on the page, so a second click is
-// the same claim. Only the Conversation's person claims it (answer_question);
-// the answer then goes to the waiting Run. Typed words answer it through send.
-// On a Conversation whose messages are the Engine's (#878), an answer names the Run and the question the Engine gave it,
-// and is a pick, several picks or the person's typed words, which go to the Run's own route.
+// An answer to the question the Agent's Run waits on (#138, #878): it names the Run and the question the Engine gave it,
+// and is a pick (the choice's index, never its text), several picks on a question where several may be picked (#648), or
+// the person's typed words, which go to the Run's own route. Only the Conversation's person answers.
 async function answer(db:Database,body:Record<string,unknown>) {
  const isChoiceIndex=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<4;
  const picks=Array.isArray(body.choice)&&body.choice.length>=1&&body.choice.length<=4&&body.choice.every(isChoiceIndex)?body.choice as number[]:null;
- if(body.run!==undefined) {
-  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.question)) return refuse('conversationFailed',400);
-  const given=typeof body.text==='string'?(body.text.trim()&&body.text.length<=20000?{text:body.text}:null):isChoiceIndex(body.choice)?{pick:body.choice}:picks?{picks}:null;
-  if(!given) return refuse('conversationFailed',400);
-  return steered(await answerEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,question:body.question,answer:given}));
- }
- if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
- if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(isChoiceIndex(body.choice)||picks)) return refuse('conversationFailed',400);
- const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,...(picks?{picks}:{choice:body.choice as number}),answerKey:body.answerKey as string});
- if('code' in answered) return answered.code==='22023'?refuse('conversationFailed',400):refuseFor(answered.code);
- // Another tab or the Engine was first: the pick is not recorded, so the card says so and reads the record again.
- if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);
- return reply({state:answered.state});
+ if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.question)) return refuse('conversationFailed',400);
+ const given=typeof body.text==='string'?(body.text.trim()&&body.text.length<=20000?{text:body.text}:null):isChoiceIndex(body.choice)?{pick:body.choice}:picks?{picks}:null;
+ if(!given) return refuse('conversationFailed',400);
+ return steered(await answerEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,question:body.question,answer:given}));
 }
 
-// "Done it" on a step an Agent handed over (#139): the person's own word, recorded once by the database with who and when
-// (mark_hand_done), under the person's own session. gtmworks does not do the step and checks nothing outside. The first
-// press also queues the person's turn that tells the Agent (#140). The press is answered once it is recorded; then, after
-// the answer, Runs Hermes has ended are closed and the turn starts if the Agent is free, as a read does. A start that
-// fails there is left to the worker and to the page's next read, which start waiting turns too.
-async function done(db:Database,body:Record<string,unknown>) {
- if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
- const {data,error}=await db.rpc('mark_hand_done',{c:body.company,conversation:body.conversation,card:body.card});
- if(error) return refuseFor(error.code);
- const {at,first}=data as {at:string,first:boolean};
- if(first) {
-  const conversation=body.conversation;
-  after(async()=>{
-   try {
-    await closeOpenRuns(service(),{conversation});
-    await startQueuedTurns(service(),{conversation});
-   } catch { logActionFailure('conversation',new Error('Handed step turn not started')); }
-  });
- }
- return reply({state:'done',at,first});
-}
-
-// A choice on the request the Agent's Run waits on (#163): one of three fixed words, never text. Only the Conversation's
-// person decides, with a choice their role may send and the Engine offered (decide_permission). The press is answered
-// once the choice is kept, as "Done it" is, and the choice then goes to the waiting Run after the answer. A second
-// press, another tab, or a request the Engine no longer waits on answers what the card shows now. Nothing of the
-// request is logged.
-// On a Conversation whose messages are the Engine's (#878), the choice names the Run and the request the Engine gave it;
-// "Always allow" from a Role that may not send it is refused here (permission_choices) before the Engine is asked.
+// A choice on the request the Agent's Run waits on (#163, #878): one of three fixed words, never text, naming the Run and
+// the request the Engine gave it. Only the Conversation's person decides; "Always allow" from a Role that may not send
+// it is refused (permission_choices) before the Engine is asked. Nothing of the request is logged.
 async function permit(db:Database,body:Record<string,unknown>) {
- if(body.run!==undefined) {
-  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.permission)||!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
-  return steered(await permitEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,permission:body.permission,choice:body.choice as PermissionChoice}));
- }
- if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
- if(!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
- const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,later:after});
- if('code' in decided) return decided.code==='22023'?refuse('conversationFailed',400):refuseFor(decided.code);
- return reply(decided);
+ if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.permission)||!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
+ return steered(await permitEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,permission:body.permission,choice:body.choice as PermissionChoice}));
 }
 
 // "Later" on a connect card (#203): the Conversation's person, while an active Owner, puts off connecting the app the
@@ -231,38 +142,12 @@ async function models(db:Database,person:string,company:string,conversation:stri
  return reply({state:read.state,models:offeredModels(read.models,access),current:found.model??read.current});
 }
 
-// The record of the Conversation, as the database holds it (ADR 0030). A read never closes a Run or starts a turn (#767):
-// the worker and the one starter of turns do both. With `since`, the stamp the page last read, the answer is only that
-// nothing changed when the database's stamp is the same, so a waiting page's poll costs one round trip. The person's
-// session must see the Conversation; anyone else reads not found.
-async function read(db:Database,person:string,company:string,conversation:string,since:unknown) {
- if(typeof since==='string'&&/^[0-9a-f]{32}$/.test(since)) {
-  const {data:stamp}=await db.rpc('conversation_stamp',{conversation});
-  if(stamp===since) return reply({unchanged:true,stamp});
- }
- const {data:found,error:unfound}=await db.from('conversations').select(conversationColumns).eq('id',conversation).eq('company_id',company).maybeSingle();
- if(unfound) return refuse('conversationUnread',503);
- if(!found) return refuse('conversationNotFound',404);
- // A read that fails answers an error, never an empty Conversation (#768): the page keeps what it shows and asks again.
- try { return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent))); }
- catch { return refuse('conversationUnread',503); }
-}
-
-// "Try again" on a message that was not sent (#764): the same turn, by its send key, waits again and its Run starts
-// after the answer; no second message is made. Only its own person, while they may write (retry_conversation_turn).
-async function retry(db:Database,body:Record<string,unknown>) {
- if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
- const retried=await retryTurn(db,service(),{company:body.company as string,conversation:body.conversation as string,sendKey:body.sendKey as string,later:after});
- if('code' in retried) return refuseFor(retried.code);
- return reply(retried);
-}
-
 // A page of the Conversation's messages, read from its Agent's Engine session (#875): the last 50 when it opens, then
 // the 50 before each time the person scrolls back. This is the messages' own request, never the page's (ADR 0030): the
 // frame, the Agent and the composer are drawn without it, and the browser keeps the last page it read while this one
 // answers. Only the Conversation's own person reads it (the row is read with their session, and named as theirs), and
 // another Member of the Company or of another Company is answered not found as the row is. `none` is a Conversation
-// with no Engine session yet; the browser then draws what the old record holds until its first send gives one.
+// with no Engine session yet, which holds no message.
 async function messages(db:Database,person:string,company:string,conversation:string,offset:unknown,limit:unknown) {
  const from=typeof offset==='string'?Number.parseInt(offset,10):0;
  const size=typeof limit==='string'?Number.parseInt(limit,10):50;
@@ -285,20 +170,8 @@ async function usage(db:Database,person:string,company:string,conversation:strin
  return reply({usage:await conversationUsage(db,company,found).catch(()=>null)});
 }
 
-// Each reply's steps and the Conversation's token use (#766, ADR 0030): their own request, after the messages are drawn,
-// read from the Agent's Hermes session through the person's own session (RLS sees only their Conversation), on the
-// profile the Engine handle gives this reader: an Agent hidden from them is not found (#782). A session that cannot be
-// read answers 503, and the page keeps the replies as they are. Nothing of it is kept or logged.
-async function steps(db:Database,company:string,conversation:string) {
- const {data:found}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).maybeSingle();
- if(!found) return refuse('conversationNotFound',404);
- const read=await conversationSteps(db,company,found).catch(()=>null);
- if(read==='notSeen') return refuse('conversationNotFound',404);
- return read?reply(read):refuse('conversationStepsUnread',503);
-}
-
 // Each write's intent and its handler; any other intent is a message to send.
-const writes={stop,answer,done,permit,model:pickModel,later,access,retry};
+const writes={stop,answer,permit,model:pickModel,later,access};
 
 async function respond(request:NextRequest) {
  try {
@@ -345,9 +218,8 @@ async function respond(request:NextRequest) {
   }
   if(body.intent==='read') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await messages(db,user.id,body.company,body.conversation,body.offset,body.limit):refuse('conversationNotFound',404);
   if(body.intent==='usage') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await usage(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
-  if(body.intent==='steps') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await steps(db,body.company,body.conversation):refuse('conversationNotFound',404);
   if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
-  return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation,body.since):refuse('conversationNotFound',404);
+  return refuse('conversationFailed',400);
  } catch { logActionFailure('conversation',new Error('Conversation request failed')); return refuse('conversationFailed',400); }
 }
 export const GET=respond;

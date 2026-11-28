@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// The images of one message, in a Conversation (#155) or a channel (#156). They are kept in the Company's private folder
+// The images of one message in a channel (#156); a Conversation's go in its Run's input and are kept nowhere (#880). They are kept in the Company's private folder
 // for that place, named by the message's send key, the keep attempt that first wrote its rows, and each image's place: a
 // retry that finds the rows still there writes the paths they name, and a send that keeps them again after they were
 // given back writes new ones, which the earlier attempt's removal never reaches (#598). The bucket has no write policy
@@ -9,13 +9,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 const bucket='creatives';
 export type ChosenImage={content_type:string,base64:string};
 
-// Where a send's files belong: the Company, the folder that names the feature, and the Conversation or channel; and the
+// Where a send's files belong: the Company, the folder that names the feature, and the channel; and the
 // send's keep attempt, which its keep and its discard both name (#727).
-export type FilesPlace={company:string,folder:'conversations'|'channels',scope:string,messageKey:string,attempt:string};
+export type FilesPlace={company:string,folder:'channels',scope:string,messageKey:string,attempt:string};
 // The catalogue's words for a database refusal: a Viewer, a place that is not the caller's, and any other failure.
 type FileRefusalWords={notAllowed:string,notFound:string,failed:string};
-// The table that names a place's files, and its column for the Conversation or channel.
-export type FilesTable={table:'conversation_attachments'|'channel_attachments',scope:'conversation_id'|'channel_id'};
+// The table that names a channel's files, and its column for the channel.
+export type FilesTable={table:'channel_attachments',scope:'channel_id'};
 type KeepFiles={place:FilesPlace,files:File[],table:FilesTable,reserve:string,reserveArgs:(place:FilesPlace)=>Record<string,unknown>,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>,words:FileRefusalWords};
 
 // The paths the database named for a send key's files, by each image's place: the rows this attempt kept, or the ones an

@@ -28,13 +28,10 @@ const logShown=50;
 export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:roled,tab}:{company:string,agent:string,name:string|PromiseLike<string>,slug:string,me:string,role:string|PromiseLike<string>,tab?:string}):Promise<AgentDetailsView> {
  // The Agent's state for the reader (#699), the sidebar's own read; the open Run above says only what it is doing.
  const stateRead=agentFaceStates(db,company);
- const [{t,language},name,role,{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount},{data:channelFileRows,count:channelFileCount}]=await Promise.all([getI18n(),named,roled,
+ const [{t,language},name,role,{data:logRows,count},{data:runs},{data:channelFileRows,count:channelFileCount}]=await Promise.all([getI18n(),named,roled,
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
-  // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
-  db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
-   .order('created_at',{ascending:false}).order('id',{ascending:false}),
-  // The files the Agent handed over in a channel (#715): row-level security shows a person only the channels they are a
+  // The files the Agent handed over in a channel (#715); a Conversation's are its Engine session's, opened there (#880): row-level security shows a person only the channels they are a
   // Member of, whose files are every Member's.
   db.from('channel_attachments').select('id,name,size,created_at,channel_messages!inner(author,agent_id),channels!inner(kind,name)',{count:'exact'}).eq('company_id',company)
    .eq('channel_messages.author','agent').eq('channel_messages.agent_id',agent).order('created_at',{ascending:false}).order('id',{ascending:false}),
@@ -42,23 +39,14 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const writer=canCreateCard({role});
  const rows=(logRows||[]) as LogRow[];
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
- const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
- const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{of:faceOf},{data:ask},people,firsts]=await Promise.all([stateRead,
-  run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
-  logPeople(db,company),
-  // A Conversation is named as the sidebar names it: the first line of its person's first message.
-  Promise.all(talks.map(async talk=>(await db.from('conversation_messages').select('body').eq('conversation_id',talk).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined)),
- ]);
+ const [{of:faceOf},people]=await Promise.all([stateRead,logPeople(db,company)]);
  const recent=latestActivity(rows,feedSince());
- // A Run "Done it" started (#140) is on the step the person did, named by its card, not the sentence the Agent was told.
- const asking=ask as {body:string,reply_cards:{title:string}|null}|null;
- const asked=(asking?.reply_cards?.title??asking?.body)?.split('\n')[0].slice(0,200);
 
  const activity=run||recent.length?<ul className="panel-card">
    {run&&<li className="panel-row dp-now"><span className="panel-row__text">
     <span className="panel-row__t"><span className="dot dot--working" aria-hidden="true"/>{t('agentWorkingNow')}</span>
-    <span className="panel-row__d">{asked?<>{t('agentOnYourRequest')} <bdi>{asked}</bdi></>:t('agentOnTeammateRequest')}</span>
+    {/* A Run of the reader's own Conversation is theirs; a teammate's says only that it is a teammate's (#141, #883). */}
+    {!run.my_conversation&&<span className="panel-row__d">{t('agentOnTeammateRequest')}</span>}
     <FeedWhen value={run.started_at} className="panel-row__d"/>
    </span></li>}
    {recent.map(row=><li key={row.id} className="panel-row"><span className="panel-row__text">
@@ -70,8 +58,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  // Its Cards on the Company's Engine board (spec #831, #846), read in the browser after the panel is drawn (ADR 0030).
  const tasksTab=<AgentBoardTasks key={`tasks-${agent}`} company={company} slug={slug} agent={agent} writer={writer}/>;
 
- const titles=new Map(talks.flatMap((talk,index)=>{ const line=firsts[index]?.split('\n')[0]; return line?[[talk,line] as [string,string]]:[]; }));
- const files=agentFiles({slug,conversationFiles:talkFiles,titles,
+ const files=agentFiles({slug,
   channelFiles:((channelFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,channels:{kind:string,name:string|null}}[]).map(file=>({...file,channel:channelTitle(t,channelNameOf(file.channels))}))});
  const filesList=files.length?<ul className="panel-card">{files.map(file=><li key={file.key} className="panel-row"><span className="panel-row__icon"><ShellIcon name="file"/></span><span className="panel-row__text">
    <a className="panel-row__t od-truncate dp-file" href={file.href} target="_blank" rel="noreferrer" title={file.name}><bdi dir="auto">{file.name}</bdi></a>
@@ -90,7 +77,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
    routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,
    // Its standing permissions (#166) and its memory (#350) are its own Engine profile's: each is read from the browser
    // when shown (#769, ADR 0030), so the details never wait on the Engine and no part holds another.
-   permissions:<AgentPermissionsPart key={`standing-${agent}`} company={company} agent={agent} canRevoke={role==='owner'||role==='manager'}/>,tasks:tasksTab,files:filesList,library,fileCount:(talkFileCount??0)+(channelFileCount??0),
+   permissions:<AgentPermissionsPart key={`standing-${agent}`} company={company} agent={agent} canRevoke={role==='owner'||role==='manager'}/>,tasks:tasksTab,files:filesList,library,fileCount:channelFileCount??0,
    memory:<AgentMemoryPart key={agent} company={company} agent={{id:agent,name}} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>,
    log,logCount:count??rows.length})};
 }

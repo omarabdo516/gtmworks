@@ -6,7 +6,7 @@ import { conversationTitle } from './conversation-title.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Translate=(key:string,...values:unknown[])=>string;
-type Row={id:string,agent_id:string|null,agent_name:string,hermes_session_id:string|null,good_morning_day:string|null,created_at:string};
+type Row={id:string,agent_id:string|null,agent_name:string,hermes_session_id:string|null,good_morning_day:string|null,created_at:string,last_message_at:string|null,archived_at:string|null};
 
 // One of the person's Conversations as the sidebar and All conversations list it (#881): its row joined with its
 // session in the Engine's list. The title is the session's title, else its preview (the opening words of its first
@@ -109,31 +109,6 @@ function heldSession(company:string,session:string):SessionListed|null {
 }
 
 
-// A Conversation the Engine's list does not hold yet, while sends still go through the old record (until #876 and #883
-// switch it off), is named as the old record names it (lib/conversation-title.mjs: its first message, else the one still
-// waiting for its Run), with its newest message under it, by that message's time and its own archived mark, as #875 left a Conversation the old
-// record holds to that record. Null when that read failed.
-const oldPage=100;
-type OldRow={id:string,last_message_at:string,archived_at:string|null,first:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],newest:{body:string}[],waiting_files:{name:string}[]};
-async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:string,line:string,at:string,archived:boolean}>|null> {
- if(!ids.length) return new Map();
- // A page of ids at a time, so the read's address stays short however many there are.
- if(ids.length>oldPage) {
-  const parts=await Promise.all(Array.from({length:Math.ceil(ids.length/oldPage)},(_,at)=>oldRecord(db,ids.slice(at*oldPage,(at+1)*oldPage))));
-  return parts.some(part=>!part)?null:new Map(parts.flatMap(part=>[...part!]));
- }
- const {data,error}=await db.from('conversations').select('id,last_message_at,archived_at,first:conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),newest:conversation_messages(body),waiting_files:conversation_attachments(name)').in('id',ids).eq('first.author','person')
-  .is('waiting_files.message_id',null).order('position',{referencedTable:'waiting_files'}).limit(1,{referencedTable:'waiting_files'})
-  .neq('newest.body','').is('newest.hand_card',null).order('id',{referencedTable:'newest',ascending:false}).limit(1,{referencedTable:'newest'})
-  .order('id',{referencedTable:'first'}).limit(1,{referencedTable:'first'}).order('queued_at',{referencedTable:'conversation_queued_turns'}).limit(1,{referencedTable:'conversation_queued_turns'});
- if(error) return null;
- return new Map(((data||[]) as OldRow[]).map(row=>{ const first=row.first?.[0];
-  // A first message still waiting for its Run (#764) names it too, by its words or, with images alone, its first file.
-  const waiting=first?undefined:row.conversation_queued_turns?.[0];
-  const title=(first?.body||waiting?.message||'').split('\n')[0]||(first?first.conversation_attachments?.[0]?.name:waiting&&row.waiting_files?.[0]?.name)||'';
-  return [row.id,{title,line:row.newest?.[0]?.body??'',at:row.last_message_at,archived:!!row.archived_at}]; }));
-}
-
 /** One Conversation's session as its own page draws it (#881): from the lists' memory when it holds it, else from one
  * read of its Agent's list, which the lists then keep. That read waits at most as a list's first read does (1.5 s) and
  * happens once after a restart, so a Conversation opened by its address draws its own title and archived mark.
@@ -156,7 +131,7 @@ const rowPage=1000;
 async function rowsOf(db:Database,company:string):Promise<Row[]|null> {
  const rows:Row[]=[];
  for(let from=0;;from+=rowPage) {
-  const {data,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id,good_morning_day,created_at').eq('company_id',company).not('agent_id','is',null)
+  const {data,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id,good_morning_day,created_at,last_message_at,archived_at').eq('company_id',company).not('agent_id','is',null)
    .order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+rowPage-1);
   if(error) return null;
   rows.push(...(data||[]) as Row[]);
@@ -195,17 +170,17 @@ export async function personConversations(db:Database,company:string,t:Translate
   return kept.complete&&(kept.wanted.get(row.hermes_session_id)??Infinity)<=kept.began&&(kept.gone||kept.missing.has(row.hermes_session_id)&&now-Date.parse(row.created_at)>=youngFor);
  };
  const shown=rows.filter(row=>!goneOf(row));
- const old=await oldRecord(db,shown.filter(row=>!sessionOf(row)).map(row=>row.id));
- if(!old) return null;
+ // A Conversation whose session the Engine has not made yet, or whose Agent's sessions could not be read, is drawn from
+ // its row: its Agent's name, its last message's time and its own archived mark.
  return shown.map((row):PersonConversation=>{
   const profile=profiles.get(row.agent_id!)??null;
   const session=sessionOf(row);
-  const before=session?undefined:old.get(row.id);
-  const named=session?session.title||session.preview:before?.title;
+  const named=session?session.title||session.preview:'';
   // A morning's Conversation is named by its day until the person renames it.
   const title=session?.title||(row.good_morning_day?conversationTitle({morningDay:row.good_morning_day,agent:row.agent_name},t,language):named||row.agent_name);
-  const at=session?.at??(before?.at&&Number.isFinite(Date.parse(before.at))?before.at:row.created_at);
-  return {id:row.id,agent:row.agent_id!,agentName:row.agent_name,title,line:session?(session.title?session.preview:''):before?.line??'',at:new Date(at).toISOString(),
-   archived:session?session.archived:!!before?.archived,session:row.hermes_session_id,profile};
+  const last=row.last_message_at&&Number.isFinite(Date.parse(row.last_message_at))?row.last_message_at:row.created_at;
+  const at=session?.at??last;
+  return {id:row.id,agent:row.agent_id!,agentName:row.agent_name,title,line:session?.title?session.preview:'',at:new Date(at).toISOString(),
+   archived:session?session.archived:!!row.archived_at,session:row.hermes_session_id,profile};
  }).sort((a,b)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id));
 }

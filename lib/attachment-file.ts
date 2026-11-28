@@ -1,10 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { attachmentHeaders } from './attachments.mjs';
 
-// Where a file is named: in a Conversation (#21), which only its own person reads, or in a channel (#156), which every
-// Member of that channel reads. A file on a Card of the Engine's board is the Engine's (#843, app/c/[slug]/files/board).
-export type AttachmentSource={from:'conversation'}|{from:'channel'};
-const tables={conversation:'conversation_attachments',channel:'channel_attachments'} as const;
+// Where a file is named: in a channel (#156), which every Member of that channel reads. A file on a Card of the Engine's
+// board is the Engine's (#843, app/c/[slug]/files/board), and so is a file of a Conversation (#880,
+// app/c/[slug]/files/conversation/[id]/[file]).
+export type AttachmentSource={from:'channel'};
+const tables={channel:'channel_attachments'} as const;
 
 // The one place an attachment's bytes leave the private bucket. The caller passes a client that acts as the asking person
 // or agent: the attachment row and the storage object are both read through it, so row level security decides who gets here.

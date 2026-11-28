@@ -406,7 +406,6 @@
   "agentToolsUnreadable": "The apps can’t be read right now. Try again in a minute.",
   "agentToolsFailed": "The engine didn’t answer. Try again in a minute.",
   "agentWorkingNow": "Working now",
-  "agentOnYourRequest": "On your request:",
   "agentOnTeammateRequest": "On a teammate’s request",
   "agentOnTheBoard": "On the board",
   "agentOpenBoard": "Open the board",

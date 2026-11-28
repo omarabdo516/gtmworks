@@ -214,7 +214,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiti
 function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,status,main,rules,readAt,morningFocus,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,status:AgentFaceState,main?:Agent,rules:Rule[],readAt:number,morningFocus:boolean,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
- // (lib/conversation-runs.mjs: @ and the name, lowercased).
+ // (lib/composer-mentions.mjs: @ and the name, lowercased).
  const handle=`@${agent.name.trim().toLowerCase()}`;
  // What the Agent's own Engine profile keeps (About, How it works, Good morning, its model and thinking level, its voice,
  // standing permissions and Skills, and its memory) is read by the browser, each part on its own, after the page is drawn

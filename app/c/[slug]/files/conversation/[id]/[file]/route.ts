@@ -11,7 +11,7 @@ import { readConversationFile } from '@/lib/conversation-messages';
 // every person's file has (lib/attachments.mjs): a raster image inline, so the page draws it, anything else downloaded.
 // Another Member, someone outside the Company and a file the Conversation does not hold all find the missing page,
 // alike; an Engine or a work sandbox that cannot be read now answers 503, never a file that is gone.
-// The `[id]` here is the Conversation's; the route beside it (`[id]/route.ts`) serves a file of the old record by its own id.
+// The `[id]` here is the Conversation's.
 const notFound=()=>new Response('Not found',{status:404});
 const notNow=()=>new Response('Could not be read now',{status:503,headers:{'Retry-After':'30','Cache-Control':'no-store'}});
 

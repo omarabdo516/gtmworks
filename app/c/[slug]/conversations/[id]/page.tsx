@@ -7,14 +7,12 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { companyOf, companyReader } from '@/lib/company-reader';
 import Page from '@/app/page-frame';
-import ConversationView, { ConversationLoaded, ConversationNotRead, EngineLoaded } from './conversation';
+import ConversationView, { EngineLoaded } from './conversation';
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { sessionFor } from '@/lib/conversation-list';
-import { conversationRecord } from '@/lib/conversation-record';
-import { conversationSteps, type ConversationSteps } from '@/lib/conversation-steps';
-import { agentAppStates } from '@/lib/company-app-items';
+import { conversationFrame } from '@/lib/conversation-frame';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
 import { pickTab } from '@/lib/agent-details.mjs';
@@ -45,15 +43,6 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Whether it was a person's open, a prefetch or the page drawn again (#762).
  const render=renderKind(await headers(),`/c/${slug}/conversations/${id}`);
  after(()=>logOpen(timing,company.id,id,render));
- // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
- // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
- const readRecord=()=>conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent));
- let record=readRecord();
- // Awaited only by the transcript: a read of the frame that fails first must not leave its failure unhandled.
- record.then(()=>markOpen('record',timing),()=>{});
- // Each reply's steps and the token use (#766, ADR 0030) go out now beside the record and come down the same response
- // once read, never awaited by the page or the messages: the chat shows them without first waiting for its script and
- // a second request (decision 0042). A read that fails is null, and the replies stay as they are.
  // The Agent's details beside the chat, while it is still attached to the company, and the reader's role. The details'
  // reads go out now with them, not after the frame's reads (decision 0042): they are the page's longest, and the page
  // has loaded only once they are drawn.
@@ -61,65 +50,42 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const details=conversation.agent_id?agentDetails(db,{company:company.id,agent:conversation.agent_id,name:Promise.resolve(agentRead).then(({data})=>data?.name??''),slug,me:user.id,role:readerRead.then(read=>read?.role||''),tab}).finally(()=>markOpen('details',timing)):null;
  // Handed to the screen only while the Agent is attached; a detached Agent's details are read and dropped.
  details?.catch(()=>{});
- // Until then the chat is named as the sidebar names it (app/shell.tsx): the first line of its first message.
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
- // chat slow to open (decision 0042).
- // A first message that still waits for its Run (#764) names the chat as well, with the files sent with it.
- // The session's own title and archived mark (#881), from the lists' memory, else one bounded read of its Agent's list.
- const [{data:stored},{data:waiting},{data:agent},roleRead,{count:storedCount},held]=await Promise.all([
-  db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
-  db.from('conversation_queued_turns').select('message,send_key').eq('conversation_id',id).order('queued_at').limit(1).maybeSingle(),
+ // chat slow to open (decision 0042). The session's own title and archived mark (#881), from the lists' memory, else one
+ // bounded read of its Agent's list.
+ const [{data:agent},roleRead,held]=await Promise.all([
   agentRead,
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   readerRead,
-  // The old record's row count: a Conversation it still holds opens as it always has, and the Engine's read (#875) is
-  // for one whose messages are the Engine's alone — a Conversation made after this read, as #876 sends them.
-  db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id),
   sessionFor(db,company.id,conversation.agent_id,conversation.hermes_session_id??null).catch(()=>null),
  ]);
  const person=roleRead?.person, role=roleRead?.role||'', writer=!!roleRead?.canWrite;
- // A Conversation whose own record holds nothing and whose Engine session exists reads its messages from the Engine on
- // their own request (#875). One the old record still holds keeps that record until #883 switches it off. The one the
- // main Agent opened on the Engine (#882) reads there from its opening on, before its first send gives it a session.
- let engine=(!!conversation.hermes_session_id||!!conversation.lead_opening)&&storedCount===0&&!waiting;
- const steps=engine?Promise.resolve(null):conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
- const waitingFiles=!stored&&waiting?(await db.from('conversation_attachments').select('name').eq('conversation_id',id).eq('send_key',waiting.send_key).order('position').limit(1)).data:null;
- const first=stored??(waiting&&{body:waiting.message,conversation_attachments:waitingFiles??[]});
  markOpen('reads',timing);
- // #434: the Owner's empty Conversation with Lead (first run makes one) is where Lead opens the Company's first
- // Conversation, once the Company has a model (lib/lead-opening.mjs); the record is then read again with its message.
- // Only a Conversation with nothing in it asks, so every other open costs nothing more.
- if(!first&&!conversation.hermes_session_id&&agent?.is_default&&role==='owner') {
-  const opened=storedCount===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
-   {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
-  // In a Company on the Engine the opening is no message: the Conversation is marked, and its read draws it (#882).
-  if(opened===id) { record.catch(()=>{}); record=readRecord(); engine=storedCount===0&&!waiting&&!!(await db.from('conversations').select('lead_opening').eq('id',id).maybeSingle<{lead_opening:boolean}>()).data?.lead_opening; }
- }
- // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
- // for them, and each takes its place when read (decision 0042).
- // The title and the archived mark are the session's own (#881), as the lists' last read of the Engine holds them; a
- // session it holds nothing of yet is named as the old record names it, by its first message.
- const named=held?.title||held?.preview;
- const sessionTitle=held?.title||(conversation.good_morning_day?null:named);
- const title=sessionTitle||conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
+ // #434, #882: the Owner's empty Conversation with the main Agent (first run makes one) is where it opens the Company's
+ // first Conversation, once the Company has a model (lib/lead-opening.mjs). The opening is no message: the row is marked,
+ // and the transcript draws it in the Owner's language. Only a Conversation with no session yet asks, so every other
+ // open costs nothing more.
+ if(!conversation.hermes_session_id&&!conversation.lead_opening&&agent?.is_default&&role==='owner')
+  await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
+   {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name});
+ // The Agent's details are handed over unread: the chat is drawn without waiting for them, and they take their place
+ // when read (decision 0042). The title and the archived mark are the session's own (#881), as the lists' last read of
+ // the Engine holds them; a session it holds nothing of yet is named by its Agent, as the lists name it.
+ const sessionTitle=held?.title||(conversation.good_morning_day?null:held?.preview);
+ const title=sessionTitle||conversationTitle({morningDay:conversation.good_morning_day,agent:conversation.agent_name},t,language);
  const archived=held?held.archived:!!conversation.archived_at;
  return <Page title={t('chats')} agent={conversation.agent_id||undefined}>
   {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
   <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} titled={!!held?.title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={archived}><Loaded record={record} steps={steps} team={company.work_mode==='team'} engine={engine} open={!!conversation.open_runs?.length||!!conversation.unseen_run} owner={role==='owner'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} titled={!!held?.title} writer={!!writer} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={archived}><Loaded frame={conversationFrame(conversation)} team={company.work_mode==='team'} open={!!conversation.open_runs?.length||!!conversation.unseen_run} owner={role==='owner'}/></ConversationView></main>
  </Page>;
 }
 
-// The chat once its record is read, streamed in place of the placeholder. `open` (#876): its row holds a Run still
-// working, which the chat follows live from the start. A Conversation with an Engine session reads
-// its messages from the Engine on their own request (#875); one without reads what the old record holds, as until its
-// first send gives it a session. The old record is still read here as that fallback and for the frame's other states;
-// #883 switches it off.
-async function Loaded({record,steps,team,engine,open,owner}:{record:ReturnType<typeof conversationRecord>,steps:Promise<ConversationSteps|null>,team:boolean,engine:boolean,open:boolean,owner:boolean}) {
+// The chat, drawn from its frame: its messages are its Engine session's, read on their own request (#875), and `open`
+// (#876) says its row holds a Run still working, which the chat follows live from the start. The boundary is kept so the
+// page's first bytes leave before the transcript's script.
+function Loaded({frame,team,open,owner}:{frame:ReturnType<typeof conversationFrame>,team:boolean,open:boolean,owner:boolean}) {
  // Everything outside this boundary is drawn by now, so the page's first bytes leave next.
  markOpen('firstByte');
- // A record that could not be read draws its line with "Try again", never an empty Conversation (#768).
- const read=await record.catch(()=>null);
- if(!read) return <ConversationNotRead/>;
- return engine?<EngineLoaded key={read.conversation.id} initial={read} steps={steps} team={team} open={open} owner={owner}/>:<ConversationLoaded initial={read} steps={steps} team={team}/>;
+ return <EngineLoaded key={frame.conversation.id} initial={frame} team={team} open={open} owner={owner}/>;
 }

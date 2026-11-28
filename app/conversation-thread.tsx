@@ -5,7 +5,7 @@ import { MorningCard } from './morning-card';
 // (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, Suspense, createContext, lazy, use, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { Fragment, Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
@@ -15,10 +15,10 @@ import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageAnswer, postMessageWithFilesAnswer, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, RunStepCard, SavedRule } from '@/lib/conversations';
-import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
-import { LiveTurn, WorkingLine, useLanding, useLiveSteps, type LiveRun } from '@/app/run-activity';
+import { StepsList } from '@/app/run-steps';
+import { LiveTurn, WorkingLine, useLanding, type LiveRun } from '@/app/run-activity';
 import { showRoutines } from '@/app/details-routines';
-import { handDoneHere, onHandDone, showScreen } from '@/app/screen-hands';
+import { onHandDone, showScreen } from '@/app/screen-hands';
 import { formOf, scheduleLabel } from '@/lib/routine-schedule.mjs';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ChangeCard } from '@/app/change-card';
@@ -28,7 +28,6 @@ import { AccessCard, type PressAccess } from '@/app/access-card';
 const ChangeAnswer=lazy(()=>import('@/app/c/[slug]/[[...section]]/agent-change-card').then(module=>({default:module.ChangeAnswer})));
 import { AgentMadeToast, ReaderTime } from '@/app/agent-made';
 import { ReplyCard } from '@/app/reply-card';
-import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
 import type { ConnectApps } from '@/app/connect-card';
 import { signInToApp } from '@/app/app-sign-in';
 import { useAppsReader, useAppsSheet } from '@/app/apps-sheet-open';
@@ -36,8 +35,7 @@ import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { ModelLine } from '@/app/model-line';
 import { modelOutcome } from '@/lib/model-causes';
-import type { ConversationRecord } from '@/lib/conversation-record';
-import type { ConversationSteps } from '@/lib/conversation-steps';
+import type { ConversationRecord } from '@/lib/conversation-frame';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useReportRun } from '@/lib/live-runs';
 import { useArrivals, useSentIntoNewChat, type Arrival } from '@/lib/arrivals';
@@ -47,9 +45,6 @@ import { reportWait } from '@/lib/waits';
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
 type BidiText=(key:string,...values:ReactNode[])=>ReactNode[];
-// A request for an Agent waiting on the Owner (#17), or one sent to open an Agent hidden from its person (#167), keeps the
-// chat reading its record, less often, until the answer is in.
-const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>(card.kind==='request'&&card.request.state==='waiting')||(card.kind==='access'&&card.access.state==='asked'&&card.access.waits)));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
 const accessCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='access'?[card.access.id]:[])??[]);
 // What each drawn message is known by for its rise (lib/arrivals), and the element it is drawn as (its key in the list).
@@ -75,8 +70,6 @@ const madeArrival=(message:ConversationRecord['messages'][number],agent:string):
 const ruleArrival=(message:ConversationRecord['messages'][number],rule:string):Arrival=>({key:`rule:${rule}`,element:`${message.kind||'m'}${message.id}/rule:${rule}`});
 const ruleArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.kind==='saved'?message.saved?.map(rule=>ruleArrival(message,rule.id))??[]:[]);
 const madeArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='made'?[madeArrival(message,card.agent.id)]:[])??[]);
-// An Agent made, or one opened for this person (#167), changes the sidebar: either is counted, so it is drawn again.
-const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0)+(message.decided?.kind==='access'&&message.decided.opened?1:0),0);
 // The cause of a model error a retry cannot fix (#457), as the record names it.
 const refusalCause={credit:'noCredit',key:'keyRefused',model:'modelMissing',access:'noAccess'} as const;
 
@@ -88,112 +81,15 @@ export function useConversationText() {
  return {c,cb};
 }
 
-// The record of a Conversation kept current while it is open, on its page or in a Card's sheet. The reply is collected
-// by the server from Hermes; the record is asked for again until the reply is in it. Each send restarts the asking, so
-// an answer about an earlier run cannot stop it before the new reply arrives. An Owner answers a request for an Agent
-// from their own page, so while one waits it is also asked for again, less often (#17). A job handed to another Agent
-// (#317) keeps it asking until Lead's follow-up reply is in the record (`handover`).
-// A message its person sends is drawn at once, before the send is answered (#756, `sending`), and the Agent is shown
-// working from then: the first read begun after the send was answered holds the stored message, which takes its place.
-export function useConversationRecord({company,initial,steps:firstSteps}:{company:string,initial:ConversationRecord,steps?:Promise<ConversationSteps|null>}) {
- const id=initial.conversation.id;
- const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
- const {list:sendingList,start:sending,reading,release}=useSending({company,conversation:id});
- const {messages,pending}=record;
- // What lives outside the Conversation comes from the server render: an Agent made in it (the sidebar's Agents) is
- // drawn again when it changes, and nothing else is (#767): sending, storing and a reply landing never redraw the page.
- const router=useRouter();
- const made=useRef(madeCount(initial.messages));
- const asking=pending||requestWaits(messages)||record.handover===true;
- // The poll asks only whether the Conversation changed since its last read (a stamp from the database, #767), and its
- // answer is the record only when it did. A hidden tab asks nothing until it is shown again, then asks at once; a read
- // that fails asks again more slowly, up to thirty seconds apart, and a signed-out reader stops asking. After a Run's
- // events end (`hurry`) it asks every 300 ms for a few seconds, so the reply is drawn within a second of its Run's end.
- const stamp=useRef(initial.stamp??null); const latest=useRef(record);
- useEffect(()=>{ latest.current=record; },[record]);
- // Three reads in a row that failed say so under the transcript (#768); what is drawn stays, and the next read that
- // lands takes the line away.
- const [unread,setUnread]=useState(false);
- const hurry=useRef(0);
- const read=async(since:string|null)=>{
-  const landed=reading();
-  const response=await fetch(`/api/conversations?company=${company}&conversation=${id}${since?`&since=${since}`:''}`,{cache:'no-store'});
-  if(!response.ok) { await response.arrayBuffer().catch(()=>{}); return {status:response.status}; }
-  const result=await response.json() as ConversationRecord|{unchanged:true,stamp:string};
-  // Nothing changed since the record shown was read, so it already holds every message answered before this read began.
-  if('unchanged' in result) { landed(); return {status:200,record:latest.current}; }
-  stamp.current=result.stamp??null; setRecord(result); landed();
-  const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
-  return {status:200,record:result};
- };
- useEffect(()=>{
-  if(!asking) return;
-  let stopped=false; let failures=0; let timer:ReturnType<typeof setTimeout>|undefined;
-  const poll=async()=>{
-   if(stopped||document.visibilityState==='hidden') return;
-   let every=1500;
-   try {
-    const answer=await read(stamp.current);
-    if(stopped) return;
-    if(answer.status===401) { stopped=true; return; }
-    if(!answer.record) throw new Error(String(answer.status));
-    failures=0; setUnread(false);
-    const now=answer.record;
-    if(!now.pending&&!requestWaits(now.messages)&&!now.handover) return;
-    every=now.pending||now.handover?1500:5000;
-   } catch { failures++; every=Math.min(1500*2**failures,30000); if(failures>=3) setUnread(true); }
-   if(hurry.current>0&&failures===0) { hurry.current--; every=300; }
-   if(!stopped) timer=setTimeout(poll,every);
-  };
-  const shown=()=>{ if(document.visibilityState==='visible'&&!stopped) { clearTimeout(timer); void poll(); } };
-  document.addEventListener('visibilitychange',shown);
-  timer=setTimeout(poll,500);
-  return ()=>{stopped=true;clearTimeout(timer);document.removeEventListener('visibilitychange',shown);};
- },[asking,sent,company,id]); // eslint-disable-line react-hooks/exhaustive-deps
- const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
- // A press that changed nothing the Agent does (#167), or a Run's events that ended (#763), read the record once now; the
- // poll then asks quickly for a moment, until the reply is in.
- const reread=async()=>{
-  hurry.current=10;
-  try { const answer=await read(null); if(answer.record) setUnread(false); } catch { /* The next send or read brings it. */ }
- };
- // Each reply's steps and the token use are their own read (ADR 0030, #766), never part of the messages: the page's
- // own read, streamed after them, for the replies it opened with, and a read of their own when a new reply lands. A
- // read that fails leaves the replies as they are, with no line about it.
- const [steps,setSteps]=useState<ConversationSteps|null>(null);
- const replies=messages.filter(message=>message.author==='agent'&&!message.kind).map(message=>message.id).join(',');
- const [opened]=useState(()=>firstSteps?replies:null);
- useEffect(()=>{
-  let gone=false;
-  firstSteps?.then(read=>{ if(read&&!gone) setSteps(current=>current??read); },()=>{});
-  return ()=>{ gone=true; };
- },[firstSteps]);
- useEffect(()=>{
-  if(!replies||replies===opened) return;
-  const stopped=new AbortController();
-  void fetch(`/api/conversations?company=${company}&conversation=${id}&intent=steps`,{cache:'no-store',signal:stopped.signal})
-   .then(async response=>{ if(response.ok) setSteps(await response.json() as ConversationSteps); else await response.arrayBuffer(); }).catch(()=>{});
-  return ()=>stopped.abort();
- },[replies,opened,company,id]);
- const drawn=useMemo(()=>{ const shown=withSteps(withSending(record,sendingList),steps); return unread?{...shown,unread:true as const}:shown; },[record,sendingList,steps,unread]);
- return {record:drawn,asked,reread,sending,reading,release};
+// What a Conversation draws while it is open: its frame, with each message its person sends drawn at once, before the
+// send is answered (#756, `sending`), and the Agent shown working from then. Its messages are its Engine session's, which
+// the Conversation's own view reads and lays in (app/c/[slug]/conversations/[id]/conversation.tsx); nothing here asks
+// the server for a record (#883).
+export function useConversationRecord({company,initial}:{company:string,initial:ConversationRecord}) {
+ const {list:sendingList,start:sending,reading,release}=useSending({company,conversation:initial.conversation.id});
+ const drawn=useMemo(()=>withSending(initial,sendingList),[initial,sendingList]);
+ return {record:drawn,sending,reading,release};
 }
-// The page's own read of each reply's steps (#766), streamed after the messages: drawn by the server once it answers, so
-// a reply shows its steps before the page's script has run, and replaced by the record's own once the hook has it.
-const OpeningStepsContext=createContext<Promise<ConversationSteps|null>|null>(null);
-export const OpeningSteps=OpeningStepsContext.Provider;
-function FirstSteps({reply,c,cb}:{reply:number,c:StepsText,cb:StepsBidiText}) {
- const read=useContext(OpeningStepsContext);
- return read?<Suspense fallback={null}><StreamedSteps read={read} reply={reply} c={c} cb={cb}/></Suspense>:null;
-}
-function StreamedSteps({read,reply,c,cb}:{read:Promise<ConversationSteps|null>,reply:number,c:StepsText,cb:StepsBidiText}) {
- const steps=use(read)?.steps[reply];
- return steps?.list.length?<StepsList steps={steps} c={c} cb={cb}/>:null;
-}
-// The record with each reply's steps under it and the Conversation's token use, once read; a reply the read does not
-// name stays as it is.
-const withSteps=(record:ConversationRecord,read:ConversationSteps|null):ConversationRecord=>!read?.steps?record:{...record,usage:record.usage??read.usage??null,
- messages:record.messages.map(message=>message.author==='agent'&&!message.kind&&!message.steps&&read.steps[message.id]?{...message,steps:read.steps[message.id]}:message)};
 // The record as drawn: the messages just sent after it, and the Agent working on them.
 const withSending=(record:ConversationRecord,list:Sending[]):ConversationRecord=>!list.length?record:{...record,pending:true,
  messages:[...record.messages,...list.map(sending=>({id:sending.id,author:'person' as const,author_name:'',body:sending.body,created_at:sending.at,kind:'sending' as const,
@@ -225,47 +121,18 @@ export function ChatPlaceholder() {
 // line.
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
 // `live` (#876): a Conversation whose messages are the Engine's draws its open Run from its own live read, the reply as
-// it is written and its steps, in place of the old record's steps read (app/api/run-steps).
+// it is written and its steps (app/api/conversation-live).
 // `ending` (#879): a Run seen to fail or stop did not finish, and `again` sends the person's message again; `stopped`
 // (#878): its person stopped it, mid-reply or before it wrote any. `card` is what the Run waits on its person for,
 // drawn in its live turn.
 export type EngineLive={view:LiveRun|null,reply:string,working:boolean,ending?:'unfinished',stopped?:'reply'|'before'|null,again?:()=>void,card?:ReactNode};
-export function ConversationTurns({slug,company,record,writer,asked,reread,details=false,live:engineLive}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean,live?:EngineLive}) {
+export function ConversationTurns({slug,company,record,writer,asked,details=false,live:engineLive}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,details?:boolean,live:EngineLive}) {
  const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
  const {t}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed}=record;
- // "Try again" on a message that was not sent (#764): the same turn waits again, and the record is read until its reply.
- const retry=async(sendKey:string)=>{
-  const failure=await postMessage({company,conversation:conversation.id,intent:'retry',sendKey});
-  if(!failure) asked();
- };
- // A Run's events ended: the record is read now, so its reply is drawn without waiting for the next tick (#763).
- // The Run's end is kept, so the time until its reply is drawn is reported once that reply is (#762).
- const endedAt=useRef<number|null>(null);
- const ended=()=>{ endedAt.current=Date.now(); void reread?.(); };
  const modelCause=record.noModel?'noModel' as const:record.modelRefused?refusalCause[record.modelRefused.reason]:null;
- const answer=async(card:number,choice:number|number[],answerKey:string)=>{
-  const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
-  asked();
-  return failure;
- };
- // "Done it" on a step the Agent handed over (#139): the card shows the time the database kept, and the press starts the
- // Agent's turn (#140), so the record is read again, as after an answer, until its reply is in. A press another tab made
-// first started nothing here, so the record is not read again: a read could replace a newer one (a message sent
-// meanwhile).
- const done=async(card:number)=>{
-  try {
-   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'done',card})});
-   const body=await response.json() as {at?:string,first?:boolean,error?:string};
-   if(!response.ok||!body.at) return {error:body.error||'conversationFailed'};
-   if(body.first===true) asked();
-   // The Screen's view drops the step at once (#714).
-   handDoneHere(card,'chat');
-   return {at:body.at,first:body.first===true};
-  } catch { return {error:'conversationFailed'}; }
- };
  // "Open the screen" on a step on the Agent's Screen (#714): with the Agent's details beside this chat they open on it;
  // with none (a board Card's chat) the page goes to the Conversation, where the details beside it take the ask.
  const router=useRouter();
@@ -281,19 +148,9 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    const body=await response.json() as {state?:string,at?:string,error?:string};
    if(!response.ok) return {error:body.error||'conversationFailed'};
    // A press another tab made first may have been answered since: the card still says it was sent.
-   void reread?.();
    if(body.state==='available') return {state:'available'};
    if(body.at&&(body.state==='dismissed'||body.state==='asked'||body.state==='opened'||body.state==='declined')) return {state:body.state==='dismissed'?'dismissed':'asked',at:body.at};
    return {error:'conversationFailed'};
-  } catch { return {error:'conversationFailed'}; }
- };
- const permit:DecidePermission=async(card,choice)=>{
-  try {
-   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'permit',card,choice})});
-   const body=await response.json() as {state?:PermissionOutcome['state'],choice?:typeof choice,at?:string,first?:boolean,error?:string};
-   if(!response.ok||!body.state) return {error:body.error||'conversationFailed'};
-   asked();
-   return body.state==='decided'&&body.choice&&body.at?{state:'decided',choice:body.choice,at:body.at,first:body.first===true}:{state:'closed',first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
  // An app the Agent asked for (#203): the Owner signs in to it for this Conversation's Agent, as Settings, Apps does,
@@ -332,28 +189,26 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   if(drawnReply.current===newest) return;
   drawnReply.current=newest;
   if(!newestReply||newestReply.author!=='agent') return;
-  const end=endedAt.current; endedAt.current=null;
-  const stored=Date.parse(newestReply.created_at);
-  const ms=end!==null?Date.now()-end:Date.now()-stored;
-  if(Number.isFinite(ms)) requestAnimationFrame(()=>reportWait({event:'reply_drawn',company,conversation:conversation.id,ms,from:end!==null?'stream':'stored'}));
+  const ms=Date.now()-Date.parse(newestReply.created_at);
+  if(Number.isFinite(ms)) requestAnimationFrame(()=>reportWait({event:'reply_drawn',company,conversation:conversation.id,ms,from:'stored'}));
  },[newest,newestReply,company,conversation.id]);
- const {view:recordSteps}=useLiveSteps({company,conversation:conversation.id},working&&!engineLive,ended);
- const steps=engineLive?engineLive.view:recordSteps;
+ // The open Run's steps are its own live read's (#876), which the Conversation's view follows.
+ const steps=engineLive.view;
  const landing=useLanding({working,live:steps,newest});
  // The open Run's face, on the page and in a Card's sheet alike (#184, #700): thinking until its first step, working
  // after it, done once it ended well in front of the reader. A Run waiting on its person's answer (#138) has ended for
  // the face, as the reference's has when its question card is drawn, and waits on them; one that failed or was stopped
  // shows the state the sidebar reads for it.
  // On the Engine's live read (#878) the Run waiting on its question stays the live turn that draws the card, and the face
- // waits on its person as the old record's does.
+ // waits on its person.
  const waitsOnPerson=!!engineLive&&record.asking===true;
  useReportRun(conversation.agent_id,waitsOnPerson?'ended':working?(steps&&(steps.steps.length||steps.now)?'working':'thinking'):failed||record.asking?'ended':'well');
  const live=landing.view;
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
- // A file of the Engine's Conversation (#880) by its key under its message; one of the old record by its own id.
- const fileHref=(file:{id:number,key?:string})=>file.key?`/c/${slug}/files/conversation/${conversation.id}/${file.key}`:`/c/${slug}/files/conversation/${file.id}`;
+ // A file of the Conversation (#880), by its key under its message in the Engine's session.
+ const fileHref=(file:{id:number,key?:string})=>`/c/${slug}/files/conversation/${conversation.id}/${file.key??''}`;
  const face=(size:number,agent?:string,name=conversation.agent_name)=><span aria-hidden="true"><AgentFace agent={agent||conversation.face} name={name} size={size}/></span>;
  // A job one Agent handed another (#317, #475): inside the asking Agent's turn (`p`), or, for one an asked Agent handed on
  // (#477), its own row between the turns (`li`), as a channel draws every handover.
@@ -371,23 +226,19 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    {/* A message being sent has no stored files to open yet: their names alone (#756). */}
    {!!message.files?.length&&message.kind==='sending'&&<div className="msg-files">{message.files.map(file=><span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>)}</div>}
    {/* A person's image on the Engine (#880) is drawn from the session that carried it to the Agent, as a thumbnail of
-       itself; it has no name of its own there. A file of the old record is its named chip. */}
+       itself; it has no name of its own there. */}
    {!!message.files?.length&&message.kind!=='sending'&&<div className="msg-files">{message.files.map(file=>file.key
     ?<a key={file.key} className="file-thumb" href={fileHref(file)} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name||c('conversationImage',file.id+1))} data-file={file.key}>
       {/* eslint-disable-next-line @next/next/no-img-element -- the file's own private route, never an optimised image */}
       <img src={fileHref(file)} alt={file.name||c('conversationImage',file.id+1)} loading="lazy"/></a>
     :<a key={file.id} className="file-chip" href={fileHref(file)} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
    {(message.kind==='queued'||message.kind==='sending')&&message.behind&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
-   {/* Not sent (#764): the Engine refused its Run or was not reached; the message stays, and "Try again" starts the same
-       turn. One refused for the Conversation's model goes back to the box instead (#158). */}
-   {message.kind==='queued'&&message.failed&&<p className="note" role="alert" data-outcome="not-sent">{c('conversationNotSent')}
-    {writer&&message.key&&!message.model_refused&&<> <button type="button" className="link-btn" onClick={()=>void retry(message.key!)}>{c('conversationTryAgain')}</button></>}</p>}
    {message.kind==='answer'&&message.failed&&<p className="note" role="status">{c('conversationAnswerNotDelivered')}</p>}
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<Fragment key={`${message.kind||'m'}${message.id}`}><li className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}<ReaderTime at={message.created_at} className="sender__time"/></div>
-   {message.steps?!!message.steps.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>:<FirstSteps reply={message.id} c={c} cb={cb}/>}
+   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    <ReplyFiles files={message.files} missed={message.missed} href={fileHref}/>
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,
@@ -399,12 +250,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
     :card.kind==='handed'?handed(card,`handed${message.id}:${card.name}:${card.goal}`,'p')
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:step.card?[<CardLine key={at} slug={slug} card={step.card} rise={rise(index)}/>]:[])}</Fragment>)}
    {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled} reply={engineLive?.reply}>{engineLive?.card}</LiveTurn>}</ol>
   {working&&!waitsOnPerson&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
-  {/* The record could not be read three times in a row (#768): what was drawn stays above, and Try again reads it now. */}
-  {record.unread&&<p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')}{reread&&<> <button type="button" className="link-btn" onClick={()=>void reread()}>{c('conversationTryAgain')}</button></>}</p>}
   {failed&&(modelCause
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.

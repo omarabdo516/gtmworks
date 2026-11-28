@@ -2,7 +2,7 @@
 // While an Agent works, its reader sees what it is doing, step by step (#646; design-reference: syncActivityKey, the live
 // activity line, and stepsHTML): the line under the transcript names the Agent and the step it is on now, and the steps
 // it finished in this Run fill the turn's steps list (app/run-steps.tsx) before the reply lands. Both come from the open
-// Run's tool calls as the Engine streams them (app/api/run-steps). A Conversation and a channel draw them alike, each
+// Run's tool calls as the Engine streams them: a channel's from app/api/run-steps, a Conversation's from its own live read (app/api/conversation-live). Both draw them alike, each
 // with the words of its own catalogue. Before the Run's first view the line reads "Thinking" (#756), and it never falls
 // back to another line (#763, vault decision 0071): a stream that ends, cannot be read or no longer knows the Run keeps
 // what the line shows until the reply is drawn.
@@ -22,14 +22,14 @@ const againAfter=1500;
 // no longer waits (#763). When the Run's events end, `ended` is called, so the place reads its record at once instead of
 // waiting for its next tick, and the reply is drawn within a second of its Run's end.
 export type LiveRun=LiveView&{ended?:true};
-export function useLiveSteps(place:{company:string,conversation?:string,channel?:string},working:boolean,ended?:()=>void):{view:LiveRun|null} {
+export function useLiveSteps(place:{company:string,channel:string},working:boolean,ended?:()=>void):{view:LiveRun|null} {
  const [view,setView]=useState<LiveRun|null>(null);
- const {company,conversation,channel}=place;
+ const {company,channel}=place;
  const onEnd=useRef(ended); onEnd.current=ended;
  useEffect(()=>{
   if(!working) return;
   const stopped=new AbortController(); let timer:ReturnType<typeof setTimeout>|undefined; let failures=0;
-  const query=new URLSearchParams({company,...(conversation?{conversation}:{}),...(channel?{channel}:{})});
+  const query=new URLSearchParams({company,channel});
   const read=async()=>{
    let end:string|null=null;
    try {
@@ -60,7 +60,7 @@ export function useLiveSteps(place:{company:string,conversation?:string,channel?
   void read();
   // Once the place no longer waits, the view goes with it.
   return ()=>{ stopped.abort(); clearTimeout(timer); setView(null); };
- },[working,company,conversation,channel]);
+ },[working,company,channel]);
  return {view};
 }
 

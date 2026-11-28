@@ -218,7 +218,7 @@ const mergedByTime=(record:ConversationMessage[],lines:ConversationMessage[],tie
 // Each decision goes before the first item shown after it.
 export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>
  mergedByTime(record,[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided})),'before');
-// How each ended run ended (conversation_run_ends); its token use is Hermes's own (#347).
+// How each ended run ended, as the old record of a Conversation kept it; its token use is Hermes's own (#347).
 // A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457), or
 // no_access when every account it could use ran out (#622).
 export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'no_access'};

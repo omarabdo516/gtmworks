@@ -27,7 +27,7 @@ async function write(db:Database,company:string,row:Found,change:{archived:boole
 }
 
 /** Archives or restores each of the reader's own Conversations on its session: answers the ids marked, and those with
- * no session the Engine holds yet (`unstarted`), which the old record's own mark keeps until #883 switches it off; null
+ * no session the Engine holds yet (`unstarted`), which their rows' own mark keeps until a Run makes the session; null
  * when the rows could not be read. */
 export async function markConversations(db:Database,company:string,ids:string[],archived:boolean):Promise<{marked:string[],unstarted:string[]}|null> {
  const rows=await rowsOf(db,company,ids);

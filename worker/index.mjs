@@ -1,13 +1,12 @@
 import { checkSettings } from '../lib/settings.mjs';
 import { createClient } from '@supabase/supabase-js';
-import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
 import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveGoodMornings } from '../lib/good-morning-runs.mjs';
 import { keepRunningRoutines } from '../lib/routine-runs.mjs';
 import { selfHosted as isSelfHosted, enginePass } from '../lib/company-engine.mjs';
-import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepMainAgentPlugins } from '../lib/main-agent-plugin.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
@@ -18,13 +17,13 @@ import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 import { keepProviderAccounts } from '../lib/provider-switches.mjs';
 import { keepFallbackModels } from '../lib/fallback-model.mjs';
 checkSettings();
-// The worker's elevated database client; lib/conversation-runs.mjs and lib/channel-runs.mjs use it.
+// The worker's elevated database client; lib/channel-runs.mjs and the other loops use it.
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
 let stopping=false;
 process.on('SIGTERM',()=>{stopping=true}); process.on('SIGINT',()=>{stopping=true});
-// Conversation runs, queued turns, channel Runs (#23), note Runs (#22) and a job Lead handed another Agent (#317) keep
-// separate loops, so a start that waits on an engine never delays closing other conversations' runs; a
-// turn starts once its conversation's run was closed (lib/conversation-runs.mjs). A loop waits `every`
+// Channel Runs (#23), note Runs (#22) and a job Lead handed another Agent (#317) keep separate loops, so a start that
+// waits on an engine never delays closing the others. A Conversation's Runs are the Engine's own (#883): the worker only
+// lets go of the Runs a row holds once they ended (Held Conversation Runs). A loop waits `every`
 // milliseconds between passes, and stops waiting as soon as the worker is asked to stop.
 const pause=every=>new Promise(resolve=>{ const end=Date.now()+every; const tick=()=>stopping||Date.now()>=end?resolve():setTimeout(tick,Math.min(1000,end-Date.now())); tick(); });
 // The stack starts the worker beside the gateway and PostgREST (after a backup, an update), so the database may not answer
@@ -41,8 +40,7 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await engineP
 // of the Company it serves (lib/company-engine.mjs), and Runs go to that Engine on each Agent's profile (#342, ADR 0018).
 const selfHosted=isSelfHosted();
 const waiting=new Map(); const moving=new Map(); const keyWaits=new Map(); const providerAccounts=new Map(); const fallbackModels=new Map(); const mainAgentPlugins=new Map();
-await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
- loop('Channel runs',()=>driveChannelRuns(db,{})),
+await Promise.all([loop('Channel runs',()=>driveChannelRuns(db,{})),
  // The old board's note Runs still open at an update are drained; no new one is made (#846).
  loop('Note runs',()=>driveNoteRuns(db,{})),
  loop('Handovers',()=>driveHandovers(db,{})),
@@ -71,7 +69,6 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // gtmworks's plugin of each main Agent's profile, whose tool makes an Agent (#884): written when the profile lacks this
  // release's, and its Engine restarted once to load it (lib/main-agent-plugin.mjs).
  selfHosted&&loop('Main Agent plugin',()=>keepMainAgentPlugins(db,{kept:mainAgentPlugins}),15000),
- loop('Reserved runs',()=>abandonConversationReservations(db),60000),
  // Each Company's Engine takes its subscription accounts in the Owner's order, and each move it made from one account to
  // the next is logged once (#621).
  loop('Provider accounts',()=>keepProviderAccounts(db,{memory:providerAccounts}),10000),

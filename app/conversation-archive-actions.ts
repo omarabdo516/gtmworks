@@ -7,8 +7,8 @@ import { archiveIntents, type ArchiveAnswer, type ArchiveIntent, type ArchiveSto
 // What archiving would stop in these Conversations (#674), or archiving or restoring them: each the signed-in person's
 // own. `stops` answers what the one confirmation names (each line `about` its Conversation, which the asking page
 // titles); the others answer the Conversations they changed, or refused when none changed. Archiving is the session's
-// own archived mark (#881): it is written on the Engine first, then the person's act is logged and what the old record
-// still runs for it stops (log_conversations_archived). The page that asked reads itself again
+// own archived mark (#881): it is written on the Engine first, then the person's act is logged
+// (log_conversations_archived). The page that asked reads itself again
 // (useConversationArchive), so nothing here imports the server's cache.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const archiveConversations=withActionLog('archiveConversations',async function archiveConversations(company:string,intent:ArchiveIntent,chats:string[]):Promise<ArchiveAnswer<string>> {
@@ -32,8 +32,8 @@ export const archiveConversations=withActionLog('archiveConversations',async fun
   // The session's mark is the archive: one that is written stands even when its log is not.
   if(error) logActionFailure('archiveConversations',error);
  }
- // A Conversation whose session the Engine does not hold yet keeps the old record's own mark, which the worker carries
- // to its session once it is there (lib/conversation-archive.mjs), until #883 switches the old record off.
+ // A Conversation whose session the Engine does not hold yet (no Run started on it) keeps its row's own mark, which the
+ // worker carries to its session once it is there (lib/conversation-archive.mjs).
  if(written.unstarted.length) {
   const {data,error}=archived?await db.rpc('archive_conversations',{c:company,chats:written.unstarted}):await db.rpc('restore_conversations',{c:company,chats:written.unstarted});
   if(error) logActionFailure('archiveConversations',error); else done.push(...((data||[]) as string[]).map(String));

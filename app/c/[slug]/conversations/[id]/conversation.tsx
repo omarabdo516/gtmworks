@@ -1,6 +1,5 @@
 'use client';
 import { Suspense, createContext, memo, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from 'react';
-import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
 import { useAgentState } from '@/app/sidebar-live';
@@ -11,8 +10,7 @@ import type { DetailsTab } from '@/lib/agent-details.mjs';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
-import type { ConversationRecord } from '@/lib/conversation-record';
-import type { ConversationSteps } from '@/lib/conversation-steps';
+import type { ConversationRecord } from '@/lib/conversation-frame';
 import { takeSent, type Send } from '@/lib/sending';
 import type { LiveRun } from '@/app/run-activity';
 import type { LiveDelta, LiveLine } from '@/lib/live-steps.mjs';
@@ -20,9 +18,8 @@ import type { LiveAsking, LiveAskingLine, LiveSettled } from '@/lib/conversation
 import type { RunEnd } from '@/lib/run-outcome.mjs';
 import { ReplyCard } from '@/app/reply-card';
 import type { ReplyCard as Card } from '@/lib/conversations';
-import { columnLabel } from '@/lib/board-columns.mjs';
 import { postMessage, postMessageAnswer, postMessageWithFilesAnswer, type MessageBoxHandle } from '@/app/conversation-composer';
-import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type Steer, type ThreadConversation } from '@/app/conversation-thread';
+import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type Steer, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
 import { MoreMenu } from '@/app/more-menu';
@@ -127,18 +124,18 @@ const ChatView=createContext<View|null>(null);
 const useView=()=>use(ChatView)!;
 
 // The transcript once its record is read, in place of the placeholder.
-// A first open whose record could not be read (#768): one line with "Try again", which draws the page again, in place of
-// an empty Conversation.
-export function ConversationNotRead() {
- const {c}=useConversationText(); const router=useRouter();
- return <div className="transcript"><div className="transcript__col"><p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')} <button type="button" className="link-btn" onClick={()=>router.refresh()}>{c('conversationTryAgain')}</button></p></div></div>;
+// A first read of the messages that failed (#768), with no earlier read kept in this browser: one line with "Try again",
+// which reads the session again, in place of an empty Conversation.
+function ConversationNotRead({again}:{again:()=>void}) {
+ const {c}=useConversationText();
+ return <p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')} <button type="button" className="link-btn" onClick={again}>{c('conversationTryAgain')}</button></p>;
 }
 
 // A Conversation whose messages are the Engine's (#875): the page draws its frame, Agent and composer from the database
 // and this reads the last 50 messages from the Agent's session on a request of its own (ADR 0030). Scroll to the top
 // reads the 50 before. The last good read stays in this browser while a new read runs, and a read that fails after one
-// says it could not refresh. A Conversation with no Engine session, or one whose session the Engine does not answer,
-// falls back to the old record once, as until its first send gives it a session.
+// says it could not refresh. A Conversation with no Engine session yet holds no message; a first read that fails says it
+// could not be read, with Try again.
 type EnginePage={messages:ConversationRecord['messages'],nextOffset:number,hasMore:boolean};
 type Refreshed='read'|'again'|'stop';
 type EngineRead=(EnginePage&{state:'found'})|{state:'none'|'notSeen'|'missing'|'refused'|'unreachable'|'unread'};
@@ -159,20 +156,19 @@ function rememberPage(storage:string,page:EnginePage) {
  engineReads.set(storage,page);
  try { sessionStorage.setItem(storage,JSON.stringify(page)); } catch { /* The last read stays in memory. */ }
 }
-// The messages' own read, kept beside the frame: `page` is what is drawn, `mode` whether it is the Engine's or the old
-// record's, `failed` a read that failed after a good one, and `more` the 50 before the oldest drawn.
-function useEnginePage(company:string,conversation:string,hasOldMessages:()=>number) {
+// The messages' own read, kept beside the frame: `page` is what is drawn, `mode` whether it was read (`unread`: a first
+// read failed), `failed` a read that failed after a good one, and `more` the 50 before the oldest drawn.
+function useEnginePage(company:string,conversation:string) {
  const storage=engineKey(company,conversation);
  const [page,setPage]=useState<EnginePage|null>(null);
- const [mode,setMode]=useState<'reading'|'engine'|'fallback'>('reading');
+ const [mode,setMode]=useState<'reading'|'engine'|'unread'>('reading');
  const [failed,setFailed]=useState(false);
  const [older,setOlder]=useState(false);
  const [moreFailed,setMoreFailed]=useState(false);
  const [usage,setUsage]=useState<ConversationRecord['usage']>(null);
- const pageRef=useRef<EnginePage|null>(null); const modeRef=useRef(mode); const olderRef=useRef(false); const oldRef=useRef(hasOldMessages); const lastAsk=useRef(0);
+ const pageRef=useRef<EnginePage|null>(null); const modeRef=useRef(mode); const olderRef=useRef(false); const lastAsk=useRef(0);
  useEffect(()=>{ pageRef.current=page; },[page]);
  useEffect(()=>{ modeRef.current=mode; },[mode]);
- useEffect(()=>{ oldRef.current=hasOldMessages; },[hasOldMessages]);
  const read=async(offset:number):Promise<EngineRead>=>{
   try {
    const response=await fetch(`/api/conversations?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}&intent=read&offset=${offset}&limit=50`,{cache:'no-store'});
@@ -197,6 +193,11 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
   if(held&&!pageRef.current) { pageRef.current=held; setPage(held); setMode('engine'); }
   void readUsage();
   const readNow=await read(0);
+  // A Conversation whose session the Engine has not made yet (no Run started on it) holds no message.
+  if(readNow.state==='none') {
+   if(!pageRef.current) { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); }
+   setMode('engine'); setFailed(false); return 'read';
+  }
   if(readNow.state==='found') {
    // A page of only tool calls draws nothing, and a page with messages after it is not the end: an empty page is the
    // first page all the same, so the read goes on to the page before it (#875).
@@ -217,18 +218,17 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
     pageRef.current=next; setPage(next); setMode('engine'); setFailed(false); setMoreFailed(false);
     if(readNow.messages.length) rememberPage(storage,{messages:readNow.messages,nextOffset:readNow.nextOffset,hasMore:readNow.hasMore});
    } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
-   else if(oldRef.current()>0) setMode('fallback');
    else { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); setMode('engine'); }
    return 'read';
   }
   if(pageRef.current||modeRef.current==='engine') setFailed(true);
-  else setMode('fallback');
+  else setMode('unread');
   return readNow.state==='unread'||readNow.state==='unreachable'?'again':'stop';
  };
  const refreshRef=useRef<()=>Promise<Refreshed>>(async()=>'again');
  useEffect(()=>{ refreshRef.current=refresh; });
  // The last good read this browser kept shows at once, then a read asks the Engine again (and a tab that comes back
- // asks once more). A first read that fails or finds no messages leaves the old record in charge.
+ // asks once more).
  useEffect(()=>{
   lastAsk.current=Date.now();
   void refreshRef.current();
@@ -367,7 +367,7 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
  return {view,reply,working,unfinished,follow,begun,following,asking,settle};
 }
 
-// The card the open Run waits on (#878), as the old record's cards are drawn (app/reply-card.tsx): a question, or a
+// The card the open Run waits on (#878), drawn as every card of a reply is (app/reply-card.tsx): a question, or a
 // request to act with the choices this person may send. Its id on the page is the Engine's own id's number, for the card's
 // place; a press goes to the Run's own route through gtmworks, naming the Run and the Engine's id. Settled, it shows the
 // answer or the choice, or a question as closed and a request the Engine stopped waiting on as not allowed.
@@ -407,19 +407,18 @@ function AskingCard({company,conversation,asking,writer,chips,settle}:{company:s
 }
 
 // `owner`: the reader is the Company's Owner, who fixes a model the Agent could not reply with (#422, #457).
-export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean,open?:boolean,owner?:boolean}) {
+export function EngineLoaded({initial,team,open=false,owner=false}:{initial:ConversationRecord,team:boolean,open?:boolean,owner?:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,reread,sending,release}=useConversationRecord({company,initial,steps});
+ const {record,sending,release}=useConversationRecord({company,initial});
  const {c}=useConversationText(); const {t}=useI18n();
- const engine=useEnginePage(company,conversation.id,()=>record.messages.length);
+ const engine=useEnginePage(company,conversation.id);
  // A Run's end reads the session again; the messages sent before it then leave the drawn list, as the session holds them.
  // A Run's end reads the session again; a sent message leaves the drawn list only once a read holds it (below).
  const run=useEngineRun(company,conversation.id,open,engine.refresh);
  // The first message of a new Conversation, sent from the Agent's empty chat, is drawn here at once (#876).
  useEffect(()=>{ const handed=takeSent(conversation.id); if(handed) sending(handed.key,handed.body,[])(null); },[conversation.id]); // eslint-disable-line react-hooks/exhaustive-deps
- // What the transcript draws: the Engine's messages when they were read, else the old record, which a first read that
- // fails leaves in charge (and which the composer and the title read either way). The old record's live states — the
- // working line, Stop, a question or a request to act — wait for #876 to #879, which bring them on this read.
+ // What the transcript draws: the Engine's messages once they were read, with the messages sent here that the session
+ // does not hold yet, and the frame's own states.
  // The person's messages the page held when each sent message was first drawn: only a message the session holds beyond
  // those can be that send, so the same words said before (a second "Yes") never stand in for it. Kept as state, set while
  // drawing the first time a sent message is seen.
@@ -446,7 +445,7 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   return {waiting,held};
  },[record.messages,engine.page,before,spent,run.begun]); // eslint-disable-line react-hooks/exhaustive-deps
  // A Run seen here that did not finish (#879) says so under the person's message, with the cause the Engine named, once
- // no Run works and no sent message waits; a model the Agent could not reply with is told as the old record tells it,
+ // no Run works and no sent message waits; a model the Agent could not reply with is told by its cause,
  // with the Owner's way to fix it. A last message of the person's with no Run open is #877's no reply, below.
  const ending=run.working||sent.waiting.length||!run.unfinished?null:'unfinished' as const;
  const cause=ending?run.unfinished?.cause:undefined;
@@ -589,48 +588,10 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} reread={reread} details={!!agent} live={{...(stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working,
+  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:!engine.page&&engine.mode==='unread'?<ConversationNotRead again={()=>void engine.refresh()}/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} details={!!agent} live={{...(stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working,
    card:run.asking?<AskingCard key={run.asking.card.id} company={company} conversation={conversation.id} asking={run.asking} writer={writer} chips={agent?.main===true} settle={run.settle}/>:undefined}),
    ending:ending??undefined,stopped:ending&&run.unfinished?.outcome==='stopped'?(run.unfinished.said?'reply':'before'):null,again:asking?undefined:()=>void askAgain()}}/>}
   {noReply&&!ending&&<p className="note convo-status" role="alert" data-outcome="no-reply">{c('conversationNoReply')} <button type="button" className="link-btn" disabled={asking} onClick={()=>void askAgain()}>{c('conversationTryAgain')}</button></p>}
   {engine.failed&&engine.page&&<p className="note convo-status" role="alert" data-outcome="refresh" data-refresh>{c('conversationNoRefresh')} <button type="button" className="link-btn" onClick={engine.refresh}>{c('conversationTryAgain')}</button></p>}
  </div></div>;
 }
-
-export function ConversationLoaded({initial,steps,team}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean}) {
- const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,asked,reread,sending}=useConversationRecord({company,initial,steps});
- const {messages}=record;
- const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
- // `asked` only sets this transcript's own state, so the one it was first given stays good.
- useLayoutEffect(()=>{ store.set({record,asked,sending}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
- const early=useSyncExternalStore(store.subscribe,store.early,()=>0);
- // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`) or a permission request (#165,
- // `#permission-<card>`), or from Settings at a proposed change to an Agent's settings (#178, `#change-<proposal>`): that
-// card in view and focused, not the newest message. It runs before the effect below, on the first draw only. The address is then the Conversation's again, so a
-// reload opens on the newest message, and the first message after the landing (the Agent's reply to "Done it") is
-// followed again.
- const landed=useRef<number|null>(null);
- useLayoutEffect(()=>{
-  const card=/^#(hand|permission|change)-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
-  if(!card) return;
-  stick.current=false; landed.current=messages.length;
-  card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
-  history.replaceState(history.state,'',location.pathname+location.search);
- },[]); // eslint-disable-line react-hooks/exhaustive-deps
- // Kept on the newest message while the reader is there (design-reference: renderTranscript).
- useLayoutEffect(()=>{
-  if(landed.current!==null&&messages.length>landed.current) { landed.current=null; stick.current=true; }
-  if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight;
- },[messages.length,record.pending]);
- const answered=useRef(0);
- useEffect(()=>{ if(early>answered.current) { answered.current=early; asked(); } });
- // A new workspace opens on the Owner's Conversation with Lead before anything is said in it (#9): Lead's first words.
- const welcome=!messages.length&&agent?.main;
- return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
-  {team&&<PrivateLine agent={conversation.agent_name}/>}
-  {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  <OpeningSteps value={steps??null}><ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread} details={!!agent}/></OpeningSteps>
- </div></div>;
-}
-
