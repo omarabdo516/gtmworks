@@ -5,6 +5,8 @@ import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { liveLines, type LiveDelta, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
 import { runEnd } from '@/lib/run-outcome.mjs';
+import { conversationLines, type LiveAskingLine } from '@/lib/conversation-live.mjs';
+import type { PermissionChoice } from '@/lib/engine.mjs';
 
 // The open Run of a Conversation whose messages are the Engine's, as it happens (#876): gtmworks's web server follows the
 // Run's event stream on the Engine and relays it to the Conversation's own person, one JSON line each, as it carries the
@@ -12,7 +14,10 @@ import { runEnd } from '@/lib/run-outcome.mjs';
 // the call it makes now; a `{delta}` line is the next words of the reply as the model writes them; the last line says
 // how it ended, and why when it did not finish (#879). Once the Run's end is seen, or the Engine no longer knows the Run,
 // the row no longer holds it (end_conversation_run). Nothing of it is kept.
-type Line=LiveLine|LiveDelta;
+// Between them (#878), what the Run waits on its person for, a question or a request to act, with the choices of the
+// request this person's Role may send (permission_choices: "Always allow" for an Owner and a Manager only), and how it
+// settled (lib/conversation-live.mjs).
+type Line=LiveLine|LiveDelta|LiveAskingLine;
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
 const refuse=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});
@@ -26,6 +31,9 @@ export async function GET(request:NextRequest) {
   if(!user) return refuse('conversationNotFound',401);
   const params=request.nextUrl.searchParams;
   const company=params.get('company'); const conversation=params.get('conversation');
+  // The open card a reader that comes back still draws (#878), checked against the Run's record on its first read.
+  const heldKind=params.get('held'); const heldId=params.get('heldId');
+  const held=(heldKind==='question'||heldKind==='permission')&&heldId&&/^[\w@-]{1,120}$/.test(heldId)?{kind:heldKind,id:heldId} as const:null;
   if(!company||!uuid.test(company)||!conversation||!uuid.test(conversation)) return refuse('conversationFailed',400);
   if(!await routeAllowed(db,'app/api/conversation-live/route.ts','GET',company,user.id)) return refuse('conversationNotAllowed',403);
   // Only the Conversation's own person: the row is read with their session and named as theirs.
@@ -47,7 +55,8 @@ export async function GET(request:NextRequest) {
   if(settled) { await db.rpc('end_conversation_run',{conversation,run}); return only(settled); }
   const stopped=new AbortController();
   request.signal.addEventListener('abort',()=>stopped.abort(),{once:true});
-  const lines=liveLines(run,engine.sessions.follow(run,{signal:stopped.signal}),{reply:true})[Symbol.asyncIterator]();
+  const {data:may}=await db.rpc('permission_choices',{c:company});
+  const lines=conversationLines(run,liveLines(run,engine.sessions.follow(run,{signal:stopped.signal}),{reply:true}),{read:()=>engine.runs.read(run),may:(may as PermissionChoice[]|null)??[],held})[Symbol.asyncIterator]();
   return new Response(new ReadableStream({
    async pull(controller) {
     try {

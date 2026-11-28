@@ -59,6 +59,15 @@ function messageParts(message?:SessionMessage):{body:string,paths:string[],image
  return {body:images?lines.join('\n'):textOf(message?.content),paths:[],images};
 }
 const replyText=(message?:SessionMessage)=>messageParts(message).body;
+// The Run that submitted a person's message (#980): the Engine stamps each API Run's input row with its own id
+// (`display_metadata.submission_id`, docs/engine-probes/conversation-read.md), which the page uses to hide a retry's own
+// copy of the message it already shows. Null for a row the Engine did not stamp.
+/** @param {SessionMessage} [message] */
+const runOf=(message?:SessionMessage)=>{
+ const meta=message?.display_metadata;
+ const id=meta&&typeof meta==='object'&&'submission_id' in meta?(meta as {submission_id?:unknown}).submission_id:undefined;
+ return typeof id==='string'&&id? id:null;
+};
 // Whether an Agent's message is a reply a person reads: words, or a file it names.
 const hasReply=(message?:SessionMessage)=>{ const {body,paths}=messageParts(message); return !!body.trim()||paths.length>0; };
 // A Conversation's file (#880) is told by the message it is in and its place there: `i<message>-<n>` a person's n-th
@@ -106,7 +115,7 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:Sessi
    if(summary.test(body)) { shown.push({id:idOf(message),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary',turn:turnKey(turn)}); continue; }
    if(message.display_kind==='hidden') continue;
    const {files}=namedFiles(message,idOf(message),profile);
-   if(body.trim()||files.length) shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn),...(files.length?{files}:{})});
+   if(body.trim()||files.length) { const run=runOf(message); shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn),...(files.length?{files}:{}),...(run?{run}:{})}); }
    continue;
   }
   if(message?.role==='assistant'&&lastText.get(turn)===index&&hasReply(message)) {

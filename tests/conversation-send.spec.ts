@@ -47,6 +47,7 @@ test.beforeAll(async({},testInfo)=>{
 test.afterAll(async()=>{ await stopFake(); });
 test.afterEach(()=>{
  fake.settings.liveHold=false; fake.settings.livePace=10; fake.settings.liveSteps=()=>[]; fake.settings.runsAtOnce=0; fake.settings.sessionQueueLimit=32;
+ fake.settings.ending='completed'; fake.settings.failure=undefined;
  for(const run of fake.settings.runs) if(!run.released) fake.settings.release(run.id);
 });
 
@@ -162,7 +163,7 @@ test('three quick sends: each Run is followed live in the order it was started, 
 
 // #877: a message sent while the Agent works waits its turn in the Engine's own queue, and one the Engine cannot take is
 // never lost: it stays in the box with why it was not sent and Try again.
-const openConversation=async(page:Page,messages:{role:string,content:string,timestamp:number}[]=[])=>{
+const openConversation=async(page:Page,messages:Record<string,unknown>[]=[])=>{
  const conversation=randomUUID(); const session=`gtmworks-${randomUUID()}`;
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
  fake.settings.sessions.set(session,{profile,messages});
@@ -272,7 +273,7 @@ test('a double press sends one message',async({page})=>{
  expect(runsOf('Only once')).toBe(1);
 });
 
-test('a Conversation whose last message is the person\'s, with no Run open, says no reply, and Try again asks again',async({page})=>{
+test('a Conversation whose last message is the person\'s, with no Run open, says no reply, and Try again runs it again, holding the words once',async({page})=>{
  test.setTimeout(180000);
  await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Plan the week',timestamp:3}]);
  const line=page.locator('[data-outcome=no-reply]');
@@ -281,6 +282,56 @@ test('a Conversation whose last message is the person\'s, with no Run open, says
  await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Plan the week/,{timeout:30000});
  await expect(line).toHaveCount(0);
  expect(runsOf('Plan the week')).toBe(1);
+ // The words are the Conversation's already: the Run's own copy of them is hidden, and the box is empty.
+ await expect(person(page).filter({hasText:'Plan the week'})).toHaveCount(1);
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
+ // The same after a reload: this tab keeps the Run its press made, so the Engine's second row stays hidden.
+ await page.reload();
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Plan the week/,{timeout:20000});
+ await expect(person(page).filter({hasText:'Plan the week'})).toHaveCount(1);
+});
+
+test('Try again reads past a page of tool calls with no reply, and answers the message once',async({page})=>{
+ test.setTimeout(180000);
+ // A Turn that failed after more than a page of calls: the newest page has nothing to draw, and Try again's check has to
+ // read the page before it to find the person's message (#980).
+ const call=(id:string)=>({id,type:'function',function:{name:'web_search',arguments:JSON.stringify({query:id})}});
+ const messages:Record<string,unknown>[]=[{role:'user',content:'Plan the quarter',timestamp:1}];
+ for(let n=0;n<60;n++) messages.push(
+  {role:'assistant',content:'',tool_calls:[call(`call_${n}`)],timestamp:2+n*2},
+  {role:'tool',tool_call_id:`call_${n}`,tool_name:'web_search',content:'{"results":[]}',timestamp:3+n*2});
+ await openConversation(page,messages);
+ const line=page.locator('[data-outcome=no-reply]');
+ await expect(line).toHaveText(/No reply/,{timeout:20000});
+ await line.getByRole('button',{name:'Try again'}).click();
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Plan the quarter/,{timeout:30000});
+ expect(runsOf('Plan the quarter')).toBe(1);
+ await expect(person(page).filter({hasText:'Plan the quarter'})).toHaveCount(1);
+});
+
+test('a double press on Try again starts one Run',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Ship the brief',timestamp:3}]);
+ const line=page.locator('[data-outcome=no-reply]');
+ await expect(line).toHaveText(/No reply/,{timeout:20000});
+ // Two presses before the page can draw the first: both are sent, and the same send key makes the Engine replay one Run.
+ await line.getByRole('button',{name:'Try again'}).evaluate(button=>{ const press=button as HTMLElement; press.click(); press.click(); });
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Ship the brief/,{timeout:30000});
+ expect(runsOf('Ship the brief'),'one message, one Run, however fast the second press').toBe(1);
+ await expect(person(page).filter({hasText:'Ship the brief'})).toHaveCount(1);
+});
+
+test('a retry that failed starts a new Run on the next press',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Send the report',timestamp:3}]);
+ fake.settings.ending='failed'; fake.settings.failure='The provider said no.';
+ const line=page.locator('[data-outcome=no-reply]');
+ await expect(line).toHaveText(/No reply/,{timeout:20000});
+ await line.getByRole('button',{name:'Try again'}).click();
+ await expect(page.locator('[data-outcome=unfinished]')).toHaveText(/This reply didn’t finish\./,{timeout:30000});
+ // The failed retry's own row is the message the next press answers, so its set key is not the one the first press used.
+ await page.locator('[data-outcome=unfinished]').getByRole('button',{name:'Try again'}).click();
+ await expect.poll(()=>runsOf('Send the report'),{timeout:30000}).toBe(2);
 });
 
 test('a Viewer, another Member\'s Conversation and an Agent the sender may not talk to are refused on the server, and no Run starts',async({browser})=>{

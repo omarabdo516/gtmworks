@@ -18,6 +18,7 @@ import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-
 import { unarchiveOnWrite } from '@/lib/conversation-session-marks';
 import { conversationSteps } from '@/lib/conversation-steps';
 import { sendToEngine } from '@/lib/conversation-send';
+import { answerEngineRun, permitEngineRun, stopEngineRun } from '@/lib/conversation-steer';
 import { agentAppStates } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -27,6 +28,11 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
+// A Run the browser follows on a Conversation whose messages are the Engine's (#878), and an id the Engine gave what it
+// waits on: lib/conversation-steer.ts checks both against the row and the Run's own record.
+const runId=(value:unknown):value is string=>typeof value==='string'&&/^[\w.:-]{1,200}$/.test(value);
+const askedId=(value:unknown):value is string=>typeof value==='string'&&/^[\w@-]{1,120}$/.test(value);
+const steered=(done:object)=>'error' in done?refuse(String(done.error),Number((done as {status?:unknown}).status)||500):reply(done);
 
 // A message is checked and stored by lib/conversation-runs.mjs (ADR 0029, #764): the answer goes once it is stored, and
 // its Run starts after it, through the one starter of turns (after(), and the worker's pass over waiting turns). This
@@ -40,7 +46,13 @@ const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies Pe
 async function send(db:Database,person:string,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined) return refuse('conversationFailed',400);
+ if(body.rerun!==undefined&&body.rerun!==true&&body.rerun!=='true') return refuse('conversationFailed',400);
+ if(body.messageId!==undefined&&!(typeof body.messageId==='number'&&Number.isSafeInteger(body.messageId)&&body.messageId>=0)&&!(typeof body.messageId==='string'&&/^\d{1,15}$/.test(body.messageId))) return refuse('conversationFailed',400);
  if(typeof body.message!=='string'||body.message.length>20000) return refuse('conversationFailed',400);
+ // Try again on a Conversation whose last message is the person's with no reply (#980): a Run on that message, whose
+ // words and own id the server checks against the session, never a second message stored.
+ const rerun=body.rerun===true||body.rerun==='true';
+ const messageId=typeof body.messageId==='string'?Number(body.messageId):body.messageId as number|undefined;
  // A file the Agent cannot read, more of them than a message carries, or a message whose text and images pass the
  // Engine's request limit: refused here, with one line saying why, and nothing is stored or sent.
  const problem=conversationFilesProblem(chosen,body.message);
@@ -51,13 +63,18 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
  // A message in a Conversation whose messages are the Engine's, or in a new one, is one Run on its Engine session, its
  // images in the Run's input, and nothing of it is stored here (#876, #880). A Conversation the old record still holds
  // goes on below.
- const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen});
+ const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen,rerun,messageId});
+ // A rerun whose message is no longer the Conversation's last: the page reads the session again, where the reply or
+ // the newer message is.
+ if(engine.state==='nothing') return reply({state:'nothing'});
  if(engine.state==='started') {
   // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
   after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
   return reply({conversation,...(engine.run?{run:engine.run}:{}),engine:true,...(engine.queued?{queued:true}:{})});
  }
  if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
+ // A rerun has no old-record shape: the Conversation is on the Engine, or nothing is left unanswered.
+ if(rerun) return refuse('conversationNoReply',409);
  // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
  // the key still holds (#727).
  const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
@@ -80,8 +97,11 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
 }
 
 // Stop works for the person who started the open run, or a Manager or Owner of the Company (the database decides).
+// On a Conversation whose messages are the Engine's (#878), the browser names the Run it follows, and only its person
+// stops it, with the Run's own stop.
 async function stop(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)) return refuse('conversationFailed',400);
+ if(body.run!==undefined) return runId(body.run)?steered(await stopEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run})):refuse('conversationFailed',400);
  const stopped=await stopConversationRun(db,{company:body.company as string,conversation:body.conversation});
  if('code' in stopped) return stopped.message==='conversationNothingToStop'?reply({stopped:false}):refuseFor(stopped.code);
  if('error' in stopped) return refuse(stopped.error,stopped.status);
@@ -98,10 +118,18 @@ async function stop(db:Database,body:Record<string,unknown>) {
 // where several may be picked the picked choices' indexes (#648), and one key per card on the page, so a second click is
 // the same claim. Only the Conversation's person claims it (answer_question);
 // the answer then goes to the waiting Run. Typed words answer it through send.
+// On a Conversation whose messages are the Engine's (#878), an answer names the Run and the question the Engine gave it,
+// and is a pick, several picks or the person's typed words, which go to the Run's own route.
 async function answer(db:Database,body:Record<string,unknown>) {
- if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
  const isChoiceIndex=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<4;
  const picks=Array.isArray(body.choice)&&body.choice.length>=1&&body.choice.length<=4&&body.choice.every(isChoiceIndex)?body.choice as number[]:null;
+ if(body.run!==undefined) {
+  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.question)) return refuse('conversationFailed',400);
+  const given=typeof body.text==='string'?(body.text.trim()&&body.text.length<=20000?{text:body.text}:null):isChoiceIndex(body.choice)?{pick:body.choice}:picks?{picks}:null;
+  if(!given) return refuse('conversationFailed',400);
+  return steered(await answerEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,question:body.question,answer:given}));
+ }
+ if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
  if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(isChoiceIndex(body.choice)||picks)) return refuse('conversationFailed',400);
  const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,...(picks?{picks}:{choice:body.choice as number}),answerKey:body.answerKey as string});
  if('code' in answered) return answered.code==='22023'?refuse('conversationFailed',400):refuseFor(answered.code);
@@ -137,7 +165,13 @@ async function done(db:Database,body:Record<string,unknown>) {
 // once the choice is kept, as "Done it" is, and the choice then goes to the waiting Run after the answer. A second
 // press, another tab, or a request the Engine no longer waits on answers what the card shows now. Nothing of the
 // request is logged.
+// On a Conversation whose messages are the Engine's (#878), the choice names the Run and the request the Engine gave it;
+// "Always allow" from a Role that may not send it is refused here (permission_choices) before the Engine is asked.
 async function permit(db:Database,body:Record<string,unknown>) {
+ if(body.run!==undefined) {
+  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.permission)||!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
+  return steered(await permitEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,permission:body.permission,choice:body.choice as PermissionChoice}));
+ }
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  if(!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
  const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,later:after});
@@ -288,7 +322,7 @@ async function respond(request:NextRequest) {
    // A form sends a text's line breaks as CRLF (the HTML form encoding), where the box and a JSON send keep the person's
    // own LF: the message is read back as they typed it (#880), so the Agent's words and the drawn ones are the same.
    const message=field('message')?.replace(/\r\n/g,'\n');
-   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message,agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
+   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message,agent:field('agent'),intent:field('intent'),rerun:field('rerun'),messageId:field('messageId'),...(card!==undefined?{card:Number(card)}:{})};
    // Every file is passed to the check, an empty one included: it is refused with the line, never silently dropped.
    chosen=fields.getAll('files').filter((file):file is File=>file instanceof File);
    if(chosen.length&&body.intent!==undefined) return refuse('conversationFailed',400);

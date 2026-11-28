@@ -6,6 +6,18 @@
   "ar": { "title": "الموديل وأول محادثة ووش الوكيل على المحرك", "body": "في المحادثة اللي محفوظة على محرك الوكلاء، الموديل اللي بتختاره بيمشي مع كل رد وبيفضل مختار بعد ما تعمل ريلود، والوكيل الرئيسي لسه بيفتح أول محادثة للشركة الجديدة بأسئلته، والإملاء بالصوت بيتبعت زي الكتابة بالظبط، ووش الوكيل بيبيّن إنه شغال لحد ما رده يخلص، حتى لو قفلت الصفحة." }
  },
  {
+  "issue": 980,
+  "date": "2026-11-28",
+  "en": { "title": "Try again answers your last message, once", "body": "When a Conversation ends on your message with no reply, Try again starts the Agent again on that message, which stays once in the Conversation, instead of sending your words a second time." },
+  "ar": { "title": "«جرّب تاني» بيرد على آخر رسالة ليك، مرة واحدة", "body": "لما المحادثة تخلص على رسالتك ومفيش رد، «جرّب تاني» بيشغّل الوكيل تاني على الرسالة دي، وبتفضل مرة واحدة في المحادثة، بدل ما كلامك يتبعت تاني." }
+ },
+ {
+  "issue": 981,
+  "date": "2026-11-28",
+  "en": { "title": "An update no longer stops on a busy database", "body": "When an update's database changes meet the app or the background worker reading the same tables, the database rolls them back whole and the update runs them again, five attempts at most, instead of stopping; any other failure still stops at once and leaves the version you run serving." },
+  "ar": { "title": "التحديث مبقاش بيقف على قاعدة بيانات مشغولة", "body": "لما تغييرات قاعدة البيانات في التحديث تقابل التطبيق أو الشغّال اللي في الخلفية بيقرأوا نفس الجداول، قاعدة البيانات بترجّعهم كلهم والتحديث بيشغّلهم تاني، لحد خمس محاولات، بدل ما يقف؛ وأي فشل تاني لسه بيوقف على طول وبيسيب النسخة اللي شغّالة عندك." }
+ },
+ {
   "issue": 880,
   "date": "2026-11-28",
   "en": { "title": "Images and an agent’s files go straight through", "body": "An image you attach reaches the agent and stays under your message, and a file the agent names in its reply opens straight from its work folder; gtmworks keeps no copy of either, and while the work sandbox is stopped the file says it can’t be read now." },

@@ -141,8 +141,9 @@ test('a newest page of only tool calls loads the messages before it, and a page 
  await open(page,conversation);
  // The newest 50 are tool calls alone, so the first page has nothing to draw and no scrollbar: the read goes on to the
  // page that holds the person's message and the reply, without the person scrolling.
- await expect(page.getByText('The older message')).toBeVisible({timeout:15000});
- await expect(page.getByText('The older reply')).toBeVisible();
+ const drawn=page.getByRole('list',{name:'Messages'});
+ await expect(drawn.getByText('The older message')).toBeVisible({timeout:15000});
+ await expect(drawn.getByText('The older reply')).toBeVisible();
 });
 
 test('a Card step of an Agent hidden from the reader names no Card',async({page})=>{

@@ -100,8 +100,8 @@ test('Try again on an image message with no reply sends its words as they were a
  const parts=(fake.settings.runs.at(-1)!.input as {content:{type:string,text?:string,image_url?:{url:string}}[]}[]).at(-1)!.content;
  expect(parts).toEqual([{type:'text',text:'Look at this\n'},{type:'image_url',image_url:{url}}]);
  await expect(page.locator('.msg[data-author=agent]')).toHaveText(/Reply to: Look at this/,{timeout:30000});
- // The message sent again is drawn once, as the session holds it.
- await expect(sent).toHaveCount(2);
+ // Try again answers the message already drawn (#980): the Conversation holds it once, with its image.
+ await expect(sent).toHaveCount(1);
 });
 
 test('the limits on a person\'s images are as today: a kind the Agent cannot read and too many are refused before anything is sent',async({page})=>{
