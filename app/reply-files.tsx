@@ -3,13 +3,13 @@
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { named } from '@/lib/bidi';
+import type { MessageFile } from '@/lib/conversations';
 
 // The files an Agent handed over in its reply (#708, ADR 0028), under its bubble on the Agent's side: each the same chip
 // a person's message shows (design-reference: filesHTML), opened and downloaded by its own route, and an image drawn as
 // a thumbnail of itself. A file the reply named but could not hand over is one quiet line with its name, never a path.
 // A file read from the work sandbox while it is stopped (#880, `notNow`) is listed, cannot be opened, and says why.
-type ReplyFile={id:number,name:string,image?:true,key?:string,state?:'notNow'};
-export function ReplyFiles({files=[],missed=[],href}:{files?:ReplyFile[],missed?:string[],href:(file:ReplyFile)=>string}) {
+export function ReplyFiles({files=[],missed=[],href}:{files?:MessageFile[],missed?:string[],href:(file:MessageFile)=>string}) {
  const {t}=useI18n();
  if(!files.length&&!missed.length) return null;
  const off=files.filter(file=>file.state==='notNow');

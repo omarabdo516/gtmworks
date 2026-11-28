@@ -5,7 +5,7 @@ import type { ConversationMessage, MessageFile, RunStep } from './conversations'
 import type { SessionMessage, SessionUsage } from './engine.mjs';
 import { agentEngine, companyEngine, seenAgents, stepsBetween, takeToolCalls } from './engine/handle.mjs';
 import { fileTagName, takeFileTags } from './media-tags.mjs';
-import { ownWorkFile } from './reply-files.mjs';
+import { ownWorkFile, readAgentWorkFile } from './reply-files.mjs';
 import { pictureType } from './file-preview.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -197,11 +197,5 @@ export async function readConversationFile(db:Database,{company,person,conversat
  const reply=await sessions.find(session,(each:SessionMessage)=>each.role==='assistant'&&idOf(each)===id);
  if(reply.state!=='found') return {state:reply.state==='missing'?'missing':'notNow'};
  const path=messageParts(reply.message).paths[n];
- const at=path?ownWorkFile(path,target.engine.profile):null;
- if(!at) return {state:'missing'};
- const read=await target.engine.files.download({...at,root:'work'});
- // The work sandbox stopped, or its Engine not answering, is a file that cannot be read now, never one that is gone.
- if(read.state==='found') return {state:'found',name:read.name,type:pictureType(read.name)||'application/octet-stream',body:read.body};
- if(read.state==='tooLarge') return {state:'tooLarge'};
- return {state:read.state==='unreachable'||read.state==='refused'?'notNow':'missing'};
+ return path?readAgentWorkFile(target.engine,path):{state:'missing'};
 }
