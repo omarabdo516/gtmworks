@@ -76,7 +76,7 @@ export const motionTable = [
   // A chat's Card on the board (#144): the corner pill eases its colours and gives under a press.
   { built: '.gw .corner-pill', file: 'app/shell.css', html: '<div class="gw"><div class="chat__corner"><a class="corner-pill" href="#"></a></div></div>', held: 0.96 },
   // A Card that just started waiting on the reader shakes its badge once (#146). Its chat's pill shakes with the same
-  // rule, which also carries the pill's own colours and press: tests/components/conversation-card.test.tsx reads it.
+  // rule, which also carries the pill's own colours and press.
   { built: '.gw .kcard .badge--wait.is-new', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard"><span class="badge badge--wait is-new">Waiting on you</span></div></div></div>' },
   // The board as built (#131): a Card eases its colours and lift and gives under a press; a bar slides when its figure
   // changes and grows in when the board opens; the sidebar's count pops when more waits on the reader. The carried

@@ -1,20 +1,20 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
-import { use, type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
-import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
+import ConversationView, { EngineLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
+import { ConversationTurns } from '@/app/conversation-thread';
 import { ReplyCard } from '@/app/reply-card';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord } from '@/lib/conversation-frame';
+import type { LiveAskingLine } from '@/lib/conversation-live.mjs';
 import type { ReplyCard as Card } from '@/lib/conversations';
-const Arrived = ({ record }: { record: Promise<ConversationRecord> }) => <ConversationLoaded initial={use(record)} team={false}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
-const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
 // design-reference: threads['th-meta'] m3, its question and the three ANGLES texts; a fourth for four choices.
 type Question = Extract<Card, { kind: 'question' }>;
@@ -296,92 +296,49 @@ test('the main Agent\'s question with no choice to pick is answered in words: no
 });
 
 
-// The chat: the Agent waits on its question, so it is not shown working; a pick posts the answer intent and the record is
-// read again, which shows the card answered and the pick as the person's message after it.
+// The chat: the question the open Run waits on is drawn in its live turn from the Conversation's live read (#878), the
+// main Agent's as the chip card and any other Agent's as the lettered one (a pick reaching the Run is
+// conversation-steer.spec.ts's); an answer drawn from the record is the person's turn after the card.
 const at = '2026-06-10T09:41:00Z';
 const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'Ads', face: 'c-1' };
-const record = (card: Question, answer?: string, lead = false): ConversationRecord => ({
+const first = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'محتاجين حملة Meta لكورس «المحاسب الشامل»', created_at: at };
+const record = (card: Question, answer?: string): ConversationRecord => ({
  conversation,
  messages: [
-  { id: 1, author: 'person', author_name: 'Omar', body: 'محتاجين حملة Meta لكورس «المحاسب الشامل»', created_at: at },
+  first,
   { id: 42, author: 'agent', author_name: 'Ads', body: '', created_at: at, kind: 'asked', cards: [{ kind: 'reply', card }] },
   ...answer ? [{ id: 42, author: 'person' as const, author_name: 'Omar', body: answer, created_at: at, kind: 'answer' as const }] : [],
  ],
- usage: { input: 0, output: 0 }, pending: true, ...answer ? {} : { asking: true as const }, failed: false, working: 'Omar', canStop: true,
- ...(lead ? { lead: true as const } : {}),
+ usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false,
 });
+const chat = (initial: ConversationRecord, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}><div className="gw">
+ <ConversationTurns slug="rs-learning" company="co-1" record={initial} writer asked={() => {}} live={{ view: null, reply: '', working: false }}/></div></LanguageProvider>);
 
-// The same question in the chat: the main Agent's Conversation draws the chip card, any other Agent's the lettered one.
-test.each([[true, '.ask1__opts .chip', '.ask1__or'], [false, '.opt__key', '.qcard__hint']] as const)('in the chat, the main Agent\'s question draws the reference\'s chip card and any other Agent\'s the lettered card (main Agent: %s)', async (lead, selector, line) => {
- const open = asked(angles.slice(0, 3));
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(record(open, undefined, lead))));
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open, undefined, lead))}/></ConversationView></div></LanguageProvider>);
- const group = screen.getByRole('group', { name: open.question });
+test.each([[true, '.ask1__opts .chip', '.ask1__or'], [false, '.opt__key', '.qcard__hint']] as const)('in the chat, the main Agent\'s question the Run waits on draws the reference\'s chip card and any other Agent\'s the lettered card (main Agent: %s)', async (lead, selector, line) => {
+ const question = 'اختار زاوية الإعلان';
+ const asking: LiveAskingLine = { asking: { kind: 'question', run: 'run_1', id: 'q-42', text: question, choices: angles.slice(0, 3), multiple: false } };
+ vi.stubGlobal('fetch', async (url: string) => {
+  if (url.includes('&intent=read')) return Response.json({ state: 'found', messages: [first], nextOffset: 1, hasMore: false });
+  if (url.startsWith('/api/conversation-live?')) return new Response(`${JSON.stringify(asking)}\n`, { headers: { 'Content-Type': 'application/x-ndjson' } });
+  if (url.includes('&intent=usage')) return Response.json({});
+  return new Promise<Response>(() => {});
+ });
+ // A Conversation of its own for each: the page keeps the last read of a Conversation in this browser.
+ const frame: ConversationRecord = { conversation: { ...conversation, id: `${conversation.id}-${lead}` }, messages: [], usage: null, pending: false, failed: false, working: null, canStop: false };
+ const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={{ id: 'ag-1', connection_id: 'c-1', name: 'Ads', speciality: 'Ads', main: lead }} details={null} company="co-1" conversation={frame.conversation} title="" writer>
+  <EngineLoaded initial={frame} team={false} open/></ConversationView></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: question });
  await expect.element(group).toBeVisible();
  expect(group.element().querySelectorAll(selector)).toHaveLength(3);
  expect(group.element().querySelector(line)).not.toBeNull();
  expect(group.element().querySelector(lead ? '.opt__key' : '.ask1__opts')).toBeNull();
 });
 
-test('in the chat, a pick posts the answer, the record is read again, and the pick shows as the person\'s message after the answered card', async () => {
- const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
- const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
- document.head.append(...styles);
- onTestFinished(() => styles.forEach(style => style.remove()));
- vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- const open = asked(angles.slice(0, 3));
- const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'claimed' })
-  : Response.json(record({ ...open, state: 'answered', answer: angles[0] } as Question, angles[0])));
- vi.stubGlobal('fetch', calls);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))}/></ConversationView></div></LanguageProvider>);
- await expect.element(screen.getByRole('group', { name: open.question })).toBeVisible();
- expect(screen.getByRole('status').elements().filter(line => line.matches('.convo-status')), 'the Agent waits on the person, not working').toEqual([]);
- expect(document.querySelector('.composer__send.is-stop'), 'the empty box keeps its send arrow, with no stop square').toBeNull();
-
- // A DOM click: under fake timers Vitest moves the clock 50 ms for every 50 ms a locator action takes, so a slow click on a
- // busy runner fires the chat's first read of the record (500 ms) before the pick, and the card is answered under it.
- (screen.getByRole('button', { name: angles[0] }).element() as HTMLButtonElement).click();
- // Answered on this page, the card settles, its letter pops and its check draws (design-reference: .card.is-just).
- await expect.element(screen.getByRole('group', { name: `${open.question}: Answered` })).toBeInTheDocument();
- const settled = screen.getByRole('group', { name: `${open.question}: Answered` }).element();
- const motion = (part: Element) => { const style = getComputedStyle(part); return [style.animationName, style.animationDuration, style.animationDelay]; };
- expect([settled, settled.querySelector('.opt__key')!, settled.querySelector('.opt__check path')!].map(motion))
-  .toEqual([['gw-settle', '0.32s', '0s'], ['gw-ck-pop', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
- const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
- expect(posted).toHaveLength(1);
- expect(JSON.parse(posted[0][1]!.body as string)).toEqual({ company: 'co-1', conversation: conversation.id, intent: 'answer', card: 42, choice: 0, answerKey: expect.any(String) });
- await vi.advanceTimersByTimeAsync(500);
- expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST')).toHaveLength(1);
- await expect.poll(() => document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.textContent).toContain(angles[0]);
- expect(document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.dataset.author).toBe('person');
- // The Agent's reply being worked on, now the answer sends its Run on, comes after them (#694).
- const order = [...document.querySelectorAll('.turns > li')].map(item => (item as HTMLElement).dataset.live === undefined ? (item as HTMLElement).dataset.kind ?? 'message' : 'live');
- expect(order).toEqual(['message', 'asked', 'answer', 'live']);
- await expect.element(screen.getByRole('group', { name: `${open.question}: Answered` })).toBeVisible();
-});
-
-test('in the chat, a pick another tab answered first is not shown as this one\'s: the card says so and the record is read again', async () => {
- vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- const open = asked(angles.slice(0, 3));
- const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ error: 'questionTaken' }, { status: 409 })
-  : Response.json(record({ ...open, state: 'answered', answer: angles[1] } as Question, angles[1])));
- vi.stubGlobal('fetch', calls);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))}/></ConversationView></div></LanguageProvider>);
- // A DOM click, as above: the chat's first read of the record must not land before the pick.
- await expect.element(screen.getByRole('group', { name: open.question })).toBeVisible();
- (screen.getByRole('button', { name: angles[0] }).element() as HTMLButtonElement).click();
- await expect.element(screen.getByRole('alert')).toHaveTextContent('This question was already answered');
- await vi.advanceTimersByTimeAsync(500);
- expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'the record is read again').toHaveLength(1);
- await expect.poll(() => document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.textContent).toContain(angles[1]);
-});
-
 test.each([['en', 'Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.'], ['ar', 'موصلتش: الوكيل كان بطّل يستنى الإجابة دي. ابعتها تاني في رسالة جديدة.']] as const)('in the %s interface, an answer the Engine no longer waited for is the person\'s turn with a note that it was not delivered', async (language, note) => {
  const closed = asked(angles.slice(0, 3), { state: 'closed' });
  const base = record(closed, angles[0]);
  const failed = { ...base, messages: base.messages.map(message => message.kind === 'answer' ? { ...message, failed: true } : message) };
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(failed)));
- await render(<LanguageProvider language={language}><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(failed)}/></ConversationView></div></LanguageProvider>);
+ await chat(failed, language);
  const answer = document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')!;
  expect(answer.textContent).toContain(angles[0]);
  expect(answer.querySelector('[role="status"]')?.textContent, 'announced only when it changes, not again on every load').toBe(note);

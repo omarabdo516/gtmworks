@@ -1,27 +1,18 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
-import { use, type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
-import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
+import { ConversationTurns } from '@/app/conversation-thread';
 import { ReplyCard } from '@/app/reply-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { ShellIcon } from '@/components/shell-icon';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord } from '@/lib/conversation-frame';
 import type { ReplyCard as Card } from '@/lib/conversations';
-// The loaded chat once its record is read, as the page streams it.
-const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
-vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
-// The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
-// answer meant for the record.
-// The live steps' read (#646) waits for ever, and each reply's steps (#766) are read as none: neither is the record's read.
-const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : String(url).includes('&intent=steps') ? Promise.resolve(Response.json({ steps: {}, usage: null })) : fetch(url, init));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
-// The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
-const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
 // #136: every word on a draft card is the Agent's, so the card is laid out once in its title's direction and every text on
 // it follows the card, whichever the interface's.
@@ -128,21 +119,22 @@ const turns = (cards: Card[], pending: boolean): ConversationRecord => ({
  usage: { input: 0, output: 0 }, pending, failed: false, working: null, canStop: false,
 });
 
+// The Conversation's transcript, drawn from its record, with no Run open.
+const chat = (record: ConversationRecord, writer: boolean) => <LanguageProvider language="en"><div className="gw">
+ <ConversationTurns slug="rs-learning" company="co-1" record={record} writer={writer} asked={() => {}} live={{ view: null, reply: '', working: false }}/></div></LanguageProvider>;
+
 test('a card that arrives while the Conversation is open rises in once; the cards it opened with do not', async () => {
  const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
  const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
  document.head.append(...styles);
  onTestFinished(() => styles.forEach(style => style.remove()));
- vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- const asks = vi.fn(async () => Response.json(turns([outline, plan], false)));
- stubFetch(asks);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_id: null, agent_name: 'Ads', face: 'c-1' }} title="" writer={false}><Arrived record={arrived(turns([outline], true))} team={false}/></ConversationView></div></LanguageProvider>);
+ const screen = await render(chat(turns([outline], true), false));
  const rising = (card: Card) => getComputedStyle(screen.getByRole('group', { name: card.title }).element()).animationName;
  await expect.element(screen.getByRole('group', { name: outline.title })).toBeVisible();
  expect(rising(outline)).toBe('none');
 
- await vi.advanceTimersByTimeAsync(500);
- expect(asks).toHaveBeenCalledTimes(1);
+ // A read of the Conversation brings the next reply with its card.
+ await screen.rerender(chat(turns([outline, plan], false), false));
  await expect.element(screen.getByRole('group', { name: plan.title })).toBeVisible();
  expect([rising(outline), rising(plan)]).toEqual(['none', 'gw-rise']);
 });
@@ -232,7 +224,7 @@ test.each(['en', 'ar'] as const)('in the %s interface, a step done today shows i
 
 test('in the chat, a person who may not write sees Done it but cannot press it', async () => {
  const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer={false}><Arrived record={arrived({ ...turns([handed()], false), conversation })} team={false}/></ConversationView></div></LanguageProvider>);
+ const screen = await render(chat({ ...turns([handed()], false), conversation }, false));
  await expect.element(screen.getByRole('button', { name: 'Done it' })).toBeDisabled();
 });
 
@@ -314,87 +306,6 @@ test('a Done it the server refuses gives the button back with the refusal, and a
  await expect.element(group).toHaveClass('is-resolved');
  expect(done).toHaveBeenCalledTimes(2);
  expect(screen.getByRole('alert').elements()).toEqual([]);
-});
-
-// #140: the press starts the Agent's turn, so the record is read again as after an answer: the Agent is shown working
-// at once, and its reply comes under the card with no message of the person's for the press.
-const chatStyles = async () => {
- const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
- const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
- document.head.append(...styles);
- onTestFinished(() => styles.forEach(style => style.remove()));
-};
-test('in the chat, Done it posts the done intent with the card and shows the time it answers; the Agent is shown working and its reply comes under the card, with no message of the person\'s', async () => {
- await chatStyles();
- const open = handed();
- const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
- const record = (card: Hand): ConversationRecord => ({ ...turns([card], false), conversation });
- const done = { ...open, state: 'done', at: '2026-06-10T09:42:00Z' } as Hand;
- const replied: ConversationRecord = { ...record(done), messages: [...record(done).messages, { id: 5, author: 'agent', author_name: 'SEO', body: 'I saw it on the site.', created_at: '2026-06-10T09:43:00Z' }] };
- let answer: (value: Response) => void = () => {};
- const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: true })
-  : new Promise<Response>(resolve => { answer = resolve; }));
- stubFetch(calls);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))} team={false}/></ConversationView></div></LanguageProvider>);
- const group = screen.getByRole('group', { name: handWords.en.label(open.title) });
- await screen.getByRole('button', { name: 'Done it' }).click();
- await expect.poll(() => group.element().querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:42:00Z');
- // Done by this press, the card settles and its check draws (design-reference: .card.is-just).
- const motion = (part: Element) => { const style = getComputedStyle(part); return [style.animationName, style.animationDuration, style.animationDelay]; };
- expect([group.element(), group.element().querySelector('.card__outcome svg path')!].map(motion)).toEqual([['gw-settle', '0.32s', '0s'], ['gw-draw-check', '0.38s', '0.14s']]);
- const posted = calls.mock.calls.filter(([, init]) => init?.method === 'POST');
- expect(posted.map(([url, init]) => [url, JSON.parse(init!.body as string)])).toEqual([['/api/conversations', { company: 'co-1', conversation: conversation.id, intent: 'done', card: 7 }]]);
- // The Run's live read has not answered: the line reads "Thinking" (#756).
- await expect.element(screen.getByRole('status')).toHaveTextContent('SEOThinking…');
- await expect.poll(() => calls.mock.calls.filter(([, init]) => init?.method !== 'POST').length).toBe(1);
- answer(Response.json(replied));
- const reply = screen.getByText('I saw it on the site.');
- await expect.element(reply).toBeVisible();
- expect(group.element().compareDocumentPosition(reply.element()) & Node.DOCUMENT_POSITION_FOLLOWING, 'the reply comes after the card').toBeTruthy();
- expect([...document.querySelectorAll('[data-author="person"]')].map(turn => turn.textContent), 'the press adds no message of the person\'s').toEqual([expect.stringContaining('Prepare the draft')]);
- await expect.poll(() => document.querySelector('.convo-status')).toBeNull();
-});
-
-// #139's guard: a press another tab made first started nothing here, so the record is not read again, and a read can
-// never replace a newer one (a message sent meanwhile).
-test('in the chat, a Done it another tab pressed first reads done with that time, and the record is not read again', async () => {
- await chatStyles();
- const open = handed();
- const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
- const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: false })
-  : Response.json({ ...turns([open], false), conversation }));
- stubFetch(calls);
- const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived({ ...turns([open], false), conversation })} team={false}/></ConversationView></div></LanguageProvider>);
- const group = screen.getByRole('group', { name: handWords.en.label(open.title) });
- await screen.getByRole('button', { name: 'Done it' }).click();
- await expect.poll(() => group.element().querySelector('time')?.getAttribute('datetime')).toBe('2026-06-10T09:42:00Z');
- expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST'), 'no read can replace a newer record').toEqual([]);
- expect(document.querySelector('.convo-status'), 'nothing started here, so the record is not asked for and no one is shown working').toBeNull();
-});
-
-// #140: "Waiting on you" opens the Conversation at `#hand-<card>`: that card is in view and focused, not the newest message.
-test('opened at a handed step\'s address, the chat shows that card in view and focused, not the newest message; the address is the chat\'s again, and the Agent\'s reply to Done it is followed', async () => {
- await chatStyles();
- const before = location.href;
- history.replaceState(null, '', '#hand-7');
- onTestFinished(() => history.replaceState(null, '', before));
- const many = turns([handed(), ...[11, 12, 13, 14, 15, 16].map(id => ({ ...plan, id }))], false);
- const replied: ConversationRecord = { ...many, messages: [...many.messages, { id: 90, author: 'agent', author_name: 'SEO', body: 'I saw it on the site.', created_at: '2026-06-10T09:43:00Z' }] };
- stubFetch(vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: true }) : Response.json(replied)));
- const screen = await render(<LanguageProvider language="en"><div className="gw" style={{ height: '600px' }}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={many.conversation} title="" writer><Arrived record={arrived(many)} team={false}/></ConversationView></div></LanguageProvider>);
- const card = screen.getByRole('group', { name: handWords.en.label(handed().title) });
- await expect.element(card).toBeVisible();
- const box = document.querySelector<HTMLElement>('.transcript')!;
- expect(box.scrollHeight, 'the chat is taller than its window').toBeGreaterThan(box.clientHeight + 200);
- expect(card.element().id).toBe('hand-7');
- expect(document.activeElement).toBe(card.element());
- const [shown, view] = [card.element().getBoundingClientRect(), box.getBoundingClientRect()];
- expect(shown.top >= view.top && shown.bottom <= view.bottom, 'the card is in view').toBe(true);
- expect(box.scrollTop + box.clientHeight, 'the chat is not at its newest message').toBeLessThan(box.scrollHeight - 50);
- expect(location.hash, 'a reload opens on the newest message').toBe('');
- await screen.getByRole('button', { name: 'Done it' }).click();
- await expect.element(screen.getByText('I saw it on the site.')).toBeVisible();
- await expect.poll(() => box.scrollHeight - box.scrollTop - box.clientHeight, { message: 'the reply is followed' }).toBeLessThan(2);
 });
 
 test.each([['en', '“Done it” didn’t reach the agent: the agent engine wouldn’t start it. Tell it in a message.'], ['ar', '«عملتها» موصلتش للوكيل: محرك الوكلاء مرضيش يبدأها. قولّه في رسالة.']] as const)('in the %s interface, a done card whose turn to the Agent could not start tells a person who may write so under its time, and a Viewer nothing', async (language, words) => {

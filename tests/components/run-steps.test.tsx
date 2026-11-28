@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { ConversationTurns } from '@/app/conversation-thread';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord } from '@/lib/conversation-frame';
 import type { RunStep, RunSteps } from '@/lib/conversations';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -31,7 +31,7 @@ const record = (steps?: RunSteps): ConversationRecord => ({
  usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false,
 });
 const drawn = (language: 'en' | 'ar', steps?: RunSteps) => render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="gw"><div className="chat">
- <ConversationTurns slug="rs-learning" company="co-1" record={record(steps)} writer asked={() => {}}/></div></div></div></LanguageProvider>);
+ <ConversationTurns slug="rs-learning" company="co-1" record={record(steps)} writer asked={() => {}} live={{ view: null, reply: '', working: false }}/></div></div></div></LanguageProvider>);
 const listOf = (button: Element) => document.getElementById(button.getAttribute('aria-controls') ?? '')!;
 const words = { en: { done: 'Done', skipped: 'Skipped' }, ar: { done: 'تم', skipped: 'اتخطى' } };
 

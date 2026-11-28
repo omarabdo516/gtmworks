@@ -1,12 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { act, use, type ComponentProps } from 'react';
+import { act, type ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { cdp } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
+import ConversationView, { EngineLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord } from '@/lib/conversation-frame';
 import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -14,8 +14,8 @@ import '@/app/globals.css';
 
 // #756: a sent message is drawn in the transcript the moment its person presses Send, with its text and its files, before
 // the send is answered, and the line under the transcript reads "Thinking" from then; a refused send takes the message
-// back to the box with its error; the stored message, once read, takes the drawn one's place, once and without rising
-// in again. A channel's composer does the same.
+// back to the box with its error; the message the Engine's session holds, once read after its Run, takes the drawn
+// one's place, once and without rising in again. A channel's composer does the same.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
@@ -25,12 +25,16 @@ const reducedMotion = (on: boolean) => cdp().send('Emulation.setEmulatedMedia', 
 afterEach(async () => { vi.unstubAllGlobals(); await reducedMotion(false); });
 
 const never = () => new Promise<Response>(() => {});
-// The send (a POST) is answered by `post`, each record read by `read`; the live steps' read (#646) waits for ever.
-const routes = ({ post, read = never }: { post: (init: RequestInit) => Promise<Response>, read?: () => Promise<Response> }) => {
+const found = (messages: ConversationRecord['messages']) => Response.json({ state: 'found', messages, nextOffset: messages.length, hasMore: false });
+// The send (a POST) is answered by `post`, each read of the session's messages by `read`, and the open Run's live read
+// (#876) ends at once when `ends`, else it waits for ever, as the live steps' read of a channel (#646) does.
+const routes = ({ post, read = never, ends = false }: { post: (init: RequestInit) => Promise<Response>, read?: () => Promise<Response>, ends?: boolean }) => {
  const posts: RequestInit[] = [];
  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
   if (String(url).startsWith('/api/run-steps?')) return never();
+  if (String(url).startsWith('/api/conversation-live?')) return ends ? Promise.resolve(new Response(`${JSON.stringify({ end: 'ended' })}\n`)) : never();
   if (init?.method === 'POST') { posts.push(init); return post(init); }
+  if (String(url).includes('&intent=usage')) return Promise.resolve(Response.json({}));
   return read();
  });
  return posts;
@@ -39,13 +43,16 @@ const routes = ({ post, read = never }: { post: (init: RequestInit) => Promise<R
 const at = '2026-06-10T09:41:00Z';
 const before = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Hello', created_at: at };
 const hello = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'Hi, Omar.', created_at: at };
+// Each test opens a Conversation of its own: the page keeps the last read of a Conversation in this browser.
+let opens = 0;
 const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
+ conversation: { id: `cv-2-${++opens}`, agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
 });
-const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
-const Arrived = ({ record }: { record: Promise<ConversationRecord> }) => <ConversationLoaded initial={use(record)} team={false}/>;
+// The page draws the Conversation's frame at once and reads its messages from the Engine's session (#875): unless the
+// test answers the read itself, the session holds the record's messages.
 const conversation = (initial: ConversationRecord, language: 'en' | 'ar' = 'en') => render(<div className="gw"><LanguageProvider language={language}>
- <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} title="" writer><Arrived record={arrived(initial)}/></ConversationView></LanguageProvider></div>);
+ <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} title="" writer><EngineLoaded initial={{ ...initial, messages: [] }} team={false}/></ConversationView></LanguageProvider></div>);
+const session = (messages: ConversationRecord['messages']) => async () => found(messages);
 const userTurns = () => [...document.querySelectorAll('.turns > li.turn--user')];
 const turnOf = (text: string) => userTurns().filter(turn => turn.textContent?.includes(text));
 const image = (name: string) => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], name, { type: 'image/png' });
@@ -59,7 +66,7 @@ test.each([
  ['en', 'Message', 'Send', 'MonaThinking…'],
  ['ar', 'الرسالة', 'ابعت', 'Monaبيفكر…'],
 ] as const)('in the %s interface, with a send that is never answered, the message and its file are in the transcript and the line reads "Thinking"', async (language, label, send, thinking) => {
- const posts = routes({ post: never });
+ const posts = routes({ post: never, read: session([before, hello]) });
  const screen = await conversation(talk([before, hello]), language);
  const box = screen.getByRole('textbox', { name: label, exact: true });
  await box.fill('Plan the December campaign');
@@ -81,7 +88,7 @@ test.each([
 });
 
 test('a refused send takes the drawn message out, puts its words and file back in the box, and says why', async () => {
- routes({ post: async () => Response.json({ error: 'conversationFailed' }, { status: 502 }) });
+ routes({ post: async () => Response.json({ error: 'conversationFailed' }, { status: 502 }), read: session([before, hello]) });
  const screen = await conversation(talk([before, hello]));
  const box = screen.getByRole('textbox', { name: 'Message', exact: true });
  await box.fill('Plan the December campaign');
@@ -94,21 +101,23 @@ test('a refused send takes the drawn message out, puts its words and file back i
  expect(document.querySelector('[role="status"]'), 'nothing works').toBeNull();
 });
 
-test('the stored message takes the drawn one\'s place once read: one bubble, the same element in the list, no second rise', async () => {
+test('the message the session holds takes the drawn one\'s place once read: one bubble, in the same place, no second rise', async () => {
  const stored = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'Plan the December campaign', created_at: at };
  let answer: (response: Response) => void = () => {};
- const reads: ConversationRecord[] = [talk([before, hello, stored], { pending: true }), talk([before, hello, stored, { id: 4, author: 'agent', author_name: 'Mona', body: 'Here is the plan.', created_at: at }])];
- routes({ post: () => new Promise<Response>(resolve => { answer = resolve; }), read: async () => Response.json(reads.length > 1 ? reads.shift() : reads[0]) });
+ // The first read is the session before the send; once the Run ends, the read holds the message and its reply.
+ const reads = [[before, hello], [before, hello, stored, { id: 4, author: 'agent' as const, author_name: 'Mona', body: 'Here is the plan.', created_at: at }]];
+ routes({ post: () => new Promise<Response>(resolve => { answer = resolve; }), read: async () => found(reads.length > 1 ? reads.shift()! : reads[0]), ends: true });
  const screen = await conversation(talk([before, hello]));
+ await expect.element(screen.getByText('Hi, Omar.')).toBeVisible();
  await screen.getByRole('textbox', { name: 'Message', exact: true }).fill('Plan the December campaign');
  await screen.getByRole('button', { name: 'Send', exact: true }).click();
  await expect.poll(() => turnOf('Plan the December campaign').length).toBe(1);
  const [drawn] = turnOf('Plan the December campaign');
  expect(drawn.classList.contains('msg-in'), 'the message rises in as it is sent').toBe(true);
  answer(Response.json({ conversation: 'cv-2' }));
- // Answered: no longer marked as sending, still the drawn message until the record holds it.
- await expect.poll(() => drawn.getAttribute('aria-busy')).toBeNull();
- expect(drawn.classList.contains('is-sending')).toBe(false);
+ // Answered: no longer marked as sending.
+ await expect.poll(() => turnOf('Plan the December campaign')[0]?.getAttribute('aria-busy')).toBeNull();
+ expect(turnOf('Plan the December campaign')[0]?.classList.contains('is-sending')).toBe(false);
  await expect.poll(() => turnOf('Plan the December campaign')[0]?.getAttribute('data-kind'), { timeout: 4000 }).toBeNull();
  const [kept] = turnOf('Plan the December campaign');
  expect(turnOf('Plan the December campaign'), 'drawn once').toHaveLength(1);
@@ -120,7 +129,7 @@ test('the stored message takes the drawn one\'s place once read: one bubble, the
 
 test('with reduced motion the drawn message keeps the rule every message has: no time to its rise', async () => {
  await reducedMotion(true);
- routes({ post: never });
+ routes({ post: never, read: session([before, hello]) });
  const screen = await conversation(talk([before, hello]));
  await screen.getByRole('textbox', { name: 'Message', exact: true }).fill('Plan the December campaign');
  await screen.getByRole('button', { name: 'Send', exact: true }).click();

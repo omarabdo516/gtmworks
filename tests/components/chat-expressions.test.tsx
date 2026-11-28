@@ -1,16 +1,17 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { use, type ComponentProps, type ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
-import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
+import ConversationView, { EngineLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { SidebarLive, AgentTile } from '@/app/sidebar-live';
 import AgentChat from '@/app/c/[slug]/chat/[[...agent]]/agent-chat';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { AgentFaceState } from '@/lib/agent-face-states';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord } from '@/lib/conversation-frame';
 import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 import type { LiveLine } from '@/lib/live-steps.mjs';
+import type { LiveAskingLine } from '@/lib/conversation-live.mjs';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 import '@/app/globals.css';
@@ -29,25 +30,29 @@ const at = '2026-11-24T09:41:00Z';
 const asked = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Plan the December campaign', created_at: at };
 const replied = { id: 2, author: 'agent' as const, author_name: 'Ads', body: 'Here is the plan.', created_at: at };
 const quiet: ConversationRecord = { conversation: { id: 'cv-1', agent_id: 'ads', agent_name: 'Ads', face: 'ads' }, messages: [asked, replied], usage: null, pending: false, failed: false, working: null, canStop: false };
-const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
-const Arrived = ({ record }: { record: Promise<ConversationRecord> }) => <ConversationLoaded initial={use(record)} team={false}/>;
+type Messages = ConversationRecord['messages'];
+type Live = LiveLine | LiveAskingLine;
 
-// The server parts: the sidebar's poll answers `shared` for every Agent, a send is taken, each read of the record answers
-// the next of `reads` (the last one again), and the Run's live steps are the fake Engine's lines.
-function server({ shared = { ads: 'idle' } as Record<string, AgentFaceState>, reads = [quiet] as ConversationRecord[], channel = null as ChannelRecord[] | null } = {}) {
+// The server parts: the sidebar's poll answers `shared` for every Agent, a send is taken, each read of the Conversation's
+// Engine session answers the next of `reads` (the last one again), and the open Run's live read (#876) and a channel's
+// live steps are the fake Engine's lines; `end` closes the Conversation's live read.
+function server({ shared = { ads: 'idle' } as Record<string, AgentFaceState>, reads = [quiet.messages] as Messages[], channel = null as ChannelRecord[] | null } = {}) {
  const state = { shared, reads, channel };
- let line: (line: LiveLine) => void = () => {};
+ let line: (line: Live) => void = () => {}; let close: () => void = () => {};
+ const stream = () => Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start(controller) {
+  line = next => controller.enqueue(new TextEncoder().encode(`${JSON.stringify(next)}\n`));
+  close = () => controller.close();
+ } }), { headers: { 'Content-Type': 'application/x-ndjson' } }));
  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
   if (url.startsWith('/api/sidebar?')) return Promise.resolve(Response.json({ channels: [], agents: state.shared }));
-  if (url.startsWith('/api/run-steps?')) return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start(controller) {
-   line = next => controller.enqueue(new TextEncoder().encode(`${JSON.stringify(next)}\n`));
-  } }), { headers: { 'Content-Type': 'application/x-ndjson' } }));
+  if (url.startsWith('/api/run-steps?') || url.startsWith('/api/conversation-live?')) return stream();
   if (init?.method === 'POST') return Promise.resolve(Response.json({ ok: true }));
-  if (url.startsWith('/api/conversations?')) return Promise.resolve(Response.json(state.reads.length > 1 ? state.reads.shift() : state.reads[0]));
+  if (url.includes('&intent=read')) { const messages = state.reads.length > 1 ? state.reads.shift()! : state.reads[0]; return Promise.resolve(Response.json({ state: 'found', messages, nextOffset: messages.length, hasMore: false })); }
+  if (url.includes('&intent=usage')) return Promise.resolve(Response.json({}));
   if (url.startsWith('/api/channels?') && state.channel) return Promise.resolve(Response.json(state.channel.length > 1 ? state.channel.shift() : state.channel[0]));
   return new Promise<Response>(() => {});
  });
- return { state, step: (next: LiveLine) => line(next) };
+ return { state, step: (next: Live) => line(next), end: (last?: Live) => { if (last) line(last); close(); } };
 }
 
 const Sidebar = ({ children, states = { ads: 'idle' } }: { children: ReactNode, states?: Record<string, AgentFaceState> }) => <LanguageProvider language="en"><div className="gw">
@@ -56,9 +61,15 @@ const Sidebar = ({ children, states = { ads: 'idle' } }: { children: ReactNode, 
   {children}
  </SidebarLive>
 </div></LanguageProvider>;
-const conversation = (record: ConversationRecord, states?: Record<string, AgentFaceState>) => <Sidebar states={states}>
- <ConversationView slug="rs" agent={{ id: 'ads', connection_id: 'c-ads', name: 'Ads' } as never} details={null} company="co-1" conversation={record.conversation} title="" writer><Arrived record={arrived(record)}/></ConversationView>
-</Sidebar>;
+// The page draws the frame at once, and reads the messages from the Engine's session; `open`: a Run of it works. Each
+// opens a Conversation of its own, since the page keeps the last read of a Conversation in this browser.
+let opens = 0;
+const conversation = (record: ConversationRecord, states?: Record<string, AgentFaceState>, open = false) => {
+ const frame = { ...record, conversation: { ...record.conversation, id: `cv-1-${++opens}` }, messages: [] };
+ return <Sidebar states={states}>
+  <ConversationView slug="rs" agent={{ id: 'ads', connection_id: 'c-ads', name: 'Ads' } as never} details={null} company="co-1" conversation={frame.conversation} title="" writer><EngineLoaded initial={frame} team={false} open={open}/></ConversationView>
+ </Sidebar>;
+};
 
 const tile = (agent = 'ads') => document.querySelector<HTMLElement>(`.agent-tile[data-agent="${agent}"] .face`)?.dataset.state;
 const head = () => document.querySelector<HTMLElement>('.head-pill .face')?.dataset.state;
@@ -94,8 +105,7 @@ test('an asleep Agent listens too; one that waits on the person or works elsewhe
 });
 
 test('sent, it thinks until its Run\'s first step, works after it, and is done when the reply lands well', async () => {
- const running: ConversationRecord = { ...quiet, messages: [asked], pending: true };
- const fake = server({ reads: [running] });
+ const fake = server({ reads: [[]] });
  await render(conversation({ ...quiet, messages: [] }));
  await userEvent.type(field(), 'Plan the December campaign');
  await userEvent.keyboard('{Enter}');
@@ -114,7 +124,9 @@ test('sent, it thinks until its Run\'s first step, works after it, and is done w
  await expect.poll(() => reply()?.dataset.state).toBe('working');
  expect(reply()!.classList.contains('face--live')).toBe(true);
  expect(reply()!.getBoundingClientRect().width).toBe(24);
- fake.state.reads = [quiet];
+ // The Run ends well, and the session then holds the message and its reply.
+ fake.state.reads = [quiet.messages];
+ fake.end({ end: 'ended' });
  await expect.poll(both, { timeout: 4000 }).toEqual({ head: 'done', tile: 'done' });
  // Past replies are 20px and still.
  const past = document.querySelector<HTMLElement>('li[data-author="agent"]:not([data-live]) .face')!;
@@ -124,15 +136,16 @@ test('sent, it thinks until its Run\'s first step, works after it, and is done w
 });
 
 test('a Run that failed, was stopped or paused for a question is never done: it shows its own state', async () => {
- const running: ConversationRecord = { ...quiet, messages: [asked], pending: true };
- for (const [ended, shared] of [[{ ...quiet, messages: [asked], failed: true }, 'stuck'], [{ ...quiet, messages: [asked], failed: true }, 'idle'], [{ ...running, asking: true }, 'waiting']] as const) {
-  const fake = server({ reads: [running] });
-  const screen = await render(conversation(running));
+ const question: Live = { asking: { kind: 'question', run: 'run_1', id: 'q-1', text: 'Which audience?', choices: ['Students', 'Parents'], multiple: false } };
+ for (const [ended, shared] of [[{ end: 'ended', outcome: 'failed' }, 'stuck'], [{ end: 'ended', outcome: 'stopped' }, 'idle'], [question, 'waiting']] as const) {
+  const fake = server({ reads: [[asked]] });
+  const screen = await render(conversation({ ...quiet, messages: [asked] }, undefined, true));
   await expect.poll(both).toEqual({ head: 'thinking', tile: 'thinking' });
   const states: AgentFaceState[] = [];
   const watch = setInterval(() => { const now = head(); if (now) states.push(now as AgentFaceState); }, 20);
   fake.state.shared = { ads: shared };
-  fake.state.reads = [ended as ConversationRecord];
+  fake.step({ run: 'run_1', steps: [], now: null });
+  if ('end' in ended) fake.end(ended as Live); else fake.step(ended);
   await expect.poll(both, { timeout: 4000 }).toEqual({ head: shared, tile: shared });
   await new Promise(resolve => setTimeout(resolve, 300));
   clearInterval(watch);

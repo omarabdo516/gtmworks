@@ -1,18 +1,16 @@
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
-import { use, type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { act } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { cdp, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
+import ConversationView, { EngineLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { ChatPlaceholder } from '@/app/conversation-thread';
 import { NumbersPlaceholder, PeriodSwitch } from '@/app/c/[slug]/numbers/numbers-client';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { ConversationRecord } from '@/lib/conversation-record';
-// The loaded chat once its record is read, as the page streams it.
-const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
+import type { ConversationRecord } from '@/lib/conversation-frame';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-2', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
@@ -87,23 +85,39 @@ for (const reduced of [false, true]) test(`the placeholder stays hidden for its 
 const at = '2026-06-10T09:41:00Z';
 const asked = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Draft the long launch plan', created_at: at };
 const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'On it.', created_at: at };
-const talk = (messages: ConversationRecord['messages'], more: Partial<ConversationRecord> = {}): ConversationRecord => ({
- conversation: { id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages, usage: { input: 0, output: 0 }, pending: false, failed: false, working: null, canStop: false, ...more,
+// Each test opens a Conversation of its own: the page keeps the last read of a Conversation in this browser.
+let opens = 0;
+const frame = (): ConversationRecord => ({
+ conversation: { id: `cv-2-${++opens}`, agent_id: null, agent_name: 'Mona', face: 'c-2' }, messages: [], usage: null, pending: false, failed: false, working: null, canStop: false,
 });
-function held() {
- let arrive!: (record: ConversationRecord) => void;
- const record = new Promise<ConversationRecord>(resolve => { arrive = resolve; });
- return { record, arrive };
+type Messages = ConversationRecord['messages'];
+const found = (messages: Messages) => Response.json({ state: 'found', messages, nextOffset: messages.length, hasMore: false });
+// The Engine's side as gtmworks's routes answer it (#875, #876): the first read of the session's messages waits until
+// `arrive` (later ones answer `later`, or the same), the usage read answers none, the open Run's live read ends at once,
+// and a send (a POST) is answered by `post`.
+function held({ post = async () => Response.json({}), later }: { post?: (init: RequestInit) => Promise<Response>, later?: Messages } = {}) {
+ let arrive!: (messages: Messages) => void;
+ const first = new Promise<Messages>(resolve => { arrive = resolve; });
+ const reads: string[] = [];
+ vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+  if (init?.method === 'POST') return post(init);
+  if (url.includes('&intent=read')) { reads.push(url); const messages = await first; return found(reads.length > 1 && later ? later : messages); }
+  if (url.startsWith('/api/conversation-live?')) return new Response(`${JSON.stringify({ end: 'ended' })}\n`);
+  if (url.includes('&intent=usage')) return Response.json({});
+  return new Promise<Response>(() => {});
+ });
+ return { arrive, reads };
 }
-const opened = (record: Promise<ConversationRecord>) => render(<LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
- <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
-</div></LanguageProvider>);
+const chatPage = (initial: ConversationRecord) => <LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
+ <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} title="Draft the long launch plan" writer><EngineLoaded initial={initial} team={false}/></ConversationView>
+</div></LanguageProvider>;
+const opened = (initial: ConversationRecord) => render(chatPage(initial));
 const tops = () => ['.transcript__col', '.composer-area'].map(selector => Math.round(box(document.querySelector(selector)!).top));
 
-test('while the record is on its way the chat keeps its title and composer around the placeholder; the messages take its place without moving it, and what was typed stays in the box', async () => {
+test('while the messages are on their way the chat keeps its title and composer around the placeholder; the messages take its place without moving it, and what was typed stays in the box', async () => {
  await page.viewport(1440, 900);
- const { record, arrive } = held();
- const screen = await opened(record);
+ const { arrive } = held();
+ const screen = await opened(frame());
  const placeholder = screen.getByText('Loading the chat', { exact: true });
  // Its 400ms hold is the hold test's; here it is ended on the placeholder's own clock.
  busyRegion('Loading the chat').region.getAnimations().forEach(animation => animation.finish());
@@ -113,7 +127,7 @@ test('while the record is on its way the chat keeps its title and composer aroun
  await field.fill('And the budget');
  (field.element() as HTMLTextAreaElement).setSelectionRange(4, 7);
  const before = tops();
- arrive(talk([asked, reply]));
+ arrive([asked, reply]);
  await expect.element(screen.getByText('On it.')).toBeVisible();
  await expect.element(placeholder).not.toBeInTheDocument();
  expect(tops()).toEqual(before);
@@ -123,52 +137,50 @@ test('while the record is on its way the chat keeps its title and composer aroun
 });
 
 test('text typed while the chat loads stays in the box without taking the focus from where the person moved it', async () => {
- const { record, arrive } = held();
+ const { arrive } = held();
+ const initial = frame();
  const screen = await render(<LanguageProvider language="en"><button type="button">Elsewhere</button><div className="gw" style={{ height: 900 }}>
-  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
+  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={initial.conversation} title="Draft the long launch plan" writer><EngineLoaded initial={initial} team={false}/></ConversationView>
  </div></LanguageProvider>);
  await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
  const elsewhere = screen.getByRole('button', { name: 'Elsewhere' }).element() as HTMLElement;
  elsewhere.focus();
- arrive(talk([asked, reply]));
+ arrive([asked, reply]);
  await expect.element(screen.getByText('On it.')).toBeVisible();
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('And the budget');
  expect(document.activeElement).toBe(elsewhere);
 });
 
-test('a message sent before the record arrives is posted at once, and once the chat is loaded its reply is asked for and shown', async () => {
- const { record, arrive } = held();
+test('a message sent before the messages arrive is posted at once, and once the chat is loaded its reply is followed and shown', async () => {
  const sent: unknown[] = [];
- vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
-  if (init?.method === 'POST') { sent.push(JSON.parse(String(init.body))); return Response.json({}); }
-  return Response.json(talk([asked, { ...reply, body: 'Reply to: And the budget' }]));
- }));
- const screen = await opened(record);
+ const { arrive } = held({ post: async init => { sent.push(JSON.parse(String(init.body))); return Response.json({}); },
+  later: [asked, { id: 3, author: 'person', author_name: 'Omar', body: 'And the budget', created_at: at }, { ...reply, id: 4, body: 'Reply to: And the budget' }] });
+ const initial = frame();
+ const screen = await opened(initial);
  const field = screen.getByRole('textbox', { name: 'Message' });
  await field.fill('And the budget');
  await screen.getByRole('button', { name: 'Send' }).click();
- await expect.poll(() => sent).toEqual([expect.objectContaining({ company: 'co-1', conversation: 'cv-2', message: 'And the budget' })]);
+ await expect.poll(() => sent).toEqual([expect.objectContaining({ company: 'co-1', conversation: initial.conversation.id, message: 'And the budget' })]);
  await expect.element(field).toHaveValue('');
- arrive(talk([asked]));
+ arrive([asked]);
  await expect.element(screen.getByText('Reply to: And the budget'), { timeout: 3000 }).toBeVisible();
+ expect(screen.getByText('And the budget', { exact: true }).elements(), 'the message is drawn once').toHaveLength(1);
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
 test('a message sent while the chat loads whose answer is lost after it loaded comes back in the box, and sending it again is the same send', async () => {
- const { record, arrive } = held();
  const keys: string[] = [];
  let lose!: () => void;
- vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
-  if (init?.method !== 'POST') return Response.json(talk([asked]));
+ const { arrive } = held({ post: async init => {
   keys.push(JSON.parse(String(init.body)).sendKey);
   if (keys.length === 1) await new Promise<void>(resolve => { lose = resolve; }).then(() => { throw new TypeError('Failed to fetch'); });
   return Response.json({});
- }));
- const screen = await opened(record);
+ } });
+ const screen = await opened(frame());
  await screen.getByRole('textbox', { name: 'Message' }).fill('And the budget');
  await screen.getByRole('button', { name: 'Send' }).click();
  await expect.poll(() => keys.length).toBe(1);
- arrive(talk([asked]));
+ arrive([asked]);
  await expect.element(screen.getByText('Loading the chat', { exact: true })).not.toBeInTheDocument();
  lose();
  const field = screen.getByRole('textbox', { name: 'Message' });
@@ -179,17 +191,15 @@ test('a message sent while the chat loads whose answer is lost after it loaded c
 });
 
 test('text typed into the server-drawn composer before the page is ready stays in the box once the chat is loaded', async () => {
- const { record, arrive } = held();
- const chat = <LanguageProvider language="en"><div className="gw" style={{ height: 900 }}>
-  <ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-2', agent_id: null, agent_name: 'Mona', face: 'c-2' }} title="Draft the long launch plan" writer><Arrived record={record} team={false}/></ConversationView>
- </div></LanguageProvider>;
+ const { arrive } = held();
+ const chat = chatPage(frame());
  const container = document.createElement('div'); document.body.append(container);
  container.innerHTML = renderToString(chat);
  const typed = container.querySelector('textarea')!;
  typed.value = 'Typed before the page was ready';
  const root = await act(async () => hydrateRoot(container, chat, { onRecoverableError: () => {} }));
  try {
-  await act(async () => { arrive(talk([asked, reply])); });
+  await act(async () => { arrive([asked, reply]); });
   await expect.poll(() => container.textContent).toContain('On it.');
   expect(container.querySelector('textarea')).toBe(typed);
   expect(typed.value).toBe('Typed before the page was ready');
