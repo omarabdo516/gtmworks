@@ -33,3 +33,58 @@ language plpgsql security definer set search_path='' as $$
 begin
  raise exception 'inviteEmailRetired' using errcode='42501';
 end $$;
+
+
+-- The legacy role-agents cutover (20270418000001) redefines the claim and the owner guard when the installer applies every
+-- cutover after the normal migrations; this cutover sorts after it and keeps the ended checks in the final shape.
+create or replace function public.claim_invitations() returns void language plpgsql security definer set search_path = '' as $$
+declare inv public.member_invitations; mail text; joined boolean;
+begin
+ select email into mail from auth.users where id=auth.uid();
+ if mail is null then return; end if;
+ insert into public.people(id,name) values(auth.uid(),split_part(mail,'@',1)) on conflict(id) do nothing;
+ for inv in select * from public.member_invitations where lower(email)=lower(mail) and claimed_at is null and ended_at is null for update loop
+  joined := false;
+  insert into public.members(company_id,person_id,role,grant_publishing,grant_money_figures,grant_customer_data) values(inv.company_id,auth.uid(),inv.role,inv.grant_publishing,inv.grant_money_figures,inv.grant_customer_data) on conflict (company_id,person_id) do update set role=excluded.role, grant_publishing=excluded.grant_publishing, grant_money_figures=excluded.grant_money_figures, grant_customer_data=excluded.grant_customer_data, removed_at=null where public.members.removed_at is not null
+   returning true into joined;
+  if joined then
+   delete from public.member_agent_access where company_id=inv.company_id and person_id=auth.uid();
+   insert into public.member_agent_access(company_id,person_id,agent_id)
+    select inv.company_id,auth.uid(),a.agent_id from public.invitation_agent_access a where a.invitation_id=inv.id
+    on conflict do nothing;
+  end if;
+  insert into public.channel_people(channel_id, company_id, person_id, joined_through, added_by)
+   select i.channel_id, i.company_id, auth.uid(), coalesce((select max(m.id) from public.channel_messages m where m.channel_id=i.channel_id),0), i.added_by
+   from public.channel_invitees i where i.invitation_id=inv.id
+   on conflict (channel_id, person_id) do nothing;
+  delete from public.channel_invitees where invitation_id=inv.id;
+  delete from public.invitation_agent_access where invitation_id=inv.id;
+  update public.member_invitations set claimed_at=now() where id=inv.id;
+ end loop;
+end $$;
+
+create or replace function public.guard_member() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+ if tg_op = 'DELETE' then raise exception 'members must be removed by updating removed_at'; end if;
+ if tg_op = 'UPDATE' and (new.company_id <> old.company_id or new.person_id <> old.person_id) then raise exception 'membership identity cannot change'; end if;
+ if auth.uid() is not null then
+  -- A signed-in person's write (the request's role), however it reaches the row: the database's own maintenance is not
+  -- a person changing a Member.
+  if tg_op = 'UPDATE' and current_setting('role', true) = 'authenticated' and old.removed_at is null and not public.is_company_owner(old.company_id) then
+   if old.role = 'owner' and (new.role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data, new.removed_at)
+      is distinct from (old.role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data, old.removed_at) then
+    raise exception 'ownerChangedByOwnerOnly' using errcode = '42501';
+   end if;
+   if old.person_id = auth.uid() and (new.role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data)
+      is distinct from (old.role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data) then
+    raise exception 'ownGrantsUnchangeable' using errcode = '42501';
+   end if;
+  end if;
+  if new.role = 'owner' and (tg_op = 'INSERT' or old.role <> 'owner' or old.removed_at is not null) and not public.can_assign_owner(new.company_id) and not exists(select 1 from public.member_invitations where company_id=new.company_id and role='owner' and claimed_at is null and ended_at is null and lower(email)=lower((select email from auth.users where id=auth.uid()))) then raise exception 'only an owner can assign owner'; end if;
+  if tg_op <> 'INSERT' and old.role = 'owner' and old.removed_at is null and (new.role <> 'owner' or new.removed_at is not null) then
+   perform pg_advisory_xact_lock(hashtextextended(old.company_id::text,0));
+   if (select count(*) from public.members where company_id=old.company_id and role='owner' and removed_at is null) <= 1 then raise exception 'last owner cannot be removed or demoted'; end if;
+  end if;
+ end if;
+ return new;
+end $$;

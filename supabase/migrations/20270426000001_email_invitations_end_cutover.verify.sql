@@ -10,5 +10,6 @@ select json_build_object(
   and not has_table_privilege('anon','public.member_invitations','insert,update,delete,truncate'),
  'email_invite_maker_refuses',position('inviteEmailRetired' in pg_get_functiondef('public.invite_member(uuid,text,text,boolean)'::regprocedure))>0,
  'agent_switch_kept',to_regprocedure('public.set_invitation_agent_visible(uuid,uuid,uuid,boolean)') is not null,
- 'claim_skips_ended',position('ended_at is null' in pg_get_functiondef('public.claim_invitations()'::regprocedure))>0
+ 'claim_skips_ended',position('ended_at is null' in pg_get_functiondef('public.claim_invitations()'::regprocedure))>0,
+ 'owner_guard_skips_ended',position('ended_at is null' in pg_get_functiondef('public.guard_member()'::regprocedure))>0
 );
