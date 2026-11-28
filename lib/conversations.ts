@@ -134,7 +134,10 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 }
 // A file a person sent with a message (#155; design-reference: filesHTML), or an Agent handed over in its reply (#708):
 // its name, the id its own route serves it by, and whether it is a raster image the page draws as a thumbnail.
-export type MessageFile={id:number,name:string,image?:true};
+// One of a Conversation on the Engine (#880) is served by its `key` instead, read again from the Engine each time it is
+// opened (lib/conversation-messages.ts readConversationFile), and its `id` is its place under its message; a person's
+// image there has no name of its own, and an Agent's file whose work sandbox is stopped is `notNow`, listed and not opened.
+export type MessageFile={id:number,name:string,image?:true,key?:string,state?:'notNow'};
 // A message its person just sent is drawn by the page before its record holds it (`sending`, #756, lib/sending.ts),
 // `posting` until the send is answered; no record the server reads has one. On the Engine (#877) it names its Run once
 // the Engine took it (`run`), and is `behind` while the Engine says it waits its turn behind another.

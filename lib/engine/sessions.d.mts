@@ -9,3 +9,5 @@ export function isSilentReply(reply:unknown):boolean;
 export function titleSession(connection:{address:string,profile:string,key:string},session:string,title:string):Promise<'marked'|'missing'|'invalid'|'refused'|'unreachable'>;
 export function readSessionList(connection:import('../engine.mjs').EngineConnection,page?:{offset?:number,limit?:number}):Promise<import('../engine.mjs').SessionListRead>;
 export function sessionHeld(connection:import('../engine.mjs').EngineConnection,session:string):Promise<'found'|'missing'|'unreachable'>;
+export function findSessionMessage(connection:import('../engine.mjs').EngineConnection,session:string,matches:(message:import('../engine.mjs').SessionMessage)=>boolean):Promise<{state:'found',message:import('../engine.mjs').SessionMessage,offset:number}|{state:'missing'|'refused'|'unreachable'}>;
+export function readSessionImage(connection:import('../engine.mjs').EngineConnection,session:string,matches:(message:import('../engine.mjs').SessionMessage)=>boolean,n:number):Promise<{state:'found',type:string,body:Uint8Array<ArrayBuffer>}|{state:'missing'|'refused'|'unreachable'|'tooLarge'}>;

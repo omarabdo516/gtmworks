@@ -2,7 +2,7 @@ import 'server-only';
 import type { supabase } from './supabase';
 import { agentEngine } from './engine/handle.mjs';
 import { mentionedAgent } from './composer-mentions.mjs';
-import { noteInstructions } from './conversation-runs.mjs';
+import { imageInput, noteInstructions } from './conversation-runs.mjs';
 import { logActionFailure } from './diagnostics.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -15,12 +15,12 @@ export type EngineSend={state:'started',conversation:string,run:string,queued:bo
 // A person's message in a Conversation whose messages are the Engine's (#876, ADR 0033 item 1): checked on the server
 // (open_engine_conversation: an active Member, not a Viewer, their own Conversation, an Agent they may talk to), a new
 // Conversation's row written first on a session id the database chooses, then one Run started on that session with the
-// message, the sender's own note as its instructions, and the send key as its idempotency key. The row then holds the
+// message and its images, the sender's own note as its instructions, and the send key as its idempotency key. The row then holds the
 // Run's id until its end is seen (app/api/conversation-live). Nothing of the message is stored in gtmworks: who wrote it
 // is the row's person, the signed-in one of `db`, as the Engine's session keeps no author (ADR 0033). A new Conversation's first message that calls another Agent the sender
 // sees goes to that Agent, as it always has (#153).
 // `service` is a service-role client: only the server holds the Run it started on the row (hold_conversation_run).
-export async function sendToEngine(db:Database,service:{rpc:(name:string,args:object)=>PromiseLike<{error:unknown}>},{company,person,conversation,agent:chosen,message,sendKey}:{company:string,person:string,conversation:string,agent?:string,message:string,sendKey:string}):Promise<EngineSend> {
+export async function sendToEngine(db:Database,service:{rpc:(name:string,args:object)=>PromiseLike<{error:unknown}>},{company,person,conversation,agent:chosen,message,sendKey,images=[]}:{company:string,person:string,conversation:string,agent?:string,message:string,sendKey:string,images?:File[]}):Promise<EngineSend> {
  let agent=chosen??null;
  if(chosen) agent=mentionedAgent(message,(await db.from('hermes_agents').select('id,name,is_default').eq('company_id',company)).data||[])||chosen;
  if(!agent) agent=(await db.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()).data?.id??null;
@@ -36,7 +36,11 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  // few times; one still unknown is refused, and the person's Try again (the same key) replays it rather than start another.
  // The Engine answering "retry" (#877: it runs as many Runs at once as it takes) is asked again when it says, for a short
  // time (busyFor), then refused as busy; a session whose queue is full is refused at once. Neither made a Run.
- const start={session:checked.session,input:message,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+ // A person's images go in the Run's input (#880), each the image part the Engine reads, as base64 of its own bytes;
+ // the route checked their kind, count and size before anything was sent. The Engine keeps them in the session, and
+ // the Conversation reads them back from there: gtmworks keeps no copy.
+ const input=images.length?imageInput(message,await Promise.all(images.map(async file=>({content_type:file.type,base64:Buffer.from(await file.arrayBuffer()).toString('base64')})))):message;
+ const start={session:checked.session,input,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`};
  const began=Date.now(); let lost=false; let unsure=0;
  let run=await target.engine.sessions.send(start);
  for(;;) {

@@ -272,7 +272,7 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
   <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<ReaderTime at={message.at} className="sender__time"/></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
   {!!message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
-  <ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/channel/${id}`}/>
+  <ReplyFiles files={message.files} missed={message.missed} href={file=>`/c/${slug}/files/channel/${file.id}`}/>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
  </li>;
  // Every name that called an Agent is marked, so is every Member's name a message gives (#200), and each Agent that could

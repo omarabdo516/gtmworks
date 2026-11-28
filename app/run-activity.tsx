@@ -11,6 +11,7 @@ import { AgentFace } from '@/components/agent-face';
 import { useAgentState } from '@/app/sidebar-live';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import type { LiveLine, LiveView } from '@/lib/live-steps.mjs';
+import { takeFileTags } from '@/lib/media-tags.mjs';
 
 // Read again this long after a read ends while the Agent still works: the next Run of a queued turn, or a read cut short.
 const againAfter=1500;
@@ -113,10 +114,12 @@ export function LiveTurn({view,agent,face,c,cb,open,toggled,reply,children}:{vie
  // Its face is 24px and alive, in the state the chat's head and the sidebar show (#700): thinking until the Run's first
  // step, working after it. Past replies are 20px and still.
  const state=useAgentState(face,'working');
+ // A MEDIA line (ADR 0028) names a file, listed under the reply once it lands (#880): it is never shown as words.
+ const written=reply?takeFileTags(reply).body:'';
  return <li className="turn turn--agent msg" data-author="agent" data-live>
   <div className="sender"><span aria-hidden="true"><AgentFace agent={face} size={24} state={state} live/></span><bdi>{agent}</bdi></div>
   {!!view?.steps.length&&<StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>}
-  {!!reply&&<div className="bubble bubble--agent" dir="auto" data-writing>{reply}</div>}
+  {!!written&&<div className="bubble bubble--agent" dir="auto" data-writing>{written}</div>}
   {children}
  </li>;
 }

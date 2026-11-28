@@ -6,6 +6,7 @@
   "conversationUnread": "This Conversation couldn’t be read.",
   "conversationNoRefresh": "Couldn’t refresh. Showing what was last read.",
   "conversationEngineSummary": "The Engine’s summary of earlier messages",
+  "conversationImage": "Image {0}",
   "conversationTryAgain": "Try again",
   "conversationNotFinished": "This reply didn’t finish.",
   "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.",

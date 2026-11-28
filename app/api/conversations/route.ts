@@ -40,9 +40,9 @@ const steered=(done:object)=>'error' in done?refuse(String(done.error),Number((d
 // of the request names an author, and any such field is ignored.
 // A message names no Card: the old board's sheet, whose first message started a Card's chat (#145), is switched off
 // (#846), and a send that names one is refused.
-// Images go with the message (#155): the check runs before anything is uploaded or stored, and they are kept with the
-// turn before it is stored, so its Run reads them from the Conversation's files (lib/conversation-files.ts). Nothing of
-// the request is logged.
+// Images go with the message (#155): the check runs before anything is sent, uploaded or stored. On the Engine they go in
+// the Run's input and are kept nowhere here (#880); on the old record they are kept with the turn before it is stored,
+// so its Run reads them from the Conversation's files (lib/conversation-files.ts). Nothing of the request is logged.
 async function send(db:Database,person:string,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined) return refuse('conversationFailed',400);
@@ -54,22 +54,16 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
  if(!chosen.length&&!body.message.trim()) return refuse('conversationFailed',400);
  const conversation=body.conversation as string;
  const messageKey=body.sendKey as string; const company=body.company as string;
- // A message with no images in a Conversation whose messages are the Engine's, or in a new one, is one Run on its
- // Engine session, and nothing of it is stored here (#876). A Conversation the old record still holds goes on below.
- // Images go to the Engine with #880; until then a Conversation on the Engine takes none, so that none of its messages
- // is written to the old record (which would hold it there).
- if(chosen.length) {
-  const {data:onEngine}=await db.from('conversations').select('hermes_session_id').eq('id',conversation).eq('company_id',company).not('hermes_session_id','is',null).maybeSingle();
-  if(onEngine&&(await db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',conversation)).count===0) return refuse('conversationFailed',400);
- } else {
-  const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey});
-  if(engine.state==='started') {
-   // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
-   after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
-   return reply({conversation,run:engine.run,engine:true,...(engine.queued?{queued:true}:{})});
-  }
-  if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
+ // A message in a Conversation whose messages are the Engine's, or in a new one, is one Run on its Engine session, its
+ // images in the Run's input, and nothing of it is stored here (#876, #880). A Conversation the old record still holds
+ // goes on below.
+ const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen});
+ if(engine.state==='started') {
+  // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
+  after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
+  return reply({conversation,run:engine.run,engine:true,...(engine.queued?{queued:true}:{})});
  }
+ if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
  // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
  // the key still holds (#727).
  const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
@@ -314,7 +308,10 @@ async function respond(request:NextRequest) {
    const fields=await request.formData();
    const field=(name:string)=>{ const value=fields.get(name); return typeof value==='string'?value:undefined; };
    const card=field('card');
-   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message:field('message'),agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
+   // A form sends a text's line breaks as CRLF (the HTML form encoding), where the box and a JSON send keep the person's
+   // own LF: the message is read back as they typed it (#880), so the Agent's words and the drawn ones are the same.
+   const message=field('message')?.replace(/\r\n/g,'\n');
+   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message,agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
    // Every file is passed to the check, an empty one included: it is refused with the line, never silently dropped.
    chosen=fields.getAll('files').filter((file):file is File=>file instanceof File);
    if(chosen.length&&body.intent!==undefined) return refuse('conversationFailed',400);
