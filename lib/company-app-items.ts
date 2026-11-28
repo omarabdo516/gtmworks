@@ -45,11 +45,6 @@ export const companyAppTest=cache(async(company:string,app:string)=>{
  try { return await testCompanyApp(await supabase(),{company,app}); } catch { return null; }
 });
 
-// One Agent's apps now, by key, for the connect cards of its Conversations (#203); null when they cannot be read.
-export const agentAppStates=cache(async(company:string,agent:string):Promise<AppStates>=>{
- try { return await readAgentApps(await supabase(),{company,agent}); } catch { return null; }
-});
-
 // One channel reply's Hermes session on the profile its Run was pinned to, for the channel's steps (#148); null when it
 // cannot be read. The database gave the profile only to a member of that channel (channel_run_sessions).
 export const channelSessionTurns=cache(async(company:string,profile:string,session:string)=>{

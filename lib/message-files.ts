@@ -34,7 +34,7 @@ const refusalOf=(code:string|undefined,words:FileRefusalWords)=>code==='42501'?w
 // failure is thrown as it is and tried again.
 type StorageFailure={statusCode?:string|number,status?:number,code?:string,message?:string};
 const gone=(error:StorageFailure)=>error.statusCode==='404'||error.statusCode===404||error.status===404||error.code==='NoSuchKey';
-export class MessageFileGone extends Error {
+class MessageFileGone extends Error {
  constructor(message:string) { super(message); this.name='MessageFileGone'; }
 }
 /** @param {SupabaseClient} service @param {{content_type:string,path:string}[]} rows @param {string} missing */

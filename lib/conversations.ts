@@ -143,7 +143,6 @@ export type MessageFile={id:number,name:string,image?:true,key?:string,state?:'n
 // the Engine took it (`run`), and is `behind` while the Engine says it waits its turn behind another.
 export type ConversationMessage={id:number,author:'person'|'agent'|'engine',author_name:string,body:string,turn?:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'asked'|'answer'|'handed'|'handedOn'|'sending'|'summary',to?:string,failed?:boolean,behind?:true,key?:string,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[],run?:string};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
-export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
 export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
@@ -240,8 +239,6 @@ export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 export type StoredNote={id:number,author_name:string,addressed_name:string,body:string,created_at:string};
 // A turn "Done it" queued (#140) names its hand card and is drawn by that card, never as a message.
 export type QueuedTurn={send_key:string,message:string,queued_at:string,started_at:string|null,failed_at:string|null,hand_card?:number|null,model_refused?:boolean};
-export const noteColumns='id,author_name,addressed_name,body,created_at';
-export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand_card,model_refused';
 // A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
 // of the record uses, waiting or started.
 export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
