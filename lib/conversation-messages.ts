@@ -7,9 +7,10 @@ import { agentEngine, companyEngine, seenAgents, stepsBetween, takeToolCalls } f
 import { fileTagName, takeFileTags } from './media-tags.mjs';
 import { ownWorkFile, readAgentWorkFile } from './reply-files.mjs';
 import { pictureType } from './file-preview.mjs';
+import { openingFor } from './lead-opening.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
-type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null};
+type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,lead_opening?:boolean,person_id?:string,created_at?:string};
 type ConversationMessagesPage={state:'found',messages:ConversationMessage[],nextOffset:number,hasMore:boolean}|{state:'none'|'notSeen'|'missing'|'refused'|'unreachable'};
 // A message whose Steps still hold the profile a Card was given to, kept on the server until the reader's Agents are
 // known (namedMessages); the profile never leaves here.
@@ -148,17 +149,45 @@ function namedMessages(messages:PageMessage[],seen:SeenRow[],profiles:string[]):
  });
 }
 
+// The main Agent's opening of a new Company's first Conversation (#882, lib/lead-opening.mjs): gtmworks's own words, in
+// its person's language as they read it, with their first name and the Company's, drawn as the Agent's first message.
+// No copy of it is kept: an Engine session holds no message without a Run, and a Run would put a person's before it.
+async function openingOf(db:Database,company:string,found:Found):Promise<ConversationMessage|null> {
+ if(!found.lead_opening||!found.person_id) return null;
+ const [{data:person},{data:place}]=await Promise.all([
+  db.from('people').select('name,language').eq('id',found.person_id).maybeSingle<{name:string,language:string|null}>(),
+  db.from('companies').select('name').eq('id',company).maybeSingle<{name:string}>(),
+ ]);
+ if(!person||!place) return null;
+ const body=openingFor({owner:person.name,language:person.language,lead:found.agent_name,company:place.name});
+ // Its id is made as a session message's is (idOf), from a key no session message has, so every read names it alike;
+ // it is as old as the row, which is older than any message of the session.
+ return {id:Number.parseInt(createHash('sha1').update(`lead-opening:${found.id}`).digest('hex').slice(0,10),16),author:'agent',author_name:found.agent_name,body,
+  created_at:found.created_at??new Date(0).toISOString()};
+}
+
 // One page of a Conversation's messages from its Agent's Engine session (#875), read through the Engine handle on the
 // profile the reader sees the Agent on. None when the Conversation has no session yet or its Company no Engine; notSeen
-// when the Agent is hidden from the reader. gtmworks keeps none of it.
+// when the Agent is hidden from the reader. gtmworks keeps none of it. The Conversation the main Agent opened draws its
+// opening above the session's first message, and alone before its Owner answers, when it has no session yet (#882).
 /** @param {Database} db @param {string} company @param {Found} found @param {{offset:number,limit:number}} page */
 export async function conversationMessagesPage(db:Database,company:string,found:Found,{offset,limit}:{offset:number,limit:number}):Promise<ConversationMessagesPage> {
+ if(found.agent_id&&!found.hermes_session_id&&found.lead_opening) {
+  const opening=await openingOf(db,company,found);
+  return opening?{state:'found',messages:[opening],nextOffset:0,hasMore:false}:{state:'none'};
+ }
  if(!found.agent_id||!found.hermes_session_id) return {state:'none'};
  const target=await agentEngine(db,{company,agent:found.agent_id});
  if(target.state==='missing') return {state:'notSeen'};
  if(target.state==='noEngine'||target.state==='invalid') return {state:'none'};
  if(target.state!=='found') return {state:'unreachable'};
  const read=await target.engine.sessions.messages(found.hermes_session_id,{offset,limit});
+ // The opened Conversation's first send gave it a session id before its Run started: a start the Engine refused leaves
+ // a session it does not hold, and the opening is still all there is.
+ if(read.state==='missing'&&found.lead_opening) {
+  const opening=await openingOf(db,company,found);
+  if(opening) return {state:'found',messages:[opening],nextOffset:0,hasMore:false};
+ }
  if(read.state!=='found') return {state:read.state};
  let messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name,target.engine.profile);
  // A file an Agent named is listed whether or not its work sandbox runs; while it is stopped the file says it cannot be
@@ -171,7 +200,9 @@ export async function conversationMessagesPage(db:Database,company:string,found:
   const [seen,engine]=await Promise.all([seenAgents(db,company),companyEngine(company,{reader:db})]);
   named=namedMessages(messages,seen??[],engine?.profiles??[]);
  }
- return {state:'found',messages:named,nextOffset:offset+read.messages.length,hasMore:read.more&&read.messages.length>0};
+ const hasMore=read.more&&read.messages.length>0;
+ const opening=hasMore?null:await openingOf(db,company,found);
+ return {state:'found',messages:opening?[opening,...named]:named,nextOffset:offset+read.messages.length,hasMore};
 }
 
 // The Conversation's token use (#347), its session detail's, on a request of its own after the messages (ADR 0030): null

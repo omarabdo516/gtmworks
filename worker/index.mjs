@@ -13,6 +13,7 @@ import { keepMainAgentPlugins } from '../lib/main-agent-plugin.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
 import { keepKanbanCards } from '../lib/kanban-card-rows.mjs';
 import { keepConversationRows } from '../lib/conversation-drift.mjs';
+import { keepHeldConversationRuns } from '../lib/conversation-held-runs.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 import { keepProviderAccounts } from '../lib/provider-switches.mjs';
 import { keepFallbackModels } from '../lib/fallback-model.mjs';
@@ -64,6 +65,9 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  // A Conversation's row whose session is gone from its Engine, as when its Agent was deleted, is forgotten by the same
  // slow check for drift, every five minutes (#881).
  loop('Conversation rows',()=>keepConversationRows(db,{}),60000),
+ // A Run an Engine Conversation's row holds is let go once the Engine says it ended, when nobody had the Conversation open
+ // to see its end, so the Agent's face stops showing it working (#882).
+ loop('Held Conversation Runs',()=>keepHeldConversationRuns(db,{}),60000),
  // gtmworks's plugin of each main Agent's profile, whose tool makes an Agent (#884): written when the profile lacks this
  // release's, and its Engine restarted once to load it (lib/main-agent-plugin.mjs).
  selfHosted&&loop('Main Agent plugin',()=>keepMainAgentPlugins(db,{kept:mainAgentPlugins}),15000),

@@ -70,7 +70,7 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
  if(engine.state==='started') {
   // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
   after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
-  return reply({conversation,run:engine.run,engine:true,...(engine.queued?{queued:true}:{})});
+  return reply({conversation,...(engine.run?{run:engine.run}:{}),engine:true,...(engine.queued?{queued:true}:{})});
  }
  if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
  // A rerun has no old-record shape: the Conversation is on the Engine, or nothing is left unanswered.
@@ -267,7 +267,7 @@ async function messages(db:Database,person:string,company:string,conversation:st
  const from=typeof offset==='string'?Number.parseInt(offset,10):0;
  const size=typeof limit==='string'?Number.parseInt(limit,10):50;
  if(!Number.isSafeInteger(from)||from<0||!Number.isSafeInteger(size)||size<1||size>50) return refuse('conversationFailed',400);
- const {data:found,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
+ const {data:found,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id,lead_opening,person_id,created_at').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
  if(error) return refuse('conversationUnread',503);
  if(!found) return refuse('conversationNotFound',404);
  const read=await conversationMessagesPage(db,company,found,{offset:from,limit:size}).catch(()=>null);

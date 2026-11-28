@@ -19,7 +19,7 @@ select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 create temporary table first_open as select public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000001','a8760000-0000-0000-0000-000000000001','Plan the launch') as answer;
 select is((select answer-'session' from first_open),
- jsonb_build_object('state','engine','agent','a8760000-0000-0000-0000-000000000001','note','Write to me in short lines.'),
+ jsonb_build_object('state','engine','agent','a8760000-0000-0000-0000-000000000001','note','Write to me in short lines.','model',null,'model_before',null),
  'a new Conversation is the sender''s, with their own note and no one else''s');
 select matches((select answer->>'session' from first_open),'^gtmworks-[0-9a-f-]{36}$','on a session id the database chose');
 select is((select hermes_session_id from public.conversations where id='c8760000-0000-0000-0000-000000000001'),(select answer->>'session' from first_open),'its row is written before any Run starts');

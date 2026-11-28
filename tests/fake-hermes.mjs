@@ -940,7 +940,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!run&&onSession&&settings.runs.filter(each=>each.sessionId===onSession&&!each.turnStarted).length>=settings.sessionQueueLimit)
      return send(response,409,{error:{message:'queue_full',type:'invalid_request_error',param:null,code:'queue_full'}});
     // As the pinned release does (api_server_runs.py, run idempotency): the same key with another body is a conflict.
-    if(run&&run.body!==raw) return send(response,409,{error:{message:'Idempotency-Key reused with a different request',code:'idempotency_conflict'}});
+    if(run&&run.body!==raw) return send(response,409,{error:{message:'Idempotency-Key reused with a different request',code:'idempotency_key_conflict'}});
     if(!run) {
      const sent=JSON.parse(raw);
      if(settings.refusedModels.has(sent.model)) return send(response,400,{error:{message:`Model '${sent.model}' is not available`,type:'invalid_request_error'}});

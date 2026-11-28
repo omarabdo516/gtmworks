@@ -1,5 +1,11 @@
 [
  {
+  "issue": 882,
+  "date": "2026-11-28",
+  "en": { "title": "The model, the first Conversation and the agent’s face on the engine", "body": "In a Conversation kept on the agent engine, the model you pick goes with every reply and stays picked after a reload, the main agent still opens a new company’s first Conversation with its questions, dictation sends as typing does, and the agent’s face shows it working until its reply ends, even when you left the page." },
+  "ar": { "title": "الموديل وأول محادثة ووش الوكيل على المحرك", "body": "في المحادثة اللي محفوظة على محرك الوكلاء، الموديل اللي بتختاره بيمشي مع كل رد وبيفضل مختار بعد ما تعمل ريلود، والوكيل الرئيسي لسه بيفتح أول محادثة للشركة الجديدة بأسئلته، والإملاء بالصوت بيتبعت زي الكتابة بالظبط، ووش الوكيل بيبيّن إنه شغال لحد ما رده يخلص، حتى لو قفلت الصفحة." }
+ },
+ {
   "issue": 980,
   "date": "2026-11-28",
   "en": { "title": "Try again answers your last message, once", "body": "When a Conversation ends on your message with no reply, Try again starts the Agent again on that message, which stays once in the Conversation, instead of sending your words a second time." },

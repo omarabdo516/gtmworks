@@ -54,7 +54,8 @@ test('a lost start answer is unknown, and the same key with another body is refu
   assert.equal(fake.settings.runs.length,1);
   const run=await startRun(start);
   assert.equal(run,fake.settings.runs[0].id);
-  assert.equal(await startRun({...start,instructions:'Changed note.'}),null);
+  // The pinned release answers 409 idempotency_key_conflict (api_server_runs.py 558): the caller decides what it knows (#708, #882).
+  assert.deepEqual(await startRun({...start,instructions:'Changed note.'}),{state:'keyConflict'});
   assert.equal(fake.settings.runs.length,1);
  } finally { await fake.close(); }
 });
