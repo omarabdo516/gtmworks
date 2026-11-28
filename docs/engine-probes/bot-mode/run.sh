@@ -2,8 +2,9 @@
 # Probe of #969: prints docs/engine-probes/bot-mode.md's answers again on a throwaway Engine of the pinned image, then
 # removes it. The Engine runs with the install's managed configuration mounted where scripts/engine-template.yml mounts
 # it (the `ssh` terminal backend, the managed .env and the file-sync hook), and its terminal reaches a Work sandbox of
-# the install's own sandbox image on a network of its own, as an install's does. A few minutes, most of it the Engine's
-# own start, a dozen Runs and three Routine runs.
+# the install's own sandbox image on a network of its own, as an install's does. The key the Engine reaches the sandbox
+# with is copied into its data volume from the host, as the install does; the probe itself uses only the Engine's routes.
+# About three and a half minutes: the Engine's own start, a dozen Runs, four Routine runs and a minute waiting for a wake.
 #
 #   sh docs/engine-probes/bot-mode/run.sh
 set -eu

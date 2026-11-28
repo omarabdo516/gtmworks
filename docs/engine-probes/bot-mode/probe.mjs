@@ -11,7 +11,7 @@ const ALPHA='alpha', BETA='beta', GAMMA='gamma';
 const TITLE='Bot Chat';
 const say=line=>console.log(line);
 const answers={};
-const record=(q,ok,why)=>{ answers[q]=ok; say(`${ok?'YES':'NO '} question ${q}: ${why}`); };
+const record=(question,ok,why)=>{ answers[question]=ok; say(`${ok?'YES':'NO '} question ${question}: ${why}`); };
 const q=profile=>`?profile=${encodeURIComponent(profile)}`;
 const seconds=ms=>`${(ms/1000).toFixed(1)} s`;
 const mark=()=>randomUUID().slice(0,8);
@@ -37,6 +37,8 @@ const botChat=async profile=>(await sessions(profile)).find(row=>row.title===TIT
 const messages=async(profile,session)=>(await must(`read ${session}'s messages`,manage(`/api/sessions/${encodeURIComponent(session)}/messages${q(profile)}&order=oldest&limit=200&inline_images=false`))).messages;
 const sessionRow=(profile,session)=>must(`read session ${session}`,manage(`/api/sessions/${encodeURIComponent(session)}${q(profile)}`));
 const requests=()=>fetch(`${process.env.MODEL_ADDRESS}/requests`).then(response=>response.json());
+// How many kept model requests hold `text` anywhere in their body, the system prompt included.
+const mentions=text=>fetch(`${process.env.MODEL_ADDRESS}/requests?contains=${encodeURIComponent(text)}`).then(response=>response.json());
 // The newest model request that offered tools and whose newest user message names `marker`.
 async function sentFor(marker) {
  const hit=[...await requests()].reverse().find(one=>one.tools.length&&String(one.users.at(-1)??'').includes(marker));
@@ -74,7 +76,8 @@ await main(async()=>{
  const extra=await api(`/p/${ALPHA}/api/sessions`,{method:'POST',body:{title:TITLE,system_prompt:'x'}});
  const canonical=(await rpc('profiles.list')).profiles.find(row=>row.name===ALPHA).canonical_session;
  say(`question 1: POST /p/${ALPHA}/api/sessions {title:"${TITLE}"} answered ${made.status}: id ${chat.id}, source ${chat.source}, user_id ${chat.user_id}; a second create ${again.status} ${again.json?.error?.code}; a create with a system prompt ${extra.status} ${extra.json?.error?.code}; profiles.list now names canonical_session ${canonical?.id}`);
- record(1,made.status===201&&chat.id.startsWith('local-')&&again.status===400&&canonical?.id===chat.id,
+ record(1,made.status===201&&chat.id.startsWith('local-')&&again.status===400&&again.json?.error?.code==='invalid_title'
+  &&extra.status===400&&extra.json?.error?.code==='bot_chat_parameters_unsupported'&&canonical?.id===chat.id,
   'a profile is marked with /api/ws profiles.configure (ui_meta in its profile.yaml) and its one Bot Chat is made with POST /api/sessions on the Run API, both on the Engine\'s own routes');
 
  // --- 2. A turn in it ---------------------------------------------------------------------------------------------
@@ -128,17 +131,17 @@ await main(async()=>{
   'a Run in the Bot Chat is a Bot Chat turn: title and history kept, the section and message_agent offered, read back on the session routes; but its event stream carries only run.completed');
  answers['2-stream']=chatEvents.length===1&&chatEvents[0]==='run.completed'&&plainEvents.length>1;
  answers['2-install-wide']=sentGamma.tools.includes('message_agent');
- answers['2-stop-reaches-turn']=!finished;
+ answers['2-stop-reaches-turn']=!(stop.status===200&&stoppedEnd.status==='cancelled'&&finished);
 
  // --- 3. Who is speaking ------------------------------------------------------------------------------------------
  const firstUser=read2.find(one=>one.role==='user'&&String(one.content).includes(m2));
  const storedJSON=JSON.stringify(read2)+JSON.stringify(row2);
  const runJSON=JSON.stringify(await readRun(ALPHA,first.run.run_id));
- const modelJSON=JSON.stringify(sent2);
- say(`question 3: author {name:"Mona"} on the Run: the model's request names Mona ${modelJSON.includes('Mona')}; the session's messages and row name Mona ${storedJSON.includes('Mona')}; the Run's read-back names Mona ${runJSON.includes('Mona')}`);
+ const told=await mentions('Mona');
+ say(`question 3: author {name:"Mona"} on the Run: model requests whose whole body (system prompt included) names Mona: ${told.count} of ${told.of}; the session's messages and row name Mona ${storedJSON.includes('Mona')}; the Run's read-back names Mona ${runJSON.includes('Mona')}`);
  say(`question 3: the stored user message carries platform_message_id ${firstUser?.platform_message_id} and message_uid ${firstUser?.message_uid}; the Run answered delivery_id ${first.done.delivery_id}`);
  const joins=firstUser?.platform_message_id===`bot:${first.done.delivery_id}`;
- record(3,!modelJSON.includes('Mona')&&!storedJSON.includes('Mona')&&!runJSON.includes('Mona')&&joins,
+ record(3,told.count===0&&!storedJSON.includes('Mona')&&!runJSON.includes('Mona')&&joins,
   'the Engine keeps no person\'s name: the model is not told it, the session does not store it and no read gives it back; the Run\'s delivery_id is the stored message\'s platform_message_id "bot:<delivery_id>", so gtmworks keeps one row per message (delivery_id, Member)');
 
  // --- 4. Several people at once -----------------------------------------------------------------------------------
@@ -232,9 +235,11 @@ await main(async()=>{
   const note=all.find(one=>one.role==='user'&&one.display_kind==='process_complete'&&String(one.content).includes(`beta says 42 leads ${m6}`));
   return note?{note,ms:Date.now()-t6}:null;
  },{timeout:120000});
- // Does anything wake alpha to act on the reply? Its model is asked nothing more for 20 s.
- await sleep(20000);
- const woken=(await requests()).some(one=>one.tools.length&&String(one.users.at(-1)??'').includes('Background process')&&String(one.users.at(-1)??'').includes(m6));
+ // Does anything wake alpha to act on the reply? A model request that carries the completion notice (its "Background
+ // process" text with beta's reply) would be alpha woken. 60 s covers a housekeeping tick.
+ const heard=async()=>(await requests()).filter(one=>one.users.some(text=>text.includes('Background process')&&text.includes(`beta says 42 leads ${m6}`))).length;
+ await sleep(60000);
+ const woken=await heard()>0;
  const answered=(await messages(ALPHA,chat.id)).slice(before6).filter(one=>one.role==='assistant').length;
  // The named change: the caller starts a Run in alpha's Bot Chat once the reply is there, and alpha's model gets it.
  const m6w=mark();
@@ -248,7 +253,7 @@ await main(async()=>{
  say(`question 6: alpha's turn ended ${asked.done.status}; message_agent answered ${String(ack?.content).slice(0,240)}`);
  say(`question 6: beta had no Bot Chat before (${betaBefore===null}); beta's Bot Chat ${betaChat.id} now holds ${JSON.stringify(firstLine(betaTurn?.content))} and its reply ${JSON.stringify(betaRead.at(-1)?.content)}`);
  say(`question 6: the reply came back into alpha's Bot Chat ${seconds(back.ms)} after the turn started, as a ${back.note.display_kind} message; the delivery ran on the Engine as: ${command.replace(/\/tmp\/hermes-dm-\S+/,'<dm file>')}`);
- say(`question 6: 20 s later alpha had been woken to act on it: ${woken} (alpha's answers since the hand-off: ${answered}, its own "asked beta" only); a Run started then in alpha's Bot Chat ended ${wake.done.status}, and its model got the reply folded into that turn's message: ${wakeSees}`);
+ say(`question 6: 60 s later alpha had been woken to act on it: ${woken} (alpha's answers since the hand-off: ${answered}, its own "asked beta" only); a Run started then in alpha's Bot Chat ended ${wake.done.status}, and its model got the reply folded into that turn's message: ${wakeSees}`);
  // The same hand-off with nothing on the Engine but the Run API: gtmworks starts a Run in beta's Bot Chat, attributed to
  // alpha, and reads the reply back itself.
  const m6r=mark();
