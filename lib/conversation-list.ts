@@ -25,7 +25,9 @@ export type PersonConversation={id:string,agent:string,agentName:string,title:st
 // began, laid over that read when it lands so it never brings back an older title or mark.
 // `wanted`: each session asked for, by when it was first asked; `began`: when the read held now began, so a session it
 // was never asked for is not taken for gone.
-type Kept={at:number,began:number,tried:number,sessions:Map<string,SessionListed>,complete:boolean,gone:boolean,wanted:Map<string,number>,reading:Promise<void>|null,noted:Map<string,{at:number,change:Partial<SessionListed>}>};
+// `missing`: sessions the Engine answered not found for on their own read; the paged list's absence alone proves nothing,
+// since a session that moved between pages while it was read is missing from it.
+type Kept={at:number,began:number,tried:number,sessions:Map<string,SessionListed>,complete:boolean,gone:boolean,missing:Set<string>,wanted:Map<string,number>,reading:Promise<void>|null,noted:Map<string,{at:number,change:Partial<SessionListed>}>};
 const memory=((globalThis as {[key:symbol]:unknown})[Symbol.for('gtmworks.sessionLists')]??=new Map<string,Kept>()) as Map<string,Kept>;
 const freshFor=15000;
 // A list waits for a first read of an Agent this long, and for a read that may hold a Conversation just started (one
@@ -35,6 +37,8 @@ const firstWait=1500, newWait=500;
 // found; a session older than its 1,000 newest is drawn from its row, by its Agent's name. Upgrade if a profile keeps
 // more sessions than that.
 const listPages=10, listPage=100;
+// shortcut: a read confirms at most 50 unseen sessions on their own; the rest are drawn from their rows until a later read.
+const confirmAtMost=50;
 // A session the Engine's list does not hold is a Conversation not started yet while its row is this young, and gone
 // after (its Agent deleted on the Engine): the slow drift check then forgets its row (lib/conversation-drift.mjs).
 const youngFor=10*60*1000;
@@ -53,8 +57,16 @@ async function readList(kept:Kept,on:Profile) {
   if(read.sessions.length<listPage||(page+1)*listPage>=read.total) { complete=true; break; }
   if([...kept.wanted.keys()].every(id=>sessions.has(id))) break;
  }
+ // Each session asked for that a whole read did not show is asked for on its own, a few at a time; only a session the
+ // Engine answers not found for is missing. One it still holds is drawn from its row until a read shows it.
+ const missing=new Set<string>();
+ if(complete&&!gone) {
+  const unseen=[...kept.wanted.keys()].filter(id=>!sessions.has(id)).slice(0,confirmAtMost);
+  const answers=await Promise.all(unseen.map(async id=>[id,await on.sessions.held(id).catch(()=>'unreachable')] as const));
+  for(const [id,answer] of answers) if(answer==='missing') missing.add(id);
+ }
  for(const [id,{at,change}] of kept.noted) { if(at<began) kept.noted.delete(id); else { const held=sessions.get(id); if(held) Object.assign(held,change); } }
- Object.assign(kept,{at:Date.now(),began,sessions,complete,gone});
+ Object.assign(kept,{at:Date.now(),began,sessions,complete,gone,missing});
 }
 
 // The sessions of one Agent's profile that `wanted` names, from the last good read, read again when it is stale or does
@@ -62,7 +74,7 @@ async function readList(kept:Kept,on:Profile) {
 async function profileSessions(company:string,profile:string,on:Profile|null,wanted:string[],now:number):Promise<Kept|null> {
  const key=keyOf(company,profile);
  let kept=memory.get(key);
- if(!kept) { kept={at:0,began:0,tried:0,sessions:new Map(),complete:false,gone:false,wanted:new Map(),reading:null,noted:new Map()}; memory.set(key,kept); }
+ if(!kept) { kept={at:0,began:0,tried:0,sessions:new Map(),complete:false,gone:false,missing:new Set(),wanted:new Map(),reading:null,noted:new Map()}; memory.set(key,kept); }
  const unheld=wanted.filter(id=>!kept.wanted.has(id));
  for(const id of unheld) kept.wanted.set(id,now);
  const good=kept.at>0;
@@ -169,10 +181,10 @@ export async function personConversations(db:Database,company:string,t:Translate
  const keptOf=(row:Row)=>row.hermes_session_id&&profiles.has(row.agent_id!)?reads.get(profiles.get(row.agent_id!)!)??null:null;
  const sessionOf=(row:Row)=>row.hermes_session_id?keptOf(row)?.sessions.get(row.hermes_session_id):undefined;
  // A session is gone only by a whole read that began after it was asked for: its profile unknown to the Engine, or the
- // session missing from the list while its row is no longer young.
+ // session answered not found on its own read while its row is no longer young.
  const goneOf=(row:Row)=>{
   const kept=keptOf(row); if(!kept||!row.hermes_session_id||sessionOf(row)) return false;
-  return kept.complete&&(kept.wanted.get(row.hermes_session_id)??Infinity)<=kept.began&&(kept.gone||now-Date.parse(row.created_at)>=youngFor);
+  return kept.complete&&(kept.wanted.get(row.hermes_session_id)??Infinity)<=kept.began&&(kept.gone||kept.missing.has(row.hermes_session_id)&&now-Date.parse(row.created_at)>=youngFor);
  };
  const shown=rows.filter(row=>!goneOf(row));
  const old=await oldRecord(db,shown.filter(row=>!sessionOf(row)).map(row=>row.id));
