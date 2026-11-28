@@ -10,9 +10,15 @@ const company='10000000-0000-0000-0000-000000000001';
 const owner='20000000-0000-0000-0000-000000000001';
 
 // Nour on a profile of the lane's fake Hermes, the install's one Hermes (#342).
+// Nour runs on an Engine profile of its own, as an Agent the Company made does (its archived mark is written there, #881).
 function attachNour() {
- const [id,profile,connection]=[randomUUID(),`nour-${randomUUID().slice(0,8)}`,randomUUID()];
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','Nour','Marketing',false,'${profile}')`);
+ const id=randomUUID(); const [profile,connection]=[`ag-${id.replaceAll('-','')}`,randomUUID()];
+ query(`do $$ begin
+  insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','co-'||replace('${company}','-',''),true)
+   on conflict (company_id) do nothing;
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${id}','${company}',true);
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','Nour','Marketing',false,'${profile}');
+ end $$;`);
  return {id,profile};
 }
 async function ownerSignIn(page:Page,path:string) {
@@ -37,6 +43,7 @@ test('A person archives their Conversation from its head while its Agent replies
  test.setTimeout(150000);
  const fake=await laneHermes();
  const nour=attachNour();
+ fake.settings.profiles.set(nour.profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  try {
   await ownerSignIn(page,`/c/rs-learning/chat/${nour.id}`);
   const title=`Plan the launch ${Date.now()}`;

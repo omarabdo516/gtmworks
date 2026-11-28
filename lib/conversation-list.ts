@@ -96,14 +96,14 @@ export function heldSession(company:string,session:string):SessionListed|null {
 // switch it off), is named as the old record names it (lib/conversation-title.mjs: its first message, else the one still
 // waiting for its Run), with its newest message under it, by that message's time and its own archived mark, as #875 left a Conversation the old
 // record holds to that record. Null when that read failed.
-type OldRow={id:string,last_message_at:string,archived_at:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],newest:{body:string}[]};
+type OldRow={id:string,last_message_at:string,archived_at:string|null,first:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],newest:{body:string}[]};
 async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:string,line:string,at:string,archived:boolean}>|null> {
  if(!ids.length) return new Map();
- const {data,error}=await db.from('conversations').select('id,last_message_at,archived_at,conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),newest:conversation_messages(body)').in('id',ids).eq('conversation_messages.author','person')
+ const {data,error}=await db.from('conversations').select('id,last_message_at,archived_at,first:conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),newest:conversation_messages(body)').in('id',ids).eq('first.author','person')
   .neq('newest.body','').is('newest.hand_card',null).order('id',{referencedTable:'newest',ascending:false}).limit(1,{referencedTable:'newest'})
-  .order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'}).limit(1,{referencedTable:'conversation_queued_turns'});
+  .order('id',{referencedTable:'first'}).limit(1,{referencedTable:'first'}).order('queued_at',{referencedTable:'conversation_queued_turns'}).limit(1,{referencedTable:'conversation_queued_turns'});
  if(error) return null;
- return new Map(((data||[]) as OldRow[]).map(row=>{ const first=row.conversation_messages?.[0];
+ return new Map(((data||[]) as OldRow[]).map(row=>{ const first=row.first?.[0];
   const title=(first?.body||row.conversation_queued_turns?.[0]?.message||'').split('\n')[0]||first?.conversation_attachments?.[0]?.name||'';
   return [row.id,{title,line:row.newest?.[0]?.body??'',at:row.last_message_at,archived:!!row.archived_at}]; }));
 }
