@@ -52,3 +52,16 @@ test('the same send key replays the same Run, and a refused start is no Run',asy
   assert.equal(typeof await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'send-3'}),'object','no run id');
  } finally { await fake.close(); }
 });
+
+test('a start whose answers were lost is unknown, and asking again with the same key replays that one Run',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  fake.settings.loseStarts=2;
+  const lost=await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'send-4'});
+  assert.deepEqual(lost,{state:'unknown'});
+  const found=await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'send-4',retry:true});
+  assert.equal(typeof found,'string');
+  assert.equal(fake.settings.runs.length,1,'one Run, never two');
+ } finally { await fake.close(); }
+});

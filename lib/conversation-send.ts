@@ -31,7 +31,14 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  if(target.state==='missing') return {state:'refused',error:'conversationNotFound',status:404};
  if(target.state!=='found') return {state:'refused',error:'conversationHermesFailed',status:502};
  const instructions=noteInstructions(checked.note);
- const run=await target.engine.sessions.send({session:checked.session,input:message,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`});
+ // The same send key is the same Run: a start whose answer was lost is asked again with it, which replays that Run, a
+ // few times; one still unknown is refused, and the person's Try again (the same key) replays it rather than start another.
+ const start={session:checked.session,input:message,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+ let run=await target.engine.sessions.send(start);
+ for(let attempt=0;run!==null&&typeof run==='object'&&run.state!=='keyConflict'&&attempt<3;attempt++) {
+  await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+  run=await target.engine.sessions.send({...start,retry:run.state==='unknown'});
+ }
  if(typeof run!=='string') return {state:'refused',error:'conversationHermesFailed',status:502};
  // The Run is on the Engine now; a row that could not take its id still gets the reply in the session, read on the next
  // open, so the send is not refused for it.
