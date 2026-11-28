@@ -192,7 +192,7 @@ test('pending links list their label, Role, maker and end; Cancel stops one at o
  expect(laneRows(`select used_at is not null used from public.company_links where secret_hash='${hash(second.split('#code=')[1])}'`)).toEqual([{used:true}]);
 });
 
-test('a Company worked alone lists its pending Invite link in the Team dialog and in Members settings, and cancels it in both',async({page})=>{
+test('a Company worked alone lists its pending Invite link in the Team dialog and in Members settings, cancels it in both, and a link made in settings joins the list at once',async({page})=>{
  const soloCompany='10000000-0000-0000-0000-000000000002', solo='rs-consultations';
  query(`do $$ begin
    update public.companies set work_mode='alone' where id='${soloCompany}';
@@ -221,5 +221,18 @@ test('a Company worked alone lists its pending Invite link in the Team dialog an
  await settingsList.getByRole('button',{name:'Cancel Solo Person’s invite link'}).click();
  await expect(page.getByText('The invite link for Solo Person was cancelled.')).toBeVisible();
  await expect(page.getByRole('list',{name:'Invite links'})).toHaveCount(0);
- expect(laneRows(`select count(*)::int n from public.company_links where company_id='${soloCompany}' and label='Solo Person' and cancelled_at is not null and used_at is null`)).toEqual([{n:2}]);
+ // A link made right here in Members settings joins the pending list above it at once.
+ await page.getByRole('button',{name:'Make an invite link'}).click();
+ await page.locator('#lnk-label').fill('Settings Person');
+ await page.locator('#lnk-role').selectOption('viewer');
+ await page.getByRole('switch',{name:'SEO',exact:true}).click();
+ await page.getByRole('button',{name:'Make the link'}).click();
+ await expect(page.getByLabel('Invite link for Settings Person')).toHaveValue(/\/join#code=[a-f0-9]{64}$/);
+ await page.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ const made=page.getByRole('list',{name:'Invite links'});
+ await expect(made).toContainText('Settings Person');
+ await made.getByRole('button',{name:'Cancel Settings Person’s invite link'}).click();
+ await expect(page.getByText('The invite link for Settings Person was cancelled.')).toBeVisible();
+ await expect(page.getByRole('list',{name:'Invite links'})).toHaveCount(0);
+ expect(laneRows(`select count(*)::int n from public.company_links where company_id='${soloCompany}' and label in ('Solo Person','Settings Person') and cancelled_at is not null and used_at is null`)).toEqual([{n:3}]);
 });

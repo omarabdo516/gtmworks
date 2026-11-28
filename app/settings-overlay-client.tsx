@@ -85,9 +85,16 @@ export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:s
  return <InviteSection mode={mode} roles={roles} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 
-// "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action.
+// "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action. The page
+// reads the section again after a successful make, so the new link joins the pending list above it at once (#951).
 export function InviteLink({company,agents}:{company:string,agents:TeamAgent[]}) {
- return <InviteLinkSection agents={agents.filter(agent=>!agent.is_default)} make={(label,role,chosen)=>makeInviteLink(company,label,role,chosen)}/>;
+ const router=useRouter();
+ const make=async(label:string,role:string,chosen:string[])=>{
+  const answer=await makeInviteLink(company,label,role,chosen);
+  if(answer.link) router.refresh();
+  return answer;
+ };
+ return <InviteLinkSection agents={agents.filter(agent=>!agent.is_default)} make={make}/>;
 }
 
 // The pending Invite links of a Company worked alone (#951), cancelled through the Administrator's action; the page reads
