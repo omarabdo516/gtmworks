@@ -369,6 +369,11 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   return usage===base.usage?base:{...base,usage};
  },[record,engine.page,engine.usage,sent.waiting]);
  useLayoutEffect(()=>{ store.set({record:shown,asked:run.follow,sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
+ // A message sent from the composer before this transcript was drawn has its Run followed once it is (#876), as the old
+ // record's transcript asks for its reply.
+ const early=useSyncExternalStore(store.subscribe,store.early,()=>0);
+ const answeredEarly=useRef(0);
+ useEffect(()=>{ if(early>answeredEarly.current) { answeredEarly.current=early; run.follow(); } },[early,run.follow]);
  // The messages sent that a read of the session now holds are drawn from it alone: one still queued behind a working Run,
  // which the session does not hold yet, stays drawn as sent.
  // A message that stood for one send is spent on it, kept as state set while drawing: it never stands for another send
