@@ -35,6 +35,19 @@ test('a migration before the cutover takes no column, table or function away tha
  }
 });
 
+// #981: an update runs its migrations in one transaction while the release it replaces keeps serving, and the failed
+// install-sandbox-update run showed a worker session there reading companies and then conversations. The transaction takes
+// both tables in that order before any migration alters them, so the two cannot deadlock; a fresh install has neither
+// table yet, so the lock is skipped there.
+test('the installer takes companies and conversations in the worker\'s order before it migrates', () => {
+ const install=readFileSync('scripts/install.sh','utf8');
+ const start=install.indexOf('apply_migrations() {');
+ const block=install.slice(start,install.indexOf('\n}\n',start));
+ assert.match(block,/both_tables/,'the lock is taken only where both tables exist');
+ assert.match(block,/lock table public\.companies, public\.conversations in access exclusive mode;/);
+ assert.ok(block.indexOf('lock table public.companies')<block.indexOf('for file in supabase/migrations/*.sql'),'the lock comes before every migration');
+});
+
 test('the first step of the levels removal keeps the level, and the cutover removes it after every other migration', () => {
  const first=read(firstStep);
  for(const kept of [/companies drop column agent_level/,/drop column tools_level/,/drop column tools_policy/,/drop function[^;]*set_agent_level/,/drop function[^;]*engine_tool_policy/])

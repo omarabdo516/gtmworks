@@ -1,5 +1,11 @@
 [
  {
+  "issue": 981,
+  "date": "2026-11-28",
+  "en": { "title": "An update no longer stops on a busy database", "body": "When an update's database changes meet the app or the background worker reading the same tables, the database rolls them back whole and the update runs them again, five attempts at most, instead of stopping; any other failure still stops at once and leaves the version you run serving." },
+  "ar": { "title": "التحديث مبقاش بيقف على قاعدة بيانات مشغولة", "body": "لما تغييرات قاعدة البيانات في التحديث تقابل التطبيق أو الشغّال اللي في الخلفية بيقرأوا نفس الجداول، قاعدة البيانات بترجّعهم كلهم والتحديث بيشغّلهم تاني، لحد خمس محاولات، بدل ما يقف؛ وأي فشل تاني لسه بيوقف على طول وبيسيب النسخة اللي شغّالة عندك." }
+ },
+ {
   "issue": 880,
   "date": "2026-11-28",
   "en": { "title": "Images and an agent’s files go straight through", "body": "An image you attach reaches the agent and stays under your message, and a file the agent names in its reply opens straight from its work folder; gtmworks keeps no copy of either, and while the work sandbox is stopped the file says it can’t be read now." },
