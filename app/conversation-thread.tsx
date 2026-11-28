@@ -13,7 +13,7 @@ import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
-import { MessageBox, postMessage, postMessageAnswer, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
+import { MessageBox, postMessage, postMessageAnswer, postMessageWithFilesAnswer, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, RunStepCard, SavedRule } from '@/lib/conversations';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import { LiveTurn, WorkingLine, useLanding, useLiveSteps, type LiveRun } from '@/app/run-activity';
@@ -347,6 +347,8 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
+ // A file of the Engine's Conversation (#880) by its key under its message; one of the old record by its own id.
+ const fileHref=(file:{id:number,key?:string})=>file.key?`/c/${slug}/files/conversation/${conversation.id}/${file.key}`:`/c/${slug}/files/conversation/${file.id}`;
  const face=(size:number,agent?:string,name=conversation.agent_name)=><span aria-hidden="true"><AgentFace agent={agent||conversation.face} name={name} size={size}/></span>;
  // A job one Agent handed another (#317, #475): inside the asking Agent's turn (`p`), or, for one an asked Agent handed on
  // (#477), its own row between the turns (`li`), as a channel draws every handover.
@@ -367,7 +369,13 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    {!!message.body.trim()&&<div className="bubble-row"><ReaderTime at={message.created_at} className="bubble__time"/><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {/* A message being sent has no stored files to open yet: their names alone (#756). */}
    {!!message.files?.length&&message.kind==='sending'&&<div className="msg-files">{message.files.map(file=><span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>)}</div>}
-   {!!message.files?.length&&message.kind!=='sending'&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
+   {/* A person's image on the Engine (#880) is drawn from the session that carried it to the Agent, as a thumbnail of
+       itself; it has no name of its own there. A file of the old record is its named chip. */}
+   {!!message.files?.length&&message.kind!=='sending'&&<div className="msg-files">{message.files.map(file=>file.key
+    ?<a key={file.key} className="file-thumb" href={fileHref(file)} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name||c('conversationImage',file.id+1))} data-file={file.key}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- the file's own private route, never an optimised image */}
+      <img src={fileHref(file)} alt={file.name||c('conversationImage',file.id+1)} loading="lazy"/></a>
+    :<a key={file.id} className="file-chip" href={fileHref(file)} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
    {(message.kind==='queued'||message.kind==='sending')&&message.behind&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
    {/* Not sent (#764): the Engine refused its Run or was not reached; the message stays, and "Try again" starts the same
        turn. One refused for the Conversation's model goes back to the box instead (#158). */}
@@ -380,7 +388,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}<ReaderTime at={message.created_at} className="sender__time"/></div>
    {message.steps?!!message.steps.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>:<FirstSteps reply={message.id} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
-   <ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/conversation/${id}`}/>
+   <ReplyFiles files={message.files} missed={message.missed} href={fileHref}/>
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,
        which the Conversation still gave. */}
    {message.steps?.list.some(step=>step.sandbox)&&<p className="note" role="alert" data-outcome="sandbox">{t('workSandboxNotRunning')}</p>}
@@ -427,7 +435,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,s
    return failure;
   }}:undefined} drawn={!!sending} send={async(message,sendKey,files)=>{
    const settled=sending?.(sendKey,message,files);
-   const {failure,answer}=files.length?{failure:await postMessageWithFiles({company,conversation:conversation.id,message,sendKey},files),answer:null}:await postMessageAnswer({company,conversation:conversation.id,message,sendKey});
+   const {failure,answer}=files.length?await postMessageWithFilesAnswer({company,conversation:conversation.id,message,sendKey},files):await postMessageAnswer({company,conversation:conversation.id,message,sendKey});
    settled?.(failure,answer);
    if(!failure) { asked(); sent?.(); }
    return failure;

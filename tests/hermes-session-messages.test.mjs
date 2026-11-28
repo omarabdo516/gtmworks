@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { readSessionMessages, readSessionUsage, stepsBetween } from '../lib/engine/sessions.mjs';
+import { findSessionMessage, readSessionImage, readSessionMessages, readSessionUsage, stepsBetween } from '../lib/engine/sessions.mjs';
 
 // #875 on the fake Engine server, whose management listener serves a session's messages as the pinned release does
 // (hermes_cli/web_routers/sessions.py get_session_messages): the last 50 messages of a Conversation's session are read
-// a page at a time from the newest, with compacted messages asked for and inline images, and the page before when the
+// a page at a time from the newest, with compacted messages asked for and no image inlined (#880), and the page before when the
 // page starts in the middle of a turn, so its first reply still carries the tool calls its turn made.
 const profile='co-messages';
 const connection=(/** @type {Awaited<ReturnType<typeof fakeHermes>>} */ fake)=>({address:fake.address,managementAddress:fake.managementAddress,profile,key:fake.settings.key});
@@ -29,7 +29,7 @@ test('the last messages of a session are read a page at a time from the newest, 
   const first=await readSessionMessages(connection(fake),'session-page',{offset:4,limit:2});
   assert.deepEqual(first.state==='found'&&first.messages.map(message=>message.content),['Message 0']);
   assert.equal(first.state==='found'&&first.more,false,'a short page is the first');
-  assert.ok(fake.settings.managementRequests.some(request=>request.path?.includes('/messages?')&&request.path.includes('include_compacted=true')&&request.path.includes('inline_images=true')),'compacted messages and inline images are asked for');
+  assert.ok(fake.settings.managementRequests.some(request=>request.path?.includes('/messages?')&&request.path.includes('include_compacted=true')&&request.path.includes('inline_images=false')),'compacted messages are asked for, and no image inlined');
  } finally { await fake.close(); }
 });
 
@@ -88,5 +88,31 @@ test('a session\'s token use is read from its detail on its own, and null when t
   assert.deepEqual(await readSessionUsage(connection(fake),'session-use'),{input:29000,output:32});
   assert.equal(await readSessionUsage(connection(fake),'unknown'),null);
   assert.equal(await readSessionUsage({...connection(fake),key:'wrong'},'session-use'),null);
+ } finally { await fake.close(); }
+});
+
+// #880: a person's images are kept in the session as the Run's input carried them, and read back one at a time.
+const png=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,1,2,3]);
+const gif=Buffer.from('GIF89a-second');
+const imageMessage=(/** @type {number} */ timestamp,/** @type {string} */ text,/** @type {[string,Buffer][]} */ images)=>user(timestamp,[...(text?[{type:'text',text}]:[]),...images.map(([type,body])=>({type:'image_url',image_url:{url:`data:${type};base64,${body.toString('base64')}`}}))]);
+
+test('a page shows each image of a person\'s message as a line, and each image is read alone, its own bytes',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.sessions.set('session-images',{profile,messages:[imageMessage(1,'Our logo',[['image/png',png],['image/gif',gif]]),replied(2,'A fine logo.'),imageMessage(3,'',[['image/svg+xml',Buffer.from('<svg/>')]])]});
+  const page=await readSessionMessages(connection(fake),'session-images',{offset:0,limit:50});
+  assert.deepEqual(page.state==='found'&&page.messages.map(message=>message.content),['Our logo\n[image]\n[image]','A fine logo.','\n[image]'],'the page holds no image, only its line');
+  const first=(/** @type {any} */ message)=>message.role==='user'&&String(message.content).startsWith('Our logo');
+  const found=await findSessionMessage(connection(fake),'session-images',first);
+  assert.equal(found.state==='found'&&found.offset,2,'it is two messages from the newest');
+  const second=await readSessionImage(connection(fake),'session-images',first,1);
+  assert.equal(second.state,'found');
+  assert.equal(second.state==='found'&&second.type,'image/gif');
+  assert.deepEqual(second.state==='found'&&Buffer.from(second.body),gif);
+  assert.equal((await readSessionImage(connection(fake),'session-images',first,2)).state,'missing','a message has only the images it carries');
+  const vector=await readSessionImage(connection(fake),'session-images',message=>message.role==='user'&&message.timestamp===3,0);
+  assert.equal(vector.state,'missing','a kind the page does not draw is never handed on');
+  assert.equal((await findSessionMessage(connection(fake),'session-images',()=>false)).state,'missing');
+  assert.equal((await readSessionImage(connection(fake),'no-such-session',first,0)).state,'missing');
  } finally { await fake.close(); }
 });

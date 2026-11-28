@@ -18,7 +18,7 @@ import type { LiveRun } from '@/app/run-activity';
 import type { LiveDelta, LiveLine } from '@/lib/live-steps.mjs';
 import type { RunEnd } from '@/lib/run-outcome.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
-import { postMessageAnswer, type MessageBoxHandle } from '@/app/conversation-composer';
+import { postMessageAnswer, postMessageWithFilesAnswer, type MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
@@ -442,11 +442,26 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  // Under a reply that did not finish (#879), and on a message left with no reply (#980), it answers the words already in
  // the Conversation: one Run on them, drawn by the page once (lib/conversation-messages.ts pageMessages), never a second
  // message of its own and never back in the box.
+ // A person's images on the Engine as files to send again, from their own address; null when one cannot be read now.
+ const imagesOf=async(message:{files?:{id:number,key?:string}[]}):Promise<File[]|null>=>{
+  try {
+   return await Promise.all((message.files??[]).filter(file=>file.key?.startsWith('i')).map(async file=>{
+    const answer=await fetch(`/c/${slug}/files/conversation/${conversation.id}/${file.key}`,{cache:'no-store'});
+    if(!answer.ok) throw new Error('image unread');
+    const body=await answer.blob();
+    return new File([body],`image-${file.id+1}.${body.type.slice('image/'.length).replace('jpeg','jpg')}`,{type:body.type});
+   }));
+  } catch { return null; }
+ };
  const askAgain=async()=>{
   if(said?.author!=='person'||asking) return;
   setAsking(true);
   const key=againKeys.current.get(said.id)??crypto.randomUUID(); againKeys.current.set(said.id,key);
-  const {failure}=await postMessageAnswer({company,conversation:conversation.id,message:said.body,sendKey:key});
+  // The message's images go again with its words (#880), read back from the session that holds them: gtmworks has no copy.
+  const images=await imagesOf(said);
+  if(!images) { setAsking(false); toast(t('conversationFailed'),{icon:'alert'}); return; }
+  const fields={company,conversation:conversation.id,message:said.body,sendKey:key};
+  const {failure}=images.length?await postMessageWithFilesAnswer(fields,images):await postMessageAnswer(fields);
   setAsking(false);
   if(failure) toast(t(failure),{icon:'alert'}); else run.follow();
  };
