@@ -19,6 +19,7 @@ import { continuePage } from '@/lib/page-fade';
 import type { ReadyRole } from '@/lib/ready-roles';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 import { sentIntoNewChat } from '@/lib/arrivals';
+import { handSent } from '@/lib/sending';
 
 const ReadyMade=lazy(()=>import('@/app/ready-made'));
 
@@ -105,6 +106,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     // There the message rises in, as one sent in an open Conversation does (#132), and the page goes on without fading
     // in again (#135).
     sentIntoNewChat(conversation);
+    if(!files.length) handSent(conversation,{key:sendKey,body:message});
     continuePage(`/c/${slug}/conversations/${conversation}`);
     router.push(`/c/${slug}/conversations/${conversation}`);
     return new Promise<never>(()=>{});

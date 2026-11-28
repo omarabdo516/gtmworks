@@ -31,6 +31,9 @@ insert into decisions
   'public.stop_conversation_handovers(uuid,uuid)','public.can_see_conversation_agent(uuid,uuid)','public.lead_key_settle(uuid)','public.conversation_agent_access(uuid)',
   'public.pin_run_model(uuid,uuid)','public.refuse_run_model(uuid,uuid)','public.answer_agent_request(uuid,bigint,boolean,text)',
   'public.card_chat_person(uuid,bigint)','public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
+ union all select 'public.open_engine_conversation(uuid,uuid,uuid,text)','asks','a send on the Engine (#876) brings an archived Conversation back, by archived_at, as a message on the old record does'
+ union all select fn,'exempt','the open Run of the one Conversation its caller names (#876), held and let go on its row: archived or not, it lists no Conversations' from unnest(array[
+  'public.hold_conversation_run(uuid,uuid,text)','public.end_conversation_run(uuid,text)']) fn
  union all select fn,'exempt','an Agent''s Run in one Conversation, carried by the worker or by the Run''s own tool call: archiving stopped the Run there and closed what it asked (stop_conversation_work), and a Run closing later writes its end and asks nothing (#671)' from unnest(array[
   'public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean)','public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean,jsonb,text[])','public.track_run_question(uuid,text,jsonb,boolean,timestamptz)',
   'public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text)','public.settle_permission(bigint,text)',

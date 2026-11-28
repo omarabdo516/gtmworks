@@ -154,8 +154,9 @@ test('All conversations pages by 50 and searches titles and previews',async({pag
  await signIn(page,'omar@example.com','/c/rs-learning/conversations');
  const rows=page.locator('.cv-list .cv-row');
  await expect(rows).toHaveCount(50,{timeout:30000});
- // The seed's general channel was made today, after these: the newest Conversation is the first row with a face.
- await expect(page.locator('.cv-list .cv-row:has(.cv-face)').first()).toContainText('Batch words 51');
+ // The seed's general channel was made today, after these: the newest Conversation is the first row with a face. The
+ // test before wrote in its Conversation on the Engine, which makes that session newer still (#876), so it is left out.
+ await expect(page.locator('.cv-list .cv-row:has(.cv-face)').filter({hasNotText:'To shelve'}).first()).toContainText('Batch words 51');
  await page.getByRole('button',{name:'Show more'}).click();
  await expect(rows.nth(50)).toBeVisible();
  expect(await rows.count()).toBeGreaterThan(52);

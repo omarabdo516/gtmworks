@@ -107,13 +107,14 @@ function ActivityLine({view,working,agent,face,c,cb}:{view:LiveView,working?:Rea
 
 // The Agent's turn while it works, from the moment the person sent (#694): its sender line, and once a step ended the
 // steps it finished so far (`view`, null until the Run's live read answers), in the list the reply will carry, open as
-// the person left it for this Run (`open`, `toggled`).
-export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView|null,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
+// the person left it for this Run (`open`, `toggled`). `reply` (#876): the reply's words so far, as the model writes them.
+export function LiveTurn({view,agent,face,c,cb,open,toggled,reply}:{view:LiveView|null,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void,reply?:string}) {
  // Its face is 24px and alive, in the state the chat's head and the sidebar show (#700): thinking until the Run's first
  // step, working after it. Past replies are 20px and still.
  const state=useAgentState(face,'working');
  return <li className="turn turn--agent msg" data-author="agent" data-live>
   <div className="sender"><span aria-hidden="true"><AgentFace agent={face} size={24} state={state} live/></span><bdi>{agent}</bdi></div>
   {!!view?.steps.length&&<StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>}
+  {!!reply&&<div className="bubble bubble--agent" dir="auto" data-writing>{reply}</div>}
  </li>;
 }

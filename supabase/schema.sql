@@ -5512,6 +5512,23 @@ CREATE FUNCTION public.edit_work_card(c uuid, card bigint, fields jsonb, evidenc
 ALTER FUNCTION public.edit_work_card(c uuid, card bigint, fields jsonb, evidence text) OWNER TO postgres;
 
 --
+-- Name: end_conversation_run(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.end_conversation_run(conversation uuid, run text) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ with ended as (
+  update public.conversations v set open_runs=array_remove(v.open_runs,run)
+  where v.id=conversation and v.person_id=auth.uid() and run=any(v.open_runs) and public.is_member(v.company_id)
+  returning 1)
+ select exists(select 1 from ended);
+$$;
+
+ALTER FUNCTION public.end_conversation_run(conversation uuid, run text) OWNER TO postgres;
+
+--
 -- Name: end_handovers_stopped(bigint[]); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -6506,6 +6523,24 @@ begin
 end $_$;
 
 ALTER FUNCTION public.hold_agent_change(c uuid, agent uuid, act text, skill text, note text, body text) OWNER TO postgres;
+
+--
+-- Name: hold_conversation_run(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+ with held as (
+  update public.conversations v set open_runs=case when run=any(v.open_runs) then v.open_runs else v.open_runs||run end
+  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$' and (run=any(v.open_runs) or cardinality(v.open_runs)<32)
+   and exists(select 1 from public.members m where m.company_id=v.company_id and m.person_id=person and m.removed_at is null and m.role<>'viewer')
+  returning 1)
+ select exists(select 1 from held);
+$_$;
+
+ALTER FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) OWNER TO postgres;
 
 --
 -- Name: in_channel(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -8403,6 +8438,60 @@ $$;
 ALTER FUNCTION public.open_conversation_runs(just uuid, owner uuid, after bigint) OWNER TO postgres;
 
 --
+-- Name: open_engine_conversation(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare existing public.conversations; chosen public.hermes_agents; held text;
+begin
+ if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
+ if conversation is null or message is null then raise exception 'conversationNotFound' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
+ select * into existing from public.conversations where id=conversation;
+ if found then
+  if existing.person_id<>auth.uid() or existing.company_id<>c or existing.agent_id is null then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+  agent := existing.agent_id;
+ end if;
+ select * into chosen from public.hermes_agents where id=agent and company_id=c;
+ if not found or not public.agent_visible_to(c,auth.uid(),agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ if existing.id is null then
+  -- A new Conversation starts on the Engine only in a Company switched over, and a message addressed to a Member is kept
+  -- as a note on the old record, as today.
+  if not coalesce((select o.engine_conversations from public.companies o where o.id=c),false)
+   or (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
+   return jsonb_build_object('state','old');
+  end if;
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,last_message_at)
+   values(conversation,c,auth.uid(),agent,chosen.name,'gtmworks-'||gen_random_uuid()::text,now())
+   returning hermes_session_id into held;
+ else
+  -- Only a Conversation this path made is on the Engine: it has its session and nothing on the old record. Any other
+  -- (one the old record holds, or a row made without a session, such as the Owner's empty first Conversation) stays there.
+  if existing.hermes_session_id is null
+   or exists(select 1 from public.conversation_messages m where m.conversation_id=conversation)
+   or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation)
+   or exists(select 1 from public.conversation_notes n where n.conversation_id=conversation) then
+   return jsonb_build_object('state','old');
+  end if;
+  -- A note to a Member has no place in an Engine session: it is refused, and the words stay in the box.
+  if (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
+   raise exception 'conversationAddressedOnEngine' using errcode='22023';
+  end if;
+  -- Writing in an archived Conversation brings it back, logged as the person's, as on the old record.
+  update public.conversations set last_message_at=greatest(last_message_at,now()),archived_at=null,archived_by=null
+   where id=conversation returning hermes_session_id into held;
+  if existing.archived_at is not null then perform public.log_conversation_archive(conversation,false,auth.uid()); end if;
+ end if;
+ return jsonb_build_object('state','engine','agent',agent,'session',held,
+  'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()));
+end $$;
+
+ALTER FUNCTION public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text) OWNER TO postgres;
+
+--
 -- Name: open_first_conversation(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -8509,9 +8598,11 @@ CREATE TABLE public.conversations (
     session_missing_since timestamp with time zone,
     session_mark_after timestamp with time zone,
     kept_agent_id uuid,
+    open_runs text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT conversations_archived_by_archived CHECK (((archived_by IS NULL) OR (archived_at IS NOT NULL))),
     CONSTRAINT conversations_good_morning_day CHECK (((good_morning IS NULL) OR (good_morning_day IS NOT NULL))),
-    CONSTRAINT conversations_model_valid CHECK ((public.model_choice_valid(model) AND public.model_choice_valid(model_before)))
+    CONSTRAINT conversations_model_valid CHECK ((public.model_choice_valid(model) AND public.model_choice_valid(model_before))),
+    CONSTRAINT conversations_open_runs CHECK (((cardinality(open_runs) <= 32) AND (array_to_string(open_runs, ','::text) ~ '^([A-Za-z0-9_.:-]{1,200}(,|$))*$'::text)))
 );
 
 ALTER TABLE public.conversations OWNER TO postgres;
@@ -13132,6 +13223,7 @@ CREATE TABLE public.companies (
     name text NOT NULL,
     work_mode text DEFAULT 'team'::text,
     engine_id uuid,
+    engine_conversations boolean DEFAULT false NOT NULL,
     CONSTRAINT companies_work_mode_check CHECK ((work_mode = ANY (ARRAY['alone'::text, 'team'::text])))
 );
 
@@ -20812,6 +20904,13 @@ GRANT ALL ON FUNCTION public.edit_work_card(c uuid, card bigint, fields jsonb, e
 GRANT ALL ON FUNCTION public.edit_work_card(c uuid, card bigint, fields jsonb, evidence text) TO service_role;
 
 --
+-- Name: FUNCTION end_conversation_run(conversation uuid, run text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.end_conversation_run(conversation uuid, run text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.end_conversation_run(conversation uuid, run text) TO authenticated;
+
+--
 -- Name: FUNCTION end_handovers_stopped(ids bigint[]); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21211,6 +21310,13 @@ REVOKE ALL ON FUNCTION public.hermes_profile_address(address text) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION public.hold_agent_change(c uuid, agent uuid, act text, skill text, note text, body text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.hold_agent_change(c uuid, agent uuid, act text, skill text, note text, body text) TO authenticated;
+
+--
+-- Name: FUNCTION hold_conversation_run(conversation uuid, person uuid, run text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) TO service_role;
 
 --
 -- Name: FUNCTION in_channel(ch uuid); Type: ACL; Schema: public; Owner: postgres
@@ -21829,6 +21935,13 @@ GRANT ALL ON FUNCTION public.note_runs_due(just_message bigint, after bigint) TO
 
 REVOKE ALL ON FUNCTION public.open_conversation_runs(just uuid, owner uuid, after bigint) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.open_conversation_runs(just uuid, owner uuid, after bigint) TO service_role;
+
+--
+-- Name: FUNCTION open_engine_conversation(c uuid, conversation uuid, agent uuid, message text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text) TO authenticated;
 
 --
 -- Name: FUNCTION open_first_conversation(c uuid, person uuid, conversation uuid, body text); Type: ACL; Schema: public; Owner: postgres

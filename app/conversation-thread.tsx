@@ -16,7 +16,7 @@ import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, RunStepCard, SavedRule } from '@/lib/conversations';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
-import { LiveTurn, WorkingLine, useLanding, useLiveSteps } from '@/app/run-activity';
+import { LiveTurn, WorkingLine, useLanding, useLiveSteps, type LiveRun } from '@/app/run-activity';
 import { showRoutines } from '@/app/details-routines';
 import { handDoneHere, onHandDone, showScreen } from '@/app/screen-hands';
 import { formOf, scheduleLabel } from '@/lib/routine-schedule.mjs';
@@ -98,7 +98,7 @@ export function useConversationText() {
 export function useConversationRecord({company,initial,steps:firstSteps}:{company:string,initial:ConversationRecord,steps?:Promise<ConversationSteps|null>}) {
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
- const {list:sendingList,start:sending,reading}=useSending({company,conversation:id});
+ const {list:sendingList,start:sending,reading,release}=useSending({company,conversation:id});
  const {messages,pending}=record;
  // What lives outside the Conversation comes from the server render: an Agent made in it (the sidebar's Agents) is
  // drawn again when it changes, and nothing else is (#767): sending, storing and a reply landing never redraw the page.
@@ -176,7 +176,7 @@ export function useConversationRecord({company,initial,steps:firstSteps}:{compan
   return ()=>stopped.abort();
  },[replies,opened,company,id]);
  const drawn=useMemo(()=>{ const shown=withSteps(withSending(record,sendingList),steps); return unread?{...shown,unread:true as const}:shown; },[record,sendingList,steps,unread]);
- return {record:drawn,asked,reread,sending};
+ return {record:drawn,asked,reread,sending,reading,release};
 }
 // The page's own read of each reply's steps (#766), streamed after the messages: drawn by the server once it answers, so
 // a reply shows its steps before the page's script has run, and replaced by the record's own once the hook has it.
@@ -224,7 +224,10 @@ export function ChatPlaceholder() {
 // send, and the record is asked for again at once; while it waits, the Agent is still working. A Viewer sees the wait
 // line.
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
-export function ConversationTurns({slug,company,record,writer,asked,reread,details=false}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean}) {
+// `live` (#876): a Conversation whose messages are the Engine's draws its open Run from its own live read, the reply as
+// it is written and its steps, in place of the old record's steps read (app/api/run-steps).
+export type EngineLive={view:LiveRun|null,reply:string,working:boolean};
+export function ConversationTurns({slug,company,record,writer,asked,reread,details=false,live:engineLive}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean,live?:EngineLive}) {
  const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
@@ -317,7 +320,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // While the Agent works, the line under the transcript and the turn's steps follow its Run live (#646). The reply that
  // lands after live steps were drawn takes their place without rising in again, its list open if the live one was.
  // A message just sent sets the Agent working at once (#756), a typed answer to the question it waits on too.
- const working=(pending&&!record.asking)||messages.some(message=>message.kind==='sending');
+ const working=(pending&&!record.asking)||messages.some(message=>message.kind==='sending')||!!engineLive?.working;
  // An Agent's reply, not a decision drawn as its message.
  const newestReply=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided');
  const newest=newestReply?.id??null;
@@ -331,7 +334,8 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   const ms=end!==null?Date.now()-end:Date.now()-stored;
   if(Number.isFinite(ms)) requestAnimationFrame(()=>reportWait({event:'reply_drawn',company,conversation:conversation.id,ms,from:end!==null?'stream':'stored'}));
  },[newest,newestReply,company,conversation.id]);
- const {view:steps}=useLiveSteps({company,conversation:conversation.id},working,ended);
+ const {view:recordSteps}=useLiveSteps({company,conversation:conversation.id},working&&!engineLive,ended);
+ const steps=engineLive?engineLive.view:recordSteps;
  const landing=useLanding({working,live:steps,newest});
  // The open Run's face, on the page and in a Card's sheet alike (#184, #700): thinking until its first step, working
  // after it, done once it ended well in front of the reader. A Run waiting on its person's answer (#138) has ended for
@@ -383,7 +387,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:step.card?[<CardLine key={at} slug={slug} card={step.card} rise={rise(index)}/>]:[])}</Fragment>)}
-   {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
+   {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled} reply={engineLive?.reply}/>}</ol>
   {working&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
   {/* The record could not be read three times in a row (#768): what was drawn stays above, and Try again reads it now. */}
   {record.unread&&<p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')}{reread&&<> <button type="button" className="link-btn" onClick={()=>void reread()}>{c('conversationTryAgain')}</button></>}</p>}
