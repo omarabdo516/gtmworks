@@ -48,7 +48,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const nextRow=useRef(1);
  const [rows,setRows]=useState<Row[]>(()=>[freshRow(0)]);
  const [result,action,pending]=useActionState(finish,{});
- const [ready,setReady]=useState(false);
+ const [acknowledged,setAcknowledged]=useState(false);
  const [copied,setCopied]=useState<number|null>(null);
  const router=useRouter(); const leaving=useLeave(); const {close}=leaving;
  const opened=result?.opened;
@@ -58,7 +58,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const showingLinks=links.length>0;
  // Lead's Conversation takes the keyboard once it is drawn (design-reference: #ta-main focused after closeDlg).
  const answered=useContext(Answered);
- useEffect(()=>{ if(opened&&(!showingLinks||ready)) close(()=>{ answered(); askComposerFocus(opened); router.push(opened); }); },[opened,showingLinks,ready,close,router,answered]);
+ useEffect(()=>{ if(opened&&(!showingLinks||acknowledged)) close(()=>{ answered(); askComposerFocus(opened); router.push(opened); }); },[opened,showingLinks,acknowledged,close,router,answered]);
  const box=useRef<HTMLDivElement>(null);
  const focusTo=useRef<string|null>(null);
  const name=lead?.name||'Lead';
@@ -131,7 +131,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
        <button type="button" className="btn btn--primary inv-go inv-go--flush" onClick={()=>void copy(index,link.link,link.label)}><SettingsIcon name="copy"/><span aria-live="polite">{copied===index?t('settingsBackupCopied'):t('inviteLinkCopy')}</span></button></div>
      </div></div>)}</div>
     <p className="set-hint" id="fr-links-d">{t('inviteLinkOnce')}</p>
-    <div className="fr__actions"><button type="button" className="btn btn--primary" id="fr-open-done" onClick={()=>setReady(true)}>{t('firstRunOpen')}</button></div>
+    <div className="fr__actions"><button type="button" className="btn btn--primary" id="fr-open-done" onClick={()=>setAcknowledged(true)}>{t('firstRunOpen')}</button></div>
    </>:<>
     <div className="fr__head">
      <button type="button" className="link-btn fr__back" id="fr-back" disabled={pending} onClick={back}><ShellIcon name={language==='ar'?'back':'forward'}/><span>{t('firstRunBack')}</span></button>

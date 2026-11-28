@@ -41,8 +41,11 @@ test('a press that starts inside the panel and ends on the dialog surface leaves
 // #951: a Company worked alone draws no Team table, so its pending Invite link waits in a short list with the same Cancel.
 test('a Company worked alone lists its pending Invite link and cancels it', async () => {
  const cancelLink = vi.fn(async () => '');
- const loaded = { members: [{ person_id: 'p-1', role: 'owner', people: { name: 'Omar' } }], ended: [], links: [{ id: 'l-1', label: 'Nour Salah', role: 'viewer', made_by_name: 'Omar', ends_at: '2026-12-04T10:00:00+00:00' }], agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', is_default: true }], allowed: [] };
+ const loaded = { members: [{ person_id: 'p-1', role: 'owner', people: { name: 'Omar' } }], ended: [{ id: 'i-1', email: 'ended-953@example.test', role: 'viewer' }], links: [{ id: 'l-1', label: 'Nour Salah', role: 'viewer', made_by_name: 'Omar', ends_at: '2026-12-04T10:00:00+00:00' }], agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', is_default: true }], allowed: [] };
  const screen = await render(<LanguageProvider language="en"><TeamDialog company="co-1" alone={true} userId="p-1" owner={true} role="owner" personName="Omar" actions={{ ...actions(), load: async () => loaded, cancelLink }} close={vi.fn()}/></LanguageProvider>);
+ const ended = screen.getByRole('list', { name: 'Email invite ended' });
+ await expect.element(ended.getByText('Ended')).toBeVisible();
+ await expect.element(ended.getByText('Viewer · ended-953@example.test')).toBeVisible();
  const row = screen.getByRole('listitem').filter({ hasText: 'Nour Salah' });
  await expect.element(row.getByText('Viewer · Made by Omar · Ends Dec 4')).toBeVisible();
  await screen.getByRole('button', { name: 'Cancel Nour Salah’s invite link' }).click();

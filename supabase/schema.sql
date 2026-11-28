@@ -7590,6 +7590,28 @@ end $_$;
 ALTER FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) OWNER TO postgres;
 
 --
+-- Name: make_invite_links(uuid, text[], text[], text[]); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) RETURNS uuid[]
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare i int; made uuid[]:='{}';
+begin
+ if labels is null or cardinality(labels)>50
+  or cardinality(labels) is distinct from cardinality(link_roles)
+  or cardinality(labels) is distinct from cardinality(hashes) then
+  raise exception 'inviteLinkInvalid' using errcode='22023'; end if;
+ for i in 1..cardinality(labels) loop
+  made:=made||public.make_invite_link(c,labels[i],link_roles[i],'{}'::uuid[],hashes[i]);
+ end loop;
+ return made;
+end $$;
+
+ALTER FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) OWNER TO postgres;
+
+--
 -- Name: manage_hermes_agent(uuid, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -21285,6 +21307,13 @@ GRANT ALL ON FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, ac
 
 REVOKE ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) TO authenticated;
+
+--
+-- Name: FUNCTION make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) TO authenticated;
 
 --
 -- Name: FUNCTION manage_hermes_agent(c uuid, intent text, a uuid, replacement uuid); Type: ACL; Schema: public; Owner: postgres

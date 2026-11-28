@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
-import { inviteeName } from '@/lib/invite.mjs';
+import { inviteeName } from '@/lib/invitee-name.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
 import { toast } from './toast';
@@ -72,6 +72,20 @@ function InviteLinkRow({link,cancelLink,cols}:{link:TeamLink,cancelLink:CancelLi
     <span className="badge ta-pending"><SettingsIcon name="clock"/>{t('inviteLinkBadge')}</span></span></span>
   <CancelInviteLink link={link.id} label={link.label} cancelLink={cancelLink}/>
  </span></th></tr>;
+}
+
+// The email invitations ended by #953, where no Team table is drawn (a Company worked alone and its short Team dialog):
+// the name made from each email, its Role and that it is done, so the Administrator makes that Person an Invite link.
+export function EndedInvitations({ended}:{ended:TeamEndedInvitation[]}) {
+ const {t}=useI18n();
+ return <ul className="panel-card" aria-label={t('settingsInviteEnded')}>
+  {ended.map(invitation=>{const name=inviteeName(invitation.email); return <li className="panel-row" key={invitation.id}>
+   <span className="me__av pp-av" aria-hidden="true">{initial(name)}</span>
+   <span className="panel-row__text"><span className="panel-row__t"><bdi>{name}</bdi></span>
+    <span className="panel-row__d">{t(invitation.role)} · <bdi dir="ltr">{invitation.email}</bdi></span>
+    <span className="badge ta-pending"><SettingsIcon name="clock"/>{t('settingsInviteEnded')}</span></span>
+  </li>;})}
+ </ul>;
 }
 
 // The same pending links (#951) where no Team table is drawn: a Company worked alone sees its first teammate's link in a

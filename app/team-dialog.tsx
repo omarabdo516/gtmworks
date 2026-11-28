@@ -4,7 +4,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { leave } from '@/lib/motion';
 import { ShellIcon } from '@/components/shell-icon';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
-import { TeamTable, PendingLinks, type SaveSwitch, type TeamData } from './team-table';
+import { TeamTable, PendingLinks, EndedInvitations, type SaveSwitch, type TeamData } from './team-table';
 import './settings.css';
 import './team-dialog.css';
 
@@ -69,6 +69,7 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
    {alone?<div className="modal__body ta ta--solo">
     <ul className="panel-card" aria-label={t('teamSoloMembers')}><li className="panel-row"><span className="me__av pp-av" aria-hidden="true">{(personName.trim().slice(0,1)||'?').toUpperCase()}</span>
      <span className="panel-row__text"><span className="panel-row__t"><bdi>{personName}</bdi> <span className="ch-you">{t('settingsYouMark')}</span></span><span className="panel-row__d">{role} · {t('teamSoloOwnerD')}</span></span></li></ul>
+    {owner&&data&&data.ended.length>0&&<EndedInvitations ended={data.ended}/>}
     {owner&&data&&data.links.length>0&&<PendingLinks links={data.links} cancelLink={cancelLink}/>}
     {owner&&data&&<InviteLinkSection agents={data.agents.filter(agent=>!agent.is_default)} make={makeLink}/>}
     <p className="inv-note"><ShellIcon name="team"/><span>{t('settingsModeAloneD')}</span></p>

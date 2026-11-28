@@ -1,1 +1,0 @@
-| `invite.test.mjs` | An invited person is called by the first word of their email until they join, as the database's `invitee_name` makes it; it labels an ended email invitation in the Team table and a channel's invitation line. (#185, #953) | 0.1 s | supabase/tests/channel_invitees.sql (the same name in the database) | new |

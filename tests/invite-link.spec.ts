@@ -194,6 +194,7 @@ test('pending links list their label, Role, maker and end; Cancel stops one at o
 
 test('a Company worked alone lists its pending Invite link in the Team dialog and in Members settings, cancels it in both, and a link made in settings joins the list at once',async({page})=>{
  const soloCompany='10000000-0000-0000-0000-000000000002', solo='rs-consultations';
+ query(`insert into public.member_invitations(company_id,email,role,created_at,ended_at) values ('${soloCompany}','ended-953@example.test','viewer',now()-interval '2 days',now()-interval '1 day')`);
  query(`do $$ begin
    update public.companies set work_mode='alone' where id='${soloCompany}';
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile)
@@ -201,6 +202,10 @@ test('a Company worked alone lists its pending Invite link in the Team dialog an
   end $$;`);
  await signIn(page,'omar@example.com',`/c/${solo}/home`);
  const dialog=await openTeam(page);
+ // An email invitation left pending at the release is ended, and a Company worked alone is told so before it makes a link.
+ const ended=dialog.getByRole('list',{name:'Email invite ended'});
+ await expect(ended.getByText('Ended')).toBeVisible();
+ await expect(ended.getByText('Viewer · ended-953@example.test')).toBeVisible();
  const first=await makeLink(page,dialog,'Solo Person','viewer','SEO');
  expect(first).toMatch(/\/join#code=[a-f0-9]{64}$/);
  await dialog.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();

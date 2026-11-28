@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inviteeName } from '../lib/invite.mjs';
+import { inviteeName } from '../lib/invitee-name.mjs';
 
 // #185, kept by #953: an invited person is named by the first word of their email's local part until they join. Email
 // invitations are ended; the name still labels an ended row in the Team table and a channel's invitation lines.

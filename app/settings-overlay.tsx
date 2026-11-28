@@ -13,6 +13,7 @@ import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, InviteLink, PendingInviteLinks, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { EndedInvitations, type TeamEndedInvitation } from './team-table';
 import { SettingsIcon } from './settings-icons';
 import { LookRow } from './agent-look-window';
 import { InfoTip } from './settings-info';
@@ -44,7 +45,6 @@ import { readStoredLearning } from '@/lib/company-learning.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
-type EndedInvitation={id:string,email:string,role:string};
 type InviteLink={id:string,label:string,role:string,made_by_name:string|null,ends_at:string};
 type Rule={id:string,body:string,said_by:string,said_at:string,teller:{name:string|null}|null};
 type T=Awaited<ReturnType<typeof getI18n>>['t'];
@@ -72,7 +72,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const allowed=new Set(section==='members'&&canManage?((await db.from('member_agent_access').select('person_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.person_id}:${row.agent_id}`):[]);
  // Email invitations ended by the Invite link release (#953): listed as ended, never claimed, for an Administrator or a
  // Manager to read and make a link for that person instead.
- const ended:EndedInvitation[]=section==='members'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).not('ended_at','is',null).order('created_at')).data||[]):[];
+ const ended:TeamEndedInvitation[]=section==='members'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).not('ended_at','is',null).order('created_at')).data||[]):[];
  // Invite links still waiting for their Person (#951), read only for an Administrator: pending_invite_links checks that
  // Role again, and another Role asks for none.
  const links:InviteLink[]=section==='members'&&owner?(((await db.rpc('pending_invite_links',{c:company.id})).data||[]) as unknown as InviteLink[]):[];
@@ -166,7 +166,7 @@ function CompanySection({t,company,solo,count,owner,ro,readAt}:{t:T,company:{id:
 
 // The Company's Members on their own page (#612): who is in the team and which Agents each one sees, for an Owner or a
 // Manager; the names and Roles for anyone else; and, for a Company worked alone, the Owner's invitation to the first one.
-function MembersSection({t,company,solo,members,ended,links,agents,allowed,userId,owner,canManage,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],ended:EndedInvitation[],links:InviteLink[],agents:Agent[],allowed:Set<string>,userId:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
+function MembersSection({t,company,solo,members,ended,links,agents,allowed,userId,owner,canManage,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],ended:TeamEndedInvitation[],links:InviteLink[],agents:Agent[],allowed:Set<string>,userId:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem" info={t('settingsTeamHint')}>{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
   <SettingsTeamTable company={company.id} members={members} ended={ended} links={links} agents={agents} allowed={allowed} userId={userId} owner={owner}/>
@@ -175,6 +175,7 @@ function MembersSection({t,company,solo,members,ended,links,agents,allowed,userI
  // becomes a team when that Person joins. A link made for that first Member waits here (#951), with its Cancel, until it
  // is used.
  const invite=owner&&<>
+  {ended.length>0&&<section className="dp-sec" aria-labelledby="co-h-ended"><Label id="co-h-ended">{t('settingsInviteEnded')}</Label><EndedInvitations ended={ended}/></section>}
   {links.length>0&&<section className="dp-sec" aria-labelledby="co-h-links"><Label id="co-h-links">{t('inviteLinks')}</Label><PendingInviteLinks company={company.id} links={links}/></section>}
   <InviteLink company={company.id} agents={agents}/></>;
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>

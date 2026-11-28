@@ -107,7 +107,6 @@ export function PendingInviteLinks({company,links}:{company:string,links:TeamLin
 // link (#951) is made and cancelled through the Administrator's actions; the page reads the table again after either.
 export function SettingsTeamTable({company,members,ended,links,agents,allowed,userId,owner}:{company:string,members:TeamMember[],ended:TeamEndedInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,userId:string,owner:boolean}) {
  const router=useRouter();
- const save=(c:string,target:string,agent:string,visible:boolean)=>setAgentVisible(c,target,agent,visible);
  const makeLink=async(label:string,role:string,chosen:string[])=>{
   const answer=await makeInviteLink(company,label,role,chosen);
   if(answer.link) router.refresh();
@@ -119,7 +118,7 @@ export function SettingsTeamTable({company,members,ended,links,agents,allowed,us
   return failure;
  };
  return <TeamTable company={company} members={members} ended={ended} links={links} agents={agents} allowed={allowed} userId={userId} owner={owner} hint={false}
-  save={save} makeLink={makeLink} cancelLink={cancelLink}/>;
+  save={setAgentVisible} makeLink={makeLink} cancelLink={cancelLink}/>;
 }
 
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the

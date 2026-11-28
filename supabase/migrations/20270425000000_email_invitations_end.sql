@@ -1,25 +1,27 @@
--- #953, ADR 0019: people join by Invite link, never by an email invitation. Every pending email invitation is ended
--- here: it is marked with ended_at, the Team table shows it as ended so the Administrator makes a link for that person,
--- and neither claim_invitations nor the channel invitees can use it. No new email invitation can be made: invite_member
--- refuses and the table takes no write from a Member. The table and its functions stay because the earlier migrations'
--- checks hold their shape, its ended rows are read once, and the channel invitee rows a Company already holds keep
--- their foreign key; they leave with Channels (#921).
--- Replayable (add if not exists, create or replace), so tests/email-invitations-migration.mjs can run it over a
--- pending row.
+-- #953, ADR 0019, first step (ADR 0023): an email invitation carries an end, and the claim, the channel readers and the
+-- owner guard skip an ended one. Nothing is taken away here: the release this one replaces still makes and claims email
+-- invitations during the update, and every row it writes has ended_at null. The cutover
+-- (20270425000001_email_invitations_end_cutover.sql) ends the invitations left pending, closes the maker and the table
+-- once this release serves.
 alter table public.member_invitations add column if not exists ended_at timestamptz;
-update public.member_invitations set ended_at=now() where claimed_at is null and ended_at is null;
 
--- An email invitation is made and changed by no Member any more; an Administrator only reads the ended rows. The
--- policies stay (20270417100000_owner_guard.verify.sql reads them), while the table's writes are gone.
-revoke all on public.member_invitations from anon, authenticated;
-grant select on public.member_invitations to authenticated;
-
--- The email invitation maker refuses: the app calls make_invite_link instead (#950), and an old caller writes nothing.
-create or replace function public.invite_member(c uuid, mail text, member_role text, check_only boolean default false) returns uuid
+-- The first run's team step makes every named Person's link in one call, so a failure leaves no link made without its
+-- secret shown. Each row is the Team page's own make_invite_link, and one failed row rolls back the whole batch.
+create or replace function public.make_invite_links(c uuid, labels text[], link_roles text[], hashes text[]) returns uuid[]
 language plpgsql security definer set search_path='' as $$
+declare i int; made uuid[]:='{}';
 begin
- raise exception 'inviteEmailRetired' using errcode='42501';
+ if labels is null or cardinality(labels)>50
+  or cardinality(labels) is distinct from cardinality(link_roles)
+  or cardinality(labels) is distinct from cardinality(hashes) then
+  raise exception 'inviteLinkInvalid' using errcode='22023'; end if;
+ for i in 1..cardinality(labels) loop
+  made:=made||public.make_invite_link(c,labels[i],link_roles[i],'{}'::uuid[],hashes[i]);
+ end loop;
+ return made;
 end $$;
+revoke all on function public.make_invite_links(uuid,text[],text[],text[]) from public,anon,service_role;
+grant execute on function public.make_invite_links(uuid,text[],text[],text[]) to authenticated;
 
 -- 20270108000000's claim, and an invitation ended by this migration is never claimed. It stays for the channel invitee
 -- rows a Company already holds and for a Member restored through one; no app path reaches it (app/auth/accept shows the

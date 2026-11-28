@@ -35,19 +35,23 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
  try { rows=JSON.parse(String(form.get('rows')||'[]')); }
  catch { return {error:'firstRunFailed'}; }
  if(!Array.isArray(rows)||rows.length>50) return {error:'firstRunFailed'};
- // Each named Person gets an Invite link, made here with the Owner's own session (make_invite_link checks the Role
- // again) and kept only as its hash. A row with no name is ignored, as an empty row was before.
- const links:FirstRunLink[]=[];
+ // Each named Person gets an Invite link, made here with the Owner's own session (make_invite_links checks the Role
+ // again and keeps only each hash), all in one call so a failure leaves no link made without its secret shown. A row
+ // with no name is ignored, as an empty row was before.
+ const named:{label:string,role:string}[]=[];
  for(const row of rows) {
   const label=typeof row?.label==='string'?row.label.trim():'';
   const role=typeof row?.role==='string'?row.role:'';
   if(!label) continue;
-  if(label.length>120||!roles.has(role)) return {error:'firstRunFailed'};
-  const secret=generateLinkSecret();
-  const {error}=await db.rpc('make_invite_link',{c:company,label,link_role:role,agents:[],link_hash:linkSecretHash(secret)});
-  if(error) { logActionFailure('chooseWorkMode',{code:error.code,message:'make_invite_link refused'}); return {error:'firstRunFailed'}; }
-  links.push({label,link:inviteLink(appUrl('/').origin,secret)});
+  if(label.length>120||!roles.has(role)||named.length>=50) return {error:'firstRunFailed'};
+  named.push({label,role});
  }
+ const secrets=named.map(()=>generateLinkSecret());
+ if(named.length) {
+  const {error}=await db.rpc('make_invite_links',{c:company,labels:named.map(row=>row.label),link_roles:named.map(row=>row.role),hashes:secrets.map(linkSecretHash)});
+  if(error) { logActionFailure('chooseWorkMode',{code:error.code,message:'make_invite_links refused'}); return {error:'firstRunFailed'}; }
+ }
+ const links:FirstRunLink[]=named.map((row,index)=>({label:row.label,link:inviteLink(appUrl('/').origin,secrets[index])}));
  const saved=await save('team');
  if('error' in saved) return saved;
  return {opened:`${saved.target}?first=team&invites=${links.length}`,links};
