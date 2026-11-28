@@ -289,6 +289,7 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
  const [reply,setReply]=useState('');
  const [working,setWorking]=useState(open);
  const [asking,setAsking]=useState<Asking|null>(null);
+ const heldRef=useRef<Asking|null>(null); useEffect(()=>{ heldRef.current=asking; });
  const [stopped,setStopped]=useState<'reply'|'before'|null>(null);
  const reading=useRef<AbortController|null>(null);
  const endedRef=useRef(ended); useEffect(()=>{ endedRef.current=ended; });
@@ -305,7 +306,9 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
   const read=async(failures:number):Promise<void>=>{
    let end:string|null=null; let how:string|undefined; let said='';
    try {
-    const response=await fetch(`/api/conversation-live?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}`,{cache:'no-store',signal:stopped.signal});
+    // A read again names the open card this page still draws, so the server settles it if the Engine stopped waiting.
+    const held=heldRef.current&&!heldRef.current.settled?`&held=${heldRef.current.card.kind}&heldId=${encodeURIComponent(heldRef.current.card.id)}`:'';
+    const response=await fetch(`/api/conversation-live?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}${held}`,{cache:'no-store',signal:stopped.signal});
     // Signed out, no longer allowed, or the Conversation or its Agent gone: no later read can answer, so the read ends.
     if(response.status===401||response.status===403||response.status===404) { await response.arrayBuffer().catch(()=>{}); end='none'; }
     else {
@@ -320,7 +323,7 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
        const line=JSON.parse(buffer.slice(0,at)) as LiveLine|LiveDelta|LiveAskingLine; buffer=buffer.slice(at+1);
        if('end' in line) { end=line.end; how=line.outcome; }
        else if('delta' in line) { said+=line.delta; setReply(said); setWorking(true); }
-       else if('asking' in line) { const card=line.asking; setAsking(now=>now?.card.id===card.id?now:{card,settled:null,at:null}); }
+       else if('asking' in line) { const card=line.asking; setAsking(now=>now?.card.id===card.id?(now.settled?now:{...now,card}):{card,settled:null,at:null}); }
        else if('settled' in line) settle(line.settled);
        else { setView(line); setWorking(true); }
       }

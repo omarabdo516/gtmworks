@@ -137,3 +137,36 @@ test('a stream cut short leaves the card open: only the Run\'s end or a record r
   await stopRun({...connection(fake),run});
  } finally { await fake.close(); }
 });
+
+test('a reader that comes back with a card still drawn has it settled when the Engine no longer waits on it, else drawn again',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.questions=()=>[{question:'Which city?',choices:['Cairo','Giza']},{question:'Which day?'}];
+  fake.settings.liveHold=true;
+  const run=await start(fake,'Write the plan');
+  fake.settings.release(run);
+  const engine=hermesEngine(connection(fake));
+  const reading=(/** @type {{kind:'question',id:string}|null} */ held,/** @type {(line:any)=>boolean} */ until)=>(async()=>{
+   const cut=new AbortController(); const lines=[];
+   for await(const line of conversationLines(run,liveLines(run,readRunEvents({...connection(fake),run,signal:cut.signal}),{reply:true}),{read:()=>engine.read(run),may:[],every:50,held})) { lines.push(line); if(until(line)) cut.abort(); }
+   return lines;
+  })();
+  // The reader drew the first question, then went away.
+  const first=(await reading(null,line=>'asking' in line)).find(line=>'asking' in line)?.asking;
+  assert.equal(first?.text,'Which city?');
+  // Another tab answered it meanwhile, through this server.
+  assert.ok(claimAnswer(run,first.id,{answer:'Giza'}));
+  assert.equal(await answerRun({...connection(fake),run,question:first.id,text:'Giza'}),'answered');
+  confirmAnswer(run,first.id);
+  // Coming back with it still drawn: it settles with that answer, and the next question is drawn.
+  const back=await reading({kind:'question',id:first.id},line=>'asking' in line);
+  assert.deepEqual(back.find(line=>'settled' in line)?.settled,{kind:'question',id:first.id,answer:'Giza'});
+  const second=back.find(line=>'asking' in line)?.asking;
+  assert.equal(second?.text,'Which day?');
+  // Coming back with a card the Engine still waits on draws it again, unsettled.
+  const again=await reading({kind:'question',id:second.id},line=>'asking' in line);
+  assert.equal(again.find(line=>'asking' in line)?.asking.id,second.id);
+  assert.ok(!again.some(line=>'settled' in line));
+  await stopRun({...connection(fake),run});
+ } finally { await fake.close(); }
+});
