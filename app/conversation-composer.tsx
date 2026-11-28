@@ -392,13 +392,18 @@ export async function postMessageAnswer(body:object,path='/api/conversations'):P
 }
 
 // A message that carries images goes as a form, the images themselves beside the fields a text-only send posts (#155):
-// the route refuses what the Engine cannot read before anything is stored. Every other field is the same.
+// the route refuses what the Engine cannot read before anything is stored. Every other field is the same, and so is the
+// answer: one the Engine took names its Run (#880).
 export async function postMessageWithFiles(fields:Record<string,unknown>,files:File[],path='/api/conversations') {
+ return (await postMessageWithFilesAnswer(fields,files,path)).failure;
+}
+export async function postMessageWithFilesAnswer(fields:Record<string,unknown>,files:File[],path='/api/conversations'):Promise<{failure:string|null,answer:Accepted|null}> {
  const form=new FormData();
  for(const [key,value] of Object.entries(fields)) if(value!==undefined) form.append(key,String(value));
  for(const file of files) form.append('files',file);
  try {
   const response=await fetch(path,{method:'POST',body:form});
-  return response.ok?null:((await response.json()).error as string)||'conversationFailed';
- } catch { return 'conversationFailed'; }
+  if(!response.ok) return {failure:((await response.json()).error as string)||'conversationFailed',answer:null};
+  return {failure:null,answer:await response.json().catch(()=>null) as Accepted|null};
+ } catch { return {failure:'conversationFailed',answer:null}; }
 }
