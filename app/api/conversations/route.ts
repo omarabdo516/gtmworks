@@ -239,7 +239,7 @@ async function messages(db:Database,person:string,company:string,conversation:st
  const from=typeof offset==='string'?Number.parseInt(offset,10):0;
  const size=typeof limit==='string'?Number.parseInt(limit,10):50;
  if(!Number.isSafeInteger(from)||from<0||!Number.isSafeInteger(size)||size<1||size>50) return refuse('conversationFailed',400);
- const {data:found,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
+ const {data:found,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id,lead_opening,person_id,created_at').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
  if(error) return refuse('conversationUnread',503);
  if(!found) return refuse('conversationNotFound',404);
  const read=await conversationMessagesPage(db,company,found,{offset:from,limit:size}).catch(()=>null);

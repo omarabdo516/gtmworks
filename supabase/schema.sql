@@ -1013,7 +1013,7 @@ begin
   select h.id, h.created_at from public.hermes_agents h where h.company_id=c and public.can_see_agent(c, h.id)
  ),
  chats as (
-  select cv.id, cv.agent_id, cv.person_id from public.conversations cv join seen_agents a on a.id=cv.agent_id where cv.company_id=c
+  select cv.id, cv.agent_id, cv.person_id, cv.open_runs, cv.last_message_at from public.conversations cv join seen_agents a on a.id=cv.agent_id where cv.company_id=c
  ),
  -- The channels the reader is in, asked once each.
  my_channels as (select k.id from public.channels k where k.company_id=c and public.in_channel(k.id)),
@@ -1052,6 +1052,9 @@ begin
  facts as (
   select agent_id, open, case when run_id is not null then created_at end began, null::timestamptz ended from asked
   union all select cv.agent_id, false, null, e.recorded_at from chats cv join public.conversation_run_ends e on e.conversation_id=cv.id
+  -- A Conversation whose messages are the Engine's (#882): its row holds the Run it works on until that Run's end is seen,
+  -- and its last message is when that work began.
+  union all select cv.agent_id, true, cv.last_message_at, null from chats cv where cardinality(cv.open_runs)>0
   union all select w.agent_id, w.outcome is null
     and not exists(select 1 from public.channel_runs q where q.message_id=w.message_id and q.outcome is null and q.ordinal<w.ordinal),
    w.created_at, w.closed_at from channel_work w
@@ -8500,10 +8503,17 @@ begin
   end if;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,last_message_at)
    values(conversation,c,auth.uid(),agent,chosen.name,'gtmworks-'||gen_random_uuid()::text,now())
-   returning hermes_session_id into held;
+   returning * into existing;
+  held := existing.hermes_session_id;
  else
   -- Only a Conversation this path made is on the Engine: it has its session and nothing on the old record. Any other
-  -- (one the old record holds, or a row made without a session, such as the Owner's empty first Conversation) stays there.
+  -- (one the old record holds, or a row made without a session, such as the Owner's empty first Conversation) stays there,
+  -- but the one the main Agent opened in a Company switched over, which takes its session with its first send.
+  if existing.hermes_session_id is null and existing.lead_opening
+   and coalesce((select o.engine_conversations from public.companies o where o.id=c),false) then
+   update public.conversations set hermes_session_id='gtmworks-'||gen_random_uuid()::text where id=conversation
+    returning * into existing;
+  end if;
   if existing.hermes_session_id is null
    or exists(select 1 from public.conversation_messages m where m.conversation_id=conversation)
    or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation)
@@ -8520,7 +8530,12 @@ begin
   if existing.archived_at is not null then perform public.log_conversation_archive(conversation,false,auth.uid()); end if;
  end if;
  return jsonb_build_object('state','engine','agent',agent,'session',held,
-  'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()));
+  'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()),
+  'model',existing.model)
+  || case when existing.lead_opening then jsonb_build_object('opening',jsonb_build_object(
+   'owner',(select split_part(p.name,' ',1) from public.people p where p.id=auth.uid()),
+   'language',(select p.language from public.people p where p.id=auth.uid()),
+   'lead',chosen.name,'company',(select o.name from public.companies o where o.id=c))) else '{}'::jsonb end;
 end $$;
 
 ALTER FUNCTION public.open_engine_conversation(c uuid, conversation uuid, agent uuid, message text) OWNER TO postgres;
@@ -8533,10 +8548,33 @@ CREATE FUNCTION public.open_first_conversation(c uuid, person uuid, conversation
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare lead public.hermes_agents; target uuid;
+declare lead public.hermes_agents; target uuid; written boolean;
 begin
  perform 1 from public.companies where id=c for update;
  if not found then return null; end if;
+ if coalesce((select o.engine_conversations from public.companies o where o.id=c),false) then
+  written := exists(select 1 from public.conversations v where v.company_id=c and v.hermes_session_id is not null)
+   or exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
+   or exists(select 1 from public.conversation_run_reservations r where r.company_id=c);
+  select v.id into target from public.conversations v where v.company_id=c and v.lead_opening and v.person_id=person;
+  if found then return case when not written then target end; end if;
+  if written or exists(select 1 from public.conversations v where v.company_id=c and v.lead_opening) then return null; end if;
+  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then return null; end if;
+  select * into lead from public.hermes_agents a where a.company_id=c and a.is_default;
+  if not found then return null; end if;
+  -- The Owner's empty Conversation with it (first run makes one), else a new one under the given id.
+  select v.id into target from public.conversations v where v.company_id=c and v.person_id=person and v.agent_id=lead.id
+   and v.hermes_session_id is null and not exists(select 1 from public.conversation_messages m where m.conversation_id=v.id)
+   and not exists(select 1 from public.conversation_queued_turns q where q.conversation_id=v.id)
+   and not exists(select 1 from public.conversation_notes n where n.conversation_id=v.id)
+   order by v.id=conversation desc,v.created_at,v.id limit 1;
+  if target is null then
+   target:=conversation;
+   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(target,c,person,lead.id,lead.name);
+  end if;
+  update public.conversations set lead_opening=true where id=target;
+  return target;
+ end if;
  -- Opened already: until anyone writes in the Company, the Owner's visit goes back to it, whichever visit wrote it
  -- (a link's prefetch renders the page too, and its move to the Conversation goes nowhere).
  select m.conversation_id into target from public.conversation_messages m join public.conversations v on v.id=m.conversation_id
@@ -8633,6 +8671,7 @@ CREATE TABLE public.conversations (
     session_mark_after timestamp with time zone,
     kept_agent_id uuid,
     open_runs text[] DEFAULT '{}'::text[] NOT NULL,
+    lead_opening boolean DEFAULT false NOT NULL,
     CONSTRAINT conversations_archived_by_archived CHECK (((archived_by IS NULL) OR (archived_at IS NOT NULL))),
     CONSTRAINT conversations_good_morning_day CHECK (((good_morning IS NULL) OR (good_morning_day IS NOT NULL))),
     CONSTRAINT conversations_model_valid CHECK ((public.model_choice_valid(model) AND public.model_choice_valid(model_before))),
@@ -9799,6 +9838,23 @@ begin raise exception 'conversationAppendOnly' using errcode='42501'; end;
 $$;
 
 ALTER FUNCTION public.refuse_conversation_change() OWNER TO postgres;
+
+--
+-- Name: refuse_conversation_model(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.refuse_conversation_model(c uuid, conversation uuid, refused jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+ if refused is null or jsonb_typeof(refused)='null' then return false; end if;
+ update public.conversations cv set model=cv.model_before, model_before=null
+  where cv.id=conversation and cv.company_id=c and cv.person_id=auth.uid() and public.is_member(c) and cv.model=refused;
+ return found;
+end $$;
+
+ALTER FUNCTION public.refuse_conversation_model(c uuid, conversation uuid, refused jsonb) OWNER TO postgres;
 
 --
 -- Name: refuse_conversation_run_model(uuid, uuid, uuid, integer); Type: FUNCTION; Schema: public; Owner: postgres
@@ -22345,6 +22401,13 @@ REVOKE ALL ON FUNCTION public.refuse_channel_change() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.refuse_conversation_change() FROM PUBLIC;
+
+--
+-- Name: FUNCTION refuse_conversation_model(c uuid, conversation uuid, refused jsonb); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.refuse_conversation_model(c uuid, conversation uuid, refused jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.refuse_conversation_model(c uuid, conversation uuid, refused jsonb) TO authenticated;
 
 --
 -- Name: FUNCTION refuse_conversation_run_model(conversation uuid, c uuid, message_key uuid, attempt integer); Type: ACL; Schema: public; Owner: postgres

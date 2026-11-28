@@ -32,7 +32,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
  const [{t,language},reader,{data:found}]=await Promise.all([getI18n(),companyOf(slug),
-  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at,open_runs`).eq('id',id).maybeSingle():{data:null}]);
+  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at,open_runs,lead_opening`).eq('id',id).maybeSingle():{data:null}]);
  if(!reader) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
  const {user,company}=reader;
  if(!company||!uuid.test(id)) notFound();
@@ -79,8 +79,9 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  ]);
  const person=roleRead?.person, role=roleRead?.role||'', writer=!!roleRead?.canWrite;
  // A Conversation whose own record holds nothing and whose Engine session exists reads its messages from the Engine on
- // their own request (#875). One the old record still holds keeps that record until #883 switches it off.
- const engine=!!conversation.hermes_session_id&&storedCount===0&&!waiting;
+ // their own request (#875). One the old record still holds keeps that record until #883 switches it off. The one the
+ // main Agent opened on the Engine (#882) reads there from its opening on, before its first send gives it a session.
+ let engine=(!!conversation.hermes_session_id||!!conversation.lead_opening)&&storedCount===0&&!waiting;
  const steps=engine?Promise.resolve(null):conversationSteps(db,company.id,conversation).then(read=>read==='notSeen'?null:read,()=>null);
  const waitingFiles=!stored&&waiting?(await db.from('conversation_attachments').select('name').eq('conversation_id',id).eq('send_key',waiting.send_key).order('position').limit(1)).data:null;
  const first=stored??(waiting&&{body:waiting.message,conversation_attachments:waitingFiles??[]});
@@ -91,7 +92,8 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  if(!first&&!conversation.hermes_session_id&&agent?.is_default&&role==='owner') {
   const opened=storedCount===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
    {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
-  if(opened===id) { record.catch(()=>{}); record=readRecord(); }
+  // In a Company on the Engine the opening is no message: the Conversation is marked, and its read draws it (#882).
+  if(opened===id) { record.catch(()=>{}); record=readRecord(); engine=!!(await db.from('conversations').select('lead_opening').eq('id',id).maybeSingle<{lead_opening:boolean}>()).data?.lead_opening; }
  }
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).

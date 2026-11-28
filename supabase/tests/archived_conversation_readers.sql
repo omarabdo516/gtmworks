@@ -29,7 +29,7 @@ insert into decisions
   'public.claim_conversation_turn(uuid)','public.set_conversation_model(uuid,uuid,jsonb)','public.answer_question(uuid,uuid,bigint,integer,text,uuid,integer[])',
   'public.decide_permission(uuid,uuid,bigint,text)','public.mark_hand_done(uuid,uuid,bigint)','public.postpone_app_card(uuid,uuid,bigint)',
   'public.stop_conversation_handovers(uuid,uuid)','public.can_see_conversation_agent(uuid,uuid)','public.lead_key_settle(uuid)','public.conversation_agent_access(uuid)',
-  'public.pin_run_model(uuid,uuid)','public.refuse_run_model(uuid,uuid)','public.answer_agent_request(uuid,bigint,boolean,text)',
+  'public.pin_run_model(uuid,uuid)','public.refuse_run_model(uuid,uuid)','public.refuse_conversation_model(uuid,uuid,jsonb)','public.answer_agent_request(uuid,bigint,boolean,text)',
   'public.card_chat_person(uuid,bigint)','public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
  union all select 'public.open_engine_conversation(uuid,uuid,uuid,text)','asks','a send on the Engine (#876) brings an archived Conversation back, by archived_at, as a message on the old record does'
  union all select fn,'exempt','the open Run of the one Conversation its caller names (#876), held and let go on its row: archived or not, it lists no Conversations' from unnest(array[

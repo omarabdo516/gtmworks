@@ -4,6 +4,8 @@ import { agentEngine } from './engine/handle.mjs';
 import { mentionedAgent } from './composer-mentions.mjs';
 import { noteInstructions } from './conversation-runs.mjs';
 import { logActionFailure } from './diagnostics.mjs';
+import { answeringOpening, openingWords } from './lead-opening.mjs';
+import type { ModelChoice } from './engine.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 // How long a send the Engine answers "retry" for is asked again before it is left in the box as not sent (#877).
@@ -20,23 +22,29 @@ export type EngineSend={state:'started',conversation:string,run:string,queued:bo
 // is the row's person, the signed-in one of `db`, as the Engine's session keeps no author (ADR 0033). A new Conversation's first message that calls another Agent the sender
 // sees goes to that Agent, as it always has (#153).
 // `service` is a service-role client: only the server holds the Run it started on the row (hold_conversation_run).
+// The model the Conversation's Owner chose for it (#158) goes with every Run, as the Engine takes it for that Run alone
+// (#882). The Conversation the main Agent opened (lib/lead-opening.mjs) tells its first Run the opening, in the sender's
+// language: the first is the one whose session the Engine does not hold yet, so a send asked again keeps it.
 export async function sendToEngine(db:Database,service:{rpc:(name:string,args:object)=>PromiseLike<{error:unknown}>},{company,person,conversation,agent:chosen,message,sendKey}:{company:string,person:string,conversation:string,agent?:string,message:string,sendKey:string}):Promise<EngineSend> {
  let agent=chosen??null;
  if(chosen) agent=mentionedAgent(message,(await db.from('hermes_agents').select('id,name,is_default').eq('company_id',company)).data||[])||chosen;
  if(!agent) agent=(await db.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()).data?.id??null;
  const {data:opened,error}=await db.rpc('open_engine_conversation',{c:company,conversation,agent,message});
  if(error) return {state:'refused',code:error.code};
- const checked=opened as {state:'old'}|{state:'engine',agent:string,session:string,note:string|null};
+ const checked=opened as {state:'old'}|{state:'engine',agent:string,session:string,note:string|null,model?:ModelChoice|null,opening?:{owner:string|null,language:string|null,lead:string,company:string|null}};
  if(checked.state==='old') return {state:'old'};
  const target=await agentEngine(db,{company,agent:checked.agent});
  if(target.state==='missing') return {state:'refused',error:'conversationNotFound',status:404};
  if(target.state!=='found') return {state:'refused',error:'conversationHermesFailed',status:502};
- const instructions=noteInstructions(checked.note);
+ const model=typeof checked.model?.provider==='string'&&typeof checked.model?.model==='string'?{provider:checked.model.provider,model:checked.model.model}:null;
+ const answering=checked.opening&&await target.engine.sessions.held(checked.session)==='missing'
+  ?answeringOpening(openingWords(checked.opening.language==='ar'?'ar':'en',{owner:checked.opening.owner??'',lead:checked.opening.lead,company:checked.opening.company??''})):null;
+ const instructions=[noteInstructions(checked.note),answering?.instructions].filter(Boolean).join('\n\n')||undefined;
  // The same send key is the same Run: a start whose answer was lost is asked again with it, which replays that Run, a
  // few times; one still unknown is refused, and the person's Try again (the same key) replays it rather than start another.
  // The Engine answering "retry" (#877: it runs as many Runs at once as it takes) is asked again when it says, for a short
  // time (busyFor), then refused as busy; a session whose queue is full is refused at once. Neither made a Run.
- const start={session:checked.session,input:message,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+ const start={session:checked.session,input:message,...(instructions?{instructions}:{}),...(model?{model}:{}),...(answering?{history:answering.history}:{}),idempotencyKey:`${conversation}:${sendKey}`};
  const began=Date.now(); let lost=false; let unsure=0;
  let run=await target.engine.sessions.send(start);
  for(;;) {
@@ -48,6 +56,10 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
   run=await target.engine.sessions.send({...start,retry:lost});
  }
  if(typeof run!=='string') {
+  // A start the Engine refused outright while it named the Conversation's model is refused for that model: the
+  // Conversation goes back to the model it had, and the person is told so, with their words still in the box.
+  if(!lost&&run===null&&model&&!(await db.rpc('refuse_conversation_model',{c:company,conversation,refused:model})).error)
+   return {state:'refused',error:'conversationModelRefused',status:502};
   // Once an answer was lost the Run may exist, so only Try again with the same key can say.
   if(!lost&&run?.state==='busy') return {state:'refused',error:'conversationEngineBusy',status:503};
   if(!lost&&run?.state==='queueFull') return {state:'refused',error:'conversationQueueFull',status:409};
