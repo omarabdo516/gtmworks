@@ -35,7 +35,7 @@ insert into decisions
  union all select fn,'exempt','the open Run of the one Conversation its caller names (#876), held and let go on its row: archived or not, it lists no Conversations' from unnest(array[
   'public.hold_conversation_run(uuid,uuid,text)','public.end_conversation_run(uuid,text)']) fn
  union all select fn,'exempt','the worker''s (#882): it lists the Runs the rows hold, archived or not, and lets go of one the Engine says ended; it lists no Conversations to a person' from unnest(array[
-  'public.held_conversation_runs()','public.let_go_conversation_run(uuid,text)']) fn
+  'public.held_conversation_runs()','public.let_go_conversation_run(uuid,text,boolean)']) fn
  union all select fn,'exempt','an Agent''s Run in one Conversation, carried by the worker or by the Run''s own tool call: archiving stopped the Run there and closed what it asked (stop_conversation_work), and a Run closing later writes its end and asks nothing (#671)' from unnest(array[
   'public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean)','public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean,jsonb,text[])','public.track_run_question(uuid,text,jsonb,boolean,timestamptz)',
   'public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text)','public.settle_permission(bigint,text)',

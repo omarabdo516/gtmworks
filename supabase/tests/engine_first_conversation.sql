@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(28);
 -- #882: on a Company switched over to the Engine (engine_conversations), the main Agent opens its Owner's first
 -- Conversation once, as on the old record, but writes no message: the row marks it, and its first send gives it its
 -- session and tells the Run the opening's names. A send also answers the model chosen for the Conversation, and an
@@ -86,12 +86,18 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 select is((select state from public.agent_face_states('10000000-0000-0000-0000-000000000882') where agent='f8820000-0000-0000-0000-000000000001'),'working',
  'an Agent whose Engine Conversation holds an open Run is working');
 select throws_ok($$select * from public.held_conversation_runs()$$,'42501',null,'no browser lists the held Runs');
-select throws_ok($$select public.let_go_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_1')$$,'42501',null,'nor lets go of one');
+select throws_ok($$select public.let_go_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_1',false)$$,'42501',null,'nor lets go of one');
 reset role;
 set local role service_role;
 select is((select runs from public.held_conversation_runs() where conversation='c8820000-0000-0000-0000-000000000001'),array['run_882_1'],'the worker lists the Run the row holds, with its Agent''s profile');
-select is(public.let_go_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_1'),true,'and lets go of it once the Engine says it ended');
+select is(public.let_go_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_1',true),true,'and lets go of it once the Engine says it ended');
 reset role;
+select is((select unseen_run from public.conversations where id='c8820000-0000-0000-0000-000000000001'),'run_882_1','one that did not finish stays as the unseen Run, for its person''s next open to say why');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.end_conversation_run('c8820000-0000-0000-0000-000000000001','run_882_1'),true,'its person''s open reads its end');
+reset role;
+select is((select unseen_run from public.conversations where id='c8820000-0000-0000-0000-000000000001'),null,'and lets it go');
 set local role authenticated;
 select is((select state from public.agent_face_states('10000000-0000-0000-0000-000000000882') where agent='f8820000-0000-0000-0000-000000000001'),'idle',
  'and idle once its end is seen');

@@ -26,7 +26,7 @@ test('a held Run that ended, or that the Engine no longer knows, is let go; one 
   fake.settings.runs.push(/** @type {any} */(held('run_done',{turnStarted:true,liveDone:true})),/** @type {any} */(held('run_working',{turnStarted:true})),/** @type {any} */(held('run_failed',{turnStarted:true,liveFailed:true})));
   const db=database([{company_id:rs,conversation:'c1',profile,runs:['run_done','run_working']},{company_id:rs,conversation:'c2',profile,runs:['run_failed','run_forgotten']}]);
   assert.deepEqual(await keepHeldConversationRuns(db,{health:upkeepSchedule()}),{released:3});
-  assert.deepEqual(db.released,[{conversation:'c1',run:'run_done'},{conversation:'c2',run:'run_failed'},{conversation:'c2',run:'run_forgotten'}]);
+  assert.deepEqual(db.released,[{conversation:'c1',run:'run_done',unfinished:false},{conversation:'c2',run:'run_failed',unfinished:true},{conversation:'c2',run:'run_forgotten',unfinished:false}],'one that failed stays as the unseen Run, for its person\'s next open to say why');
  } finally { await fake.close(); }
 });
 

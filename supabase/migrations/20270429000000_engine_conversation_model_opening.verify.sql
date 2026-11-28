@@ -7,8 +7,8 @@ select json_build_object(
   and not has_function_privilege('anon','public.refuse_conversation_model(uuid,uuid,jsonb)','execute'),
  'worker_only',has_function_privilege('service_role','public.held_conversation_runs()','execute')
   and not has_function_privilege('authenticated','public.held_conversation_runs()','execute')
-  and has_function_privilege('service_role','public.let_go_conversation_run(uuid,text)','execute')
-  and not has_function_privilege('authenticated','public.let_go_conversation_run(uuid,text)','execute'),
+  and has_function_privilege('service_role','public.let_go_conversation_run(uuid,text,boolean)','execute')
+  and not has_function_privilege('authenticated','public.let_go_conversation_run(uuid,text,boolean)','execute'),
  'grants_kept',has_function_privilege('authenticated','public.open_engine_conversation(uuid,uuid,uuid,text)','execute')
   and not has_function_privilege('authenticated','public.open_first_conversation(uuid,uuid,uuid,text)','execute')
   and has_function_privilege('service_role','public.open_first_conversation(uuid,uuid,uuid,text)','execute')

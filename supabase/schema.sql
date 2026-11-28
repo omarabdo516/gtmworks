@@ -5524,8 +5524,9 @@ CREATE FUNCTION public.end_conversation_run(conversation uuid, run text) RETURNS
     SET search_path TO ''
     AS $$
  with ended as (
-  update public.conversations v set open_runs=array_remove(v.open_runs,run)
-  where v.id=conversation and v.person_id=auth.uid() and run=any(v.open_runs) and public.is_member(v.company_id)
+  update public.conversations v set open_runs=array_remove(v.open_runs,run),
+   unseen_run=case when v.unseen_run=run then null else v.unseen_run end
+  where v.id=conversation and v.person_id=auth.uid() and (run=any(v.open_runs) or v.unseen_run=run) and public.is_member(v.company_id)
   returning 1)
  select exists(select 1 from ended);
 $$;
@@ -7168,18 +7169,20 @@ $$;
 ALTER FUNCTION public.lead_tools_spec_89() OWNER TO postgres;
 
 --
--- Name: let_go_conversation_run(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: let_go_conversation_run(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.let_go_conversation_run(conversation uuid, run text) RETURNS boolean
+CREATE FUNCTION public.let_go_conversation_run(conversation uuid, run text, unfinished boolean) RETURNS boolean
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO ''
     AS $$
- with ended as (update public.conversations v set open_runs=array_remove(v.open_runs,run) where v.id=conversation and run=any(v.open_runs) returning 1)
+ with ended as (update public.conversations v set open_runs=array_remove(v.open_runs,run),
+   unseen_run=case when unfinished then run else v.unseen_run end
+  where v.id=conversation and run=any(v.open_runs) returning 1)
  select exists(select 1 from ended);
 $$;
 
-ALTER FUNCTION public.let_go_conversation_run(conversation uuid, run text) OWNER TO postgres;
+ALTER FUNCTION public.let_go_conversation_run(conversation uuid, run text, unfinished boolean) OWNER TO postgres;
 
 --
 -- Name: link_channel_files(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -8702,10 +8705,12 @@ CREATE TABLE public.conversations (
     kept_agent_id uuid,
     open_runs text[] DEFAULT '{}'::text[] NOT NULL,
     lead_opening boolean DEFAULT false NOT NULL,
+    unseen_run text,
     CONSTRAINT conversations_archived_by_archived CHECK (((archived_by IS NULL) OR (archived_at IS NOT NULL))),
     CONSTRAINT conversations_good_morning_day CHECK (((good_morning IS NULL) OR (good_morning_day IS NOT NULL))),
     CONSTRAINT conversations_model_valid CHECK ((public.model_choice_valid(model) AND public.model_choice_valid(model_before))),
-    CONSTRAINT conversations_open_runs CHECK (((cardinality(open_runs) <= 32) AND (array_to_string(open_runs, ','::text) ~ '^([A-Za-z0-9_.:-]{1,200}(,|$))*$'::text)))
+    CONSTRAINT conversations_open_runs CHECK (((cardinality(open_runs) <= 32) AND (array_to_string(open_runs, ','::text) ~ '^([A-Za-z0-9_.:-]{1,200}(,|$))*$'::text))),
+    CONSTRAINT conversations_unseen_run CHECK ((unseen_run ~ '^[A-Za-z0-9_.:-]{1,200}$'::text))
 );
 
 ALTER TABLE public.conversations OWNER TO postgres;
@@ -21654,11 +21659,11 @@ GRANT ALL ON FUNCTION public.lead_soul_work() TO service_role;
 REVOKE ALL ON FUNCTION public.lead_tools_spec_89() FROM PUBLIC;
 
 --
--- Name: FUNCTION let_go_conversation_run(conversation uuid, run text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION let_go_conversation_run(conversation uuid, run text, unfinished boolean); Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON FUNCTION public.let_go_conversation_run(conversation uuid, run text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.let_go_conversation_run(conversation uuid, run text) TO service_role;
+REVOKE ALL ON FUNCTION public.let_go_conversation_run(conversation uuid, run text, unfinished boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.let_go_conversation_run(conversation uuid, run text, unfinished boolean) TO service_role;
 
 --
 -- Name: FUNCTION link_channel_files(); Type: ACL; Schema: public; Owner: postgres
