@@ -6,6 +6,7 @@ import { inviteRoles } from '@/lib/member-roles.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { InviteSection } from './invite-section';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
+import { AddMemberSection, type AddMember } from './add-member-section';
 import { TeamTable, PendingLinks, type SendInvite, type SaveSwitch, type TeamData } from './team-table';
 import './settings.css';
 import './team-dialog.css';
@@ -16,7 +17,7 @@ import './team-dialog.css';
 // A Company worked alone gets the narrower form: the Owner's own row, the invite form already open and the note on what
 // joining turns on. The data is read by the server for an Owner or a Manager only, so the dialog holds nothing else; a
 // refused read closes it.
-export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,saveInvitation:SaveSwitch,invite:SendInvite,makeLink:MakeLink,cancelLink:(link:string)=>Promise<string>};
+export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,saveInvitation:SaveSwitch,invite:SendInvite,makeLink:MakeLink,cancelLink:(link:string)=>Promise<string>,add:AddMember};
 
 const leaveMs=190;
 
@@ -64,6 +65,12 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
   if(found) setData(found);
   return '';
  };
+ // A Person added from another Company (#952) joins the table at once, as an invitation does.
+ const addMember:AddMember=async(person,role,agents)=>{
+  const answer=await actions.add(person,role,agents);
+  if(!answer.error) { const found=await actions.load(company).catch(()=>null); if(found) setData(found); }
+  return answer;
+ };
  return <dialog ref={box} className={`gw modal team-dlg${alone?' team-dlg--solo':''}${closing?' is-closing':''}`} id="team" aria-labelledby="team-title" aria-describedby="team-sub"
   onCancel={event=>{ if(event.cancelable) { event.preventDefault(); requestClose(); } }}
   onMouseDown={event=>{ pressed.current=event.target===event.currentTarget; }}
@@ -80,9 +87,10 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
     {owner&&data&&data.links.length>0&&<PendingLinks links={data.links} cancelLink={cancelLink}/>}
     {owner&&<InviteSection mode="alone" roles={inviteRoles(t)} send={invite}/>}
     {owner&&data&&<InviteLinkSection agents={data.agents.filter(agent=>!agent.is_default)} make={makeLink}/>}
+    {owner&&data&&<AddMemberSection people={data.candidates} agents={data.agents.filter(agent=>!agent.is_default)} add={addMember}/>}
     <p className="inv-note"><ShellIcon name="team"/><span>{t('settingsModeAloneD')}</span></p>
    </div>
-   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} invitations={data.invitations} links={data.links} agents={data.agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} save={actions.save} saveInvitation={actions.saveInvitation} send={invite} makeLink={makeLink} cancelLink={cancelLink}/>}</div>}
+   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} invitations={data.invitations} links={data.links} agents={data.agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} save={actions.save} saveInvitation={actions.saveInvitation} send={invite} makeLink={makeLink} cancelLink={cancelLink} add={addMember} candidates={data.candidates}/>}</div>}
    <footer className="modal__foot modal__foot--end"><button type="button" className={alone?'btn btn--secondary':'btn btn--primary'} onClick={requestClose}>{t('teamDone')}</button></footer>
   </div>
  </dialog>;
