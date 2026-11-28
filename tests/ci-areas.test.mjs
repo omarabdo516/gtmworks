@@ -118,6 +118,7 @@ for (const path of [
 for (const path of [
   'Dockerfile', '.dockerignore', 'docker-compose.install.yml', '.env.install.example', 'scripts/install.sh', 'scripts/get.sh',
   'scripts/install-db.sql', 'scripts/check-install-proxy.mjs', 'scripts/check-hermes-keys.py', 'scripts/release-assets.mjs',
+  'scripts/company-password-link.mjs',
   'scripts/ci-install-check.sh', 'scripts/ci-install-lib.sh', 'scripts/ci-install-machine.sh', '.github/actions/install-machine/action.yml',
   'scripts/check-rls.sql', 'scripts/verify-db.mjs', 'scripts/forged-identity.mjs', 'supabase/migrations/20260101000000_x.sql',
   'playwright.install.config.ts', 'tests/install/rate-limit.install.ts', '.github/workflows/release.yml',

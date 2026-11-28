@@ -184,7 +184,7 @@ In flight now: the Agent's screen, one awake Screen per Company shared by its Ag
 - ✅ **Roles.** Administrator, Manager, Contributor, Viewer, and no agency layer. [#7, ADR 0012, GLOSSARY.md Role]
 - ✅ **Sign in with email and password.** [#41]
 - ✅ **Invite links without email.** One use, seven days, with the role and the Agents the person will see. [#948, ADR 0019]
-- ✅ **Password links without email.** An Administrator or a Manager makes one from the Team page for a Member who forgot their password; one use, 24 hours, and it signs out the Member's other devices. [#954, ADR 0019]
+- ✅ **Password links without email.** An Administrator or a Manager makes one from the Team page for a Member who forgot their password; one use, 24 hours, and it signs out the Member's other devices. A Company's last Administrator, and the install owner, get theirs from `gtmworks company password-link` on the server. [#954, #955, ADR 0019]
 - ✅ **Several Companies in one install.** Each with its own data, Engine and work sandbox; a role in one grants nothing in another; proven by database tests. [#378, #382, #383, #337, ADR 0004, ADR 0018]
 - ✅ **Every route checks the role.** A route-to-permission table, re-checked on each request. [FEATURES.md rule b]
 - ✅ **Team table and Team dialog.** Invite a Member inline, "Invite sent" rows. [#185, #187, #207]

@@ -150,7 +150,8 @@ permanently and the setup link stops working; later visits sign in with email
 and password, and a sign-in lasts 30 days on that browser unless you sign out.
 Public sign-ups stay disabled. No demo people or companies are created. People
 join by Invite link, and a forgotten password is a password link an
-Administrator or a Manager makes from the Team page.
+Administrator or a Manager makes from the Team page, or `gtmworks company
+password-link` on the server for a Company's last Administrator.
 
 The install starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway and the first Company's
@@ -186,6 +187,7 @@ template when the install owner adds it on the server:
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
 gtmworks company add --name "Third Company"     # prints a first-Administrator link instead
+gtmworks company password-link "Second Company" --email person@example.com   # a password link for its Administrator
 gtmworks company list
 ```
 
@@ -308,6 +310,7 @@ gtmworks company add --name "Third Company"     # prints a first-Administrator l
 gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5 --disk 20g
 gtmworks company limits "Second Company" --memory 3g --cpus 3 --disk 30g   # its work sandbox's limits
 gtmworks company link "Third Company"          # a fresh link for a Company still waiting
+gtmworks company password-link "Second Company" --email person@example.com   # a password link for its Administrator
 gtmworks company list
 ```
 
@@ -315,7 +318,14 @@ gtmworks company list
 healthy, and makes the Company with that existing Person as its Administrator; with no
 `--owner` it prints a first-Administrator link instead and makes the Company when that link is
 sent. `company link` prints a fresh link for a Company still waiting and ends the
-earlier one. A failed Engine leaves nothing behind and the same command can be run
+earlier one. `company password-link` prints a password link for an Administrator of an
+existing Company, one use for 24 hours, for when that Administrator forgot their password
+and no other Administrator or Manager can make one from the Team page; it names the Company
+and the address and refuses a Person who is not an Administrator there. A Company's last
+Administrator, and the install owner, whose link no Administrator makes, get theirs this
+way. The secret is only in the printed link; only its hash is kept.
+
+A failed Engine leaves nothing behind and the same command can be run
 again. `company limits` changes a Company's work sandbox memory, CPUs and disk and starts
 only that sandbox again, and its Engine too when the disk changes (see **Server size**
 and **Each Company's disk** under Install). `company list` shows
