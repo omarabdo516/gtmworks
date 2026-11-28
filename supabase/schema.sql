@@ -81,6 +81,43 @@ end $$;
 ALTER FUNCTION public.abandon_conversation_reservations() OWNER TO postgres;
 
 --
+-- Name: add_company_member(uuid, uuid, text, uuid[]); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.add_company_member(c uuid, person uuid, member_role text, agents uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare joined boolean; chosen uuid; agent public.hermes_agents;
+begin
+ if c is null or not public.is_company_owner(c) then raise exception 'memberAddNotAllowed' using errcode='42501'; end if;
+ if member_role is null or member_role not in ('manager','contributor','viewer') then raise exception 'memberRoleNotAllowed' using errcode='22023'; end if;
+ if person is null then raise exception 'invalidPerson' using errcode='22023'; end if;
+ if exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null) then
+  raise exception 'alreadyMember' using errcode='23505';
+ end if;
+ if not exists(select 1 from public.members m where m.person_id=person and m.removed_at is null and m.company_id<>c
+  and public.is_company_owner(m.company_id)) then
+  raise exception 'memberNotFromAdminCompany' using errcode='42501';
+ end if;
+ foreach chosen in array coalesce(agents,'{}'::uuid[]) loop
+  select * into agent from public.hermes_agents a where a.id=chosen and a.company_id=c;
+  if not found then raise exception 'agentNotFound' using errcode='P0002'; end if;
+  if agent.is_default then raise exception 'mainAgentShownToAll' using errcode='42501'; end if;
+ end loop;
+ insert into public.members(company_id,person_id,role) values(c,person,member_role::public.member_role)
+  on conflict (company_id,person_id) do update set role=excluded.role,grant_publishing=false,grant_money_figures=false,grant_customer_data=false,removed_at=null
+  where public.members.removed_at is not null
+  returning true into joined;
+ if joined is not true then raise exception 'alreadyMember' using errcode='23505'; end if;
+ delete from public.member_agent_access where company_id=c and person_id=person;
+ insert into public.member_agent_access(company_id,person_id,agent_id)
+  select c,person,x from unnest(coalesce(agents,'{}'::uuid[])) x on conflict do nothing;
+end $$;
+
+ALTER FUNCTION public.add_company_member(c uuid, person uuid, member_role text, agents uuid[]) OWNER TO postgres;
+
+--
 -- Name: add_general_channel(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3665,6 +3702,10 @@ begin
  if link.ends_at<=now() then raise exception 'inviteLinkEnded' using errcode='55000'; end if;
  if person is null then raise exception 'invalidPerson' using errcode='22023'; end if;
  if not exists(select 1 from public.people p where p.id=person) then
+  if person_name is null then
+   select split_part(u.email,'@',1) into person_name from auth.users u where u.id=person;
+   language:=coalesce(language,'en');
+  end if;
   if person_name is null or length(btrim(person_name)) not between 1 and 120 or language is null or language not in ('en','ar') then
    raise exception 'invalidPerson' using errcode='22023';
   end if;
@@ -4153,6 +4194,26 @@ begin
 end $$;
 
 ALTER FUNCTION public.command_handover(conversation uuid, c uuid, agent uuid, message_key uuid, message text, role text, goal text) OWNER TO postgres;
+
+--
+-- Name: company_addable_people(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.company_addable_people(c uuid) RETURNS TABLE(person_id uuid, name text, company text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select p.id, p.name, x.company from (
+  select distinct on (m.person_id) m.person_id, co.name as company
+  from public.members m join public.companies co on co.id=m.company_id
+  where public.is_company_owner(c) and m.removed_at is null and m.company_id<>c and public.is_company_owner(m.company_id)
+   and not exists(select 1 from public.members here where here.company_id=c and here.person_id=m.person_id and here.removed_at is null)
+  order by m.person_id, co.name
+ ) x join public.people p on p.id=x.person_id
+ order by p.name, p.id;
+$$;
+
+ALTER FUNCTION public.company_addable_people(c uuid) OWNER TO postgres;
 
 --
 -- Name: company_agent_models(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6385,6 +6446,23 @@ CREATE FUNCTION public.install_update() RETURNS json
 $$;
 
 ALTER FUNCTION public.install_update() OWNER TO postgres;
+
+--
+-- Name: invite_link_member(text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.invite_link_member(link_hash text, person uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select exists(
+  select 1 from public.company_links l
+  join public.members m on m.company_id=l.company_id and m.person_id=person and m.removed_at is null
+  where l.secret_hash=link_hash and l.kind='invite' and l.used_at is null and l.cancelled_at is null and l.ends_at>now()
+ );
+$$;
+
+ALTER FUNCTION public.invite_link_member(link_hash text, person uuid) OWNER TO postgres;
 
 --
 -- Name: invite_link_open(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -19005,6 +19083,13 @@ REVOKE ALL ON FUNCTION public.abandon_conversation_reservations() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.abandon_conversation_reservations() TO service_role;
 
 --
+-- Name: FUNCTION add_company_member(c uuid, person uuid, member_role text, agents uuid[]); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.add_company_member(c uuid, person uuid, member_role text, agents uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.add_company_member(c uuid, person uuid, member_role text, agents uuid[]) TO authenticated;
+
+--
 -- Name: FUNCTION add_general_channel(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20113,6 +20198,13 @@ REVOKE ALL ON FUNCTION public.command_handover(conversation uuid, c uuid, agent 
 GRANT ALL ON FUNCTION public.command_handover(conversation uuid, c uuid, agent uuid, message_key uuid, message text, role text, goal text) TO authenticated;
 
 --
+-- Name: FUNCTION company_addable_people(c uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.company_addable_people(c uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.company_addable_people(c uuid) TO authenticated;
+
+--
 -- Name: FUNCTION company_agent_models(c uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -20908,6 +21000,13 @@ GRANT ALL ON FUNCTION public.in_channel(ch uuid) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.install_update() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.install_update() TO authenticated;
+
+--
+-- Name: FUNCTION invite_link_member(link_hash text, person uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.invite_link_member(link_hash text, person uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.invite_link_member(link_hash text, person uuid) TO service_role;
 
 --
 -- Name: FUNCTION invite_link_open(link_hash text); Type: ACL; Schema: public; Owner: postgres

@@ -3,12 +3,14 @@ import { withActionLog, logActionFailure } from '@/lib/diagnostics.mjs';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { orderMembers } from '@/lib/member-roles.mjs';
+import { addablePeople } from '@/lib/addable-people.mjs';
 import type { TeamData } from './team-table';
 
 // The Team dialog's data (#187): the Members, the Agents and which ones each Member and each open invitation sees. It is
 // read with the signed-in person's session, so row-level security decides the rows (supabase/tests/
 // member_agent_visibility.sql, member_invites.sql), and only an Owner or a Manager reaches it at all: anyone else gets
-// nothing back, as Settings, Company shows them no table. A pending Invite link is read only for an Administrator (#951).
+// nothing back, as Settings, Company shows them no table. A pending Invite link is read only for an Administrator (#951),
+// and so are the People they may add from another Company they administer (#952).
 export const teamChoices=withActionLog('teamChoices',async function teamChoices(company:string):Promise<TeamData|null> {
  const db=await supabase();
  if(!await actionAllowed(db,'teamChoices',company)) return null;
@@ -23,6 +25,11 @@ export const teamChoices=withActionLog('teamChoices',async function teamChoices(
  if(failure) { logActionFailure('teamChoices',{code:failure.code,message:'the Team table was not read'}); return null; }
  const invitedAllowed=invitations.data?.length?await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company):{data:[],error:null};
  if(invitedAllowed.error) { logActionFailure('teamChoices',{code:invitedAllowed.error.code,message:'the invited switches were not read'}); return null; }
+ // A failed read of the add list leaves the table as it is; the section is simply not offered.
+ const candidates=await addablePeople(db,company).catch(error=>{
+  logActionFailure('teamChoices',{code:error?.code,message:'the people from other Companies were not read'});
+  return [];
+ });
  return {
   members:orderMembers((members.data||[]) as unknown as TeamData['members']),
   invitations:(invitations.data||[]) as unknown as TeamData['invitations'],
@@ -30,5 +37,6 @@ export const teamChoices=withActionLog('teamChoices',async function teamChoices(
   agents:(agents.data||[]) as unknown as TeamData['agents'],
   allowed:(allowed.data||[]).map(row=>`${row.person_id}:${row.agent_id}`),
   invitedAllowed:(invitedAllowed.data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`),
+  candidates,
  };
 });
