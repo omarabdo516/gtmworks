@@ -1,52 +1,53 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
-import { withEngineContract } from '../lib/engine/handle.mjs';
-import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { createClient } from '@supabase/supabase-js';
-import { closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
-import { fakeEngine } from './fake-engine.mjs';
+import { fakeHermes } from './fake-hermes.mjs';
+import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-test.beforeAll(()=>laneEngineRecords());
 
 // #153, the composer's "+" menu: whom it calls in a Conversation and in a channel, and a new chat's first message that
-// calls an Agent. The menu's own behaviour (focus, keys, the caret) is proven in tests/components/plus-menu.test.tsx.
+// calls an Agent, sent as the page sends it to the lane's fake Hermes (a Conversation is its Agent's Engine session since
+// #883). The menu's own behaviour (focus, keys, the caret) is proven in tests/components/plus-menu.test.tsx.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
-const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
 const contributor='20000000-0000-0000-0000-000000000003';
 const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';
-// The install's Hermes as these runs are given it: the fake engine answers in its place (#342).
+const profile=`co-${company.replaceAll('-','')}`;
+let fake:Awaited<ReturnType<typeof fakeHermes>>;
 const id=(n:number)=>`68153000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 // Faye's empty chat is the one open; Reach is the Agent called. Reach is hidden from the Contributor (مراجع). Reach was
 // made from the meta role and Sage from the writer role (#159); Faye was made by hand, so its role commands none.
 const [faye,reach,sage]=[id(11),id(12),id(13)];
 
 test.describe.configure({mode:'serial'});
-test.beforeAll(({},testInfo)=>{
+test.beforeAll(async({},testInfo)=>{
  // A retry starts from the seed again: this file's rows below are inserted once per run of it.
  freshSeed(testInfo);
- // Connections that are never called: every run goes to the fake engine.
+ // Every Agent is on the Company's profile of the lane's fake Hermes: which Agent a Conversation is with is its row's.
+ fake=await laneHermes();
+ fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`do $$ begin
   update public.people set language='en' where id in ('${omar}','${contributor}');
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,template) values
-   ('${faye}','${company}','${id(1)}','Faye','Marketing','fake-plus-faye',null),('${reach}','${company}','${id(2)}','Reach','Outreach','fake-plus-reach','meta'),
-   ('${sage}','${company}','${id(3)}','Sage','SEO','fake-plus-sage','writer');
+   ('${faye}','${company}','${id(1)}','Faye','Marketing','${profile}',null),('${reach}','${company}','${id(2)}','Reach','Outreach','${profile}','meta'),
+   ('${sage}','${company}','${id(3)}','Sage','SEO','${profile}','writer');
+  insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${contributor}','${faye}');
  end $$;`);
 });
+test.afterAll(async()=>{ await fake?.close(); });
 
-async function session(email:string) {
- const value=status();
- const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
- const person=createClient(value('API_URL'),value('ANON_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
- const {data:link,error:linked}=await service.auth.admin.generateLink({type:'magiclink',email});
- expect(linked).toBeNull();
- expect((await person.auth.verifyOtp({type:'email',token_hash:link.properties!.hashed_token})).error).toBeNull();
- return {service,person};
-}
+// A message sent as the composer sends it: the open Conversation's composer names no Agent (app/conversation-thread.tsx).
+const send=async(page:Page,conversation:string,message:string,agent?:string)=>{
+ const sent=await page.request.post('/api/conversations',{data:{company,conversation,sendKey:randomUUID(),message,...(agent?{agent}:{})}});
+ expect(sent.status(),await sent.text()).toBe(200);
+};
+// The input of each Run started on the Conversation's own Engine session, in order.
+const inputsOf=(conversation:string)=>{ const session=rows(`select hermes_session_id from public.conversations where id='${conversation}'`)[0]?.hermes_session_id;
+ return fake.settings.runs.filter(run=>run.sessionId===session).map(run=>run.input); };
 const agentOf=(conversation:string)=>rows(`select agent_id from public.conversations where id='${conversation}'`)[0]?.agent_id;
 // The menu's entries under each of its labels, in order, each by its name without the line under it.
 const groups=(page:Page)=>page.getByRole('menu').evaluate(menu=>{
@@ -59,34 +60,30 @@ const groups=(page:Page)=>page.getByRole('menu').evaluate(menu=>{
 });
 
 const conversations:Record<string,string>={};
-test('integration: on the fake engine a first message from Faye\'s empty chat that calls @Reach starts the Conversation with Reach',async()=>{
- const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
+test('integration: on the Engine a first message from Faye\'s empty chat that calls @Reach starts the Conversation with Reach',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  const conversation=randomUUID();
- expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week'}))).toEqual({conversation});
+ await send(page,conversation,'@Reach plan the outreach week',faye);
  expect(agentOf(conversation)).toBe(reach);
- expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'@Reach plan the outreach week'}]);
+ expect(inputsOf(conversation)).toEqual(['@Reach plan the outreach week']);
 });
 
-test('integration: on the fake engine a call of an Agent hidden from the Contributor changes nothing: the Conversation is Faye\'s',async()=>{
- const fake=fakeEngine(); const {service,person}=await session('reviewer@example.com');
+test('integration: on the Engine a call of an Agent hidden from the Contributor changes nothing: the Conversation is Faye\'s',async({page})=>{
+ await signIn(page,'reviewer@example.com','/c/rs-learning/home');
  const conversation=randomUUID();
- expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'@Reach plan the outreach week'}))).toEqual({conversation});
+ await send(page,conversation,'@Reach plan the outreach week',faye);
  expect(agentOf(conversation)).toBe(faye);
- expect(fake.runs.map(run=>run.input)).toEqual(['@Reach plan the outreach week']);
+ expect(inputsOf(conversation)).toEqual(['@Reach plan the outreach week']);
  conversations.contributor=conversation;
- await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
 });
 
-test('integration: on the fake engine an open Conversation keeps its Agent: a message that calls @Reach goes, as typed, to Faye',async()=>{
- const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
+test('integration: on the Engine an open Conversation keeps its Agent: a message that calls @Reach goes, as typed, to Faye',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  const conversation=randomUUID();
- expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch'}))).toEqual({conversation});
- expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
- // The open Conversation's composer names no Agent (app/conversation-thread.tsx).
- expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'@Reach take over the outreach'}))).toEqual({conversation});
+ await send(page,conversation,'Plan the launch',faye);
+ await send(page,conversation,'@Reach take over the outreach');
  expect(agentOf(conversation)).toBe(faye);
- expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch'},{conversation,input:'@Reach take over the outreach'}]);
- expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id`).map(row=>row.body)).toEqual(['Plan the launch','@Reach take over the outreach']);
+ expect(inputsOf(conversation)).toEqual(['Plan the launch','@Reach take over the outreach']);
 });
 
 test('in a Conversation the Contributor\'s "Call an agent" lists exactly the Agents they see, each with its face, name and @name, and not Reach',async({page})=>{
@@ -123,17 +120,15 @@ test('in a Conversation the Commands name the Agent each role was given, after "
  await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
-test('integration: on the fake engine a command typed in an Agent\'s own Conversation runs there, as typed, with no handoff',async()=>{
+test('integration: on the Engine a command typed in an Agent\'s own Conversation runs there, as typed, with no handoff',async({page})=>{
  // Item 4: nothing in the send path reads a command. "Reach" is this Company's meta Agent, and a command in Faye's
  // Conversation starts Faye's one Run with the words as typed.
- const fake=fakeEngine(); const {service,person}=await session('omar@example.com');
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
  const conversation=randomUUID();
- expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),agent:faye,message:'Plan the launch'}))).toEqual({conversation});
- expect(await withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}))).toBe(1);
- expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{company,conversation,sendKey:randomUUID(),message:'/campaign Launch the December ads'}))).toEqual({conversation});
+ await send(page,conversation,'Plan the launch',faye);
+ await send(page,conversation,'/campaign Launch the December ads');
  expect(agentOf(conversation)).toBe(faye);
- expect(fake.runs.map(run=>({conversation:run.conversation,input:run.input}))).toEqual([{conversation,input:'Plan the launch'},{conversation,input:'/campaign Launch the December ads'}]);
- expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id`).map(row=>row.body)).toEqual(['Plan the launch','/campaign Launch the December ads']);
+ expect(inputsOf(conversation)).toEqual(['Plan the launch','/campaign Launch the December ads']);
 });
 
 test('in the general channel "Call someone in the channel" lists the other Members before "Call an agent" lists the channel\'s Agents',async({page})=>{

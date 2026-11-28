@@ -4,7 +4,6 @@ import { laneEngineRecords } from './spec-engine-records';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { answerQuestion, closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { answerChannelQuestion, driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { signIn } from './sign-in';
@@ -14,11 +13,10 @@ test.beforeAll(()=>laneEngineRecords());
 // words only in its session while the Run waits (the driver's own test, tests/hermes-runs.test.mjs, reads them there);
 // the fake engine hands them over with the question, as the driver does. The chat shows them as the Agent's message
 // above the card while the Run waits, once, and after the answer and a reload the reply does not repeat them, in a
-// Conversation and in a Channel.
+// Channel. A Conversation's question is its Engine Run's since #883 (tests/conversation-steer.spec.ts).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
 const company='10000000-0000-0000-0000-000000000001';
-const omar='20000000-0000-0000-0000-000000000001';
 const general='69000000-0000-0000-0000-000000000001';
 const five='Five Agents I advise:\n1. Writer — drafts the posts alone\n2. Analyst — reads the numbers, asks you before any spend';
 
@@ -39,44 +37,10 @@ async function memberClient(email:string) {
 }
 const asking=()=>{
  const fake=fakeEngine();
- // A Conversation's question may take several picks, as Omar's did; the Channel's here takes one.
- fake.settings.questions=input=>input.includes('Which Agents')?[{text:'Which of them do we make now?',choices:['Writer','Analyst'],multiple:!input.startsWith('@')&&!input.includes(': @'),said:five}]:[];
+ fake.settings.questions=input=>input.includes('Which Agents')?[{text:'Which of them do we make now?',choices:['Writer','Analyst'],said:five}]:[];
  fake.settings.reply=(_input,answers)=>`Making ${answers.join(', ')} now.`;
  return fake;
 };
-
-test('integration: in a Conversation the words written before a question are the Agent\'s message above its card while the Run waits, and once after the answer and a reload',async({page})=>{
- test.setTimeout(120000);
- const fake=asking(); const {agent,detach}=attachAgent();
- try {
-  const {service,person}=await memberClient('omar@example.com');
-  const conversation=randomUUID();
-  const close=()=>withEngineContract(fake.engineFor,()=>closeOpenRuns(service,{conversation}));
-  expect(await withEngineContract(fake.engineFor,()=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Which Agents do you advise we make?'}))).toEqual({conversation});
-  expect(await close()).toBe(0);
-  expect(await close()).toBe(0);
-  expect(JSON.parse(query(`select kind,said_before from public.reply_cards where conversation_id='${conversation}'`))).toEqual([{kind:'question',said_before:five}]);
-
-  await page.setViewportSize({width:1440,height:900});
-  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
-  const asked=page.locator('.turns > li.turn--agent[data-kind="asked"]');
-  await expect(asked).toHaveCount(1);
-  await expect(asked.locator('.sender')).toContainText('Faye');
-  await expect(asked.locator('.bubble--agent')).toHaveText(five);
-  await expect(asked.getByText('Which of them do we make now?')).toBeVisible();
-  // The words come first, then the card that asks about them.
-  expect(await asked.evaluate(turn=>{ const words=turn.querySelector('.bubble--agent'); const card=[...turn.querySelectorAll('*')].find(node=>node.textContent?.trim()==='Which of them do we make now?'); return !!words&&!!card&&!!(words.compareDocumentPosition(card)&Node.DOCUMENT_POSITION_FOLLOWING); })).toBe(true);
-
-  const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
-  expect(await withEngineContract(fake.engineFor,()=>answerQuestion(person,service,{company,conversation,card:Number(card),answer:'Writer',answerKey:randomUUID()}))).toEqual({state:'claimed'});
-  await expect.poll(async()=>{ await close(); return JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent'`)); }).toEqual([{body:'Making Writer now.'}]);
-
-  await page.reload();
-  await expect(page.locator('.turns .bubble--agent').filter({hasText:'Making Writer now.'})).toHaveCount(1);
-  await expect(page.locator('.turns .bubble--agent').filter({hasText:'Five Agents I advise'})).toHaveCount(1);
-  await expect(page.locator('.turns > li.turn--agent[data-kind="asked"] .bubble--agent')).toHaveText(five);
- } finally { detach(); }
-});
 
 test('integration: in a Channel the words written before a question are the Agent\'s message above its card while the Run waits, and once after the answer and a reload',async({page})=>{
  test.setTimeout(120000);
