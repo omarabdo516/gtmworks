@@ -1,10 +1,22 @@
 [
 {
+  "issue": 951,
+  "date": "2026-11-28",
+  "en": { "title": "Invite links you can see and cancel", "body": "The Team page lists every invite link still waiting for its Person, with the Role it gives, who made it and the day it ends. Cancel stops one at once, and a Person who opens a link that was used, cancelled or ended sees a clear page telling them to ask the Administrator for a new one." },
+  "ar": { "title": "لينكات الدعوة اللي تشوفها وتلغيها", "body": "صفحة الفريق بقت بتعرض كل لينك دعوة لسه مستني صاحبه، مع الدور اللي بيديه، ومين عمله، واليوم اللي بيخلص فيه. والغاء اللينك بيوقفه على طول، واللي يفتح لينك مستخدم أو ملغي أو خلص بيشوف صفحة واضحة بتقوله يطلب من الأدمن لينك جديد." }
+},
+{
   "issue": 875,
   "date": "2026-11-27",
   "en": { "title": "A Conversation opens on its last messages", "body": "Opening a Conversation reads its last 50 messages from the Agent’s Engine session, and the 50 before as you scroll back; your older words stay yours after the Engine compacts them, and its summary is drawn as the Engine’s." },
   "ar": { "title": "المحادثة بتفتح على آخر رسايلها", "body": "فتح المحادثة بقى بيقرا آخر ٥٠ رسالة من جلسة الوكيل في المحرك، والـ٥٠ اللي قبلهم لما ترجع لفوق؛ وكلامك القديم بيفضل بتاعك بعد ما المحرك يضغطه، وملخصه بيظهر على إنه من المحرك." }
 },
+ {
+  "issue": 950,
+  "date": "2026-11-27",
+  "en": { "title": "Invite links", "body": "An Administrator makes an invite link on the Team page with the person's name, their Role and the Agents they will see, and sends it any way they like; the person opens it, types their name, email and password, and lands in the Company signed in. A link works once and ends after 7 days." },
+  "ar": { "title": "لينكات الدعوة", "body": "الأدمن بيعمل لينك دعوة من صفحة الفريق باسم الشخص ودوره والوكلاء اللي هيشوفهم، ويبعته بأي طريقة تعجبه؛ والشخص يفتحه ويكتب اسمه وإيميله وكلمة السر، ويدخل الشركة على طول. اللينك بيشتغل مرة واحدة وبيخلص بعد 7 أيام." }
+ },
  {
   "issue": 846,
   "date": "2026-11-27",

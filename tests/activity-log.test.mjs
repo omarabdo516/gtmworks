@@ -134,10 +134,19 @@ test('Card, Member and Agent rows say who changed what', () => {
  const invited = describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'nour@rslearning.com', role: 'contributor', private: 'managers' } });
  assert.deepEqual([invited.act, invited.obj, invited.to], [['logActMemberInvited'], 'nour@rslearning.com', { key: 'logInvitedContributor' }]);
  assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActMemberInvited'), i18n(language).t('logInvitedContributor')]), [['invited a member', 'Contributor · Invite sent'], ['عزم عضو', 'مساهم · اتبعتله دعوة']]);
+ // An Invite link made, the Person who joined with it, and one its Administrator cancelled: each names the link by its
+ // label and its Role (#950, #951).
+ const linkMade = describeEntry({ subject: 'member', action: 'invite_link_made', details: { label: 'Nour Salah', role: 'contributor', private: 'managers' } });
+ const linkUsed = describeEntry({ subject: 'member', action: 'invite_link_used', person_id: lead, details: { label: 'Nour Salah', role: 'viewer', person_name: 'Nour' } });
+ const linkCancelled = describeEntry({ subject: 'member', action: 'invite_link_cancelled', details: { label: 'Nour Salah', role: 'contributor', private: 'managers' } });
+ assert.deepEqual([linkMade.act, linkMade.obj, linkMade.to], [['logActInviteLinkMade'], 'Nour Salah', { key: 'contributor' }]);
+ assert.deepEqual([linkUsed.act, linkUsed.obj, linkUsed.to], [['logActInviteLinkUsed'], 'Nour Salah', { key: 'viewer' }]);
+ assert.deepEqual([linkCancelled.act, linkCancelled.obj, linkCancelled.to], [['logActInviteLinkCancelled'], 'Nour Salah', { key: 'contributor' }]);
+ assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActInviteLinkMade'), i18n(language).t('logActInviteLinkUsed'), i18n(language).t('logActInviteLinkCancelled')]), [['made an invite link for', 'joined with the invite link for', 'cancelled an invite link for'], ['عمل لينك دعوة لـ', 'انضم بلينك الدعوة بتاع', 'لغى لينك دعوة لـ']]);
  const long = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'title', old: 'x'.repeat(200), new: 'y' } });
  assert.equal(long.from.text.length, 80);
  // Every act and value key is in both catalogues.
- const rows = [moved, back, note, idea, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
+ const rows = [moved, back, note, idea, handed, caption, role, added, requested, saved, removed, suggested, approved, rejected, describeEntry({ subject: 'card', action: 'unknown' }), describeEntry({ subject: 'member', action: 'agent_granted', details: {} }), invited, linkMade, linkUsed, linkCancelled, ...['manager', 'viewer'].map(role => describeEntry({ subject: 'member', action: 'member_invited', details: { email: 'a@b.co', role } }))];
  for (const language of ['en', 'ar']) for (const line of rows) {
   const { t } = i18n(language);
   t(line.act[0], ...line.act.slice(1).map(value => 'key' in value ? t(value.key) : value.text));

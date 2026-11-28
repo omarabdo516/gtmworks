@@ -2360,6 +2360,28 @@ $$;
 ALTER FUNCTION public.can_see_conversation_agent(c uuid, conversation uuid) OWNER TO postgres;
 
 --
+-- Name: cancel_invite_link(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.cancel_invite_link(c uuid, link uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare stopped public.company_links;
+begin
+ if c is null or not public.is_company_owner(c) then raise exception 'inviteLinkNotAllowed' using errcode='42501'; end if;
+ update public.company_links set cancelled_at=now()
+  where id=link and company_id=c and kind='invite' and used_at is null and cancelled_at is null
+  returning * into stopped;
+ if not found then return; end if;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
+  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member','invite_link_cancelled',
+   jsonb_build_object('label',stopped.label,'role',stopped.role,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+end $$;
+
+ALTER FUNCTION public.cancel_invite_link(c uuid, link uuid) OWNER TO postgres;
+
+--
 -- Name: card_archive_stops(uuid, bigint[]); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3625,6 +3647,46 @@ begin
 end $$;
 
 ALTER FUNCTION public.claim_invitations() OWNER TO postgres;
+
+--
+-- Name: claim_invite_link(text, uuid, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.claim_invite_link(link_hash text, person uuid, person_name text, language text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare link public.company_links; joined boolean; slug text;
+begin
+ if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'inviteLinkInvalid' using errcode='55000'; end if;
+ select l.* into link from public.company_links l where l.secret_hash=link_hash and l.kind='invite' for update;
+ if not found or link.used_at is not null then raise exception 'inviteLinkUsed' using errcode='55000'; end if;
+ if link.cancelled_at is not null then raise exception 'inviteLinkCancelled' using errcode='55000'; end if;
+ if link.ends_at<=now() then raise exception 'inviteLinkEnded' using errcode='55000'; end if;
+ if person is null then raise exception 'invalidPerson' using errcode='22023'; end if;
+ if not exists(select 1 from public.people p where p.id=person) then
+  if person_name is null or length(btrim(person_name)) not between 1 and 120 or language is null or language not in ('en','ar') then
+   raise exception 'invalidPerson' using errcode='22023';
+  end if;
+  insert into public.people(id,name,language) values(person,btrim(person_name),language);
+ end if;
+ insert into public.members(company_id,person_id,role) values(link.company_id,person,link.role::public.member_role)
+  on conflict (company_id,person_id) do update set role=excluded.role,grant_publishing=false,grant_money_figures=false,grant_customer_data=false,removed_at=null
+  where public.members.removed_at is not null
+  returning true into joined;
+ if joined is not true then raise exception 'alreadyMember' using errcode='23505'; end if;
+ delete from public.member_agent_access where company_id=link.company_id and person_id=person;
+ insert into public.member_agent_access(company_id,person_id,agent_id)
+  select link.company_id,person,a.agent_id from public.company_link_agents a where a.link_id=link.id on conflict do nothing;
+ update public.company_links set used_at=now(),used_by=person where id=link.id;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
+  values(link.company_id,person,'person',(select name from public.people where id=person),'member',person,'invite_link_used',
+   jsonb_build_object('label',link.label,'role',link.role,'person_name',(select name from public.people where id=person)),'company_links',nextval('public.company_link_log_seq'),now());
+ select c.slug into slug from public.companies c where c.id=link.company_id;
+ return slug;
+end $_$;
+
+ALTER FUNCTION public.claim_invite_link(link_hash text, person uuid, person_name text, language text) OWNER TO postgres;
 
 --
 -- Name: close_channel_run(bigint, text, text, text, bigint, bigint); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6360,6 +6422,20 @@ $$;
 ALTER FUNCTION public.install_update() OWNER TO postgres;
 
 --
+-- Name: invite_link_open(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.invite_link_open(link_hash text) RETURNS TABLE(company text, role text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select c.name,l.role from public.company_links l join public.companies c on c.id=l.company_id
+ where l.secret_hash=link_hash and l.kind='invite' and l.used_at is null and l.cancelled_at is null and l.ends_at>now();
+$$;
+
+ALTER FUNCTION public.invite_link_open(link_hash text) OWNER TO postgres;
+
+--
 -- Name: invite_member(uuid, text, text, boolean); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -7536,6 +7612,36 @@ end $_$;
 ALTER FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, act text) OWNER TO postgres;
 
 --
+-- Name: make_invite_link(uuid, text, text, uuid[], text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare made uuid; named text:=btrim(coalesce(label,''),E' \t\r\n'); chosen uuid; agent public.hermes_agents;
+begin
+ if c is null or not public.is_company_owner(c) then raise exception 'inviteLinkNotAllowed' using errcode='42501'; end if;
+ if link_role is null or link_role not in ('manager','contributor','viewer') then raise exception 'inviteRoleNotAllowed' using errcode='22023'; end if;
+ if length(named) not between 1 and 120 then raise exception 'inviteLinkLabel' using errcode='22023'; end if;
+ if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'inviteLinkInvalid' using errcode='22023'; end if;
+ foreach chosen in array coalesce(agents,'{}'::uuid[]) loop
+  select * into agent from public.hermes_agents a where a.id=chosen and a.company_id=c;
+  if not found then raise exception 'agentNotFound' using errcode='P0002'; end if;
+  if agent.is_default then raise exception 'mainAgentShownToAll' using errcode='42501'; end if;
+ end loop;
+ insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at)
+  values(c,'invite',link_hash,auth.uid(),named,link_role,now()+interval '7 days') returning id into made;
+ insert into public.company_link_agents(company_id,link_id,agent_id) select c,made,x from unnest(coalesce(agents,'{}'::uuid[])) x on conflict do nothing;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
+  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member','invite_link_made',
+   jsonb_build_object('label',named,'role',link_role,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+ return made;
+end $_$;
+
+ALTER FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) OWNER TO postgres;
+
+--
 -- Name: manage_hermes_agent(uuid, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -8272,6 +8378,24 @@ CREATE FUNCTION public.own_conversations(c uuid) RETURNS SETOF public.conversati
 $$;
 
 ALTER FUNCTION public.own_conversations(c uuid) OWNER TO postgres;
+
+--
+-- Name: pending_invite_links(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.pending_invite_links(c uuid) RETURNS TABLE(id uuid, label text, role text, made_by_name text, ends_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+ if c is null or not public.is_company_owner(c) then raise exception 'inviteLinkNotAllowed' using errcode='42501'; end if;
+ return query select l.id,l.label,l.role,p.name,l.ends_at
+  from public.company_links l left join public.people p on p.id=l.made_by
+  where l.company_id=c and l.kind='invite' and l.used_at is null and l.cancelled_at is null and l.ends_at>now()
+  order by l.created_at;
+end $$;
+
+ALTER FUNCTION public.pending_invite_links(c uuid) OWNER TO postgres;
 
 --
 -- Name: permission_allows_of(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
@@ -12959,6 +13083,60 @@ CREATE TABLE public.company_key_unfinished (
 ALTER TABLE public.company_key_unfinished OWNER TO postgres;
 
 --
+-- Name: company_link_agents; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.company_link_agents (
+    company_id uuid NOT NULL,
+    link_id uuid NOT NULL,
+    agent_id uuid NOT NULL
+);
+
+ALTER TABLE public.company_link_agents OWNER TO postgres;
+
+--
+-- Name: company_link_log_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.company_link_log_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.company_link_log_seq OWNER TO postgres;
+
+--
+-- Name: company_links; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.company_links (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    kind text NOT NULL,
+    secret_hash text NOT NULL,
+    made_by uuid,
+    label text,
+    role text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    ends_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    used_by uuid,
+    cancelled_at timestamp with time zone,
+    CONSTRAINT company_links_check CHECK (((kind <> 'invite'::text) OR ((label IS NOT NULL) AND (role IS NOT NULL)))),
+    CONSTRAINT company_links_check1 CHECK ((ends_at > created_at)),
+    CONSTRAINT company_links_check2 CHECK (((used_by IS NULL) OR (used_at IS NOT NULL))),
+    CONSTRAINT company_links_check3 CHECK (((used_at IS NULL) OR (cancelled_at IS NULL))),
+    CONSTRAINT company_links_kind_check CHECK ((kind = 'invite'::text)),
+    CONSTRAINT company_links_label_check CHECK (((label IS NULL) OR ((length(btrim(label)) >= 1) AND (length(btrim(label)) <= 120)))),
+    CONSTRAINT company_links_role_check CHECK ((role = ANY (ARRAY['manager'::text, 'contributor'::text, 'viewer'::text]))),
+    CONSTRAINT company_links_secret_hash_check CHECK ((secret_hash ~ '^[a-f0-9]{64}$'::text))
+);
+
+ALTER TABLE public.company_links OWNER TO postgres;
+
+--
 -- Name: company_log; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -12981,7 +13159,7 @@ CREATE TABLE public.company_log (
     CONSTRAINT company_log_actor_kind_check CHECK ((actor_kind = ANY (ARRAY['person'::text, 'agent'::text, 'system'::text]))),
     CONSTRAINT company_log_check CHECK (((subject = 'card'::text) = (card_id IS NOT NULL))),
     CONSTRAINT company_log_check1 CHECK (((actor_kind = 'system'::text) = (actor_id IS NULL))),
-    CONSTRAINT company_log_source_check CHECK ((source = ANY (ARRAY['work_activity'::text, 'work_comments'::text, 'member_audit'::text, 'hermes_agent_audit'::text, 'company_audit'::text, 'note_runs'::text, 'reply_cards'::text, 'member_invitations'::text, 'reply_card_answers'::text, 'channel_permissions'::text, 'agent_handovers'::text, 'channel_handover_replies'::text, 'channel_cards'::text, 'channel_replies'::text, 'conversation_archives'::text, 'channel_archives'::text, 'engine_dashboard'::text]))),
+    CONSTRAINT company_log_source_check CHECK ((source = ANY (ARRAY['work_activity'::text, 'work_comments'::text, 'member_audit'::text, 'hermes_agent_audit'::text, 'company_audit'::text, 'note_runs'::text, 'reply_cards'::text, 'member_invitations'::text, 'reply_card_answers'::text, 'channel_permissions'::text, 'agent_handovers'::text, 'channel_handover_replies'::text, 'channel_cards'::text, 'channel_replies'::text, 'conversation_archives'::text, 'channel_archives'::text, 'engine_dashboard'::text, 'company_links'::text]))),
     CONSTRAINT company_log_subject_check CHECK ((subject = ANY (ARRAY['card'::text, 'member'::text, 'agent'::text, 'company'::text])))
 );
 
@@ -14576,6 +14754,27 @@ ALTER TABLE ONLY public.company_key_unfinished
     ADD CONSTRAINT company_key_unfinished_pkey PRIMARY KEY (company_id, provider);
 
 --
+-- Name: company_link_agents company_link_agents_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_link_agents
+    ADD CONSTRAINT company_link_agents_pkey PRIMARY KEY (link_id, agent_id);
+
+--
+-- Name: company_links company_links_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_links
+    ADD CONSTRAINT company_links_pkey PRIMARY KEY (id);
+
+--
+-- Name: company_links company_links_secret_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_links
+    ADD CONSTRAINT company_links_secret_hash_key UNIQUE (secret_hash);
+
+--
 -- Name: company_log company_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -15344,6 +15543,12 @@ CREATE UNIQUE INDEX company_audit_sign_in_session ON public.company_audit USING 
 --
 
 CREATE UNIQUE INDEX company_audit_switch ON public.company_audit USING btree (company_id, switch_id) WHERE (switch_id IS NOT NULL);
+
+--
+-- Name: company_links_company; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX company_links_company ON public.company_links USING btree (company_id, created_at DESC);
 
 --
 -- Name: company_log_by_card; Type: INDEX; Schema: public; Owner: postgres
@@ -16635,6 +16840,48 @@ ALTER TABLE ONLY public.company_key_holds
 
 ALTER TABLE ONLY public.company_key_unfinished
     ADD CONSTRAINT company_key_unfinished_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+--
+-- Name: company_link_agents company_link_agents_agent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_link_agents
+    ADD CONSTRAINT company_link_agents_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.hermes_agents(id) ON DELETE CASCADE;
+
+--
+-- Name: company_link_agents company_link_agents_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_link_agents
+    ADD CONSTRAINT company_link_agents_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+--
+-- Name: company_link_agents company_link_agents_link_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_link_agents
+    ADD CONSTRAINT company_link_agents_link_id_fkey FOREIGN KEY (link_id) REFERENCES public.company_links(id) ON DELETE CASCADE;
+
+--
+-- Name: company_links company_links_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_links
+    ADD CONSTRAINT company_links_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+--
+-- Name: company_links company_links_made_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_links
+    ADD CONSTRAINT company_links_made_by_fkey FOREIGN KEY (made_by) REFERENCES public.people(id) ON DELETE SET NULL;
+
+--
+-- Name: company_links company_links_used_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.company_links
+    ADD CONSTRAINT company_links_used_by_fkey FOREIGN KEY (used_by) REFERENCES public.people(id) ON DELETE SET NULL;
 
 --
 -- Name: company_log company_log_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
@@ -18068,6 +18315,18 @@ ALTER TABLE public.company_key_holds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.company_key_unfinished ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: company_link_agents; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.company_link_agents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: company_links; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.company_links ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: company_log; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -19442,6 +19701,13 @@ REVOKE ALL ON FUNCTION public.can_see_conversation_agent(c uuid, conversation uu
 GRANT ALL ON FUNCTION public.can_see_conversation_agent(c uuid, conversation uuid) TO authenticated;
 
 --
+-- Name: FUNCTION cancel_invite_link(c uuid, link uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.cancel_invite_link(c uuid, link uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.cancel_invite_link(c uuid, link uuid) TO authenticated;
+
+--
 -- Name: FUNCTION card_archive_stops(c uuid, cards bigint[]); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -19810,6 +20076,13 @@ GRANT ALL ON FUNCTION public.claim_conversation_turn(conversation uuid) TO servi
 REVOKE ALL ON FUNCTION public.claim_invitations() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.claim_invitations() TO authenticated;
 GRANT ALL ON FUNCTION public.claim_invitations() TO service_role;
+
+--
+-- Name: FUNCTION claim_invite_link(link_hash text, person uuid, person_name text, language text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.claim_invite_link(link_hash text, person uuid, person_name text, language text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_invite_link(link_hash text, person uuid, person_name text, language text) TO service_role;
 
 --
 -- Name: FUNCTION close_channel_run(message bigint, run text, run_outcome text, reply text, used_input bigint, used_output bigint); Type: ACL; Schema: public; Owner: postgres
@@ -20731,6 +21004,13 @@ REVOKE ALL ON FUNCTION public.install_update() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.install_update() TO authenticated;
 
 --
+-- Name: FUNCTION invite_link_open(link_hash text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.invite_link_open(link_hash text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.invite_link_open(link_hash text) TO service_role;
+
+--
 -- Name: FUNCTION invite_member(c uuid, mail text, member_role text, check_only boolean); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21110,6 +21390,13 @@ REVOKE ALL ON FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, a
 GRANT ALL ON FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, act text) TO authenticated;
 
 --
+-- Name: FUNCTION make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text) TO authenticated;
+
+--
 -- Name: FUNCTION manage_hermes_agent(c uuid, intent text, a uuid, replacement uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21331,6 +21618,13 @@ GRANT SELECT ON TABLE public.conversations TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION public.own_conversations(c uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION pending_invite_links(c uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.pending_invite_links(c uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pending_invite_links(c uuid) TO authenticated;
 
 --
 -- Name: FUNCTION permission_allows_of(asking jsonb, kept jsonb); Type: ACL; Schema: public; Owner: postgres
@@ -22826,6 +23120,18 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.company_engines TO service_rol
 
 GRANT SELECT ON TABLE public.company_fallback_models TO authenticated;
 GRANT SELECT ON TABLE public.company_fallback_models TO service_role;
+
+--
+-- Name: TABLE company_link_agents; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.company_link_agents TO service_role;
+
+--
+-- Name: TABLE company_links; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.company_links TO service_role;
 
 --
 -- Name: TABLE company_log; Type: ACL; Schema: public; Owner: postgres
