@@ -17,7 +17,7 @@ import { takeSent, type Send } from '@/lib/sending';
 import type { LiveRun } from '@/app/run-activity';
 import type { LiveDelta, LiveLine } from '@/lib/live-steps.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
-import type { MessageBoxHandle } from '@/app/conversation-composer';
+import { postMessageAnswer, type MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
@@ -279,6 +279,10 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
  const [view,setView]=useState<LiveRun|null>(null);
  const [reply,setReply]=useState('');
  const [working,setWorking]=useState(open);
+ // The Runs whose live read has begun (#877): a message the Engine queued waits until its own Run is one of them.
+ const [begun,setBegun]=useState<ReadonlySet<string>>(()=>new Set());
+ // Whether a live read is on, the one looking for the next Run included: none on, the row holds no Run that works.
+ const [following,setFollowing]=useState(open);
  const reading=useRef<AbortController|null>(null);
  const endedRef=useRef(ended); useEffect(()=>{ endedRef.current=ended; });
  // A message sent while a Run is followed starts its own Run, which the row holds after it: once a Run ends the next one
@@ -288,6 +292,7 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
  const follow=useCallback((next=false)=>{
   if(reading.current) { again.current=true; return; }
   const stopped=new AbortController(); reading.current=stopped;
+  setFollowing(true);
   if(!next||again.current) setWorking(true);
   const read=async(failures:number):Promise<void>=>{
    let end:string|null=null; let said='';
@@ -307,7 +312,7 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
        const line=JSON.parse(buffer.slice(0,at)) as LiveLine|LiveDelta; buffer=buffer.slice(at+1);
        if('end' in line) end=line.end;
        else if('delta' in line) { said+=line.delta; setReply(said); setWorking(true); }
-       else { setView(line); setWorking(true); }
+       else { setView(line); setWorking(true); setBegun(current=>current.has(line.run)?current:new Set([...current,line.run])); }
       }
      }
     }
@@ -325,7 +330,7 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
     if(stopped.signal.aborted) return;
     reading.current=null; setView(null); setReply('');
     // The next Run the row holds, if any: after one that ended, or after a send made meanwhile.
-    if(outcome==='read'&&(end!=='none'||again.current)) { const sent=again.current; again.current=false; if(!sent) setWorking(false); follow(!sent); } else { again.current=false; setWorking(false); }
+    if(outcome==='read'&&(end!=='none'||again.current)) { const sent=again.current; again.current=false; if(!sent) setWorking(false); follow(!sent); } else { again.current=false; setWorking(false); setFollowing(false); }
     return;
    }
    // A read cut short replays the Run's events from its start, so the words are drawn again from the first.
@@ -335,13 +340,13 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
   void read(0);
  },[company,conversation]);
  useEffect(()=>{ if(open) follow(); return ()=>{ reading.current?.abort(); reading.current=null; }; },[open,follow]);
- return {view,reply,working,follow};
+ return {view,reply,working,follow,begun,following};
 }
 
 export function EngineLoaded({initial,steps,team,open=false}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean,open?:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
  const {record,reread,sending,release}=useConversationRecord({company,initial,steps});
- const {c}=useConversationText();
+ const {c}=useConversationText(); const {t}=useI18n();
  const engine=useEnginePage(company,conversation.id,()=>record.messages.length);
  // A Run's end reads the session again; the messages sent before it then leave the drawn list, as the session holds them.
  // A Run's end reads the session again; a sent message leaves the drawn list only once a read holds it (below).
@@ -372,9 +377,10 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
    const found=people.find(drawn=>drawn.body===message.body&&!seen.has(drawn.id)&&!used.has(drawn.id)&&(spent.get(drawn.id)??message.id)===message.id);
    if(!found) return true;
    used.add(found.id); held.push({id:message.id,by:found.id}); return false;
-  });
+  // One the Engine queued waits its turn (#877) until the live read begins its own Run.
+  }).map(message=>message.behind&&message.run&&run.begun.has(message.run)?{...message,behind:undefined}:message);
   return {waiting,held};
- },[record.messages,engine.page,before,spent]); // eslint-disable-line react-hooks/exhaustive-deps
+ },[record.messages,engine.page,before,spent,run.begun]); // eslint-disable-line react-hooks/exhaustive-deps
  const shown=useMemo(()=>{
   const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
@@ -412,6 +418,22 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  // A read of the session that already holds the reply the live read is writing draws it once: the stored one (#876).
  const last=shown.messages.at(-1);
  const stored=!!run.reply&&last?.author==='agent'&&last.body.trim()===run.reply.trim();
+ // The session's last message is the person's and no Run of the row works (#877): the Agent gave no reply (its Run was
+ // lost, or failed with the Engine). Try again asks it again with those words, as a new Run of their own.
+ const said=engine.page?.messages.at(-1);
+ const noReply=writer&&engine.mode==='engine'&&said?.author==='person'&&!run.following&&!run.working&&!sent.waiting.length;
+ const [asking,setAsking]=useState(false);
+ // One send key per message left with no reply: a second press after an answer that was lost replays that Run.
+ const againKeys=useRef(new Map<number,string>());
+ const askAgain=async()=>{
+  if(!said||asking) return;
+  setAsking(true);
+  const key=againKeys.current.get(said.id)??crypto.randomUUID(); againKeys.current.set(said.id,key);
+  const settle=sending(key,said.body,[]);
+  const {failure,answer}=await postMessageAnswer({company,conversation:conversation.id,message:said.body,sendKey:key});
+  settle(failure,answer); setAsking(false);
+  if(failure) toast(t(failure),{icon:'alert'}); else run.follow();
+ };
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
   if(view.scrollTop<80&&view.scrollHeight>view.clientHeight+80&&engine.hasMore&&!engine.older) {
@@ -422,6 +444,7 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
   {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} reread={reread} details={!!agent} live={stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working}}/>}
+  {noReply&&<p className="note convo-status" role="alert" data-outcome="no-reply">{c('conversationNoReply')} <button type="button" className="link-btn" disabled={asking} onClick={()=>void askAgain()}>{c('conversationTryAgain')}</button></p>}
   {engine.failed&&engine.page&&<p className="note convo-status" role="alert" data-outcome="refresh" data-refresh>{c('conversationNoRefresh')} <button type="button" className="link-btn" onClick={engine.refresh}>{c('conversationTryAgain')}</button></p>}
  </div></div>;
 }
