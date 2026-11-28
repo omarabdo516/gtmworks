@@ -234,3 +234,24 @@ test('an answer whose save draws the layout again without the question still ope
  await expect.poll(() => workspace().inert).toBe(false);
  expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
+
+// #953: when the links were made but the answer could not be saved, the screen keeps the links and its next press only
+// saves the answer, so a retry never makes a second batch.
+test('a save that fails after the links were made keeps them on screen, and the next press only saves the answer', async () => {
+ const links = [{ label: 'Nour Salah', link: `http://127.0.0.1:3000/join#code=${'c'.repeat(64)}` }];
+ finish.mockResolvedValueOnce({ error: 'firstRunFailed', links }).mockResolvedValueOnce({ opened: '/c/acme-abcd1234/conversations/cv-1?first=team&invites=1' });
+ const screen = await show();
+ await showStepTwo(screen);
+ await userEvent.type(fields()[0], 'Nour Salah');
+ await screen.getByRole('button', { name: 'Open the workspace' }).click();
+ await expect.element(screen.getByLabelText('Invite link for Nour Salah')).toHaveValue(links[0].link);
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Your answer wasn’t saved. Try again.');
+ await expect.element(screen.getByRole('button', { name: 'Copy the link' })).toBeVisible();
+ await screen.getByRole('button', { name: 'Open the workspace' }).click();
+ await expect.poll(() => finish.mock.calls.length).toBe(2);
+ const form = finish.mock.calls[1][1];
+ expect(form.get('choice')).toBe('save');
+ expect(form.get('made')).toBe('1');
+ await expect.poll(() => push.mock.calls.length).toBe(1);
+ expect(push.mock.calls[0][0]).toBe('/c/acme-abcd1234/conversations/cv-1?first=team&invites=1');
+});

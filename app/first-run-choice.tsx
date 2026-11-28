@@ -11,7 +11,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { SettingsIcon } from './settings-icons';
 import { writeClipboard } from './settings-backup-copy';
 import { toast } from './toast';
-import type { FirstRunFinish } from '@/lib/first-run-choice';
+import type { FirstRunFinish, FirstRunLink } from '@/lib/first-run-choice';
 export type { FirstRunState, FirstRunFinish } from '@/lib/first-run-choice';
 
 type Mode='alone'|'team';
@@ -49,12 +49,15 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const [rows,setRows]=useState<Row[]>(()=>[freshRow(0)]);
  const [result,action,pending]=useActionState(finish,{});
  const [acknowledged,setAcknowledged]=useState(false);
+ const [keptLinks,setKeptLinks]=useState<FirstRunLink[]>([]);
  const [copied,setCopied]=useState<number|null>(null);
  const router=useRouter(); const leaving=useLeave(); const {close}=leaving;
  const opened=result?.opened;
  // A team's step makes each Person's Invite link (#953) and shows them once to copy; the question leaves only when the
  // Owner has had their look.
- const links=result?.links??[];
+ // A save that fails after the links were made returns them with the error; the retry keeps them on screen and only
+ // saves the answer.
+ const links=result?.links?.length?result.links:keptLinks;
  const showingLinks=links.length>0;
  // Lead's Conversation takes the keyboard once it is drawn (design-reference: #ta-main focused after closeDlg).
  const answered=useContext(Answered);
@@ -131,7 +134,10 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
        <button type="button" className="btn btn--primary inv-go inv-go--flush" onClick={()=>void copy(index,link.link,link.label)}><SettingsIcon name="copy"/><span aria-live="polite">{copied===index?t('settingsBackupCopied'):t('inviteLinkCopy')}</span></button></div>
      </div></div>)}</div>
     <p className="set-hint" id="fr-links-d">{t('inviteLinkOnce')}</p>
-    <div className="fr__actions"><button type="button" className="btn btn--primary" id="fr-open-done" onClick={()=>setAcknowledged(true)}>{t('firstRunOpen')}</button></div>
+    {result?.error&&<p className="fr__error" role="alert">{t(result.error)}</p>}
+    <div className="fr__actions">{opened
+     ?<button type="button" className="btn btn--primary" id="fr-open-done" onClick={()=>setAcknowledged(true)}>{t('firstRunOpen')}</button>
+      :<button type="submit" name="choice" value="save" className="btn btn--primary" id="fr-open-done" disabled={pending} onClick={()=>{ setKeptLinks(links); setAcknowledged(true); }}>{t('firstRunOpen')}</button>}</div>
    </>:<>
     <div className="fr__head">
      <button type="button" className="link-btn fr__back" id="fr-back" disabled={pending} onClick={back}><ShellIcon name={language==='ar'?'back':'forward'}/><span>{t('firstRunBack')}</span></button>
@@ -158,7 +164,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
      <button type="submit" name="choice" value="open" className="btn btn--primary" id="fr-open" disabled={pending}>{t('firstRunOpen')}</button></div>
    </>}
    <input type="hidden" name="company" value={company}/><input type="hidden" name="slug" value={slug}/>
-   <input type="hidden" name="mode" value={mode??''}/><input type="hidden" name="rows" value={data}/>
+   <input type="hidden" name="mode" value={mode??''}/><input type="hidden" name="rows" value={data}/><input type="hidden" name="made" value={String(links.length)}/>
   </form></div>
  </div></div>;
 }

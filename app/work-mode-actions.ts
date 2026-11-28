@@ -30,6 +30,14 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
   if('error' in saved) return saved;
   return {opened:`${saved.target}?first=${mode}${mode==='team'?'&invites=0':''}`};
  }
+ // The links were made but the answer could not be saved: the screen still shows them, and this second press saves the
+ // answer alone, so a retry never makes a second batch.
+ if(choice==='save') {
+  const invites=Math.max(0,Math.min(50,Number(form.get('made'))||0));
+  const saved=await save('team');
+  if('error' in saved) return saved;
+  return {opened:`${saved.target}?first=team&invites=${invites}`};
+ }
  if(choice!=='open') return {error:'firstRunFailed'};
  let rows:Row[];
  try { rows=JSON.parse(String(form.get('rows')||'[]')); }
@@ -53,6 +61,6 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
  }
  const links:FirstRunLink[]=named.map((row,index)=>({label:row.label,link:inviteLink(appUrl('/').origin,secrets[index])}));
  const saved=await save('team');
- if('error' in saved) return saved;
+ if('error' in saved) return {...saved,links};
  return {opened:`${saved.target}?first=team&invites=${links.length}`,links};
 });
