@@ -394,12 +394,30 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  // with the Owner's way to fix it. A last message of the person's with no Run open is #877's no reply, below.
  const ending=run.working||sent.waiting.length||!run.unfinished?null:'unfinished' as const;
  const cause=ending?run.unfinished?.cause:undefined;
+ // The Runs Try again started (#980): each repeats the words already drawn, stamped with its own Run id, and the page
+ // hides that row. The Engine keeps the words twice; the Conversation holds them once, and this tab keeps the ids so a
+ // reload draws it once too.
+ // shortcut: another tab does not know them; upgrade when the Engine can adopt the unanswered message (#115325).
+ const retryKey=`conversation-retries:${conversation.id}`;
+ const [retryRuns,setRetryRuns]=useState<ReadonlySet<string>>(()=>{
+  if(typeof window==='undefined') return new Set();
+  try { const held=JSON.parse(sessionStorage.getItem(retryKey)??'[]'); return new Set(Array.isArray(held)?held.filter((id):id is string=>typeof id==='string'):[]); } catch { return new Set(); }
+ });
+ const rememberRetry=(id:string)=>setRetryRuns(current=>{
+  if(current.has(id)) return current;
+  const next=new Set([...current,id]);
+  try { sessionStorage.setItem(retryKey,JSON.stringify([...next])); } catch { /* The ids stay in memory only. */ }
+  return next;
+ });
  const shown=useMemo(()=>{
   const ended=cause==='noModel'?{noModel:{owner}}:cause?{modelRefused:{reason:cause,owner,...(run.unfinished?.resetsAt?{resetsAt:run.unfinished.resetsAt}:{})}}:{};
-  const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:undefined,failed:!!ending,noModel:undefined,modelRefused:undefined,...ended,working:null,canStop:false,handover:undefined,unread:undefined}:record;
+  // A retry's Run adds its own copy of the words it answers (#980); the Engine's row for it is hidden, so the message
+  // already drawn stands alone. The id is the Run's, kept while this page is open (`retryRuns`).
+  const page=engine.page?{...engine.page,messages:engine.page.messages.filter(message=>!(message.author==='person'&&message.run&&retryRuns.has(message.run)))}:null;
+  const base=page?{...record,messages:[...page.messages,...sent.waiting],pending:false,asking:undefined,failed:!!ending,noModel:undefined,modelRefused:undefined,...ended,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
- },[record,engine.page,engine.usage,sent.waiting,ending,cause,owner,run.unfinished]);
+ },[record,engine.page,engine.usage,sent.waiting,ending,cause,owner,run.unfinished,retryRuns]);
  useLayoutEffect(()=>{ store.set({record:shown,asked:()=>run.follow(),sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
  // A message sent from the composer before this transcript was drawn has its Run followed once it is (#876), as the old
  // record's transcript asks for its reply.
@@ -440,8 +458,8 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  // One send key per message left with no reply: a second press after an answer that was lost replays that Run.
  const againKeys=useRef(new Map<number,string>());
  // Under a reply that did not finish (#879), and on a message left with no reply (#980), it answers the words already in
- // the Conversation: one Run on them, whose Engine turn adopts the message the session holds (`resume_unanswered`), never
- // a second message of its own and never back in the box.
+ // the Conversation: one Run on them, its own copy of the row hidden (`retryRuns`), never a second message of its own and
+ // never back in the box.
  // A person's images on the Engine as files to send again, from their own address; null when one cannot be read now.
  const imagesOf=async(message:{files?:{id:number,key?:string}[]}):Promise<File[]|null>=>{
   try {
@@ -461,9 +479,15 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   const images=await imagesOf(said);
   if(!images) { setAsking(false); toast(t('conversationFailed'),{icon:'alert'}); return; }
   const fields={company,conversation:conversation.id,message:said.body,sendKey:key,rerun:true};
-  const {failure}=images.length?await postMessageWithFilesAnswer(fields,images):await postMessageAnswer(fields);
+  const {failure,answer}=images.length?await postMessageWithFilesAnswer(fields,images):await postMessageAnswer(fields);
   setAsking(false);
-  if(failure) toast(t(failure),{icon:'alert'}); else run.follow();
+  if(failure) toast(t(failure),{icon:'alert'});
+  else {
+   // The Run's own row for these words is the one the page hides; the Run id is the Engine's stamp on it.
+   const started=answer?.run;
+   if(started) rememberRetry(started);
+   run.follow();
+  }
  };
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;

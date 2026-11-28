@@ -23,17 +23,24 @@ export type EngineSend={state:'started',conversation:string,run:string,queued:bo
 // sees goes to that Agent, as it always has (#153).
 // `service` is a service-role client: only the server holds the Run it started on the row (hold_conversation_run).
 // `rerun`: Try again on the Conversation's unanswered last message (#980). The words the page sends must be that message
-// (checked here, on the Engine's own session), and the Run asks the Engine to adopt the row rather than append it again;
-// the same send key is the same Run, as any send.
+// (checked here, on the Engine's own session, past any page of tool calls); the Run is started as any send with the same
+// send key, and the page hides the Run's own copy of the words by the id the Engine stamps on its row.
 export async function sendToEngine(db:Database,service:{rpc:(name:string,args:object)=>PromiseLike<{error:unknown}>},{company,person,conversation,agent:chosen,message,sendKey,images=[],rerun=false}:{company:string,person:string,conversation:string,agent?:string,message:string,sendKey:string,images?:File[],rerun?:boolean}):Promise<EngineSend> {
  // The last message the Conversation draws must be the person's, with these words: another message, a reply or a fresh
- // read that moved on means this press no longer answers the unanswered message.
+ // read that moved on means this press no longer answers the unanswered message. The newest page may be tool calls and
+ // results alone (a Turn that failed after more than a page of them), so read older pages until one message is drawn.
  if(rerun) {
   const {data:found}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle<{id:string,agent_id:string|null,hermes_session_id:string|null}>();
   if(!found?.agent_id||!found.hermes_session_id) return {state:'refused',error:'conversationNotFound',status:404};
-  const page=await conversationMessagesPage(db,company,{id:conversation,agent_id:found.agent_id,agent_name:'',hermes_session_id:found.hermes_session_id},{offset:0,limit:50});
-  if(page.state!=='found') return {state:'refused',error:page.state==='notSeen'?'conversationNotFound':'conversationUnread',status:page.state==='notSeen'?404:503};
-  const said=page.messages.at(-1);
+  const target={id:conversation,agent_id:found.agent_id,agent_name:'',hermes_session_id:found.hermes_session_id};
+  let said=null;
+  for(let offset=0;;) {
+   const page=await conversationMessagesPage(db,company,target,{offset,limit:50});
+   if(page.state!=='found') return {state:'refused',error:page.state==='notSeen'?'conversationNotFound':'conversationUnread',status:page.state==='notSeen'?404:503};
+   said=page.messages.at(-1)??null;
+   if(said||!page.hasMore) break;
+   offset=page.nextOffset;
+  }
   if(said?.author!=='person'||said.body!==message) return {state:'nothing'};
  }
  let agent=chosen??null;
@@ -55,7 +62,7 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  // the route checked their kind, count and size before anything was sent. The Engine keeps them in the session, and
  // the Conversation reads them back from there: gtmworks keeps no copy.
  const input=images.length?imageInput(message,await Promise.all(images.map(async file=>({content_type:file.type,base64:Buffer.from(await file.arrayBuffer()).toString('base64')})))):message;
- const start={session:checked.session,input,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`,...(rerun?{resume:true}:{})};
+ const start={session:checked.session,input,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`};
  const began=Date.now(); let lost=false; let unsure=0;
  let run=await target.engine.sessions.send(start);
  for(;;) {
