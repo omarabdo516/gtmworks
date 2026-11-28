@@ -4,7 +4,7 @@ import { agentEngine } from './engine/handle.mjs';
 import { mentionedAgent } from './composer-mentions.mjs';
 import { noteInstructions } from './conversation-runs.mjs';
 import { logActionFailure } from './diagnostics.mjs';
-import { answeringOpening, openingWords } from './lead-opening.mjs';
+import { answeringOpening, openingFor } from './lead-opening.mjs';
 import type { ModelChoice } from './engine.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -37,16 +37,22 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  if(target.state==='missing') return {state:'refused',error:'conversationNotFound',status:404};
  if(target.state!=='found') return {state:'refused',error:'conversationHermesFailed',status:502};
  const model=typeof checked.model?.provider==='string'&&typeof checked.model?.model==='string'?{provider:checked.model.provider,model:checked.model.model}:null;
- const answering=checked.opening&&await target.engine.sessions.held(checked.session)==='missing'
-  ?answeringOpening(openingWords(checked.opening.language==='ar'?'ar':'en',{owner:checked.opening.owner??'',lead:checked.opening.lead,company:checked.opening.company??''})):null;
- const instructions=[noteInstructions(checked.note),answering?.instructions].filter(Boolean).join('\n\n')||undefined;
+ const opening=checked.opening?answeringOpening(openingFor(checked.opening)):null;
+ const startOf=(told:boolean)=>{
+  const instructions=[noteInstructions(checked.note),told?opening?.instructions:undefined].filter(Boolean).join('\n\n');
+  return {session:checked.session,input:message,...(instructions?{instructions}:{}),...(model?{model}:{}),...(told&&opening?{history:opening.history}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+ };
+ // The first Run is the one whose session the Engine does not hold yet. A send asked again after its first answer was
+ // lost finds the session held: the Engine then says the key was used with the opening, and it is asked with it.
+ let told=!!opening&&await target.engine.sessions.held(checked.session)==='missing';
  // The same send key is the same Run: a start whose answer was lost is asked again with it, which replays that Run, a
  // few times; one still unknown is refused, and the person's Try again (the same key) replays it rather than start another.
  // The Engine answering "retry" (#877: it runs as many Runs at once as it takes) is asked again when it says, for a short
  // time (busyFor), then refused as busy; a session whose queue is full is refused at once. Neither made a Run.
- const start={session:checked.session,input:message,...(instructions?{instructions}:{}),...(model?{model}:{}),...(answering?{history:answering.history}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+ let start=startOf(told);
  const began=Date.now(); let lost=false; let unsure=0;
  let run=await target.engine.sessions.send(start);
+ if(run&&typeof run==='object'&&run.state==='keyConflict'&&opening&&!told) { told=true; start=startOf(true); run=await target.engine.sessions.send(start); }
  for(;;) {
   if(run===null||typeof run!=='object'||run.state==='keyConflict'||run.state==='queueFull') break;
   let wait:number;
@@ -58,7 +64,7 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  if(typeof run!=='string') {
   // A start the Engine refused outright while it named the Conversation's model is refused for that model: the
   // Conversation goes back to the model it had, and the person is told so, with their words still in the box.
-  if(!lost&&run===null&&model&&!(await db.rpc('refuse_conversation_model',{c:company,conversation,refused:model})).error)
+  if(!lost&&run===null&&model&&(await db.rpc('refuse_conversation_model',{c:company,conversation,refused:model})).data===true)
    return {state:'refused',error:'conversationModelRefused',status:502};
   // Once an answer was lost the Run may exist, so only Try again with the same key can say.
   if(!lost&&run?.state==='busy') return {state:'refused',error:'conversationEngineBusy',status:503};

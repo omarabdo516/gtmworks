@@ -5,7 +5,7 @@ import type { ConversationMessage, RunStep } from './conversations';
 import type { SessionMessage, SessionUsage } from './engine.mjs';
 import { agentEngine, companyEngine, seenAgents, stepsBetween, takeToolCalls } from './engine/handle.mjs';
 import { takeFileTags } from './media-tags.mjs';
-import { openingWords } from './lead-opening.mjs';
+import { openingFor } from './lead-opening.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Found={id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,lead_opening?:boolean,person_id?:string,created_at?:string};
@@ -117,7 +117,9 @@ async function openingOf(db:Database,company:string,found:Found):Promise<Convers
   db.from('companies').select('name').eq('id',company).maybeSingle<{name:string}>(),
  ]);
  if(!person||!place) return null;
- const body=openingWords(person.language==='ar'?'ar':'en',{owner:person.name.split(' ')[0]||'',lead:found.agent_name,company:place.name});
+ const body=openingFor({owner:person.name,language:person.language,lead:found.agent_name,company:place.name});
+ // Its id is made as a session message's is (idOf), from a key no session message has, so every read names it alike;
+ // it is as old as the row, which is older than any message of the session.
  return {id:Number.parseInt(createHash('sha1').update(`lead-opening:${found.id}`).digest('hex').slice(0,10),16),author:'agent',author_name:found.agent_name,body,
   created_at:found.created_at??new Date(0).toISOString()};
 }
@@ -138,6 +140,12 @@ export async function conversationMessagesPage(db:Database,company:string,found:
  if(target.state==='noEngine'||target.state==='invalid') return {state:'none'};
  if(target.state!=='found') return {state:'unreachable'};
  const read=await target.engine.sessions.messages(found.hermes_session_id,{offset,limit});
+ // The opened Conversation's first send gave it a session id before its Run started: a start the Engine refused leaves
+ // a session it does not hold, and the opening is still all there is.
+ if(read.state==='missing'&&found.lead_opening) {
+  const opening=await openingOf(db,company,found);
+  if(opening) return {state:'found',messages:[opening],nextOffset:0,hasMore:false};
+ }
  if(read.state!=='found') return {state:read.state};
  const messages=pageMessages(read.messages,read.prefix,read.suffix,found.agent_name);
  const made=messages.some(message=>message.steps?.list.some(step=>step.card));

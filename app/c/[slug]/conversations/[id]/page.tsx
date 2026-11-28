@@ -93,7 +93,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
   const opened=storedCount===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
    {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
   // In a Company on the Engine the opening is no message: the Conversation is marked, and its read draws it (#882).
-  if(opened===id) { record.catch(()=>{}); record=readRecord(); engine=!!(await db.from('conversations').select('lead_opening').eq('id',id).maybeSingle<{lead_opening:boolean}>()).data?.lead_opening; }
+  if(opened===id) { record.catch(()=>{}); record=readRecord(); engine=storedCount===0&&!waiting&&!!(await db.from('conversations').select('lead_opening').eq('id',id).maybeSingle<{lead_opening:boolean}>()).data?.lead_opening; }
  }
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
