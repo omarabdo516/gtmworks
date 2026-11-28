@@ -7,7 +7,7 @@ import { Input } from '@/components/paperclip/ui/input';
 import { reportClientError } from '@/lib/client-errors';
 // The Supabase browser client is large: it loads only when a password is saved.
 const browserSupabase=async()=>(await import('@/lib/browser-supabase')).browserSupabase();
-// Sets the signed-in person's password: after a reset link, from an invitation, or from their own settings. The password
+// Sets the signed-in person's password: after a reset link or from their own settings. The password
 // goes from this browser straight to the auth service, never through gtmworks' server. `done` is opened after saving;
 // without it the form says the password was saved.
 export default function SetPasswordForm({done}:{done?:string}) {

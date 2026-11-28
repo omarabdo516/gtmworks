@@ -23,11 +23,16 @@ grant select, insert on made to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 
--- The Owner invites two people.
+-- The Owner held two email invitations still open from before they ended (#953); the channel still holds them until the
+-- migration's ended ones leave.
+reset role;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-insert into invited values ('delivery',public.invite_member('10000000-0000-0000-0000-000000000001','delivery@example.test','contributor'));
-insert into invited values ('mona',public.invite_member('10000000-0000-0000-0000-000000000001','MONA_ali+ads@example.test','viewer'));
-select is((select count(*)::int from invited),2,'the Owner invites two people');
+with made as (insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','delivery@example.test','contributor') returning id)
+ insert into invited select 'delivery',id from made;
+with made as (insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','mona_ali+ads@example.test','viewer') returning id)
+ insert into invited select 'mona',id from made;
+set local role authenticated;
+select is((select count(*)::int from invited),2,'the Owner holds two open invitations');
 
 -- The general channel's Members hold both, with the name made from the email.
 select is((select array_agg(name||':'||role||':'||coalesce(email,'-') order by name) from public.channel_members((select id from general)) where invitation is not null),
@@ -57,7 +62,10 @@ select is((select array_agg(kind||':'||invitee_name||':'||actor_name order by in
 select is((select count(*)::int from public.channel_notes where channel_id=(select id from general)),2,'one line per invitation');
 select is((select count(*)::int from public.channel_messages where channel_id=(select id from general)),0,'a note is not a message');
 select is((select count(*)::int from public.channel_runs),0,'and starts no Run');
-select throws_ok($$select public.invite_member('10000000-0000-0000-0000-000000000001','Delivery@Example.test','manager')$$,'23505','inviteEmailTaken','inviting the same person again is refused');
+reset role;
+select throws_ok($$insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','delivery@example.test','manager')$$,'23505',null,'the same person cannot hold a second open invitation');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.channel_notes where channel_id=(select id from general)),2,'and adds no second line');
 
 -- A team channel made with an invitation holds it; a Contributor in it reads the row without the email.

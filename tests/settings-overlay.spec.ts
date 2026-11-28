@@ -1,7 +1,7 @@
 import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { signIn, openNavigation, emailLink } from './sign-in';
+import { signIn, openNavigation } from './sign-in';
 import { dialogExit, recordDialogExit, dialogRecords, type DialogExitRecord } from './dialog-exit';
 
 // The settings overlay (#26): opened from the account menu over the page, closed back to it, one address per state,
@@ -380,51 +380,52 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
  }
 });
 
-// #185: the Owner invites from the Team table without leaving the page; the invited person is a row marked "Invite sent"
-// for the Owner and the Managers, and their ordinary Member row once they accept from the email.
-test('the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted',async({page,context,browser})=>{
- const local=`team-invite-${Date.now()}`, email=`${local}@example.com`;
+// #950, #953: the Owner makes an Invite link from the Team table without leaving the page; a Manager reads the pending
+// row and has no way to make one, and the Person who joins becomes an ordinary Member row.
+test('the Owner makes an Invite link from the Team table, a Manager reads the pending row, and the Person becomes a Member row when they join',async({page,browser})=>{
+ const label=`Team Person ${Date.now()}`, email=`team-person-${Date.now()}@example.com`;
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
  const overlay=page.getByRole('dialog',{name:'Settings'});
  const address=page.url();
- await overlay.getByRole('button',{name:'Invite a member'}).click();
- await expect(overlay.locator('#inv-email')).toBeFocused();
- await overlay.locator('#inv-email').fill(email);
- await overlay.locator('#inv-role').selectOption('viewer');
- await overlay.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(page.locator('.toast')).toHaveText(`Invite sent to ${email}`);
- await expect(overlay.locator('#inv-toggle')).toBeFocused();
- const invited=overlay.locator('.ta-table tbody tr').filter({hasText:email});
- await expect(invited.locator('.ta-role')).toHaveText(`Viewer · ${email}`);
- await expect(invited.locator('.ta-pending')).toHaveText('Invite sent');
+ await overlay.getByRole('button',{name:'Make an invite link'}).click();
+ await expect(overlay.locator('#lnk-label')).toBeFocused();
+ await overlay.locator('#lnk-label').fill(label);
+ await overlay.locator('#lnk-role').selectOption('viewer');
+ await overlay.getByRole('button',{name:'Make the link'}).click();
+ const field=overlay.getByLabel(`Invite link for ${label}`);
+ await expect(field).toHaveValue(/\/join#code=[a-f0-9]{64}$/);
+ const link=await field.inputValue();
+ await overlay.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ const pending=overlay.locator('.ta-table tbody tr').filter({hasText:label});
+ await expect(pending.locator('.ta-role')).toContainText('Viewer');
+ await expect(pending.locator('.ta-pending')).toHaveText('Invite link');
  expect(page.url()).toBe(address);
- // The same email in another letter case is already invited: the error shows under the field and nothing is sent.
- await overlay.getByRole('button',{name:'Invite a member'}).click();
- await overlay.locator('#inv-email').fill(email.toUpperCase());
- await overlay.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(overlay.locator('#inv-email-err')).toHaveText('This email has already been invited.');
- await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(1);
- // signIn empties the local mailbox, so the invitation's link is read before the Manager signs in.
- const link=await emailLink(page,email);
 
+ // A Manager reads the pending row and has no way to make a link of their own.
  const other=await browser.newContext(); const manager=await other.newPage();
  try {
   await signIn(manager,'manager@example.com','/c/rs-learning/settings?section=members');
   const theirs=manager.getByRole('dialog',{name:'Settings'});
-  await expect(theirs.locator('.ta-table tbody tr').filter({hasText:email}).locator('.ta-pending')).toHaveText('Invite sent');
-  await expect(theirs.locator('#inv-toggle')).toHaveCount(0);
+  // A pending Invite link is the Administrator’s alone (#951); a Manager reads neither its row nor a way to make one.
+  await expect(theirs.locator('.ta-table tbody tr').filter({hasText:label})).toHaveCount(0);
+  await expect(theirs.getByRole('button',{name:'Make an invite link'})).toHaveCount(0);
  } finally { await other.close(); }
 
- await context.clearCookies(); await page.goto(link);
- await page.getByLabel('New password').fill('team-invited-password'); await page.getByLabel('Confirm password').fill('team-invited-password');
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\//);
- await context.clearCookies();
- await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
- const joined=overlay.locator('.ta-table tbody tr').filter({hasText:local});
+ // The Person opens the link in a browser of their own and joins.
+ const fresh=await browser.newContext(); const person=await fresh.newPage();
+ await person.goto(link);
+ await person.getByLabel('Your name').fill('Team Person');
+ await person.getByLabel('Email').fill(email);
+ await person.getByLabel('Password',{exact:true}).fill('team-person-password');
+ await person.getByLabel('Confirm password').fill('team-person-password');
+ await person.getByRole('button',{name:'Join and sign in'}).click();
+ await expect(person).toHaveURL(/\/c\/rs-learning\/home$/);
+ await fresh.close();
+
+ await page.goto('/c/rs-learning/settings?section=members');
+ const joined=page.getByRole('dialog',{name:'Settings'}).locator('.ta-table tbody tr').filter({hasText:'Team Person'});
  await expect(joined.locator('.ta-role')).toHaveText('Viewer');
  await expect(joined.locator('.ta-pending')).toHaveCount(0);
- await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(0);
 });
 
 // ADR 0018: Agent levels are gone. In place of the level choice the Company section says in one line what every Agent

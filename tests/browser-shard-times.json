@@ -27,7 +27,6 @@
   "board.spec.ts": 267,
   "channel-archive.spec.ts": 36,
   "channel-files.spec.ts": 46,
-  "channel-invitees.spec.ts": 44,
   "channel-runs.spec.ts": 71,
   "channels.spec.ts": 122,
   "chat-motion.spec.ts": 73,

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(65);
+select plan(70);
 -- #950, ADR 0019: an Administrator makes an Invite link with a label, a Role and the Agents the new Person will see. Only
 -- its secret's hash is kept, in a table no Member reads; the link ends after 7 days and never gives the Administrator
 -- role. Sending its form claims it once, in one transaction, and the new Member sees the chosen Agents and the main one.
@@ -140,6 +140,19 @@ set local role service_role;
 select is((select count(*)::int from public.invite_link_open(repeat('11',32))),0,'a cancelled link is no longer open');
 select throws_ok($$select public.claim_invite_link(repeat('11',32),'a9500000-0000-0000-0000-000000000012','Late','en')$$,'55000','inviteLinkCancelled','and sending its form is refused');
 reset role;
+
+-- #953: first run's step makes every named Person's link in one call; a later row that fails leaves none of the batch.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select ok(has_function_privilege('authenticated','public.make_invite_links(uuid,text[],text[],text[])','execute')
+ and not has_function_privilege('anon','public.make_invite_links(uuid,text[],text[],text[])','execute'),'only a signed-in person makes a batch of links');
+select is(array_length(public.make_invite_links('10000000-0000-0000-0000-000000000001',array['Batch One','Batch Two'],array['viewer','manager'],array[repeat('7a',32),repeat('8b',32)]),1),2,'a batch makes a link for every Person');
+reset role;
+select is((select count(*)::int from public.company_links where label in ('Batch One','Batch Two')),2,'and keeps each one');
+set local role authenticated;
+select throws_ok($$select public.make_invite_links('10000000-0000-0000-0000-000000000001',array['Batch Three','Batch Four'],array['viewer','viewer'],array[repeat('9c',32),repeat('9c',32)])$$,'23505',null,'a later row that fails is refused');
+reset role;
+select is((select count(*)::int from public.company_links where label in ('Batch Three','Batch Four')),0,'and leaves none of the batch made');
 
 -- #952: a Person who already has an account joins with it, without a second account or a name sent again.
 insert into auth.users(id,email) values ('a9500000-0000-0000-0000-000000000013','account-950@example.test');

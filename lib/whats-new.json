@@ -18,6 +18,12 @@
   "ar": { "title": "لينكات كلمة المرور", "body": "العضو اللي نسي كلمة المرور بيطلب من أدمن أو مدير في شركته، اللي بيعمله لينك كلمة مرور من صفحة الفريق؛ بيشتغل مرة واحدة لمدة 24 ساعة، وبيدخّله بكلمة المرور الجديدة ويخرّج أجهزته التانية، وصفحة الدخول مبقتش تبعت إيميل لتغيير كلمة المرور." }
 },
 {
+  "issue": 953,
+  "date": "2026-11-28",
+  "en": { "title": "Invite links everywhere; no invitation emails", "body": "Every place that invited by email now makes an Invite link: the Team page and first run’s “Who’s on your team?” step show each link once to copy. An email invitation left over from before is ended and the Team table says so, and the app sends no email." },
+  "ar": { "title": "لينكات الدعوة في كل مكان؛ ومفيش دعوات بالإيميل", "body": "كل مكان كان بيعزم بالإيميل بقى بيعمل لينك دعوة: صفحة الفريق وخطوة «مين معاك في التيم؟» في أول تشغيل بيعرضوا كل لينك مرة واحدة عشان تنسخه. وأي دعوة إيميل قديمة اتقفلت وصفحة الفريق بتقول كده، والتطبيق مبقاش يبعت إيميل." }
+},
+{
   "issue": 952,
   "date": "2026-11-28",
   "en": { "title": "People join with the account they have", "body": "A person who already has an account signs in on the invite link and joins with the link's Role and Agents, without making a second account; a person who is already a Member keeps their Role and Agents, and the link stays unused. From the Team page an Administrator also adds a Member of another company they administer, with a Role and Agents and no link." },

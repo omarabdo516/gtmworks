@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { userEvent } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { InviteLinkSection, type MakeLink } from '@/app/invite-link-section';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -63,4 +63,39 @@ test('a refused make shows why and keeps the form; the Arabic form reads as the 
  await expect.element(screen.getByText('معرفناش نعمل اللينك. جرّب تاني.')).toBeVisible();
  expect(document.getElementById('lnk-link')).toBeNull();
  await expect.element(screen.getByText('الوكلاء اللي هيشوفهم')).toBeVisible();
+});
+
+// #313, #953: the form that replaced the email invitation keeps the promise its test held (#257 removed the compared
+// screens): on a phone its controls reach 44px under a finger, and its small controls keep their 22px size.
+const tapArea = (node: Element) => {
+ const own = node.getBoundingClientRect(), ring = getComputedStyle(node, '::before');
+ const grow = ring.content === 'none' ? 0 : -(parseFloat(ring.top) || 0) - (parseFloat(ring.bottom) || 0);
+ return { reach: own.height + Math.max(0, grow), seen: node.clientHeight };
+};
+for (const language of ['en', 'ar'] as const) test(`on a phone in ${language} the Invite link form's controls reach 44px, and its small controls keep their 22px size`, async () => {
+ await page.viewport(390, 900);
+ const screen = await show(language);
+ make.mockResolvedValue({ link });
+ const closed = tapArea(document.getElementById('lnk-toggle')!);
+ expect(closed.reach, '"Make an invite link" reaches 44px').toBeGreaterThanOrEqual(44);
+ expect(closed.seen, '"Make an invite link" keeps at least 22px').toBeGreaterThanOrEqual(22);
+ await screen.getByRole('button', { name: language === 'ar' ? 'اعمل لينك دعوة' : 'Make an invite link' }).click();
+ const fields = [...document.querySelectorAll('.inv-sec .inv :is(input#lnk-label, select, button[type=submit])')];
+ expect(fields).toHaveLength(3);
+ for (const field of fields) {
+  const area = tapArea(field);
+  expect(area.reach, `${field.id || field.tagName} reaches 44px`).toBeGreaterThanOrEqual(44);
+  expect(area.seen, `${field.id || field.tagName} keeps at least 22px`).toBeGreaterThanOrEqual(22);
+ }
+ const cancel = tapArea(document.querySelector('.inv-sec .dp-label .link-btn')!);
+ expect(cancel.reach, 'Cancel reaches 44px').toBeGreaterThanOrEqual(44);
+ expect(cancel.seen, 'Cancel keeps at least 22px').toBeGreaterThanOrEqual(22);
+ await userEvent.type(document.getElementById('lnk-label')!, 'Nour Salah');
+ await screen.getByRole('button', { name: language === 'ar' ? 'اعمل اللينك' : 'Make the link' }).click();
+ await expect.element(screen.getByLabelText(language === 'ar' ? 'لينك دعوة لـ Nour Salah' : 'Invite link for Nour Salah')).toHaveValue(link);
+ for (const control of [document.getElementById('lnk-link')!, document.getElementById('lnk-copy')!, document.querySelector('.inv-sec .dp-label .link-btn')!]) {
+  const area = tapArea(control);
+  expect(area.reach, `${control.id || control.textContent} reaches 44px`).toBeGreaterThanOrEqual(44);
+  expect(area.seen, `${control.id || control.textContent} keeps at least 22px`).toBeGreaterThanOrEqual(22);
+ }
 });
