@@ -33,13 +33,8 @@ cd "$root"
 area_setup
 reset_install
 install_source first-install.log || fail 'first install'
-# The install sends no email (#948, ADR 0019): no mailbox service is defined, no SMTP or mailer setting reaches Auth,
-# and no inbox port is published.
-services=$(compose config --services) || fail 'read the install services'
-config=$(compose config) || fail 'read the install configuration'
-if grep -qx mail <<< "$services"; then fail 'the install has no mail service'; fi
-if grep -qE 'GOTRUE_(SMTP|MAILER)_' <<< "$config"; then fail 'the install sets no SMTP or mailer setting'; fi
-if docker ps -q --filter 'publish=8025' | grep -q .; then fail 'the install publishes no mailbox port'; fi
+# The install sends no email (#948, ADR 0019).
+no_mailbox
 # The work sandbox image every Company's sandbox runs (#392, ADR 0020): the source install built it from
 # sandbox/Dockerfile (or CI loaded it), and its own check proves in a container of it what an install owner and an Agent see.
 [[ -f .work-sandbox-image ]] || fail 'the install names the work sandbox image it got'
@@ -1664,6 +1659,7 @@ docker exec gtmworks-install-hermes-1 grep -qF "$marker" "/opt/data/profiles/$pr
 # previous release ran, and leaves the Company answering from its record.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail 'release update'
+no_mailbox
 main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(first_engine_key) == "$key" ]] || fail 'the update adopted the Engine key'
 # The Engine the update brought up has gtmworks's theme as its dashboard's default (#872).
@@ -1725,6 +1721,7 @@ compose exec -T web node --input-type=module - sandbox "$marker" < "$root/script
 # The next release's migration is applied through the running database's bind mount.
 cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" . || fail 'next release files in place'
 sh install.sh update || fail 'next release update'
+no_mailbox
 main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
   || fail 'the next release migration applied through the running bind mount'

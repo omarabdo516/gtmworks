@@ -142,6 +142,17 @@ reset_install() {
   if [ -f .env.install ]; then remove_install || return 1; else remove_engine; fi
   rm -f .env.install
 }
+# Whether an install sends no email (#948, ADR 0019): no mailbox service is defined, no SMTP or mailer setting reaches
+# Auth, and no inbox port is published. A fresh install proves it, and so does an update from a release that ran the
+# mailbox, which a Compose up alone would leave running.
+no_mailbox() {
+  local services config
+  services=$(compose config --services) || fail 'read the install services'
+  config=$(compose config) || fail 'read the install configuration'
+  if grep -qx mail <<< "$services"; then fail 'the install has no mail service'; fi
+  if grep -qE 'GOTRUE_(SMTP|MAILER)_' <<< "$config"; then fail 'the install sets no SMTP or mailer setting'; fi
+  if docker ps -q --filter 'publish=8025' | grep -q .; then fail 'the install publishes no mailbox port'; fi
+}
 # The setup an area starts from (#407, #408, #409): the source install, its output kept in the log named by the one
 # argument and its status kept under the proof's pipefail, and first run completed the way a browser does it on the
 # local install, straight to the gateway: the setup form's submission with the setup code in its body makes the first

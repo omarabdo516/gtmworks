@@ -38,10 +38,10 @@ function install({signInAt,checksCode=true,closes=true,linksSupported=true}) {
    return json({access_token:'owner-token'});
   }
   if(url.pathname==='/rest/v1/companies' && request.method==='GET' && request.headers.apikey==='service' && url.searchParams.get('slug')===`eq.${slug}`) return json([{id:'10000000-0000-0000-0000-000000000001'}]);
-  if(url.pathname==='/rest/v1/rpc/make_invite_link' && request.method==='POST') {
+  if(url.pathname==='/rest/v1/rpc/make_invite_links' && request.method==='POST') {
    assert.equal(request.headers.authorization,'Bearer owner-token'); assert.equal(request.headers.apikey,'anon');
-   const row=JSON.parse(body); assert.equal(row.link_role,'contributor'); assert.match(row.link_hash,/^[a-f0-9]{64}$/);
-   links.push({used_at:null}); return json('10000000-0000-0000-0000-000000000002');
+   const row=JSON.parse(body); assert.deepEqual(row.link_roles,['contributor']); assert.match(row.hashes[0],/^[a-f0-9]{64}$/);
+   links.push({used_at:null}); return json(['10000000-0000-0000-0000-000000000002']);
   }
   if(url.pathname==='/rest/v1/company_links' && request.method==='GET' && request.headers.apikey==='service' && !linksSupported) return send(404,{},'');
   if(url.pathname==='/rest/v1/company_links' && request.method==='GET' && request.headers.apikey==='service') return json(links.map(row=>({used_at:row.used_at ?? '2026-11-28T00:00:00Z'})));
@@ -100,7 +100,7 @@ test('the proxied install check fails when a redirect leaves the public origin f
 
 // The install sends no email (#948, ADR 0019): it has no mailbox service and no SMTP or mailer setting. Sign-in stays
 // with a password, which GoTrue reads as its email provider, so the provider itself stays on.
-test('the install defines no mailbox service and no SMTP or mailer setting', () => {
+test('the install defines no mailbox service or SMTP setting and keeps password sign-in\'s email provider', () => {
  const compose=load(readFileSync('docker-compose.install.yml','utf8'));
  assert.equal(compose.services.mail,undefined,'no mail service');
  assert.doesNotMatch(readFileSync('docker-compose.install.yml','utf8'),/GOTRUE_(SMTP|MAILER)_/);

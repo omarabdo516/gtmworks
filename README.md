@@ -540,7 +540,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - 🟡 Board, Cards, Projects and Routines (merged, waiting for the release, #572)
 - ✅ Company knowledge, Skills, memory and team lessons
 - 🟡 Connect any MCP server, and run command tools in the sandbox (merged, waiting for the release, #572)
-- ✅ Roles, Invite links without email and per-Member Agent access
+- ✅ Roles, Invite links without email and per-Member Agent access [#948]
 - 🟡 Good morning message from the main Agent (merged, waiting for the release, #572)
 - ✅ English and Egyptian Arabic, dictation in Egyptian Arabic
 - 🟡 Open Design, installed by you and connected from Apps: Agents make designs

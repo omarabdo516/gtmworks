@@ -59,10 +59,10 @@ assert.ok((await home.response.text()).includes(owner.company),'the Company home
 console.log(`Reached ${home.url}`);
 assert.equal((await submit({...owner,email:'second-owner@example.com',code})).response.status,404,'a second submission with the setup code is refused');
 
-// An Invite link (#950, #953) joins a new Person with no email: the Owner signs in with a password, the app's own
-// make_invite_link makes the link with that session and keeps only its hash, the page opens on the public origin, and
-// its form makes the Person, the Member and a session. An older release has no link table yet: its first run is
-// checked without this step, and no email is sent by this script either way.
+// An Invite link (#950, #953) joins a new Person with no email: the first run's Administrator signs in with a password,
+// first run's own make_invite_links makes the link with that session and keeps only its hash, the page opens on the
+// public origin, and its form makes the Person, the Member and a session. An older release has no link table yet: its
+// first run is checked without this step, and no email is sent by this script either way.
 const restHeaders={apikey:service,authorization:`Bearer ${service}`};
 const linksTable=await fetch(`${origin}/rest/v1/company_links?select=id&limit=1`,{headers:restHeaders});
 if(linksTable.ok) {
@@ -70,13 +70,13 @@ if(linksTable.ok) {
  const [company]=await (await fetch(`${origin}/rest/v1/companies?slug=eq.${encodeURIComponent(slug)}&select=id`,{headers:restHeaders})).json();
  assert.ok(company?.id,`the Company ${slug} is read`);
  const signedIn=await fetch(`${origin}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:anon,'content-type':'application/json'},body:JSON.stringify({email:owner.email,password:owner.password})});
- assert.equal(signedIn.status,200,`the Owner signs in with a password (HTTP ${signedIn.status})`);
+ assert.equal(signedIn.status,200,`the Administrator signs in with a password (HTTP ${signedIn.status})`);
  const {access_token:ownerToken}=await signedIn.json();
- assert.ok(ownerToken,'the Owner has a session');
+ assert.ok(ownerToken,'the Administrator has a session');
  const secret=randomBytes(32).toString('hex'), hash=createHash('sha256').update(secret).digest('hex');
- const made=await fetch(`${origin}/rest/v1/rpc/make_invite_link`,{method:'POST',headers:{apikey:anon,authorization:`Bearer ${ownerToken}`,'content-type':'application/json'},
-  body:JSON.stringify({c:company.id,label:'Proxy Invitee',link_role:'contributor',agents:[],link_hash:hash})});
- assert.equal(made.status,200,`the Owner makes an Invite link (HTTP ${made.status})`);
+ const made=await fetch(`${origin}/rest/v1/rpc/make_invite_links`,{method:'POST',headers:{apikey:anon,authorization:`Bearer ${ownerToken}`,'content-type':'application/json'},
+  body:JSON.stringify({c:company.id,labels:['Proxy Invitee'],link_roles:['contributor'],hashes:[hash]})});
+ assert.equal(made.status,200,`first run's Administrator makes an Invite link (HTTP ${made.status})`);
  assert.equal((await visit(`${origin}/join`)).status,200,'the join page opens');
  const joiner={name:'Proxy Invitee',email:'proxy-joined@example.com',password:'proxy-joined-password'};
  const joined=await visit(`${origin}/join/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},

@@ -109,6 +109,12 @@ compose() {
     *) docker compose --env-file .env.install -f docker-compose.install.yml "$@" ;;
   esac
 }
+# An install made by a release before #956 ran a mailbox service (mail, Mailpit). Compose leaves a container running
+# when its service leaves the file, so an update removes that container itself, with the port it published.
+remove_old_mailbox() {
+  old_mailbox=$(docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' --filter 'label=com.docker.compose.service=mail')
+  [ -z "$old_mailbox" ] || docker rm -f $old_mailbox > /dev/null
+}
 # The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
 # pulls it; a source checkout builds it from its one build file. Its reference is written under .install-lock while the
 # run is in flight and only moved to .work-sandbox-image when the run succeeds (#393), so a run that failed records no
@@ -1483,6 +1489,7 @@ elif [ "$operation" = restore ]; then
   # first and the containers never start with it in their environment.
   adopt_engine_key || return 1
   compose up -d --force-recreate --wait --wait-timeout 300
+  remove_old_mailbox
   # Every Engine starts with its Company's sandbox (#393), so the image the restored install's sandboxes run is recorded
   # first, as an install records it: a release pins it, a checkout builds it once.
   work_sandbox_image || return 1
@@ -1673,12 +1680,13 @@ fi
 # Every Engine started from this release's files, which stay whatever fails next.
 engine_files=
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
-  # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
+  # auth is recreated when its settings changed (password rules, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth web worker
 else
   # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300
 fi
+remove_old_mailbox
 worker_stopped=no
 # The app and the worker join every Engine's network once they exist, and again after every recreation.
 join_engine_networks

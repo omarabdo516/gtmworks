@@ -41,7 +41,7 @@ test('first run takes a password with its confirmation and refuses a short or mi
  assert.equal(firstRunInput(form({...base,password:undefined,confirm:undefined})),null);
 });
 
-test('the auth service enforces the same rule and a 30 day session', () => {
+test('the auth service enforces the same rule, a 24 hour sign-in link and a 30 day session', () => {
  const config=readFileSync('supabase/config.toml','utf8');
  assert.match(config,/^minimum_password_length = 10$/m);
  assert.match(config,/^otp_expiry = 86400$/m);
