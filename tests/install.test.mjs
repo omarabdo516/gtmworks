@@ -1176,6 +1176,60 @@ esac
  assert.equal(existsSync(join(directory,'.install-lock')),false);
 });
 
+// #981: an update applies its migrations while the previous release's app and worker keep reading, and a query locking
+// the tables a migration alters in the other order deadlocks with it. Postgres rolls the whole transaction back and names
+// the deadlock, so the installer runs the same migrations again, five attempts at most, as the first-run reset does
+// (#326). Any other failure is the migrations' own and stops at once.
+test('a migration transaction that deadlocks with the running app runs again whole; any other failure stops at once', t => {
+ const fixture=()=>{
+  const directory=mkdtempSync(join(tmpdir(),'gtmworks-deadlock-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
+  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
+  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
+  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
+  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
+  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\\n';;
+ *validate*) exit 0;;
+ *engine-key*) printf '%s\\n' "$ENGINE_KEY";;
+ *'exec -T db psql'*) n=$(cat "$ATTEMPTS" 2> /dev/null || echo 0); echo $((n+1)) > "$ATTEMPTS"
+   cat > "$INSTALL_SQL.$n"; cp "$INSTALL_SQL.$n" "$INSTALL_SQL"
+   if [ -n "\${DEADLOCKED:-}" ] && [ "$n" = 0 ]; then echo 'psql:/migrations/002_deadlocked.sql:11: ERROR:  deadlock detected' >&2; exit 3; fi
+   if [ -n "\${DEADLOCK_ALWAYS:-}" ]; then echo 'psql:/migrations/002_deadlocked.sql:11: ERROR:  deadlock detected' >&2; exit 3; fi
+   if [ -n "\${MIGRATION_ERROR:-}" ]; then echo "$MIGRATION_ERROR" >&2; exit 3; fi;;
+esac
+`,{mode:0o755});
+  const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_SQL:join(directory,'migration.sql'),ATTEMPTS:join(directory,'attempts'),ENGINE_KEY:'a1'.repeat(32)};
+  return {directory,run:extra=>spawnSync('sh',['scripts/install.sh'],{cwd:directory,env:{...env,...extra},encoding:'utf8'}),
+   transactions:()=>readdirSync(directory).filter(name=>/^migration\.sql\.\d+$/.test(name)).sort().map(name=>readFileSync(join(directory,name),'utf8'))};
+ };
+ const deadlocked=fixture();
+ const recovered=deadlocked.run({DEADLOCKED:'1'});
+ assert.equal(recovered.status,0,recovered.stderr);
+ assert.match(recovered.stderr,/deadlock/);
+ const runs=deadlocked.transactions();
+ assert.equal(runs.length,3,'the transaction runs again, then the cutover once the app answers');
+ assert.match(runs[0],/\\echo Applying migration: 001_first\.sql/);
+ assert.match(runs[0],/select to_regclass\('public\.companies'\) is not null and to_regclass\('public\.conversations'\) is not null as both_tables \\gset\n\\if :both_tables\nlock table public\.companies, public\.conversations in access exclusive mode;\n\\endif/);
+ assert.ok(runs[0].indexOf('lock table public.companies')<runs[0].indexOf('/001_first.sql'),'the lock comes before every migration');
+ assert.equal(runs[0],runs[1],'the whole transaction is sent again');
+ assert.notEqual(runs[1],runs[2],'the cutover runs alone, after the app answers');
+ const failed=fixture();
+ const error=failed.run({MIGRATION_ERROR:'psql:/migrations/001_first.sql:1: ERROR:  division by zero'});
+ assert.equal(error.status,3,error.stderr);
+ assert.match(error.stderr,/division by zero/);
+ assert.equal(failed.transactions().length,1,'a failure that is not a deadlock is not run again');
+ const stuck=fixture();
+ const gaveUp=stuck.run({DEADLOCK_ALWAYS:'1'});
+ assert.equal(gaveUp.status,3,gaveUp.stderr);
+ assert.match(gaveUp.stderr,/deadlock detected/);
+ assert.equal(stuck.transactions().length,5,'five attempts at most, then the psql status');
+});
+
 // #411: a source install that skips `compose build web` because CI loaded the run's one image says so in one line, so a
 // person reading the log knows which image the install runs; a source install anywhere else still builds its own.
 test('a source install that skips building the app image says so in one line', t => {
