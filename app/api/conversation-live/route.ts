@@ -55,7 +55,13 @@ export async function GET(request:NextRequest) {
      let value=next.value;
      // The Run ended, or the Engine no longer knows it: the row lets it go, and the reader reads the session. An end is
      // told as the Run's record says it went: one that failed or was stopped did not finish, and says why.
-     if('end' in value&&value.end==='ended') value=await told()??value;
+     // The record may not say so the moment the events end: it is read again a few times, and an end it never names
+     // is told plainly, which the page shows as no reply under the person's message.
+     if('end' in value&&value.end==='ended') {
+      let read=await told();
+      for(let tries=0;!read&&tries<3;tries++) { await new Promise(resolve=>setTimeout(resolve,300)); read=await told(); }
+      value=read??value;
+     }
      if('end' in value&&(value.end==='ended'||value.end==='gone')) await db.rpc('end_conversation_run',{conversation,run});
      controller.enqueue(line(value));
     } catch { controller.enqueue(line({end:'unreachable'})); controller.close(); }
