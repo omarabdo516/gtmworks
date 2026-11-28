@@ -248,17 +248,17 @@ test('the Engine\'s own queue limit, once reached, leaves the message not sent a
  await openConversation(page);
  fake.settings.liveHold=true; fake.settings.sessionQueueLimit=1;
  const starts=fake.settings.counts().runStart??0;
- await send(page,'One');
+ await send(page,'Queue one');
  await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+1);
- await send(page,'Two');
+ await send(page,'Queue two');
  await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+2);
- await send(page,'Three');
+ await send(page,'Queue three');
  const line=page.locator('.composer-error');
  await expect(line).toHaveText(/Not sent: too many messages are already waiting for this agent/,{timeout:20000});
  await expect(line.getByRole('button',{name:'Try again'})).toBeVisible();
- await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Three');
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('Queue three');
  await expect(person(page)).toHaveCount(2);
- expect(runsOf('Three')).toBe(0);
+ expect(runsOf('Queue three')).toBe(0);
 });
 
 test('a double press sends one message',async({page})=>{

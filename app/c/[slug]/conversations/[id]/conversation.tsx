@@ -423,10 +423,13 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  const said=engine.page?.messages.at(-1);
  const noReply=writer&&engine.mode==='engine'&&said?.author==='person'&&!run.following&&!run.working&&!sent.waiting.length;
  const [asking,setAsking]=useState(false);
+ // One send key per message left with no reply: a second press after an answer that was lost replays that Run.
+ const againKeys=useRef(new Map<number,string>());
  const askAgain=async()=>{
   if(!said||asking) return;
   setAsking(true);
-  const key=crypto.randomUUID(); const settle=sending(key,said.body,[]);
+  const key=againKeys.current.get(said.id)??crypto.randomUUID(); againKeys.current.set(said.id,key);
+  const settle=sending(key,said.body,[]);
   const {failure,answer}=await postMessageAnswer({company,conversation:conversation.id,message:said.body,sendKey:key});
   settle(failure,answer); setAsking(false);
   if(failure) toast(t(failure),{icon:'alert'}); else run.follow();

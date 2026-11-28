@@ -280,7 +280,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   {/* A message the Engine could not take stays in the box (#877): the line says why it was not sent, and Try again
      sends it again with the same key, so a Run the Engine did start is the one it replays. */}
   {error&&<p role="alert" className="composer-error" data-outcome={notSent.has(error)?'not-sent':undefined}>{t(error,maxFiles)}
-   {notSent.has(error)&&canSend&&<> <button type="button" className="link-btn" disabled={busy} onClick={()=>void submit()}>{t('tryAgain')}</button></>}</p>}
+   {notSent.has(error)&&canSend&&<> <button type="button" className="link-btn" disabled={busy} onClick={()=>void submit()}>{t('conversationSendAgain')}</button></>}</p>}
   {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}{dictation.help}</p>}
   {flights.drawn}
  </div>;
