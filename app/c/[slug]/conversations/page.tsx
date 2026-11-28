@@ -21,7 +21,7 @@ export default async function AllConversationsPage({params,searchParams}:{params
  if(!company||!role) notFound();
  const [first,counts]=await Promise.all([
   conversationPage(db,company.id,{tab},t,language),
-  conversationCounts(db,company.id),
+  conversationCounts(db,company.id,t,language),
  ]);
  return <Page title={t('allConversations')}>
   <main className="board-view board-view--page all-convos h-full"><AllConversations key={tab} slug={slug} company={company.id} tab={tab} counts={counts} first={first}/></main>

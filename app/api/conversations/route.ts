@@ -15,6 +15,7 @@ import { discardConversationFiles, keepConversationFiles, type ConversationFiles
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
 import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-messages';
+import { unarchiveOnWrite } from '@/lib/conversation-session-marks';
 import { conversationSteps } from '@/lib/conversation-steps';
 import { agentAppStates } from '@/lib/company-app-items';
 
@@ -56,6 +57,9 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuse(sent.error,sent.status); }
  // A note to a person and an answer to a question store no turn, so nothing can sit under one: their images go.
  if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files);
+ // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared. An Engine that
+ // does not answer leaves it in the archive, and the message is sent all the same.
+ await unarchiveOnWrite(db,company,conversation).catch(()=>{});
  return reply(sent);
 }
 

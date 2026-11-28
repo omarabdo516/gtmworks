@@ -6,3 +6,5 @@ export type UsageModel={model:string,input:number,output:number,sessions:number}
 export type ProfileUsage={state:'found',input:number,output:number,sessions:number,models:UsageModel[]}|{state:'refused'|'unreachable',input:null,output:null,sessions:null,models:null};
 export function readUsage(connection:import('../engine.mjs').EngineConnection,days:number):Promise<ProfileUsage>;
 export function isSilentReply(reply:unknown):boolean;
+export function titleSession(connection:{address:string,profile:string,key:string},session:string,title:string):Promise<'marked'|'missing'|'invalid'|'refused'|'unreachable'>;
+export function readSessionList(connection:import('../engine.mjs').EngineConnection,page?:{offset?:number,limit?:number}):Promise<import('../engine.mjs').SessionListRead>;

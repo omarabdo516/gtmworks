@@ -33,7 +33,7 @@ function conversations(agent:string,titles:string[]) {
 }
 test.use({actionTimeout:15000});
 
-test('A person archives their Conversation from its head while its Agent replies: one confirmation names what stops, Undo brings it back, and writing in it brings it back too; the Engine session takes the mark once the Engine answers',async({page})=>{
+test('A person archives their Conversation from its head while its Agent replies: one confirmation names what stops, Undo brings it back, and writing in it brings it back too; the archive is the own mark of its Engine session, and nothing is archived while the Engine cannot take it',async({page})=>{
  test.setTimeout(150000);
  const fake=await laneHermes();
  const nour=attachNour();
@@ -53,7 +53,7 @@ test('A person archives their Conversation from its head while its Agent replies
   const recent=page.locator('#sb-recent .thread-row').filter({hasText:title});
   await expect(recent).toHaveCount(1);
 
-  // The Engine cannot take the mark for now: archiving in gtmworks does not wait for it.
+  // The archive is the session's own archived mark (#881): while the Engine cannot take it, nothing is archived.
   fake.settings.sessionMarkStatus=503;
   const archiveFromHead=async()=>{
    await page.getByRole('button',{name:'More: this conversation'}).click();
@@ -65,14 +65,23 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(dialog.locator('.cf-row')).toHaveText([`Nour stops working on “${title}”`]);
   await dialog.getByRole('button',{name:'Cancel'}).click();
   await expect(dialog).toHaveCount(0);
-  expect(rows(`select archived_at from public.conversations where id='${conversation}'`)[0].archived_at).toBeNull();
+  await archiveFromHead();
+  await page.getByRole('dialog',{name:'Archive the conversation?'}).getByRole('button',{name:'Archive and stop'}).click();
+  await expect(page.locator('.toast').filter({hasText:'Nothing was archived'})).toBeVisible();
+  await expect(recent).toHaveCount(1);
+  await expect(page.locator('.arc-line')).toHaveCount(0);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(false);
 
+  // Once it answers, archiving marks the session at once, and gtmworks keeps no mark of its own.
+  fake.settings.sessionMarkStatus=null;
   await archiveFromHead();
   await page.getByRole('dialog',{name:'Archive the conversation?'}).getByRole('button',{name:'Archive and stop'}).click();
   const toast=page.locator('.toast').filter({hasText:'Archived'});
   await expect(toast).toBeVisible();
   await expect(page.locator('.arc-line')).toHaveText('This conversation is archived. Writing in it brings it back to your recent chats.');
   await expect(recent).toHaveCount(0);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(true);
+  expect(rows(`select archived_at from public.conversations where id='${conversation}'`)[0].archived_at).toBeNull();
 
   // Undo brings it back to the recent chats. It lasts as long as its toast (app/toast.tsx), so it is pressed before the
   // Engine is asked whether the Run stopped, which the Engine keeps once told (#746).
@@ -81,18 +90,14 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(page.locator('.toast').filter({hasText:'Restored'})).toBeVisible();
   await expect(recent).toHaveCount(1);
   await expect(page.locator('.arc-line')).toHaveCount(0);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(false);
   // Archived again once its stopped Run has closed, so nothing is left to stop: no confirmation.
   await expect.poll(()=>rows(`select count(*)::int as n from public.conversation_run_ends where conversation_id='${conversation}'`)[0].n,{timeout:30000}).toBe(2);
   await archiveFromHead();
   await expect(page.locator('.toast').filter({hasText:'Archived'})).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  // The Engine's session is asked for the mark, which does not land while the Engine cannot take it.
-  await expect.poll(()=>fake.settings.sessionMarks.length,{timeout:30000}).toBeGreaterThan(0);
-  expect(rows(`select (archived_at is not null) as archived, session_archived from public.conversations where id='${conversation}'`)[0]).toEqual({archived:true,session_archived:null});
-  // Once it answers, it takes the mark.
-  fake.settings.sessionMarkStatus=null;
-  await expect.poll(()=>fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`),{timeout:30000}).toBe(true);
-  expect(fake.settings.sessionMarks.every(mark=>JSON.stringify(mark.body)==='{"archived":true}'),'the archived flag alone: nothing else of the session, nor the Agent\'s memory').toBe(true);
+  expect(fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`)).toBe(true);
+  expect(fake.settings.sessionMarks.every(mark=>Object.keys(mark.body).join()==='archived'),'the archived flag alone: nothing else of the session, nor the Agent\'s memory').toBe(true);
 
   // A message written in it brings it back, and the Engine's mark is taken off.
   fake.settings.pendingReads=0;

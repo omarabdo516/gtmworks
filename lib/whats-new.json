@@ -1,5 +1,11 @@
 [
 {
+  "issue": 881,
+  "date": "2026-11-28",
+  "en": { "title": "Rename a Conversation, and lists that never wait", "body": "The sidebar and All conversations list your Conversations from the Agent’s Engine, by their titles or, before they have one, by their first words, and keep what they last read so moving between pages never waits; rename a Conversation from its menu, and archiving or writing in it is kept on the Engine." },
+  "ar": { "title": "غيّر اسم المحادثة، والقوايم مبتستناش", "body": "الشريط الجانبي و«كل المحادثات» بيعرضوا محادثاتك من محرك الوكيل، بعناوينها أو بأول كلامها لحد ما يبقى ليها عنوان، وبيحتفظوا بآخر قراية عشان التنقل بين الصفحات ميستناش؛ وتقدر تغيّر اسم المحادثة من القايمة بتاعتها، والأرشفة أو الكتابة فيها بتتحفظ في المحرك." }
+},
+{
   "issue": 875,
   "date": "2026-11-27",
   "en": { "title": "A Conversation opens on its last messages", "body": "Opening a Conversation reads its last 50 messages from the Agent’s Engine session, and the 50 before as you scroll back; your older words stay yours after the Engine compacts them, and its summary is drawn as the Engine’s." },

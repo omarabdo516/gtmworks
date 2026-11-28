@@ -21,6 +21,7 @@ import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
 import { MoreMenu } from '@/app/more-menu';
 import { useConversationArchive } from '@/app/conversation-archive';
+import { useConversationRename } from '@/app/conversation-rename';
 import { toast } from '@/app/toast';
 import { useRouter } from 'next/navigation';
 
@@ -81,15 +82,16 @@ function ChatHead({panel,agent,conversation,title}:{panel:DetailsPanel,agent:Det
  return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={named?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto"/></>;
 }
 
-// The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or
-// restore it while it is archived. Its person tidies their own, whatever their Role.
+// The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): rename the Conversation (#881),
+// and archive it, or restore it while it is archived. Its person tidies their own, whatever their Role.
 function ChatMore({company,conversation,title,archived,changed}:{company:string,conversation:ThreadConversation,title:string,archived:boolean,changed:(archived:boolean)=>void}) {
  const {t}=useI18n();
  const chat={id:conversation.id,title};
  const {archive,restore,confirm}=useConversationArchive(company,(_ids,nowArchived)=>changed(nowArchived));
- return <div className="chat__start"><MoreMenu label={t('conversationMore')} items={[archived
+ const {rename,dialog}=useConversationRename(company);
+ return <div className="chat__start"><MoreMenu label={t('conversationMore')} items={[{key:'rename',icon:'pencil',label:t('conversationRename'),run:()=>rename(chat)},archived
   ?{key:'restore',icon:'restore',label:t('conversationRestore'),run:()=>void restore([chat])}
-  :{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([chat])}]}/>{confirm}</div>;
+  :{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([chat])}]}/>{confirm}{dialog}</div>;
 }
 
 // The composer, told the record when it is there and given the send made before it as the transcript asks for its reply
