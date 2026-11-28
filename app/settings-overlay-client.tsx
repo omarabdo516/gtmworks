@@ -11,7 +11,7 @@ import { inviteMember } from './invite-actions';
 import { makeInviteLink, cancelInviteLink } from './invite-link-actions';
 import { InviteLinkSection } from './invite-link-section';
 import { InviteSection, type InviteRole } from './invite-section';
-import { TeamTable, type TeamAgent, type TeamInvitation, type TeamLink, type TeamMember } from './team-table';
+import { TeamTable, PendingLinks, type TeamAgent, type TeamInvitation, type TeamLink, type TeamMember } from './team-table';
 import { useSaidWhen } from './agent-made';
 import { toast } from './toast';
 
@@ -88,6 +88,18 @@ export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:s
 // "Make an invite link" (#950) for a Company worked alone, its make bound to the Administrator's server action.
 export function InviteLink({company,agents}:{company:string,agents:TeamAgent[]}) {
  return <InviteLinkSection agents={agents.filter(agent=>!agent.is_default)} make={(label,role,chosen)=>makeInviteLink(company,label,role,chosen)}/>;
+}
+
+// The pending Invite links of a Company worked alone (#951), cancelled through the Administrator's action; the page reads
+// the section again after a cancel, so the row leaves at once.
+export function PendingInviteLinks({company,links}:{company:string,links:TeamLink[]}) {
+ const router=useRouter();
+ const cancelLink=async(link:string)=>{
+  const failure=await cancelInviteLink(company,link);
+  if(!failure) router.refresh();
+  return failure;
+ };
+ return <PendingLinks links={links} cancelLink={cancelLink}/>;
 }
 
 // The Team table (#187), with its switches and its Owner invite bound to the server actions that check the Role again.

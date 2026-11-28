@@ -957,6 +957,7 @@
   "inviteLinkNameEmpty": "Write the person’s name, so you know whose link it is.",
   "inviteLinkFailed": "Couldn’t make the link. Try again.",
   "inviteLinkBadge": "Invite link",
+  "inviteLinks": "Invite links",
   "inviteLinkMadeBy": "Made by {0}",
   "inviteLinkEnds": "Ends {0}",
   "inviteLinkCancel": "Cancel link",

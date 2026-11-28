@@ -957,6 +957,7 @@
   "inviteLinkNameEmpty": "اكتب اسم الشخص، عشان تعرف اللينك ده بتاع مين.",
   "inviteLinkFailed": "معرفناش نعمل اللينك. جرّب تاني.",
   "inviteLinkBadge": "لينك دعوة",
+  "inviteLinks": "لينكات دعوة",
   "inviteLinkMadeBy": "عمله {0}",
   "inviteLinkEnds": "بيخلص {0}",
   "inviteLinkCancel": "الغي اللينك",

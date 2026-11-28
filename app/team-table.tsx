@@ -46,27 +46,52 @@ function AgentSwitch({company,target,agent,agentName,personName,on,label,save}:{
  })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
 }
 
+// The Administrator's Cancel on one pending Invite link (#951): it stops the link at once and says so; a refusal stays
+// in place with its reason. Both the Team table's row and a Company worked alone's short list draw it.
+function CancelInviteLink({link,label,cancelLink}:{link:string,label:string,cancelLink:CancelLink}) {
+ const {t}=useI18n();
+ const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
+ const cancel=()=>startTransition(async()=>{
+  setError('');
+  const failure=await cancelLink(link).catch(()=> 'inviteLinkCancelFailed');
+  if(failure) { setError(failure); return; }
+  toast(t('inviteLinkCancelled',label),{icon:'x'});
+ });
+ return <span className="ta-link-act">{error&&<span className="set-err" role="alert">{t(error)}</span>}
+  <button type="button" className="link-btn" disabled={pending} aria-label={t('inviteLinkCancelLabel',label)} onClick={cancel}>{t('inviteLinkCancel')}</button></span>;
+}
+
 // A pending Invite link (#951) in the Team table: its label, the Role it gives, who made it and when it ends, with the
 // Administrator's Cancel. A used link leaves this list (the Person shows as a Member), and a cancelled or ended one stops
 // working at once. The row takes its cancel as a prop, so its component test renders it with no server action.
 function InviteLinkRow({link,cancelLink,cols}:{link:TeamLink,cancelLink:CancelLink,cols:number}) {
  const {t,locale}=useI18n();
- const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
  const day=new Date(link.ends_at).toLocaleDateString(locale,{day:'numeric',month:'short',timeZone:'UTC'});
- const cancel=()=>startTransition(async()=>{
-  setError('');
-  const failure=await cancelLink(link.id).catch(()=> 'inviteLinkCancelFailed');
-  if(failure) { setError(failure); return; }
-  toast(t('inviteLinkCancelled',link.label),{icon:'x'});
- });
  return <tr><th scope="row" colSpan={cols}><span className="ta-link">
   <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(link.label)}</span>
    <span className="od-field"><span className="ta-name"><bdi>{link.label}</bdi></span>
     <span className="ta-role">{t(link.role)}{link.made_by_name?<> · {t('inviteLinkMadeBy',link.made_by_name)}</>:null} · {t('inviteLinkEnds',day)}</span>
     <span className="badge ta-pending"><SettingsIcon name="clock"/>{t('inviteLinkBadge')}</span></span></span>
-  <span className="ta-link-act">{error&&<span className="set-err" role="alert">{t(error)}</span>}
-   <button type="button" className="link-btn" disabled={pending} aria-label={t('inviteLinkCancelLabel',link.label)} onClick={cancel}>{t('inviteLinkCancel')}</button></span>
+  <CancelInviteLink link={link.id} label={link.label} cancelLink={cancelLink}/>
  </span></th></tr>;
+}
+
+// The same pending links (#951) where no Team table is drawn: a Company worked alone sees its first teammate's link in a
+// short list, with the same Cancel, instead of losing track of it until someone joins.
+export function PendingLinks({links,cancelLink}:{links:TeamLink[],cancelLink:CancelLink}) {
+ const {t,locale}=useI18n();
+ return <ul className="panel-card" aria-label={t('inviteLinks')}>
+  {links.map(link=>{
+   const day=new Date(link.ends_at).toLocaleDateString(locale,{day:'numeric',month:'short',timeZone:'UTC'});
+   return <li className="panel-row" key={link.id}>
+    <span className="me__av pp-av" aria-hidden="true">{initial(link.label)}</span>
+    <span className="panel-row__text"><span className="panel-row__t"><bdi>{link.label}</bdi></span>
+     <span className="panel-row__d">{t(link.role)}{link.made_by_name?<> · {t('inviteLinkMadeBy',link.made_by_name)}</>:null} · {t('inviteLinkEnds',day)}</span>
+     <span className="badge ta-pending"><SettingsIcon name="clock"/>{t('inviteLinkBadge')}</span></span>
+    <CancelInviteLink link={link.id} label={link.label} cancelLink={cancelLink}/>
+   </li>;
+  })}
+ </ul>;
 }
 
 export function TeamTable({company,members,invitations,links=[],agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,makeLink,cancelLink,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,makeLink?:MakeLink,cancelLink?:CancelLink,hint?:boolean}) {

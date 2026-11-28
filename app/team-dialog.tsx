@@ -6,7 +6,7 @@ import { inviteRoles } from '@/lib/member-roles.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { InviteSection } from './invite-section';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
-import { TeamTable, type SendInvite, type SaveSwitch, type TeamData } from './team-table';
+import { TeamTable, PendingLinks, type SendInvite, type SaveSwitch, type TeamData } from './team-table';
 import './settings.css';
 import './team-dialog.css';
 
@@ -77,6 +77,7 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
    {alone?<div className="modal__body ta ta--solo">
     <ul className="panel-card" aria-label={t('teamSoloMembers')}><li className="panel-row"><span className="me__av pp-av" aria-hidden="true">{(personName.trim().slice(0,1)||'?').toUpperCase()}</span>
      <span className="panel-row__text"><span className="panel-row__t"><bdi>{personName}</bdi> <span className="ch-you">{t('settingsYouMark')}</span></span><span className="panel-row__d">{role} · {t('teamSoloOwnerD')}</span></span></li></ul>
+    {owner&&data&&data.links.length>0&&<PendingLinks links={data.links} cancelLink={cancelLink}/>}
     {owner&&<InviteSection mode="alone" roles={inviteRoles(t)} send={invite}/>}
     {owner&&data&&<InviteLinkSection agents={data.agents.filter(agent=>!agent.is_default)} make={makeLink}/>}
     <p className="inv-note"><ShellIcon name="team"/><span>{t('settingsModeAloneD')}</span></p>
