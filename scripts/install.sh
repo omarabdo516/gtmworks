@@ -1237,27 +1237,54 @@ volumes() {
 # (ADR 0023): `apply_migrations` leaves it out, and `apply_migrations cutover` applies it alone, once this release's app
 # answers and its worker runs. Every other migration keeps the database usable by the previous release, so a run that fails before
 # the cutover leaves that release serving on a schema it was built for.
+#
+# An update runs while the release it replaces keeps serving, and a worker session there reads companies and then
+# conversations: this transaction takes both tables in that order before any migration alters them (#981), so the update
+# cannot wait for companies while the session waits for conversations. A fresh install has neither table yet, and the
+# Supabase CLI runs the migrations without this transaction, so the lock is taken only where both tables exist.
 apply_migrations() {
   stage=${1:-}
-  {
-    printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
-      'revoke all on schema gtmworks_install from public, anon, authenticated, service_role;' \
-      'create table if not exists gtmworks_install.schema_migrations(name text primary key);' \
-      'select not exists(select 1 from gtmworks_install.schema_migrations) as bootstrap \gset' \
-      '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif'
-    for file in supabase/migrations/*.sql; do
-      case "$file" in *.verify.sql) continue;; esac
-      case "$file" in
-        *_cutover.sql) [ "$stage" = cutover ] || continue;;
-        *) [ "$stage" != cutover ] || continue;;
-      esac
-      migration=${file##*/}
-      printf '%s\n' "select exists(select 1 from gtmworks_install.schema_migrations where name='$migration') as applied \gset" \
-        '\if :applied' '\else' "\echo Applying migration: $migration" "\ir /migrations/$migration" \
-        "insert into gtmworks_install.schema_migrations values ('$migration');" '\endif'
-    done
-    printf "notify pgrst, 'reload schema';\n"
-  } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
+  migration_attempts=5
+  migration_attempt=1
+  while :; do
+    if {
+      printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
+        'revoke all on schema gtmworks_install from public, anon, authenticated, service_role;' \
+        'create table if not exists gtmworks_install.schema_migrations(name text primary key);' \
+        'select not exists(select 1 from gtmworks_install.schema_migrations) as bootstrap \gset' \
+        '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif' \
+        "select to_regclass('public.companies') is not null and to_regclass('public.conversations') is not null as both_tables \\gset" \
+        '\if :both_tables' 'lock table public.companies, public.conversations in access exclusive mode;' '\endif'
+      for file in supabase/migrations/*.sql; do
+        case "$file" in *.verify.sql) continue;; esac
+        case "$file" in
+          *_cutover.sql) [ "$stage" = cutover ] || continue;;
+          *) [ "$stage" != cutover ] || continue;;
+        esac
+        migration=${file##*/}
+        printf '%s\n' "select exists(select 1 from gtmworks_install.schema_migrations where name='$migration') as applied \gset" \
+          '\if :applied' '\else' "\echo Applying migration: $migration" "\ir /migrations/$migration" \
+          "insert into gtmworks_install.schema_migrations values ('$migration');" '\endif'
+      done
+      printf "notify pgrst, 'reload schema';\n"
+    } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction 2> .install-lock/migrations.log; then
+      cat .install-lock/migrations.log >&2
+      return 0
+    else
+      migration_status=$?
+    fi
+    cat .install-lock/migrations.log >&2
+    # The app and the worker keep reading while an update migrates, and a query locking the tables a migration alters in
+    # the other order deadlocks with it (#981). Postgres rolls the whole transaction back and names the deadlock, so the
+    # same migrations run again, five attempts at most, as the first-run reset does for its own deadlocks (#326); any
+    # other failure stops at once.
+    if [ "$migration_attempt" -ge "$migration_attempts" ] || ! grep -q 'ERROR:  deadlock detected' .install-lock/migrations.log; then
+      return "$migration_status"
+    fi
+    migration_attempt=$((migration_attempt + 1))
+    echo "The database rolled the migrations back on a deadlock: running them again (attempt $migration_attempt of $migration_attempts)." >&2
+    sleep 1
+  done
 }
 # The one check of a backup archive, made before anything stops or changes: only the backup's own entries, none outside
 # it, each of them present, and every Company's Engine with its data and a usable key (#378, T4). It sets engines_layout,
