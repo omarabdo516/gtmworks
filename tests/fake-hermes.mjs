@@ -580,7 +580,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   catalog:['klaviyo','canva','notion','airtable','webflow','wordpress-com','amplitude','mixpanel','attio','close','calendly','figma','gamma','intercom'],
   catalogAuth:/** @type {Record<string,'oauth'|'none'>} */({}),catalogEnv:/** @type {Record<string,{name:string,prompt:string,required:boolean}[]>} */({}),
   serverTokens:/** @type {Map<string,string>} */(new Map()),
-  appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
+  appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appErrors:/** @type {Record<string,string>} */({}),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),appAuthScheme:/** @type {'https'|'http'} */('https'),
   // A vendor that refuses OAuth dynamic client registration (#914; Meta's Ads MCP): Hermes's sign-in start fails with the
   // vendor's answer unless the server's config names a fixed client (tools/mcp_oauth.py, oauth.client_id), and a
@@ -1454,6 +1454,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(server[2]==='enabled'&&request.method==='PUT') { keepServers({...servers,[name]:{...servers[name],enabled:Boolean(body?.enabled)}}); return send(response,200,{ok:true,name,enabled:Boolean(body?.enabled)}); }
     if(!server[2]&&request.method==='DELETE') { const rest={...servers}; delete rest[name]; keepServers(rest); return send(response,200,{ok:true}); }
     if(server[2]==='test'&&request.method==='POST') {
+     if(typeof settings.appErrors[name]==='string') return send(response,200,{ok:false,error:settings.appErrors[name],tools:[]});
      if(settings.appsUnreachable.has(name)) return send(response,200,{ok:false,error:'Connection failed: /opt/data/mcp-tokens secret detail',tools:[]});
      if(servers[name].auth==='oauth'&&!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
      if(servers[name].auth==='header'&&!settings.serverTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'Bearer token required.',tools:[]});

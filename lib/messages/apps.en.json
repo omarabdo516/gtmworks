@@ -358,7 +358,6 @@
  "argsHint": "One per line, each exactly as you type it.",
  "commandNote": "It runs in the company’s work sandbox, starting in the agent’s own folder, never in the engine. Don’t put a key in its arguments: anyone who talks to the company’s agents can read them there.",
  "commandRequired": "Name and command are required.",
- "commandAttention": "It was added, but it did not answer. Check the command and its arguments, and that the program is in the work sandbox.",
  "guide": "How to put {0} in the work sandbox and start it",
  "token": "Token",
  "tokenHint": "Pasted once and kept only by the engine.",
@@ -386,9 +385,9 @@
  "kindTitle": "How it connects",
  "connectedTools": "Connected · {0} tools",
  "ownAdded": "{0} added",
- "ownAttention": "{0} was added, but it did not answer. Check the address and token.",
  "error.appsTokenInvalid": "That token can’t be used.",
  "error.appsServerInvalid": "That name, address or command can’t be used.",
- "connectAttention": "It was added, but the engine did not reach it. Check the address or the token, or sign in again.",
+ "testFailedFor": "It did not answer for {0}.",
+ "connectAttention": "It was added, but the tool did not answer the engine.",
  "addFor": "Add for {0}"
 }
