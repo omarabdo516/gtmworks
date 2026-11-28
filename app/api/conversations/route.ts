@@ -46,7 +46,13 @@ const steered=(done:object)=>'error' in done?refuse(String(done.error),Number((d
 async function send(db:Database,person:string,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined) return refuse('conversationFailed',400);
+ if(body.rerun!==undefined&&body.rerun!==true&&body.rerun!=='true') return refuse('conversationFailed',400);
+ if(body.messageId!==undefined&&!(typeof body.messageId==='number'&&Number.isSafeInteger(body.messageId)&&body.messageId>=0)&&!(typeof body.messageId==='string'&&/^\d{1,15}$/.test(body.messageId))) return refuse('conversationFailed',400);
  if(typeof body.message!=='string'||body.message.length>20000) return refuse('conversationFailed',400);
+ // Try again on a Conversation whose last message is the person's with no reply (#980): a Run on that message, whose
+ // words and own id the server checks against the session, never a second message stored.
+ const rerun=body.rerun===true||body.rerun==='true';
+ const messageId=typeof body.messageId==='string'?Number(body.messageId):body.messageId as number|undefined;
  // A file the Agent cannot read, more of them than a message carries, or a message whose text and images pass the
  // Engine's request limit: refused here, with one line saying why, and nothing is stored or sent.
  const problem=conversationFilesProblem(chosen,body.message);
@@ -57,13 +63,18 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
  // A message in a Conversation whose messages are the Engine's, or in a new one, is one Run on its Engine session, its
  // images in the Run's input, and nothing of it is stored here (#876, #880). A Conversation the old record still holds
  // goes on below.
- const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen});
+ const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen,rerun,messageId});
+ // A rerun whose message is no longer the Conversation's last: the page reads the session again, where the reply or
+ // the newer message is.
+ if(engine.state==='nothing') return reply({state:'nothing'});
  if(engine.state==='started') {
   // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
   after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
   return reply({conversation,run:engine.run,engine:true,...(engine.queued?{queued:true}:{})});
  }
  if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
+ // A rerun has no old-record shape: the Conversation is on the Engine, or nothing is left unanswered.
+ if(rerun) return refuse('conversationNoReply',409);
  // One keep attempt per send: its keep and its discard name the same one, so a discard leaves the rows another send of
  // the key still holds (#727).
  const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
@@ -311,7 +322,7 @@ async function respond(request:NextRequest) {
    // A form sends a text's line breaks as CRLF (the HTML form encoding), where the box and a JSON send keep the person's
    // own LF: the message is read back as they typed it (#880), so the Agent's words and the drawn ones are the same.
    const message=field('message')?.replace(/\r\n/g,'\n');
-   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message,agent:field('agent'),intent:field('intent'),...(card!==undefined?{card:Number(card)}:{})};
+   body={company:field('company'),conversation:field('conversation'),sendKey:field('sendKey'),message,agent:field('agent'),intent:field('intent'),rerun:field('rerun'),messageId:field('messageId'),...(card!==undefined?{card:Number(card)}:{})};
    // Every file is passed to the check, an empty one included: it is refused with the line, never silently dropped.
    chosen=fields.getAll('files').filter((file):file is File=>file instanceof File);
    if(chosen.length&&body.intent!==undefined) return refuse('conversationFailed',400);

@@ -1,5 +1,11 @@
 [
  {
+  "issue": 980,
+  "date": "2026-11-28",
+  "en": { "title": "Try again answers your last message, once", "body": "When a Conversation ends on your message with no reply, Try again starts the Agent again on that message, which stays once in the Conversation, instead of sending your words a second time." },
+  "ar": { "title": "«جرّب تاني» بيرد على آخر رسالة ليك، مرة واحدة", "body": "لما المحادثة تخلص على رسالتك ومفيش رد، «جرّب تاني» بيشغّل الوكيل تاني على الرسالة دي، وبتفضل مرة واحدة في المحادثة، بدل ما كلامك يتبعت تاني." }
+ },
+ {
   "issue": 981,
   "date": "2026-11-28",
   "en": { "title": "An update no longer stops on a busy database", "body": "When an update's database changes meet the app or the background worker reading the same tables, the database rolls them back whole and the update runs them again, five attempts at most, instead of stopping; any other failure still stops at once and leaves the version you run serving." },

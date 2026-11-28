@@ -3,14 +3,16 @@ import type { supabase } from './supabase';
 import { agentEngine } from './engine/handle.mjs';
 import { mentionedAgent } from './composer-mentions.mjs';
 import { imageInput, noteInstructions } from './conversation-runs.mjs';
+import { conversationMessagesPage } from './conversation-messages';
 import { logActionFailure } from './diagnostics.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 // How long a send the Engine answers "retry" for is asked again before it is left in the box as not sent (#877).
 const busyFor=8000;
 // What a send on the Engine path answers: the Run started (the reply follows on the Conversation's live read), `old`
-// for a Conversation the old record still holds (the caller sends it there), or a refusal with nothing started.
-export type EngineSend={state:'started',conversation:string,run:string,queued:boolean}|{state:'old'}|{state:'refused',code?:string,error?:string,status?:number};
+// for a Conversation the old record still holds (the caller sends it there), `nothing` for a rerun the Conversation has
+// moved past (the page reads the session again), or a refusal with nothing started.
+export type EngineSend={state:'started',conversation:string,run:string,queued:boolean}|{state:'old'}|{state:'nothing'}|{state:'refused',code?:string,error?:string,status?:number};
 
 // A person's message in a Conversation whose messages are the Engine's (#876, ADR 0033 item 1): checked on the server
 // (open_engine_conversation: an active Member, not a Viewer, their own Conversation, an Agent they may talk to), a new
@@ -20,7 +22,27 @@ export type EngineSend={state:'started',conversation:string,run:string,queued:bo
 // is the row's person, the signed-in one of `db`, as the Engine's session keeps no author (ADR 0033). A new Conversation's first message that calls another Agent the sender
 // sees goes to that Agent, as it always has (#153).
 // `service` is a service-role client: only the server holds the Run it started on the row (hold_conversation_run).
-export async function sendToEngine(db:Database,service:{rpc:(name:string,args:object)=>PromiseLike<{error:unknown}>},{company,person,conversation,agent:chosen,message,sendKey,images=[]}:{company:string,person:string,conversation:string,agent?:string,message:string,sendKey:string,images?:File[]}):Promise<EngineSend> {
+// `rerun`: Try again on the Conversation's unanswered last message (#980). The words the page sends must be that message
+// (checked here, on the Engine's own session, past any page of tool calls); the Run is started as any send with the same
+// send key, and the page hides the Run's own copy of the words by the id the Engine stamps on its row.
+export async function sendToEngine(db:Database,service:{rpc:(name:string,args:object)=>PromiseLike<{error:unknown}>},{company,person,conversation,agent:chosen,message,sendKey,images=[],rerun=false,messageId}:{company:string,person:string,conversation:string,agent?:string,message:string,sendKey:string,images?:File[],rerun?:boolean,messageId?:number}):Promise<EngineSend> {
+ // The last message the Conversation draws must be the person's, with these words: another message, a reply or a fresh
+ // read that moved on means this press no longer answers the unanswered message. The newest page may be tool calls and
+ // results alone (a Turn that failed after more than a page of them), so read older pages until one message is drawn.
+ if(rerun) {
+  const {data:found}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle<{id:string,agent_id:string|null,hermes_session_id:string|null}>();
+  if(!found?.agent_id||!found.hermes_session_id) return {state:'refused',error:'conversationNotFound',status:404};
+  const target={id:conversation,agent_id:found.agent_id,agent_name:'',hermes_session_id:found.hermes_session_id};
+  let said=null;
+  for(let offset=0;;) {
+   const page=await conversationMessagesPage(db,company,target,{offset,limit:50});
+   if(page.state!=='found') return {state:'refused',error:page.state==='notSeen'?'conversationNotFound':'conversationUnread',status:page.state==='notSeen'?404:503};
+   said=page.messages.at(-1)??null;
+   if(said||!page.hasMore) break;
+   offset=page.nextOffset;
+  }
+  if(said?.author!=='person'||said.id!==messageId||said.body!==message) return {state:'nothing'};
+ }
  let agent=chosen??null;
  if(chosen) agent=mentionedAgent(message,(await db.from('hermes_agents').select('id,name,is_default').eq('company_id',company)).data||[])||chosen;
  if(!agent) agent=(await db.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()).data?.id??null;

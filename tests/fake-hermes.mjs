@@ -782,9 +782,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   settings.sessions.set(run.sessionId,found);
   const at=()=>Date.now()/1000;
   run.turnStarted=true;
-  // A message that carries images (#880) is kept as its input's own parts, each image the data URL the Run was sent,
-  // as the pinned release keeps a native-vision turn (tui_gateway/session_history.py _build_persist_user_message).
-  found.messages.push({role:'user',content:Array.isArray(run.input)?run.input.at(-1)?.content??'':inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
+  // The person's message as the Engine stores a Run's input (#876): its words (or its images' own parts, #880), marked
+  // as the API's arrival, with the Run that submitted it (`display_metadata.submission_id`, the probe's stored shape).
+  found.messages.push({role:'user',content:Array.isArray(run.input)?run.input.at(-1)?.content??'':inputText(run.input),timestamp:at(),display_kind:'internal_notification',display_metadata:{submission_id:run.id}});
   if(settings.liveHold&&!run.released) await new Promise(resolve=>{ run.release=resolve; });
   push(run.id,{event:'run.started'});
   // Its questions, then its requests to act (#878), one at a time, each waiting until it is answered, its time limit

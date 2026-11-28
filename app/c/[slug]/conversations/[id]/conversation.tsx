@@ -450,14 +450,43 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  // with the Owner's way to fix it. A last message of the person's with no Run open is #877's no reply, below.
  const ending=run.working||sent.waiting.length||!run.unfinished?null:'unfinished' as const;
  const cause=ending?run.unfinished?.cause:undefined;
+ // The Runs Try again started (#980): each repeats the words already drawn, stamped with its own Run id, and the page
+ // hides that row. The Engine keeps the words twice; the Conversation holds them once, and this tab keeps the ids so a
+ // reload draws it once too.
+ // shortcut: another tab does not know them; upgrade when the Engine can adopt the unanswered message (#115325).
+ const retryKey=`conversation-retries:${conversation.id}`;
+ const [retryRuns,setRetryRuns]=useState<ReadonlySet<string>>(()=>{
+  if(typeof window==='undefined') return new Set();
+  try { const held=JSON.parse(sessionStorage.getItem(retryKey)??'[]'); return new Set(Array.isArray(held)?held.filter((id):id is string=>typeof id==='string'):[]); } catch { return new Set(); }
+ });
+ const rememberRetry=(id:string)=>setRetryRuns(current=>{
+  if(current.has(id)) return current;
+  const next=new Set([...current,id]);
+  try { sessionStorage.setItem(retryKey,JSON.stringify([...next])); } catch { /* The ids stay in memory only. */ }
+  return next;
+ });
  const shown=useMemo(()=>{
   // A Run waiting on its question is not working for the box (#138), which keeps its send arrow: the typed words answer it.
   const questioning=run.asking?.card.kind==='question'&&!run.asking.settled;
   const ended=cause==='noModel'?{noModel:{owner}}:cause?{modelRefused:{reason:cause,owner,...(run.unfinished?.resetsAt?{resetsAt:run.unfinished.resetsAt}:{})}}:{};
-  const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:questioning?true as const:undefined,failed:!!ending,noModel:undefined,modelRefused:undefined,...ended,working:null,canStop:false,handover:undefined,unread:undefined}:record;
+  // A retry's Run adds its own copy of the words it answers (#980); the Engine's row for it is hidden while the original
+  // message is drawn, so the words stand alone. The original may be on an older page not read yet: then the retry's row
+  // is the only copy and stays drawn until the person scrolls to it.
+  const original=(message:{author:string,body:string,run?:string})=>message.author==='person'&&!(message.run&&retryRuns.has(message.run));
+  const drawn=new Set((engine.page?.messages??[]).filter(original).map(message=>message.body));
+  // One retry row per message stands in while the original is off-page: a chain of retries keeps its first copy drawn and
+  // hides the rest, and all of them go once the original is drawn.
+  const kept=new Set<string>();
+  const page=engine.page?{...engine.page,messages:engine.page.messages.filter(message=>{
+   if(message.author!=='person'||!message.run||!retryRuns.has(message.run)) return true;
+   if(drawn.has(message.body)) return false;
+   if(kept.has(message.body)) return false;
+   kept.add(message.body); return true;
+  })}:null;
+  const base=page?{...record,messages:[...page.messages,...sent.waiting],pending:false,asking:questioning?true as const:undefined,failed:!!ending,noModel:undefined,modelRefused:undefined,...ended,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
- },[record,engine.page,engine.usage,sent.waiting,ending,cause,owner,run.unfinished,run.asking]);
+ },[record,engine.page,engine.usage,sent.waiting,ending,cause,owner,run.unfinished,run.asking,retryRuns]);
  // Stop and a typed answer go to the Run the page follows (#878): only its person writes here (`writer`).
  const followed=run.view?.run??run.asking?.card.run??null;
  const waiting=run.asking&&!run.asking.settled?run.asking.card:null;
@@ -519,7 +548,9 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  const [asking,setAsking]=useState(false);
  // One send key per message left with no reply: a second press after an answer that was lost replays that Run.
  const againKeys=useRef(new Map<number,string>());
- // Under a reply that did not finish (#879) it asks the same way.
+ // Under a reply that did not finish (#879), and on a message left with no reply (#980), it answers the words already in
+ // the Conversation: one Run on them, its own copy of the row hidden (`retryRuns`), never a second message of its own and
+ // never back in the box.
  // A person's images on the Engine as files to send again, from their own address; null when one cannot be read now.
  const imagesOf=async(message:{files?:{id:number,key?:string}[]}):Promise<File[]|null>=>{
   try {
@@ -538,11 +569,16 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   // The message's images go again with its words (#880), read back from the session that holds them: gtmworks has no copy.
   const images=await imagesOf(said);
   if(!images) { setAsking(false); toast(t('conversationFailed'),{icon:'alert'}); return; }
-  const settle=sending(key,said.body,images);
-  const fields={company,conversation:conversation.id,message:said.body,sendKey:key};
+  const fields={company,conversation:conversation.id,message:said.body,messageId:said.id,sendKey:key,rerun:true};
   const {failure,answer}=images.length?await postMessageWithFilesAnswer(fields,images):await postMessageAnswer(fields);
-  settle(failure,answer); setAsking(false);
-  if(failure) toast(t(failure),{icon:'alert'}); else run.follow();
+  setAsking(false);
+  if(failure) toast(t(failure),{icon:'alert'});
+  else {
+   // The Run's own row for these words is the one the page hides; the Run id is the Engine's stamp on it.
+   const started=answer?.run;
+   if(started) rememberRetry(started);
+   run.follow();
+  }
  };
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
