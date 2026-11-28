@@ -43,7 +43,7 @@ test("only the secret's hash is kept: sha256 in hex, and neither the command nor
 test('the command and the link claim make a Company and its Owner through the one transaction function', () => {
  // `company add --owner` no longer inserts a Company and then a member in two writes (#383 closes that gap): the one
  // function makes the Company on the named Engine record together with its Owner member.
- assert.match(command,/rpc\('create_company_with_owner',\{engine:made\.id,company_name:name,person,person_name:null,language:null,slug:companySlug\}\)/);
+ assert.match(command,/rpc\('create_company_with_owner',\{engine:made\.id,company_name:name,person:person\.id,person_name:null,language:null,slug:companySlug\}\)/);
  assert.doesNotMatch(command,/from\('members'\)\.insert/,'no separate Owner insert is left');
  assert.match(route,/rpc\('claim_company_owner_link',\{link_hash:hash,person,person_name:input\.name,language:input\.language\}\)/);
 });

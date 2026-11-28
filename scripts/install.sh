@@ -914,7 +914,7 @@ company_engine() {
 }
 
 company_usage() {
-  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company link <Company> | gtmworks company list' >&2
+  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company link <Company> | gtmworks company password-link <Company> --email <email> | gtmworks company list' >&2
   exit 1
 }
 # `gtmworks company add` (#382, #383, ADR 0018, 0019): one new Company, its Engine made from the template with its own
@@ -1044,6 +1044,29 @@ company_link() {
   fi
   compose exec -T web node scripts/company-add.mjs link --name "$company_name"
 }
+# `gtmworks company password-link <Company> --email <email>` (#955, ADR 0019): a password link for an Administrator of the
+# Company, printed once by the server. It is the way back in for a Company's last Administrator and for the install owner,
+# whose link no Administrator makes from the Team page (#915); the script refuses a Person who is not an Administrator
+# there, and only the secret's hash reaches the database.
+company_password_link() {
+  company_name=${1:-} email=
+  [ $# -gt 0 ] && shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --email) [ $# -ge 2 ] || company_usage; email=$2; shift;;
+      *) company_usage;;
+    esac
+    shift
+  done
+  test -n "$company_name" && [ -n "$email" ] || company_usage
+  test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  # A link written between a restore's safety backup and its replacement would stop working, or bring back an older one.
+  if [ -f .install-restore ] && ! flock -n .install-restore true > /dev/null 2>&1; then
+    echo 'A restore is running: wait for it to finish, then run this again.' >&2
+    return 1
+  fi
+  compose exec -T web node scripts/company-password-link.mjs --company "$company_name" --email "$email"
+}
 # `gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>]` (#396, #507): an existing
 # Company's sandbox limits, kept in its Engine's file. Only that Company's sandbox is made again with them (its exit, its
 # work folder and every other Company stay as they run), and its Engine reaches it before the command says so. A sandbox
@@ -1149,6 +1172,7 @@ company() {
     add) shift; company_add "$@";;
     limits) shift; company_limits "$@";;
     link) shift; company_link "$@";;
+    password-link) shift; company_password_link "$@";;
     list)
       report_status=0
       report=$(compose exec -T web node scripts/company-list.mjs companies) || report_status=$?
@@ -1593,7 +1617,7 @@ elif [ "$operation" = engines ]; then
   sandbox_report "$report" || status=1
   return "$status"
 elif [ "$operation" != install ]; then
-  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>] | company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | company link <Company> | company list | engines]' >&2; exit 1
+  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>] | company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | company link <Company> | company password-link <Company> --email <email> | company list | engines]' >&2; exit 1
 fi
 # A plain install run on an install the previous release made (its `hermes` container, no Engine folder) moves it to this
 # release as an update does, so it is refused the same way when that install holds several Companies on its one Engine,

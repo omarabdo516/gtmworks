@@ -313,6 +313,17 @@ test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Compa
  assert.doesNotMatch(m.docker(),/-u hermes gtmworks-engine-other/);
 });
 
+test('gtmworks company password-link is the installer\'s own, handed on with its Company and email (#955)', t => {
+ const m=machine(t);
+ ok(m.line());
+ m.clear();
+ const result=m.gtmworks(['company','password-link','Acme','--email','a@example.com']);
+ ok(result,'company password-link');
+ // get.sh keeps the gtmworks command's own options, then hands the rest of the line to install.sh, which owns the
+ // Company scripts: the new subcommand reaches it unchanged, as `company add` and `company link` do.
+ assert.deepEqual(m.installer(),[`${hex('c')} company password-link Acme --email a@example.com`]);
+});
+
 test('the line installs the highest published vX.Y.Z by default, --version that release, --dir that folder', t => {
  const m=machine(t);
  const latest=m.line();

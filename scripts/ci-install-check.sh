@@ -728,6 +728,41 @@ sh scripts/install.sh > companies-raise.log 2>&1 || { cat companies-raise.log; f
 grep -F "had 768m of memory: raised to $(sandbox_default mem_limit)" companies-raise.log || fail 'the run says it raised the lower limit'
 [[ $(limits_of "$second_sandbox") == "$(sandbox_memory_bytes) 1000000000" ]] || fail "the second Company's lower memory limit is raised to the default"
 [[ $(limits_of gtmworks-sandbox-first) == '3221225472 1500000000' ]] || fail "the first Company's limit above the default is kept"
+# `gtmworks company password-link` (#955, ADR 0019): the server prints a password link for an Administrator of a Company,
+# the way back in for its last Administrator and for the install owner, whom the Team page may not link (#915). The
+# command names the Company and the address, only the hash is kept, the secret reaches no log, and a Member who is not an
+# Administrator there or an unknown Company is refused. Sending the link's form then sets the new password, spends the
+# link and signs the Administrator in. It runs last in this area because it sets the install owner's password, which the
+# checks above sign in with.
+password_link=$(sh scripts/install.sh company password-link 'Proxy Company' --email proxy-owner@example.com 2> password-link-refusal.log) \
+  || { cat password-link-refusal.log; fail 'company password-link prints a link for an Administrator'; }
+printf '%s\n' "$password_link" | grep -Eqx 'Password link for proxy-owner@example\.com in "Proxy Company": http://localhost:3000/password#code=[a-f0-9]{64}' \
+  || fail 'company password-link names the Company and the address and prints only its link'
+password_secret=${password_link##*#code=}
+password_hash=$(printf '%s' "$password_secret" | sha256sum | cut -d' ' -f1)
+[[ $(db -c "select count(*) from public.company_links where kind='password' and secret_hash='$password_hash' and made_on_server and made_by is null and used_at is null and cancelled_at is null") == 1 ]] \
+  || fail 'the password link is kept hashed, made by the server, waiting'
+[[ $(db -c "select count(*) from public.company_links where secret_hash='$password_secret'") == 0 ]] || fail 'the password link secret is stored nowhere'
+[[ $(db -c "select count(*) from public.company_log where action='password_link_made' and company_id=(select id from public.companies where name='Proxy Company') and actor_kind='system' and person_id=(select person_id from public.members where company_id=(select id from public.companies where name='Proxy Company') and role='owner')") == 1 ]] \
+  || fail 'making the password link is in the Company log as the server made it'
+password_logs=$(compose logs 2>&1) || fail 'read container logs'
+if grep -qF "$password_secret" <<< "$password_logs"; then fail 'the password link secret is in a container log'; fi
+if sh scripts/install.sh company password-link 'Proxy Company' --email proxy-joined@example.com > password-link-not-admin.log 2>&1; then
+  cat password-link-not-admin.log
+  fail 'company password-link must refuse a Member who is not an Administrator'
+fi
+grep -Fxq 'proxy-joined@example.com is not an Administrator of "Proxy Company". Nothing was changed.' password-link-not-admin.log \
+  || fail 'the refusal names the Person and the Company'
+[[ $(db -c "select count(*) from public.company_links where kind='password'") == 1 ]] || fail 'a refused password link is written nowhere'
+if sh scripts/install.sh company password-link 'No Company' --email proxy-owner@example.com > password-link-unknown-company.log 2>&1; then
+  cat password-link-unknown-company.log
+  fail 'company password-link must refuse an unknown Company'
+fi
+grep -Fq 'No Company in this install is named No Company.' password-link-unknown-company.log || fail 'the refusal names the unknown Company'
+compose exec -T -e LINK_SECRET="$password_secret" web node --input-type=module - < scripts/check-install-password-link.mjs > password-link-proof \
+  || fail 'sending the password link sets the new password and signs its Administrator in'
+cat password-link-proof
+[[ $(db -c "select count(*) from public.company_links where secret_hash='$password_hash' and used_at is not null") == 1 ]] || fail 'the password link is used once'
 }
 
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can

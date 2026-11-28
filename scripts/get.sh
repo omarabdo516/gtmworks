@@ -12,6 +12,7 @@
 #   gtmworks update-button on|off | gtmworks auto-update on|off | gtmworks updater (one run of the updater, #443)
 #   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>]
 #   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>] | gtmworks company link <Company>
+#   gtmworks company password-link <Company> --email <email>
 #   gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
@@ -52,6 +53,7 @@ Usage:
   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] [--disk <size>]
   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] [--disk <size>]  (its work sandbox's memory, CPUs and disk)
   gtmworks company link <Company>  (a fresh first-Administrator link for a Company still waiting)
+  gtmworks company password-link <Company> --email <email>  (a password link for its Administrator)
   gtmworks company list     (each Company, the state of its Engine and of its work sandbox)
   gtmworks update-button on|off  (the Update now button Administrators see; on by default)
   gtmworks auto-update on|off    (install each newer version of this channel by itself; off by default)
