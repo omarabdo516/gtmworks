@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { supabase } from './supabase';
-import { readAgentApps, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, testCompanyApp, type AgentTool, type AgentsUsage } from './company-apps.mjs';
+import { readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, testAgentTool, testCompanyApp, type AgentTool, type AgentsUsage } from './company-apps.mjs';
 import { appsUnreadLine } from './diagnostics.mjs';
 import { presetOf } from './app-catalogue.mjs';
 import type { Language } from './i18n.mjs';
@@ -9,7 +9,6 @@ import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
 import type { AppItem } from '@/app/settings-apps-client';
 import type { AgentToolItem } from '@/app/connected-tools';
-import type { AppStates } from './conversations';
 
 type Text=Record<string,string>;
 const catalogues:Text[]=[en,ar];
