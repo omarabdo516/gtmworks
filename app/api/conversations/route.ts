@@ -65,8 +65,8 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
  // goes on below.
  const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey,images:chosen,rerun,messageId});
  // A rerun whose message is no longer the Conversation's last: the page reads the session again, where the reply or
- // the newer message is. The Run the row was already submitted by (when the Engine stamped one) rides along.
- if(engine.state==='nothing') return reply({state:'nothing',...(engine.run?{run:engine.run}:{})});
+ // the newer message is.
+ if(engine.state==='nothing') return reply({state:'nothing'});
  if(engine.state==='started') {
   // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
   after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });

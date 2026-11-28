@@ -11,8 +11,8 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 const busyFor=8000;
 // What a send on the Engine path answers: the Run started (the reply follows on the Conversation's live read), `old`
 // for a Conversation the old record still holds (the caller sends it there), `nothing` for a rerun the Conversation has
-// moved past (with the Run the last message names, when the Engine stamped one), or a refusal with nothing started.
-export type EngineSend={state:'started',conversation:string,run:string,queued:boolean}|{state:'old'}|{state:'nothing',run?:string}|{state:'refused',code?:string,error?:string,status?:number};
+// moved past (the page reads the session again), or a refusal with nothing started.
+export type EngineSend={state:'started',conversation:string,run:string,queued:boolean}|{state:'old'}|{state:'nothing'}|{state:'refused',code?:string,error?:string,status?:number};
 
 // A person's message in a Conversation whose messages are the Engine's (#876, ADR 0033 item 1): checked on the server
 // (open_engine_conversation: an active Member, not a Viewer, their own Conversation, an Agent they may talk to), a new
@@ -41,7 +41,7 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
    if(said||!page.hasMore) break;
    offset=page.nextOffset;
   }
-  if(said?.author!=='person'||said.id!==messageId||said.body!==message) return {state:'nothing',...(said?.run?{run:said.run}:{})};
+  if(said?.author!=='person'||said.id!==messageId||said.body!==message) return {state:'nothing'};
  }
  let agent=chosen??null;
  if(chosen) agent=mentionedAgent(message,(await db.from('hermes_agents').select('id,name,is_default').eq('company_id',company)).data||[])||chosen;
