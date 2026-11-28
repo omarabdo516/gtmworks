@@ -50,7 +50,7 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
   // Its first reply is on the Engine's session; the next message's Run is held working.
-  await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${title}`);
+  await expect(page.locator('.msg[data-author=agent]:not([data-live])').filter({hasText:`Reply to: ${title}`})).toBeVisible();
   const session=String(rows(`select hermes_session_id from public.conversations where id='${conversation}'`)[0].hermes_session_id);
   fake.settings.liveHold=true;
   await page.getByLabel('Message',{exact:true}).fill('And the budget');
