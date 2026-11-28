@@ -41,7 +41,7 @@ test('first run takes a password with its confirmation and refuses a short or mi
  assert.equal(firstRunInput(form({...base,password:undefined,confirm:undefined})),null);
 });
 
-test('the auth service enforces the same rule, a 24 hour email link and a 30 day session', () => {
+test('the auth service enforces the same rule, a 24 hour sign-in link and a 30 day session', () => {
  const config=readFileSync('supabase/config.toml','utf8');
  assert.match(config,/^minimum_password_length = 10$/m);
  assert.match(config,/^otp_expiry = 86400$/m);
@@ -50,15 +50,15 @@ test('the auth service enforces the same rule, a 24 hour email link and a 30 day
  assert.match(sessions,/^timebox = "720h"$/m);
  const install=readFileSync('docker-compose.install.yml','utf8');
  assert.match(install,/^\s+GOTRUE_PASSWORD_MIN_LENGTH: "10"$/m);
- assert.match(install,/^\s+GOTRUE_MAILER_OTP_EXP: "86400"$/m);
  assert.match(install,/^\s+GOTRUE_SESSIONS_TIMEBOX: 720h$/m);
 });
 
-test('the README install section describes the password first run and what the local inbox is for', () => {
+test('the README install section describes the password first run and how people join and recover a password', () => {
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
  const install=readme.split('## Install')[1].split('## Update')[0];
  assert.ok(install.includes('On a fresh install, enter your name, email, a password of at least 10 characters (twice) and your first company name; you are signed in at once, with no email step.'));
- assert.ok(install.includes('The local inbox at http://localhost:8025 receives no email from gtmworks: people join by Invite link, and a forgotten password is a password link an Administrator or a Manager makes from the Team page.'));
+ assert.ok(install.includes('People join by Invite link, and a forgotten password is a password link an Administrator or a Manager makes from the Team page.'));
+ assert.doesNotMatch(install,/\b(local inbox|mailbox|8025)\b/);
  assert.doesNotMatch(install,/follow the sign-in link/);
 });
 

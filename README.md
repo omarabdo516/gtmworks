@@ -57,7 +57,7 @@ run 44848354569, which prints these numbers on every run) and the Company's Scre
 measured on the pinned Engine (#711):
 
 - **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
-  (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
+  (web app, worker, Postgres, sign-in, REST, Storage and gateway) use
   493 MiB, the first Company's idle Engine 466 MiB and its idle work sandbox 1 MiB: about
   1 GB for one Company, which leaves room for the system, an Engine at work, the
   Company's Screen awake and a few more Companies.
@@ -140,23 +140,21 @@ the install up, not whoever reaches the address first. Lost it? Run the line
 again: until setup is finished it prints the same link, and afterwards the
 sign-in address instead.
 
-Port **3000** (app and Supabase gateway)
-and **8025** (local email inbox) must be free; both bind **only to 127.0.0.1**.
-For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
--L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
-mailbox publicly. On a fresh install, enter your name, email, a password of at
-least 10 characters (twice) and your first company name; you are signed in
-at once, with no email step. You become the first company's
-Administrator. Setup then closes permanently and the setup link stops working; later
-visits sign in with email and password, and a sign-in lasts 30 days on that
-browser unless you sign out. Public sign-ups stay disabled. No demo people or
-companies are created.
-The local inbox at http://localhost:8025 receives no email from gtmworks: people join by Invite link, and a forgotten password is a password link an Administrator or a Manager makes from the Team page.
-No SMTP account is needed for it.
+Port **3000** (app and Supabase gateway) must be free; it binds **only to
+127.0.0.1**. For a remote server, forward it over SSH
+(`ssh -L 3000:localhost:3000 your-server`) and open the setup link there. On a
+fresh install, enter your name, email, a password of at least 10 characters
+(twice) and your first company name; you are signed in at once, with no email
+step. You become the first company's Administrator. Setup then closes
+permanently and the setup link stops working; later visits sign in with email
+and password, and a sign-in lasts 30 days on that browser unless you sign out.
+Public sign-ups stay disabled. No demo people or companies are created. People
+join by Invite link, and a forgotten password is a password link an
+Administrator or a Manager makes from the Team page.
 
 The install starts the web app, worker, Postgres,
-GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
-first Company's Engine. gtmworks makes that Engine from a fixed template shipped
+GoTrue, PostgREST, file Storage, an Nginx gateway and the first Company's
+Engine. gtmworks makes that Engine from a fixed template shipped
 with the release: the official Hermes image, pinned by tag and digest and kept
 unmodified, with its own data volume, its own generated key and its own network.
 The app and the worker join the Engine's network; the Engine joins nothing else,
@@ -287,7 +285,7 @@ Persistent data lives in Docker named volumes `gtmworks-install_database`
 `gtmworks-install_files` (Storage files) and `gtmworks-install_hermes` (the first
 Company's Engine data); each later Company's Engine keeps its own
 `gtmworks-engine-<name>` volume, under Docker's data root (normally
-`/var/lib/docker/volumes`). The local email inbox is temporary. Never use `down -v`
+`/var/lib/docker/volumes`). Never use `down -v`
 on live data.
 
 ### From source
@@ -542,7 +540,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - 🟡 Board, Cards, Projects and Routines (merged, waiting for the release, #572)
 - ✅ Company knowledge, Skills, memory and team lessons
 - 🟡 Connect any MCP server, and run command tools in the sandbox (merged, waiting for the release, #572)
-- ✅ Roles, invite links and per-Member Agent access
+- ✅ Roles, Invite links without email and per-Member Agent access [#948]
 - 🟡 Good morning message from the main Agent (merged, waiting for the release, #572)
 - ✅ English and Egyptian Arabic, dictation in Egyptian Arabic
 - 🟡 Open Design, installed by you and connected from Apps: Agents make designs

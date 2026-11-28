@@ -109,6 +109,12 @@ compose() {
     *) docker compose --env-file .env.install -f docker-compose.install.yml "$@" ;;
   esac
 }
+# An install made by a release before #956 ran a mailbox service (mail, Mailpit). Compose leaves a container running
+# when its service leaves the file, so an update removes that container itself, with the port it published.
+remove_old_mailbox() {
+  old_mailbox=$(docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' --filter 'label=com.docker.compose.service=mail')
+  [ -z "$old_mailbox" ] || docker rm -f $old_mailbox > /dev/null
+}
 # The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
 # pulls it; a source checkout builds it from its one build file. Its reference is written under .install-lock while the
 # run is in flight and only moved to .work-sandbox-image when the run succeeds (#393), so a run that failed records no
@@ -1410,7 +1416,7 @@ elif [ "$operation" = restore ]; then
   docker run --rm --env-file .env.install.tmp -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
   resume=yes
   engine_stop
-  compose stop web worker gateway auth rest storage mail
+  compose stop web worker gateway auth rest storage
   empty=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
     'select not exists(select 1 from public.companies) and not exists(select 1 from auth.users) and not exists(select 1 from storage.objects);')
   test "$empty" = t || { echo 'Restore requires an empty install.' >&2; exit 1; }
@@ -1483,6 +1489,7 @@ elif [ "$operation" = restore ]; then
   # first and the containers never start with it in their environment.
   adopt_engine_key || return 1
   compose up -d --force-recreate --wait --wait-timeout 300
+  remove_old_mailbox
   # Every Engine starts with its Company's sandbox (#393), so the image the restored install's sandboxes run is recorded
   # first, as an install records it: a release pins it, a checkout builds it once.
   work_sandbox_image || return 1
@@ -1616,7 +1623,7 @@ docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" nod
 # A broken gateway config stops here, before migrations or any container changes, while the old version still serves.
 echo 'Checking gateway configuration...'
 compose run --rm --no-deps gateway nginx -t
-if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
+if [ "$operation" = install ]; then compose up -d --wait db auth rest storage; fi
 # The image every Company's work sandbox runs (#392, ADR 0020): pulled from the release's pin or built from this
 # checkout, and recorded before anything can make a Company's sandbox. It comes before the migrations (#397), so an
 # update whose image cannot be pulled stops with the schema as it was and the release it runs still serving.
@@ -1673,12 +1680,13 @@ fi
 # Every Engine started from this release's files, which stay whatever fails next.
 engine_files=
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
-  # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
+  # auth is recreated when its settings changed (password rules, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth web worker
 else
   # A release pins every service by digest: compose recreates each one the release changed and leaves the rest running.
   compose up -d --wait --wait-timeout 300
 fi
+remove_old_mailbox
 worker_stopped=no
 # The app and the worker join every Engine's network once they exist, and again after every recreation.
 join_engine_networks
@@ -1724,7 +1732,6 @@ mv .install-lock/work-sandbox-image .work-sandbox-image
 drop_moved_work_volumes
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
-echo 'Mail: http://localhost:8025'
 echo 'Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory.'
 # The last line: the one-time setup link while first run is open (issue #50), the sign-in address after.
 docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs ready "$setup"

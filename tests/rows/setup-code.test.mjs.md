@@ -1,1 +1,1 @@
-| `setup-code.test.mjs` | The setup code has 256 bits, is compared exactly and travels only after `#`. (#50) | 1.9 s | first-run.spec.ts, install job | keep (decision #50) |
+| `setup-code.test.mjs` | The setup code has 256 bits, is compared exactly and travels only after `#`; the install job completes first run and makes an Invite link. (#50, #948) | 1.9 s | first-run.spec.ts, install job | keep (decision #50) |

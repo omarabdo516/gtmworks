@@ -144,7 +144,7 @@ test('an Engine publishes no host port, joins its install network and its work n
  const launch=readFileSync('scripts/ci-install-lib.sh','utf8');
  assert.match(launch,/cat > \/opt\/data\/config\.yaml/,'the install names the launch profile it writes');
  assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');
- // Only the address the browser reaches (the gateway) and the mail viewer are published, on loopback.
+ // Only the address the browser reaches (the gateway) is published, on loopback.
  for(const [name,service] of Object.entries(compose.services)) for(const port of service.ports||[]) assert.match(port,/^127\.0\.0\.1:/,name);
 });
 
@@ -429,7 +429,7 @@ test('update recreates the auth service with its password settings and waits unt
  // compose up recreates a service whose settings changed; --wait needs auth's healthcheck to pass before success.
  assert.match(install.commands(),/up -d --no-deps --wait --wait-timeout 300 auth web worker\n/);
  assert.ok(compose.services.auth.healthcheck?.test,'auth has a healthcheck for --wait');
- assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_MAILER_OTP_EXP,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','86400','720h']);
+ assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','720h']);
 });
 
 test('only a self-hosted install keeps Company and Agent profiles, and no install-wide Engine names one', () => {
