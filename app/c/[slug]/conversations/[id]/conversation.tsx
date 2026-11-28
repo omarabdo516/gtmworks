@@ -469,9 +469,12 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   // A Run waiting on its question is not working for the box (#138), which keeps its send arrow: the typed words answer it.
   const questioning=run.asking?.card.kind==='question'&&!run.asking.settled;
   const ended=cause==='noModel'?{noModel:{owner}}:cause?{modelRefused:{reason:cause,owner,...(run.unfinished?.resetsAt?{resetsAt:run.unfinished.resetsAt}:{})}}:{};
-  // A retry's Run adds its own copy of the words it answers (#980); the Engine's row for it is hidden, so the message
-  // already drawn stands alone. The id is the Run's, kept while this page is open (`retryRuns`).
-  const page=engine.page?{...engine.page,messages:engine.page.messages.filter(message=>!(message.author==='person'&&message.run&&retryRuns.has(message.run)))}:null;
+  // A retry's Run adds its own copy of the words it answers (#980); the Engine's row for it is hidden while the original
+  // message is drawn, so the words stand alone. The original may be on an older page not read yet: then the retry's row
+  // is the only copy and stays drawn until the person scrolls to it.
+  const original=(message:{author:string,body:string,run?:string})=>message.author==='person'&&!(message.run&&retryRuns.has(message.run));
+  const drawn=new Set((engine.page?.messages??[]).filter(original).map(message=>message.body));
+  const page=engine.page?{...engine.page,messages:engine.page.messages.filter(message=>!(message.author==='person'&&message.run&&retryRuns.has(message.run)&&drawn.has(message.body)))}:null;
   const base=page?{...record,messages:[...page.messages,...sent.waiting],pending:false,asking:questioning?true as const:undefined,failed:!!ending,noModel:undefined,modelRefused:undefined,...ended,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
@@ -558,7 +561,7 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   // The message's images go again with its words (#880), read back from the session that holds them: gtmworks has no copy.
   const images=await imagesOf(said);
   if(!images) { setAsking(false); toast(t('conversationFailed'),{icon:'alert'}); return; }
-  const fields={company,conversation:conversation.id,message:said.body,sendKey:key,rerun:true};
+  const fields={company,conversation:conversation.id,message:said.body,messageId:said.id,sendKey:key,rerun:true};
   const {failure,answer}=images.length?await postMessageWithFilesAnswer(fields,images):await postMessageAnswer(fields);
   setAsking(false);
   if(failure) toast(t(failure),{icon:'alert'});
