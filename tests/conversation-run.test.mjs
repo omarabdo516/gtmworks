@@ -109,3 +109,13 @@ test('a Run started while another works on its session reads queued until its tu
   assert.equal((await readRun({...connection(fake),run:second})).queued,undefined,'its turn came');
  } finally { await fake.close(); }
 });
+
+test('a start whose answer was lost stays unknown when the next attempt is answered "retry": the lost one may be the Run that filled the Engine',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true; fake.settings.runsAtOnce=1; fake.settings.loseStarts=1;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  assert.deepEqual(await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'lost-busy'}),{state:'unknown'});
+  assert.equal(fake.settings.runs.length,1,'the lost start did make its Run');
+ } finally { await fake.close(); }
+});
