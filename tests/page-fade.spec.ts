@@ -67,10 +67,18 @@ const settle = (page: Page) => page.evaluate(async ({ names, parts, life }) => {
 
 test('each page opened from the sidebar fades in once, polling fades nothing, and the current row fades to its fill', async ({ page }) => {
  test.setTimeout(120000);
- const fake = await laneHermes(); fake.settings.pendingReads = 2;
- const agent = { id: randomUUID(), connection: randomUUID(), profile: `fade-${randomUUID().slice(0, 8)}` };
+ const fake = await laneHermes(); fake.settings.livePace = 200;
+ const id = randomUUID();
+ const agent = { id, connection: randomUUID(), profile: `ag-${id.replaceAll('-', '')}` };
+ // Salma is on her own profile of the lane's Engine, confirmed, so the first message is a Run there (#883).
+ fake.settings.profiles.set(agent.profile, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: {}, credentials: {} });
  try {
-  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${agent.id}','${company}','${agent.connection}','Salma','Marketing',false,'${agent.profile}')`);
+  query(`do $$ begin
+   insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','co-${company.replaceAll('-', '')}',true)
+    on conflict (company_id) do update set tools_confirmed=true,tools_pending=false;
+   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${agent.id}','${company}',true);
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${agent.id}','${company}','${agent.connection}','Salma','Marketing',false,'${agent.profile}');
+  end $$;`);
   query(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
   await page.setViewportSize({ width: 1440, height: 900 });
   await watch(page);
@@ -110,16 +118,16 @@ test('each page opened from the sidebar fades in once, polling fades nothing, an
   await expect(page.locator('.details')).toBeVisible();
   expect(await page.locator('.details').evaluate(element => getComputedStyle(element).animationName)).toBe('none');
 
-  // The first message starts the Conversation: the chat goes on as the same page, and its polling until the reply
-  // arrives redraws it without fading it again.
+  // The first message starts the Conversation: the chat goes on as the same page, and following its Run live and reading
+  // its messages from the Engine until the reply arrives redraws it without fading it again.
   let polls = 0;
-  page.on('request', request => { if (/\/api\/conversations\?company=.*&conversation=/.test(request.url())) polls++; });
+  page.on('request', request => { if (/\/api\/conversation-live\?|\/api\/conversations\?.*intent=read/.test(request.url())) polls++; });
   const text = `Plan the fade week ${Date.now()}`;
   await page.getByLabel('Message', { exact: true }).fill(text);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
-  await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
-  expect(polls, 'the Conversation asked for its record while the Run was open').toBeGreaterThan(0);
+  await expect(page.locator('.msg[data-author=agent]:not([data-live])').filter({ hasText: `Reply to: ${text}` })).toBeVisible({ timeout: 20000 });
+  expect(polls, 'the Conversation followed its Run and read its messages').toBeGreaterThan(0);
   await settle(page);
   expect((await pageFades(page)).length, 'the Conversation and its polling do not fade the page again').toBe(opened);
 
