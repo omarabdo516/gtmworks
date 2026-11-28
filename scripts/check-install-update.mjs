@@ -7,10 +7,22 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
-const { sendMessage }=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
+const {startConversationRun}=await import(`${process.cwd()}/lib/conversation-start.mjs`);
+const {agentEngine}=await import(`${process.cwd()}/lib/engine/handle.mjs`);
 const { readCompanySignIns }=await import(`${process.cwd()}/lib/company-sign-in.mjs`);
 const { companyProfile }=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const { writeProof }=await import(`${process.cwd()}/lib/install-proof.mjs`);
+// A reply is read from the Conversation's Engine session through the Engine handle, as the Conversation reads it: nothing
+// of a Conversation is stored in gtmworks (#876, #883).
+const sessionReply=async(db,conversation,words)=>{
+ const {data:row}=await db.from('conversations').select('company_id,agent_id,hermes_session_id').eq('id',conversation).maybeSingle();
+ if(!row?.hermes_session_id) return null;
+ const target=await agentEngine(db,{company:row.company_id,agent:row.agent_id});
+ const page=target.state==='found'?await target.engine.sessions.messages(row.hermes_session_id,{offset:0,limit:50}):null;
+ const said=message=>message?.role==='assistant'?(typeof message.content==='string'?message.content:JSON.stringify(message.content??'')):'';
+ const body=page?.state==='found'?page.messages.map(said).find(text=>text.includes(words)):undefined;
+ return body?{body}:null;
+};
 
 const marker=process.argv[2];
 assert.match(marker||'',/^[a-z0-9-]{8,64}$/,'the marker the job wrote before the update');
@@ -72,11 +84,11 @@ try {
  const {data:signedIn}=await owner.auth.getUser();
  const conversation=randomUUID();
  const send={person:signedIn.user.id,company,conversation,sendKey:randomUUID(),agent:agent.id,message:'مرحباً، اكتب عنواناً قصيراً.'};
- // A profile the worker has not confirmed yet refuses the send as pending and stores nothing, so the same send is made
- // again until it is ready (#282).
- const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(owner,service,send); return 'queued' in result?null:result; },180);
- assert.deepEqual(sent,{conversation});
- const answer=await until('a reply from the Agent',async()=>(await checked(owner.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ // A profile the worker has not confirmed yet is none the Engine handle offers: the send is refused with nothing
+ // started, so the same send (the same key, so the same Run) is made again until it is ready (#282).
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await startConversationRun(owner,service,send); return result.state==='started'?result:null; },180);
+ assert.equal(sent.conversation,conversation);
+ const answer=await until('a reply from the Agent',async()=>sessionReply(owner,conversation,reply),240);
  assert.ok(answer.body.includes(reply),answer.body);
  // What it was told before the update is in what its Engine sent the model.
  assert.ok(asked.some(raw=>raw.includes(marker)),'the Agent still remembers the fact it was told before the update');

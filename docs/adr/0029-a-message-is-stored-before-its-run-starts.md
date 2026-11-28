@@ -1,11 +1,11 @@
 ---
-status: accepted, superseded by ADR 0033 when its Conversation spec lands
+status: superseded by ADR 0033 (spec #864, #883); a Channel's message keeps this rule until Channels leave (#921)
 date: 2026-11-25
 ---
 
 # A person's message is stored before its Run starts
 
-[ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): a Conversation's messages are kept in the Engine only, on the condition that record names. Until its spec lands, this record describes the product.
+[ADR 0033](0033-an-interface-and-a-gatekeeper-over-hermes.md) (Omar, 2026-11-26): a Conversation's messages are kept in the Engine only. Spec #864 built that, and #883 switched this record's way off for a Conversation: a message is one Run on its Engine session, and one the Engine did not take stays in the box with "not sent" and "Try again", since no message exists in gtmworks without a Run. A Channel's message still follows the decision below until Channels leave the product (#921). The rest of this record is kept as it was decided.
 
 Omar's decision of 2026-11-25 (vault decision 0071), after issue #756 and the audit of the same day.
 

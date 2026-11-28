@@ -111,7 +111,7 @@ test('the Kanban step works a Card through the Engine\'s own routes and its disp
  assert.match(branch,/\/api\/plugins\/kanban/);
  assert.match(branch,/'\/dispatch/,'the step asks the Engine for a dispatch tick');
  assert.doesNotMatch(branch,/method:'DELETE'/,'no Card is deleted');
- assert.equal(branch.match(/sendMessage\(/g)?.length,1,'one Conversation, the main Agent\'s');
+ assert.equal(branch.match(/startConversationRun\(/g)?.length,1,'one Conversation, the main Agent\'s');
  assert.doesNotMatch(branch,/\/v1\/runs|\/v1\/chat|\/v1\/responses/,'no Run API call of its own');
  assert.match(branch,/single_query_mode:'deny'/,'a profile\'s own write tries to turn the board worker\'s setting off');
  assert.match(branch,/writeProof\(\{step:'kanban',marker,sandbox_host:/);

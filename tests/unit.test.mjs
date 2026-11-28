@@ -374,3 +374,18 @@ test('a failed app sign-in\'s log line is redacted whole before it is bounded, s
   assert.doesNotMatch(line.message, /SSSS/);
   assert.equal(JSON.parse(appSignInFailedLine({ app: 'meta-ads', reason: 'engine', detail: 'x' }, { env: {} })).reason, 'engine');
 });
+
+// Spec #864 (#883): a Conversation's messages are kept in the Engine only. Its terms say what was built: one session is
+// its only record, gtmworks keeps one row about whose it is, a Step is the session's own tool call, and a Run is the
+// Engine's, with a waiting message in the Engine's queue.
+test('the glossary says a Conversation is its Engine session, with one row in gtmworks', () => {
+ const glossary=readFileSync('GLOSSARY.md','utf8');
+ const entry=term=>{ const start=glossary.indexOf(`**${term} /`); assert.ok(start>=0,term); const next=glossary.indexOf('\n**',start+2); return glossary.slice(start,next<0?undefined:next); };
+ assert.match(entry('Conversation'),/that session is its only record/);
+ assert.match(entry('Conversation'),/gtmworks keeps one row for it/);
+ assert.doesNotMatch(entry('Conversation'),/append-only record/);
+ assert.match(entry('Step'),/the tool calls the session holds beside that reply/);
+ assert.match(entry('Run'),/one Run on that Conversation's session/);
+ assert.match(entry('Run'),/waits in the Engine's queue/);
+ assert.doesNotMatch(entry('Run'),/short-lived credential/);
+});

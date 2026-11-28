@@ -165,15 +165,18 @@ async function journey(page) {
  const conversation=new URL(page.url()).pathname.split('/').pop();
  step('signed out, the Administrator signed in with the password and opened the workspace on a Conversation with Lead');
 
- // 3. A message to Lead gets the Engine's reply in the same Conversation, and both are in the database.
+ // 3. A message to Lead gets the Engine's reply in the same Conversation, read from its Engine session after a reload,
+ // and nothing of it is stored in gtmworks (#883): the row names the session, and the old record holds nothing of it.
  const message=`Plan the launch ${Date.now()}`;
  await page.locator('.composer__input').fill(message);
  await page.locator('.composer__input').press('Enter');
  await expect(page.locator('.msg').filter({hasText:`Reply to: ${message}`})).toBeVisible({timeout:30000});
  await screenshot(page,'chat-reply');
- await expect.poll(()=>query(`select author,body from public.conversation_messages where conversation_id=${quote(conversation)} and body like ${quote(`%${message}`)} order by id`),{timeout:15000})
-  .toEqual([{author:'person',body:message},{author:'agent',body:`Reply to: ${message}`}]);
- step(`sent "${message}" to Lead; the reply shows in the Conversation and both messages are in conversation_messages`);
+ await page.reload();
+ await expect(page.locator('.msg').filter({hasText:`Reply to: ${message}`})).toBeVisible({timeout:30000});
+ await expect.poll(()=>query(`select hermes_session_id like 'gtmworks-%' as engine,(select count(*)::int from public.conversation_messages m where m.conversation_id=v.id) as stored from public.conversations v where v.id=${quote(conversation)}`),{timeout:15000})
+  .toEqual([{engine:true,stored:0}]);
+ step(`sent "${message}" to Lead; the reply shows in the Conversation, again after a reload from its Engine session, and nothing of it is stored`);
 
  // 4. Numbers, the KPI dashboard, from the sidebar.
  await page.locator('.sidebar').getByRole('link',{name:'Numbers',exact:true}).click();

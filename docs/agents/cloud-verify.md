@@ -52,7 +52,7 @@ page and in the local database:
 1. empties the install, then walks first run from the setup link: creates the Administrator and the first Company, and checks
    both in `public.companies` and `public.members` (role `owner`);
 2. signs out, signs back in with that email and password, answers "Alone" and lands in a Conversation with Lead;
-3. sends Lead a message and sees the reply on the page, then reads both messages in `public.conversation_messages`;
+3. sends Lead a message and sees the reply on the page, and again after a reload, read from the Conversation's Engine session; the row names that session and `public.conversation_messages` holds nothing of it (#883);
 4. opens Numbers (the KPI dashboard) from the sidebar;
 5. puts the seed back, signs in as `omar@example.com`, opens RS Learning's Marketing board from the sidebar and finds,
    in In progress with its "Working on it now" symbol, the Card the fake Engine holds (`scripts/cloud-hermes.mjs`): the

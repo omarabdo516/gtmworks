@@ -71,6 +71,7 @@ In flight now: the Agent's screen, one awake Screen per Company shared by its Ag
 ## 3. Conversations and channels
 
 - ✅ **Conversations with an Agent.** One person's private exchange with one Agent; any Member except a Viewer may start one. [#6, #8, #25, #39]
+- ✅ **A Conversation is kept on the Engine only.** A Conversation is one session in its Agent's Engine: it opens on its last 50 messages read from there, a message is one Run on that session whose reply, Steps, question and request to act arrive live, a second message waits in the Engine's queue, and gtmworks keeps one row about whose it is. The old record is switched off and left untouched for Omar to remove. [#864, #875, #876, #877, #878, #879, #880, #881, #882, #883, ADR 0033]
 - ✅ **Cards inside replies.** Draft card, review card, question card, handed step card, and "Used N tools" under a reply. [#136, #137, #138, #139, #140, #141]
 - ✅ **Each step live while an Agent works.** The line under the transcript names the Agent and the tool it runs now, and the turn's steps list fills in before the reply, in a Conversation and a channel alike, read from the Run's own event stream in the Engine. [#646]
 - ✅ **Permission requests in the chat.** "Allow once / Always allow / Don't allow", also waiting in "Waiting on you" and in channels. [#163, #165, #321]

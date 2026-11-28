@@ -11,12 +11,24 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
-const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
+const {startConversationRun}=await import(`${process.cwd()}/lib/conversation-start.mjs`);
+const {agentEngine}=await import(`${process.cwd()}/lib/engine/handle.mjs`);
 const {companyProfile}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {engineOf}=await import(`${process.cwd()}/lib/company-engine.mjs`);
 const {readSession}=await import(`${process.cwd()}/lib/engine/sessions.mjs`);
 const {readWorkSandbox}=await import(`${process.cwd()}/lib/engine/files.mjs`);
 const {writeProof}=await import(`${process.cwd()}/lib/install-proof.mjs`);
+// A reply is read from the Conversation's Engine session through the Engine handle, as the Conversation reads it: nothing
+// of a Conversation is stored in gtmworks (#876, #883).
+const sessionReply=async(db,conversation,words)=>{
+ const {data:row}=await db.from('conversations').select('company_id,agent_id,hermes_session_id').eq('id',conversation).maybeSingle();
+ if(!row?.hermes_session_id) return null;
+ const target=await agentEngine(db,{company:row.company_id,agent:row.agent_id});
+ const page=target.state==='found'?await target.engine.sessions.messages(row.hermes_session_id,{offset:0,limit:50}):null;
+ const said=message=>message?.role==='assistant'?(typeof message.content==='string'?message.content:JSON.stringify(message.content??'')):'';
+ const body=page?.state==='found'?page.messages.map(said).find(text=>text.includes(words)):undefined;
+ return body?{body}:null;
+};
 
 const [step,marker]=process.argv.slice(2);
 assert.ok(['sandbox-down','sandbox-up'].includes(step),'the step is sandbox-down or sandbox-up');
@@ -75,9 +87,9 @@ try {
  const send=async text=>{
   const conversation=randomUUID();
   const sendKey=randomUUID();
-  const result=await until('the Company ready for a run',async()=>{ const sent=await sendMessage(person,service,{person:user.id,company,conversation,sendKey,agent,message:text}); return 'queued' in sent?null:sent; },180);
-  assert.deepEqual(result,{conversation});
-  const body=await until('reply stored',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+  const result=await until('the Company ready for a run',async()=>{ const sent=await startConversationRun(person,service,{person:user.id,company,conversation,sendKey,agent,message:text}); return sent.state==='started'?sent:null; },180);
+  assert.equal(result.conversation,conversation);
+  const body=await until('reply stored',async()=>sessionReply(person,conversation,reply),240);
   assert.ok(body.body.includes(reply),body.body);
   const {hermes_session_id:session}=await checked(person.from('conversations').select('hermes_session_id').eq('id',conversation).single());
   assert.ok(session,'the reply names its Engine session');

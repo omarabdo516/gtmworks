@@ -1,7 +1,8 @@
 // CI runs this on stdin inside /app in the installed web container. It proves the Company's Engine (ADR 0010, 0018) answers
 // /health on the compose network, and that the first-run Company's Owner's Arabic message gets its reply with no manual
-// connection step: the worker gives the Company its own Hermes profile (ADR 0014) by itself, and closes the run with the
-// reply. The Company's Engine comes from the Engine record the installer wrote and first run attached (#380), so this also
+// connection step: the worker gives the Company its own Hermes profile (ADR 0014) by itself, the message is one Run on
+// the Conversation's Engine session (#876, #883), and the reply is read from that session, as the Conversation reads it:
+// nothing of it is stored in gtmworks. The Company's Engine comes from the Engine record the installer wrote and first run attached (#380), so this also
 // proves a Run on the first Company answers through the record. The profile is pointed at the fake model provider this
 // script serves on http://web:8080/v1, standing in for the Company's own subscription sign-in (#3), so CI needs no
 // subscription.
@@ -9,7 +10,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
-const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
+const {startConversationRun}=await import(`${process.cwd()}/lib/conversation-start.mjs`);
+const {agentEngine}=await import(`${process.cwd()}/lib/engine/handle.mjs`);
 const {companyProfile}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 
 const engineAddress=process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642';
@@ -69,14 +71,25 @@ try {
   body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
  assert.equal(configured.status,200,'the company profile points at the fake model');
  const conversation=randomUUID();
- // The worker confirms the new profile (its tools, then its shared Skills folder) in its own loops; until then a send is
- // refused as pending and nothing is stored, so the same send is made again until the profile is ready (#282).
+ // The worker confirms the new profile (its tools, then its shared Skills folder) in its own loops; until then the
+ // Engine handle offers no profile and a send is refused with nothing started, so the same send (the same key, so the
+ // same Run) is made again until the profile is ready (#282).
  const send={person:user.id,company,conversation,sendKey:randomUUID(),message:'مرحباً، اكتب لي عنواناً لمنشور عن إطلاق الدورة.'};
- const sent=await until('the company profile ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },120);
- assert.deepEqual(sent,{conversation});
- // The worker closes the run from Hermes's own record and stores the reply.
- const answer=await until('reply stored',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);
- assert.ok(answer.body.includes(reply),answer.body);
+ const sent=await until('the company profile ready for a run',async()=>{ const result=await startConversationRun(person,service,send); return result.state==='started'?result:null; },120);
+ assert.equal(sent.conversation,conversation);
+ assert.ok(sent.run,'the Engine named the Run it started');
+ // The reply is in the Conversation's Engine session, read through the Engine handle as the Conversation reads it.
+ const {hermes_session_id:session}=await checked(person.from('conversations').select('hermes_session_id').eq('id',conversation).single());
+ assert.match(session,/^gtmworks-/,'the database chose the Conversation\'s session');
+ const said=message=>message?.role==='assistant'?(typeof message.content==='string'?message.content:JSON.stringify(message.content??'')):'';
+ const answer=await until('the reply in the Engine session',async()=>{
+  const target=await agentEngine(person,{company,agent:agent.id});
+  const page=target.state==='found'?await target.engine.sessions.messages(session,{offset:0,limit:50}):null;
+  return page?.state==='found'?page.messages.map(said).find(body=>body.includes(reply)):null;
+ },180);
+ assert.ok(answer.includes(reply),answer);
+ // Nothing of the Conversation is stored in gtmworks: no message, no reply.
+ assert.equal((await checked(service.from('conversation_messages').select('id').eq('conversation_id',conversation))).length,0,'the old record holds nothing of it');
  assert.ok(asked.length>0,'the Engine asked the fake model');
  assert.ok(asked.some(body=>JSON.stringify(body.messages).includes('مرحباً')),'the Arabic message reached the model');
  console.log(JSON.stringify({company,agent:agent.id,conversation}));

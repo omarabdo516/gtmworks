@@ -423,7 +423,7 @@ test('the install job updates a real previous-release install with one Company, 
 // proves the memory each Engine kept is its own. It prints no key.
 test('the every-Engine check runs each Company\'s Agent on its own Engine and prints no key', () => {
  const script=readFileSync('scripts/check-install-engines.mjs','utf8');
- assert.match(script,/sendMessage\(/);
+ assert.match(script,/startConversationRun\(/,'each Agent answers a Conversation on its Engine session (#883)');
  assert.match(script,/engineOf\(/);
  assert.match(script,/install-proof\.mjs/);
  assert.match(script,/'proxy-owner@example\.com'/,'the Owner of every Company signs in');
@@ -558,7 +558,7 @@ test('the install job updates two Companies to a release pinning another Engine 
 test('the update check reads the sign-in and the Agent memory through the product, and prints no key', () => {
  const script=readFileSync('scripts/check-install-update.mjs','utf8');
  assert.match(script,/readCompanySignIns\(/);
- assert.match(script,/sendMessage\(/);
+ assert.match(script,/startConversationRun\(/,'the Conversation runs on its Engine session (#883)');
  assert.match(script,/install-proof\.mjs/);
  assert.doesNotMatch(script,/\bconsole\.(log|error|warn|info)\(/,'no console call prints a value the proof did not name');
  assert.doesNotMatch(script,/process\.stdout\.write\(/,'no direct write bypasses the proof');
@@ -1783,4 +1783,16 @@ exit 0
    RESTORED_ENGINES:'http://gtmworks-engine-first:8642 http://gtmworks-engine-second-company:8642'},encoding:'utf8'});
  assert.notEqual(missing.status,0,missing.stdout);
  assert.match(missing.stderr,/The restored database names an Engine the backup did not hold \(http:\/\/gtmworks-engine-second-company:8642\): this archive is not complete\./);
+});
+
+// #883: the install proof's Conversation check sends its message as a Run on the Conversation's Engine session, through
+// the product's own send, and reads the reply from that session, as the Conversation reads it; the old record holds
+// nothing of it.
+test('the install\'s Conversation check sends on the Engine and reads the reply from the Engine\'s session', () => {
+ const script=readFileSync('scripts/check-install-conversation.mjs','utf8');
+ assert.match(script,/lib\/conversation-start\.mjs/);
+ assert.match(script,/startConversationRun\(person,service,send\)/);
+ assert.match(script,/sessions\.messages\(session,/,'the reply is read from the Engine session');
+ assert.doesNotMatch(script,/conversation-runs/);
+ assert.match(script,/from\('conversation_messages'\)[^;]*\)\)\.length,0/,'the old record holds nothing of the Conversation');
 });

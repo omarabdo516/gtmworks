@@ -56,14 +56,14 @@ An Agent's ask to change its own settings, or Lead's on another Agent's behalf: 
 _Avoid_: settings request, config change
 
 **Run / تشغيل**:
-One attempt by an agent to work on one card in one company, with a short-lived credential limited to that card and run. A retry keeps the same card; execution happens outside gtmworks.
+One attempt by an Agent to do a piece of work, started on and kept by its Company's Engine: a message in a Conversation is one Run on that Conversation's session, a Card's work is a Run on that Card, and a Channel message's call is a Run in that Channel. While a Conversation's Run works, its row holds the Run's id until its end is seen; a message sent meanwhile is a Run of its own that waits in the Engine's queue for the session. A Run can stop, ask its person a question or wait on them to allow an action, and each is answered through the Run itself. Execution happens outside gtmworks.
 
 **Conversation / محادثة**:
-One person's exchange with one Agent, started from New. It stays with that Agent for its whole life and maps to one session in the Agent's Engine (a Hermes session today), where the Agent's working context lives. gtmworks keeps its own append-only record of it as people saw it: who wrote each message, the Agent's reply and the time; the copy flows one way, from Hermes to gtmworks. A conversation is private to the person who started it. Any Member except a Viewer may start or write in one.
+One person's exchange with one Agent, started from New. It stays with that Agent for its whole life and is one session in the Agent's Engine (a Hermes session today), and that session is its only record: its messages, the Agent's replies, their Steps and the files either side sent are read from the Engine each time it is opened, fifty messages at a time. gtmworks keeps one row for it: whose it is, in which Company, with which Agent, the session's id, and the Run it has open. Its title is the session's title and its archived mark the session's own. A conversation is private to the person who started it. Any Member except a Viewer may start or write in one, with an Agent they may talk to. The record gtmworks kept of a Conversation before this (its stored messages, waiting turns and Run notes) is not read any more and is not carried over.
 _Avoid_: chat, thread, session
 
 **Step / خطوة**:
-One tool call the Engine reported for the Run behind an Agent's reply in a Conversation, listed under the reply's sender line as the Engine reported it: the tool's name, the Engine's own preview of the call (left out when it holds a path, a key or the Engine's name), and whether the call ended ("Done") or failed ("Skipped"). gtmworks writes no step of its own. The Engine alone keeps a Run's steps (ADR 0017): gtmworks reads them from it after the reply is drawn (ADR 0030) and stores none; a failed or stopped Run, and one whose events were lost before they were read, shows none.
+One tool call an Agent's Run made, listed under the sender line of the reply it belongs to: the tool's name, the Engine's own preview of the call (left out when it holds a path, a key or the Engine's name), and whether the call ended ("Done") or failed ("Skipped"). While the Run works its Steps arrive live from the Run's own events; afterwards they are the tool calls the session holds beside that reply. gtmworks writes no step of its own and stores none (ADR 0017, ADR 0030).
 _Avoid_: action, task, activity
 
 **Channel / قناة**:

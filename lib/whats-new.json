@@ -1,5 +1,11 @@
 [
  {
+  "issue": 883,
+  "date": "2026-11-28",
+  "en": { "title": "Every Conversation is kept on the agent engine", "body": "Every Conversation, a new one and one you had before, now opens from the agent engine and sends each message to it, so it opens faster on a busy server; nothing of what you and the agent wrote is copied into gtmworks, and the messages of an older Conversation that were only kept here are not shown any more." },
+  "ar": { "title": "كل المحادثات بقت محفوظة على محرك الوكلاء", "body": "كل محادثة، الجديدة واللي كانت عندك قبل كده، بقت بتتفتح من محرك الوكلاء وبتبعتله كل رسالة، فبتفتح أسرع حتى لو السيرفر عليه ضغط؛ ومفيش حاجة من اللي انت والوكيل كتبتوه بتتنسخ في gtmworks، والرسايل القديمة اللي كانت محفوظة هنا بس مش هتظهر تاني." }
+ },
+ {
   "issue": 882,
   "date": "2026-11-28",
   "en": { "title": "The model, the first Conversation and the agent’s face on the engine", "body": "In a Conversation kept on the agent engine, the model you pick goes with every reply and stays picked after a reload, the main agent still opens a new company’s first Conversation with its questions, dictation sends as typing does, and the agent’s face shows it working until its reply ends, even when you left the page." },
