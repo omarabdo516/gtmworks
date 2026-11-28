@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { generateLinkSecret, linkSecretHash, passwordLink } from '../lib/company-link.mjs';
 import { appUrl } from '../lib/app-origin.mjs';
+import { personByEmail } from '../lib/person-email.mjs';
 
 // `gtmworks company password-link` (#955, ADR 0019) runs this inside the web container: the install owner names a Company
 // and an Administrator's email, and it prints that Administrator's password link, the way back in for a Company's last
@@ -13,20 +14,6 @@ const option=name=>{ const at=process.argv.indexOf(`--${name}`); return at>0?pro
 const sayError=message=>{ console.error(message); process.exitCode=1; };
 const press=async query=>{ const {data,error}=await query; if(error) throw new Error(error.message); return data; };
 const company=option('company').trim(), email=option('email').trim();
-// An email names an existing Person: an Auth user that has a person row. A signed-up user without one is nobody here.
-const personByEmail=async email=>{
- for(let page=1;;page++) {
-  const {data,error}=await service.auth.admin.listUsers({page,perPage:1000});
-  if(error) throw new Error(error.message);
-  const user=data.users.find(found=>String(found.email||'').toLowerCase()===email.toLowerCase());
-  if(user) {
-   const person=await press(service.from('people').select('id').eq('id',user.id).maybeSingle());
-   return person?user:null;
-  }
-  if(data.users.length<1000) return null;
- }
-};
-
 try {
  if(!company||!email) sayError('Usage: company-password-link.mjs --company <Company> --email <email>');
  else {
@@ -37,7 +24,7 @@ try {
   if(!matches.length) sayError(`No Company in this install is named ${company}. Pass the Company's id or its exact name.`);
   else if(matches.length>1) sayError(`More than one Company in this install is named ${company}. Pass the Company's id instead.`);
   else {
-   const person=await personByEmail(email);
+   const person=await personByEmail(service,email);
    if(!person) sayError(`No Person on this install has the email ${email}. Nothing was changed.`);
    else {
     const secret=generateLinkSecret();

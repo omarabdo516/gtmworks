@@ -139,6 +139,15 @@ test('the command refuses an unknown Company, an ambiguous name, an unknown emai
  }
 });
 
+test('both Company commands ask one Person-by-email rule', () => {
+ for(const file of ['scripts/company-add.mjs','scripts/company-password-link.mjs']) {
+  const source=readFileSync(file,'utf8');
+  assert.match(source,/from '\.\.\/lib\/person-email\.mjs'/);
+  assert.doesNotMatch(source,/listUsers/);
+ }
+ assert.match(readFileSync('lib/person-email.mjs','utf8'),/listUsers/);
+});
+
 test('the runtime image carries the command, as it carries the other Company commands', () => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install-engine\.mjs \/app\/scripts\/company-add\.mjs \/app\/scripts\/company-list\.mjs \/app\/scripts\/company-password-link\.mjs \.\/scripts\/$/m);

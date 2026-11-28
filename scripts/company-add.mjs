@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { registerEngine, removeEngine } from '../lib/engine-record.mjs';
 import { ownerLink, generateOwnerSecret, ownerSecretHash } from '../lib/owner-link.mjs';
 import { appUrl } from '../lib/app-origin.mjs';
+import { personByEmail } from '../lib/person-email.mjs';
 
 // `gtmworks company add` (#382, #383, ADR 0018, 0019) runs this inside the web container after scripts/install.sh has made
 // and health-checked the Company's Engine. It answers in four steps: check refuses an unknown Owner email and a bad name
@@ -24,21 +25,8 @@ const key=process.env.ENGINE_KEY||'';
 const slugFor=name=>`${name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'company'}-${randomUUID().slice(0,8)}`;
 const press=async query=>{ const {data,error}=await query; if(error) throw new Error(error.message); return data; };
 const validName=()=>{ if(name&&name.length<=120) return true; sayError('A Company needs a name of 1 to 120 letters. Nothing was created.'); return false; };
-// An email names an existing Person: an Auth user that has a person row. A signed-up user without one is nobody here.
-const personByEmail=async email=>{
- for(let page=1;;page++) {
-  const {data,error}=await service.auth.admin.listUsers({page,perPage:1000});
-  if(error) throw new Error(error.message);
-  const user=data.users.find(found=>String(found.email||'').toLowerCase()===email.toLowerCase());
-  if(user) {
-   const person=await press(service.from('people').select('id').eq('id',user.id).maybeSingle());
-   return person?user.id:null;
-  }
-  if(data.users.length<1000) return null;
- }
-};
 // An Owner is named only when the enquiry gave one: with none, the Company waits behind a first-Owner link instead.
-const checkedOwner=async()=>owner?personByEmail(owner):null;
+const checkedOwner=async()=>owner?personByEmail(service,owner):null;
 const checked=async()=>{
  if(!validName()) return false;
  if(!owner) return true;
@@ -70,7 +58,7 @@ try {
     made=await registerEngine(service,{address,key});
     if(owner) {
      const person=await checkedOwner();
-     await press(service.rpc('create_company_with_owner',{engine:made.id,company_name:name,person,person_name:null,language:null,slug:companySlug}));
+     await press(service.rpc('create_company_with_owner',{engine:made.id,company_name:name,person:person.id,person_name:null,language:null,slug:companySlug}));
     } else {
      const secret=generateOwnerSecret();
      await press(service.from('company_owner_links').insert({engine_id:made.id,company_name:name,secret_hash:ownerSecretHash(secret)}).select('id').single());
