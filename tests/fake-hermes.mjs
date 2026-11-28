@@ -782,7 +782,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   settings.sessions.set(run.sessionId,found);
   const at=()=>Date.now()/1000;
   run.turnStarted=true;
-  found.messages.push({role:'user',content:inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
+  // A message that carries images (#880) is kept as its input's own parts, each image the data URL the Run was sent,
+  // as the pinned release keeps a native-vision turn (tui_gateway/session_history.py _build_persist_user_message).
+  found.messages.push({role:'user',content:Array.isArray(run.input)?run.input.at(-1)?.content??'':inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
   if(settings.liveHold&&!run.released) await new Promise(resolve=>{ run.release=resolve; });
   push(run.id,{event:'run.started'});
   for(const step of settings.liveSteps(inputText(run.input))) {
@@ -1246,7 +1248,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     }
     const latest=url.searchParams.get('order')==='latest';
     const end=latest?Math.max(0,messages.length-offset):0;
-    const page=latest?messages.slice(Math.max(0,end-limit),end):messages.slice(offset,offset+limit);
+    let page=latest?messages.slice(Math.max(0,end-limit),end):messages.slice(offset,offset+limit);
+    // `inline_images=false` writes a message's parts as one text, each image an `[image]` line (#880,
+    // tui_gateway/session_history.py _coerce_message_text with image_urls=False); the default inlines them.
+    if(url.searchParams.get('inline_images')==='false') page=page.map(message=>Array.isArray(message.content)?{...message,content:message.content.map(part=>part?.type==='text'?part.text:['image_url','input_image','image'].includes(part?.type)?'\n[image]':`\n[${part?.type}]`).join('')}:message);
     return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:latest?'latest':'oldest',returned:page.length}});
    }
    // A profile's usage over the last `days` (#347): the sums of its sessions started since then, null with none, as
