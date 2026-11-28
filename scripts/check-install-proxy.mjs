@@ -13,7 +13,6 @@ const anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, service=process.env.SUPABA
 assert.ok(origin && mail,'APP_ORIGIN and MAIL_URL are set');
 assert.ok(anon && service,'NEXT_PUBLIC_SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are set');
 const owner={name:'Proxy Owner',email:'proxy-owner@example.com',company:'Proxy Company',language:'en',password:'proxy-owner-password',confirm:'proxy-owner-password'};
-const invitee='proxy-invitee@example.com';
 const onOrigin=url=>url===origin || url.startsWith(`${origin}/`);
 const cookies=new Map();
 
@@ -120,9 +119,9 @@ console.log(`Reset link returned to ${reset}`);
 
 // A sign-in request whose client names another host: the emailed link still opens on APP_ORIGIN.
 const forged=await visit(`${origin}/auth/v1/otp`,{method:'POST',
- headers:{apikey:anon,'content-type':'application/json','x-forwarded-host':'evil.example'},body:JSON.stringify({email:invitee,create_user:false})});
+ headers:{apikey:anon,'content-type':'application/json','x-forwarded-host':'evil.example'},body:JSON.stringify({email:joiner.email,create_user:false})});
 assert.equal(forged.status,200,`Auth sends the sign-in link (HTTP ${forged.status})`);
-const signIn=await emailedLink(invitee,'forged sign-in');
+const signIn=await emailedLink(joiner.email,'forged sign-in');
 assert.equal(new URL(signIn).origin,new URL(origin).origin,`the emailed sign-in link ignores the forged X-Forwarded-Host: ${signIn}`);
 assert.ok(onOrigin(new URL(signIn).searchParams.get('redirect_to') || ''),`the emailed sign-in link returns to ${origin}: ${signIn}`);
 console.log(`Sign-in link on ${origin} despite X-Forwarded-Host: evil.example`);
