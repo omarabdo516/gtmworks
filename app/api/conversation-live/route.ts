@@ -4,12 +4,14 @@ import { agentEngine } from '@/lib/engine/handle.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { liveLines, type LiveDelta, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
+import { runEnd } from '@/lib/run-outcome.mjs';
 
 // The open Run of a Conversation whose messages are the Engine's, as it happens (#876): gtmworks's web server follows the
 // Run's event stream on the Engine and relays it to the Conversation's own person, one JSON line each, as it carries the
 // Screen's stream (ADR 0011: no browser reaches the Engine or holds its key). A view line is the Run's steps so far and
 // the call it makes now; a `{delta}` line is the next words of the reply as the model writes them; the last line says
-// how it ended. Once the Run's end is seen the row no longer holds it (end_conversation_run). Nothing of it is kept.
+// how it ended, and why when it did not finish (#879). Once the Run's end is seen, or the Engine no longer knows the Run,
+// the row no longer holds it (end_conversation_run). Nothing of it is kept.
 type Line=LiveLine|LiveDelta;
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
@@ -36,16 +38,30 @@ export async function GET(request:NextRequest) {
   const run=found.open_runs?.[0];
   if(!run) return only({end:'none'});
   if(target.state!=='found') return only({end:'unreachable'});
+  const engine=target.engine;
+  // How the Run ended is the Run's own record (#879). A person who comes back after it ended is told so at once, and
+  // its reply is the session's, read next; a Run the Engine no longer knows is let go the same way.
+  const told=async()=>{ try { return runEnd(await engine.runs.read(run)); } catch { return null; } };
+  const settled=await told();
+  if(settled) { await db.rpc('end_conversation_run',{conversation,run}); return only(settled); }
   const stopped=new AbortController();
   request.signal.addEventListener('abort',()=>stopped.abort(),{once:true});
-  const lines=liveLines(run,target.engine.sessions.follow(run,{signal:stopped.signal}),{reply:true})[Symbol.asyncIterator]();
+  const lines=liveLines(run,engine.sessions.follow(run,{signal:stopped.signal}),{reply:true})[Symbol.asyncIterator]();
   return new Response(new ReadableStream({
    async pull(controller) {
     try {
      const next=await lines.next();
      if(next.done) { controller.close(); return; }
-     const value=next.value;
-     // The Run ended, or the Engine no longer knows it: the row lets it go, and the reader reads the session.
+     let value=next.value;
+     // The Run ended, or the Engine no longer knows it: the row lets it go, and the reader reads the session. An end is
+     // told as the Run's record says it went: one that failed or was stopped did not finish, and says why.
+     // The record may not say so the moment the events end: it is read again a few times, and an end it never names
+     // is told plainly, which the page shows as no reply under the person's message.
+     if('end' in value&&value.end==='ended') {
+      let read=await told();
+      for(let tries=0;!read&&tries<3;tries++) { await new Promise(resolve=>setTimeout(resolve,300)); read=await told(); }
+      value=read??value;
+     }
      if('end' in value&&(value.end==='ended'||value.end==='gone')) await db.rpc('end_conversation_run',{conversation,run});
      controller.enqueue(line(value));
     } catch { controller.enqueue(line({end:'unreachable'})); controller.close(); }

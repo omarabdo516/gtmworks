@@ -7,6 +7,7 @@
   "conversationNoRefresh": "Couldn’t refresh. Showing what was last read.",
   "conversationEngineSummary": "The Engine’s summary of earlier messages",
   "conversationTryAgain": "Try again",
+  "conversationNotFinished": "This reply didn’t finish.",
   "conversationAnswerNotDelivered": "Not delivered: the agent had stopped waiting for this answer. Send it again as a new message.",
   "conversationAddressed": "To {0} · the agent wasn’t asked",
   "conversationStop": "Stop {0}",
