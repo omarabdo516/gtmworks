@@ -92,8 +92,9 @@ test('the Owner\'s answer is met with the first Agent to make and the Make it ch
  await expect(asked.getByRole('button',{name:'Make it'})).toBeVisible({timeout:30000});
  // The Run was told its opening and to propose the first Agents, with the Owner's question for each.
  const run=fake.settings.runs.find(each=>String(each.input).startsWith('We sell'))!;
- expect(run.instructions).toContain('You opened this conversation, before they wrote anything, with this message:');
- expect(run.instructions).toContain('What does RS Learning sell?');
+ // On the Engine (#882) the opening goes as the Run's history, the message before the Owner's, and the instructions name it.
+ expect(run.instructions).toContain('You opened this conversation, before they wrote anything, with the message before theirs.');
+ expect(JSON.stringify(run.history)).toContain('What does RS Learning sell?');
  expect(run.instructions).toContain('propose the first two or three agents to make for this company');
  await asked.getByRole('button',{name:'Make it'}).click();
  await expect(page.locator('.msg[data-author=agent]').last()).toContainText('Course Writer is on the team now.',{timeout:30000});

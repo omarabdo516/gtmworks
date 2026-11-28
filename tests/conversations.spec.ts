@@ -18,13 +18,15 @@ const other='10000000-0000-0000-0000-000000000002';
 const manager='20000000-0000-0000-0000-000000000002';
 
 // Two agents on two profiles of the lane's fake Hermes, the install's one Hermes (#342): Mona is the company's default.
-function attachAgents() {
+function attachAgents(fake:Awaited<ReturnType<typeof laneHermes>>) {
  const stamp=randomUUID().slice(0,8); const agents:Record<string,{id:string,profile:string,connection:string}>={};
  query(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
  for(const [name,makeDefault] of [['Mona',true],['Nour',false]] as const) {
   const [profile,id,connection]=[`${name.toLowerCase()}-${stamp}`,randomUUID(),randomUUID()];
   query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','${name}','Marketing',${makeDefault},'${profile}')`);
   agents[name]={id,profile,connection};
+  // Each Agent's own profile is one the lane's Engine serves, so a send is a Run there (#883).
+  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  }
  return agents;
 }
@@ -53,7 +55,7 @@ test('The Owner starts a private conversation from the board and from Home, and 
  const placeholders=await watchPlaceholders(page);
  await wholePages(page,url=>url.pathname.startsWith('/c/rs-learning/conversations/'));
  try {
-  await ownerSignIn(page); agents=attachAgents();
+  await ownerSignIn(page); agents=attachAgents(fake);
   const {Nour,Mona}=agents as Record<string,{profile:string}>;
   // Only finished requests: a still-open stream (the dev server's or a prefetch) has no complete body to read.
   const record=(request:Request)=>{responses.push(request.response().then(response=>response?response.text():'').catch(()=>''));};
@@ -152,7 +154,7 @@ test('isolation: another member and another company get not found, and a company
  test.setTimeout(120000);
  const fake=await laneHermes(); let agents={};
  try {
-  await ownerSignIn(page); agents=attachAgents();
+  await ownerSignIn(page); agents=attachAgents(fake);
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'Private plan',sendKey:randomUUID()})).status()).toBe(200);
   const messages=`intent=read&offset=0&limit=50`;
@@ -182,7 +184,7 @@ test('A Contributor starts a conversation and gets the reply; nobody else reads 
  const contributor='20000000-0000-0000-0000-000000000005';
  query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`);
  try {
-  await ownerSignIn(page); agents=attachAgents();
+  await ownerSignIn(page); agents=attachAgents(fake);
   const {Mona}=agents as Record<string,{profile:string}>;
   const context=await browser.newContext(); const member=await context.newPage();
   try {
@@ -210,7 +212,7 @@ test('A Viewer has no composer and the server refuses their message',async({page
  test.setTimeout(120000);
  const fake=await laneHermes(); let agents={};
  try {
-  await ownerSignIn(page); agents=attachAgents();
+  await ownerSignIn(page); agents=attachAgents(fake);
   const context=await browser.newContext(); const viewer=await context.newPage();
   try {
    await signIn(viewer,'viewer@example.com','/c/rs-learning/home');
@@ -282,7 +284,7 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
  const fake=await laneHermes();
  let agents={};
  try {
-  await ownerSignIn(page); agents=attachAgents();
+  await ownerSignIn(page); agents=attachAgents(fake);
   await page.goto('/c/rs-learning/work/board');
   const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'});
   const tileFace=tile.locator('.face');
@@ -348,7 +350,7 @@ test('With reduced motion an Agent at work still shows its state and its end, an
  let agents={};
  try {
   await page.emulateMedia({reducedMotion:'reduce'});
-  await ownerSignIn(page); agents=attachAgents();
+  await ownerSignIn(page); agents=attachAgents(fake);
   await page.goto('/c/rs-learning/work/board');
   const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'});
   await tile.click();
