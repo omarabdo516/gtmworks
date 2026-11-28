@@ -108,6 +108,7 @@ test('renaming writes the title on the Engine, and the list and the chat head sh
  await expect(page.locator('#sb-recent')).toContainText('Webinar invite');
  await page.reload();
  await expect(page.locator('#sb-recent')).toContainText('Webinar invite',{timeout:20000});
+ await expect(page.getByRole('heading',{level:1,name:/^Webinar invite/})).toBeVisible();
  // A name another of the Agent's sessions holds is refused, and says so.
  const again=page.locator('#sb-recent .thread-row').filter({hasText:'Webinar invite'});
  await again.hover();

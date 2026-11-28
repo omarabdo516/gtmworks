@@ -1146,7 +1146,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(url.pathname==='/api/sessions'&&request.method==='GET') {
     if(settings.sessionListStatus) return send(response,settings.sessionListStatus,{detail:'Session store is busy (disk I/O or lock). Retry; the list was not cleared.'});
     const profile=url.searchParams.get('profile')||'default';
-    if(profile!=='default'&&!settings.profiles.has(profile)&&![...settings.sessions.values()].some(session=>session.profile===profile)) return send(response,404,{detail:`Profile '${profile}' not found`});
+    if(profile!=='default'&&!settings.profiles.has(profile)&&![...settings.sessions.values()].some(session=>session.profile===profile)&&!settings.runs.some(run=>run.profile===profile&&!settings.unknownProfiles.includes(profile))) return send(response,404,{detail:`Profile '${profile}' not found`});
     const limit=Number(url.searchParams.get('limit')??20); const offset=Number(url.searchParams.get('offset')??0); const archived=url.searchParams.get('archived')??'exclude';
     if(!Number.isInteger(limit)||limit<0||limit>100) return send(response,422,{detail:'limit'});
     if(!['exclude','only','include'].includes(archived)) return send(response,400,{detail:'archived must be one of: exclude, only, include'});
