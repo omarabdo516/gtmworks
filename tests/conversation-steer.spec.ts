@@ -69,7 +69,10 @@ test('Stop ends the open Run and the reply shows as stopped',async({page})=>{
  const writing=page.locator('li[data-live] [data-writing]');
  await expect(writing).toHaveText(/^One two/,{timeout:20000});
  await page.getByRole('button',{name:'Stop Ads'}).click();
- await expect(page.locator('[data-outcome=stopped]')).toHaveText('Stopped. Ads stopped mid-reply',{timeout:20000});
+ const stoppedLine=page.locator('[data-outcome=stopped]');
+ await expect(stoppedLine).toContainText('Stopped. Ads stopped mid-reply',{timeout:20000});
+ // As any reply that did not finish (#879), it offers to send the message again.
+ await expect(stoppedLine.getByRole('button',{name:'Try again'})).toBeVisible();
  expect(fake.settings.runs.at(-1)!.stopped).toBe(true);
  await expect.poll(()=>list(`select open_runs from public.conversations where id='${conversation}'`)[0].open_runs,{timeout:10000}).toEqual([]);
  // The next message is a new Run, and the stopped line goes.
