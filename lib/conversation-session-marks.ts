@@ -44,14 +44,16 @@ export async function titleConversation(db:Database,company:string,id:string,tit
  return row?await write(db,company,row,{title}).catch(()=>'unreachable' as const):'missing';
 }
 
-/** Writing in an archived Conversation brings it back (#881): its session's mark is cleared before the send goes on,
- * always, since another tab may have archived it since the lists' last read. Nothing is logged: the person wrote, they
- * did not restore. */
-export async function unarchiveOnWrite(db:Database,company:string,id:string) {
+/** Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared, always, since
+ * another tab may have archived it since the lists' last read. Nothing is logged: the person wrote, they did not
+ * restore. The rows are read as the reader now; the answer is the Engine's write, which the caller runs after its own
+ * answer, so a send's acknowledgement never waits on the Engine. Null when there is nothing to clear. */
+export async function unarchiveOnWrite(db:Database,company:string,id:string):Promise<(()=>Promise<void>)|null> {
  const rows=await rowsOf(db,company,[id]);
  const row=rows?.[0];
- if(!row?.agent_id||!row.hermes_session_id) return;
+ if(!row?.agent_id||!row.hermes_session_id) return null;
  const target=await agentEngine(db,{company,agent:row.agent_id});
- if(target.state!=='found') return;
- if(await target.engine.sessions.mark(row.hermes_session_id,false)==='marked') noteSession(company,target.agent.profile,row.hermes_session_id,{archived:false});
+ if(target.state!=='found') return null;
+ const {engine,agent}=target; const session=row.hermes_session_id;
+ return async()=>{ if(await engine.sessions.mark(session,false)==='marked') noteSession(company,agent.profile,session,{archived:false}); };
 }

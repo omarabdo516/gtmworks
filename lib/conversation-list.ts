@@ -96,9 +96,15 @@ export function heldSession(company:string,session:string):SessionListed|null {
 // switch it off), is named as the old record names it (lib/conversation-title.mjs: its first message, else the one still
 // waiting for its Run), with its newest message under it, by that message's time and its own archived mark, as #875 left a Conversation the old
 // record holds to that record. Null when that read failed.
+const oldPage=100;
 type OldRow={id:string,last_message_at:string,archived_at:string|null,first:{body:string,conversation_attachments:{name:string}[]}[],conversation_queued_turns:{message:string}[],newest:{body:string}[]};
 async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:string,line:string,at:string,archived:boolean}>|null> {
  if(!ids.length) return new Map();
+ // A page of ids at a time, so the read's address stays short however many there are.
+ if(ids.length>oldPage) {
+  const parts=await Promise.all(Array.from({length:Math.ceil(ids.length/oldPage)},(_,at)=>oldRecord(db,ids.slice(at*oldPage,(at+1)*oldPage))));
+  return parts.some(part=>!part)?null:new Map(parts.flatMap(part=>[...part!]));
+ }
  const {data,error}=await db.from('conversations').select('id,last_message_at,archived_at,first:conversation_messages(body,conversation_attachments(name)),conversation_queued_turns(message),newest:conversation_messages(body)').in('id',ids).eq('first.author','person')
   .neq('newest.body','').is('newest.hand_card',null).order('id',{referencedTable:'newest',ascending:false}).limit(1,{referencedTable:'newest'})
   .order('id',{referencedTable:'first'}).limit(1,{referencedTable:'first'}).order('queued_at',{referencedTable:'conversation_queued_turns'}).limit(1,{referencedTable:'conversation_queued_turns'});
@@ -108,22 +114,37 @@ async function oldRecord(db:Database,ids:string[]):Promise<Map<string,{title:str
   return [row.id,{title,line:row.newest?.[0]?.body??'',at:row.last_message_at,archived:!!row.archived_at}]; }));
 }
 
+// Every row of the person's in the Company, read as them a page of 1,000 at a time (the API's own cap per read), so a
+// Conversation made long ago and used today is never left out before the lists sort by the Engine's activity. Null when
+// a page could not be read.
+const rowPage=1000;
+async function rowsOf(db:Database,company:string):Promise<Row[]|null> {
+ const rows:Row[]=[];
+ for(let from=0;;from+=rowPage) {
+  const {data,error}=await db.from('conversations').select('id,agent_id,agent_name,hermes_session_id,good_morning_day,created_at').eq('company_id',company).not('agent_id','is',null)
+   .order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+rowPage-1);
+  if(error) return null;
+  rows.push(...(data||[]) as Row[]);
+  if(!data||data.length<rowPage) return rows;
+ }
+}
+
 // The person's own Conversations in a Company (#881, spec #864): their rows, read as them, joined with one list read
 // per Agent from the Engine, newest activity first. A Conversation of an Agent they no longer see, or whose Agent is
 // gone, is none of theirs to list; one whose session the Engine's list no longer holds is gone. An Agent whose sessions
 // have never been read (its Engine down since the server started) has its Conversations drawn from their rows. Null when
 // the rows could not be read: the lists then keep what they show.
 export async function personConversations(db:Database,company:string,t:Translate,language:string,{now=Date.now()}:{now?:number}={}):Promise<PersonConversation[]|null> {
- const [{data,error},seen,engine]=await Promise.all([
-  db.from('conversations').select('id,agent_id,agent_name,hermes_session_id,good_morning_day,created_at').eq('company_id',company).not('agent_id','is',null).order('created_at',{ascending:false}).limit(2000),
+ const [data,seen,engine]=await Promise.all([
+  rowsOf(db,company),
   seenAgents(db,company),
   companyEngine(company).catch(()=>null),
  ]);
- if(error||!seen) return null;
+ if(!data||!seen) return null;
  // Which Agents are the reader's to see is the rows' own read (row-level security); the Agents' profiles only say where
  // each one's sessions are listed. An Agent with no profile the Engine serves has its Conversations drawn from their rows.
  const profiles=new Map(seen.map(row=>[row.agent,row.profile]));
- const rows=((data||[]) as Row[]).filter(row=>row.agent_id);
+ const rows=data.filter(row=>row.agent_id);
  const byProfile=new Map<string,string[]>();
  for(const row of rows) if(row.hermes_session_id&&profiles.has(row.agent_id!)) {
   const profile=profiles.get(row.agent_id!)!;
