@@ -406,7 +406,8 @@ test('the Owner makes an Invite link from the Team table, a Manager reads the pe
  try {
   await signIn(manager,'manager@example.com','/c/rs-learning/settings?section=members');
   const theirs=manager.getByRole('dialog',{name:'Settings'});
-  await expect(theirs.locator('.ta-table tbody tr').filter({hasText:label}).locator('.ta-pending')).toHaveText('Invite link');
+  // A pending Invite link is the Administrator’s alone (#951); a Manager reads neither its row nor a way to make one.
+  await expect(theirs.locator('.ta-table tbody tr').filter({hasText:label})).toHaveCount(0);
   await expect(theirs.getByRole('button',{name:'Make an invite link'})).toHaveCount(0);
  } finally { await other.close(); }
 
