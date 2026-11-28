@@ -87,7 +87,8 @@ test('the first Person who joins with an Invite link makes the Company a team an
  await fresh.close();
  expect(rows(`select work_mode from public.companies where id='${company}'`)[0].work_mode).toBe('team');
 
- await signIn(page,'omar@example.com','/c/rs-consultations/home');
+ // Omar's own page is still signed in: the new Person joined in a separate context.
+ await page.goto('/c/rs-consultations/home');
  await expect(channels(page)).toBeVisible();
  await page.goto('/c/rs-consultations/settings');
  await expect(page.getByText('With a team · 2 members')).toBeVisible();

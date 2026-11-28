@@ -79,26 +79,33 @@ assert.equal((await submit({...owner,email:'second-owner@example.com',code})).re
 
 // An Invite link (#950, #953) joins a new Person with no email: the link's secret is made here, only its hash is kept
 // through REST with the service role (as the app's own action does through make_invite_link), the page opens on the
-// public origin, and its form makes the Person, the Member and a session. Opening the page uses nothing.
-const slug=new URL(home.url).pathname.split('/')[2];
+// public origin, and its form makes the Person, the Member and a session. An older release has no link table yet: its
+// first run is checked without this step, and no email is sent by this script either way.
 const restHeaders={apikey:service,authorization:`Bearer ${service}`};
-const [company]=await (await fetch(`${origin}/rest/v1/companies?slug=eq.${encodeURIComponent(slug)}&select=id`,{headers:restHeaders})).json();
-assert.ok(company?.id,`the Company ${slug} is read`);
-const secret=randomBytes(32).toString('hex'), hash=createHash('sha256').update(secret).digest('hex');
-const kept=await fetch(`${origin}/rest/v1/company_links`,{method:'POST',headers:{...restHeaders,'content-type':'application/json'},
- body:JSON.stringify({company_id:company.id,kind:'invite',secret_hash:hash,label:'Proxy Invitee',role:'contributor',ends_at:new Date(Date.now()+7*24*60*60*1000).toISOString()})});
-assert.equal(kept.status,201,`the Invite link is kept (HTTP ${kept.status})`);
-assert.equal((await visit(`${origin}/join`)).status,200,'the join page opens');
-const joiner={name:'Proxy Invitee',email:'proxy-joined@example.com',password:'proxy-joined-password'};
-const joined=await visit(`${origin}/join/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},
- body:new URLSearchParams({...joiner,confirm:joiner.password,code:secret,language:'en'}).toString()});
-assert.equal(joined.status,303,`the Invite link joins (HTTP ${joined.status})`);
-const joinedAt=joined.headers.get('location') || '';
-assert.ok(onOrigin(joinedAt),`the joined Person lands on ${origin}: ${joinedAt}`);
-assert.match(new URL(joinedAt).pathname,/^\/c\/[^/]+\/home$/,`the joined Person lands in the Company: ${joinedAt}`);
-const [used]=await (await fetch(`${origin}/rest/v1/company_links?secret_hash=eq.${hash}&select=used_at`,{headers:restHeaders})).json();
-assert.ok(used?.used_at,'the Invite link is kept marked used');
-console.log(`Invite link joined ${joiner.email} in ${joinedAt}`);
+const linksTable=await fetch(`${origin}/rest/v1/company_links?select=id&limit=1`,{headers:restHeaders});
+if(linksTable.ok) {
+ const slug=new URL(home.url).pathname.split('/')[2];
+ const [company]=await (await fetch(`${origin}/rest/v1/companies?slug=eq.${encodeURIComponent(slug)}&select=id`,{headers:restHeaders})).json();
+ assert.ok(company?.id,`the Company ${slug} is read`);
+ const secret=randomBytes(32).toString('hex'), hash=createHash('sha256').update(secret).digest('hex');
+ const kept=await fetch(`${origin}/rest/v1/company_links`,{method:'POST',headers:{...restHeaders,'content-type':'application/json'},
+  body:JSON.stringify({company_id:company.id,kind:'invite',secret_hash:hash,label:'Proxy Invitee',role:'contributor',ends_at:new Date(Date.now()+7*24*60*60*1000).toISOString()})});
+ assert.equal(kept.status,201,`the Invite link is kept (HTTP ${kept.status})`);
+ assert.equal((await visit(`${origin}/join`)).status,200,'the join page opens');
+ const joiner={name:'Proxy Invitee',email:'proxy-joined@example.com',password:'proxy-joined-password'};
+ const joined=await visit(`${origin}/join/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},
+  body:new URLSearchParams({...joiner,confirm:joiner.password,code:secret,language:'en'}).toString()});
+ assert.equal(joined.status,303,`the Invite link joins (HTTP ${joined.status})`);
+ const joinedAt=joined.headers.get('location') || '';
+ assert.ok(onOrigin(joinedAt),`the joined Person lands on ${origin}: ${joinedAt}`);
+ assert.match(new URL(joinedAt).pathname,/^\/c\/[^/]+\/home$/,`the joined Person lands in the Company: ${joinedAt}`);
+ const [used]=await (await fetch(`${origin}/rest/v1/company_links?secret_hash=eq.${hash}&select=used_at`,{headers:restHeaders})).json();
+ assert.ok(used?.used_at,'the Invite link is kept marked used');
+ console.log(`Invite link joined ${joiner.email} in ${joinedAt}`);
+} else {
+ assert.equal(linksTable.status,404,`the Invite link table is read (HTTP ${linksTable.status})`);
+ console.log('Invite links: not in this release');
+}
 
 // A password reset as "Forgot password?" asks for one (implicit flow): its link returns to /auth/reset with the session
 // in the fragment, and that page runs in the browser.
@@ -119,9 +126,9 @@ console.log(`Reset link returned to ${reset}`);
 
 // A sign-in request whose client names another host: the emailed link still opens on APP_ORIGIN.
 const forged=await visit(`${origin}/auth/v1/otp`,{method:'POST',
- headers:{apikey:anon,'content-type':'application/json','x-forwarded-host':'evil.example'},body:JSON.stringify({email:joiner.email,create_user:false})});
+ headers:{apikey:anon,'content-type':'application/json','x-forwarded-host':'evil.example'},body:JSON.stringify({email:owner.email,create_user:false})});
 assert.equal(forged.status,200,`Auth sends the sign-in link (HTTP ${forged.status})`);
-const signIn=await emailedLink(joiner.email,'forged sign-in');
+const signIn=await emailedLink(owner.email,'forged sign-in');
 assert.equal(new URL(signIn).origin,new URL(origin).origin,`the emailed sign-in link ignores the forged X-Forwarded-Host: ${signIn}`);
 assert.ok(onOrigin(new URL(signIn).searchParams.get('redirect_to') || ''),`the emailed sign-in link returns to ${origin}: ${signIn}`);
 console.log(`Sign-in link on ${origin} despite X-Forwarded-Host: evil.example`);

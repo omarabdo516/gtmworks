@@ -204,7 +204,7 @@ test('a Company worked alone lists its pending Invite link in the Team dialog an
  const dialog=await openTeam(page);
  // An email invitation left pending at the release is ended, and a Company worked alone is told so before it makes a link.
  const ended=dialog.getByRole('list',{name:'Email invite ended'});
- await expect(ended.getByText('Ended')).toBeVisible();
+ await expect(ended.getByText('Email invite ended',{exact:true})).toBeVisible();
  await expect(ended.getByText('Viewer · ended-953@example.test')).toBeVisible();
  const first=await makeLink(page,dialog,'Solo Person','viewer','SEO');
  expect(first).toMatch(/\/join#code=[a-f0-9]{64}$/);

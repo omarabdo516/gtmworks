@@ -12,7 +12,7 @@ const slug='proxy-company-1';
 // trustForwardedHost: Auth builds the link from a client's X-Forwarded-Host, as it could if the gateway passed one on.
 // checksCode and closes: first run opens only with the setup code and only once (issue #50), unless a fault is staged.
 const setupCode='5e7c0de'.padEnd(64,'0');
-function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,checksCode=true,closes=true}) {
+function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,checksCode=true,closes=true,linksSupported=true}) {
  const mailbox=[], links=[];
  let setUp=false;
  const server=createServer(async (request,response)=>{
@@ -44,6 +44,7 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
    const row=JSON.parse(body); assert.equal(row.kind,'invite'); assert.match(row.secret_hash,/^[a-f0-9]{64}$/);
    links.push(row); return send(201);
   }
+  if(url.pathname==='/rest/v1/company_links' && request.method==='GET' && request.headers.apikey==='service' && !linksSupported) return send(404,{},'');
   if(url.pathname==='/rest/v1/company_links' && request.method==='GET' && request.headers.apikey==='service') return json(links.map(row=>({used_at:row.used_at ?? '2026-11-28T00:00:00Z'})));
   if(url.pathname==='/join') return send(200,{},'<main>Join</main>');
   if(url.pathname==='/join/submit' && request.method==='POST') {
@@ -84,6 +85,14 @@ test('the proxied install check follows the password first run to the Company ho
  assert.equal(status,0,output);
  assert.match(output,new RegExp(`Reached http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
  assert.match(output,new RegExp(`Invite link joined proxy-joined@example\\.com in http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
+ assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
+ assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
+});
+
+test('an older release without Invite links skips that step, and first run, the reset and the forged sign-in still pass', async () => {
+ const {status,output}=await check(await install({signInAt:base=>base,linksSupported:false}));
+ assert.equal(status,0,output);
+ assert.match(output,/Invite links: not in this release/);
  assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
  assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
 });
