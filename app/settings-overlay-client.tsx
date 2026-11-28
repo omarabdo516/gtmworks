@@ -8,6 +8,7 @@ import { saveLanguage } from './language-actions';
 import AccountChoicesView from './account-choices-view';
 import { setAgentVisible } from './agent-visibility-actions';
 import { makeInviteLink, cancelInviteLink } from './invite-link-actions';
+import { makePasswordLink } from './password-link-actions';
 import { addMemberFromCompany } from './add-member-actions';
 import { InviteLinkSection } from './invite-link-section';
 import { AddMemberSection } from './add-member-section';
@@ -127,7 +128,7 @@ export function SettingsTeamTable({company,members,ended,links,agents,allowed,us
   return failure;
  };
  return <TeamTable company={company} members={members} ended={ended} links={links} agents={agents} allowed={allowed} userId={userId} owner={owner} hint={false}
-  save={setAgentVisible} makeLink={makeLink} cancelLink={cancelLink} add={(person,role,chosen)=>addMemberFromCompany(company,person,role,chosen)} candidates={candidates}/>;
+  save={setAgentVisible} makeLink={makeLink} cancelLink={cancelLink} add={(person,role,chosen)=>addMemberFromCompany(company,person,role,chosen)} candidates={candidates} makePasswordLink={person=>makePasswordLink(company,person)}/>;
 }
 
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the

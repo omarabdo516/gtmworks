@@ -24,7 +24,7 @@ test('a password needs at least 10 characters and a matching confirmation', () =
 test('the short-password message names the rule in English and Arabic', () => {
  assert.equal(en.passwordTooShort,'Use at least 10 characters for your password.');
  assert.equal(ar.passwordTooShort,'استخدم 10 أحرف على الأقل لكلمة المرور.');
- for(const key of ['passwordsDoNotMatch','wrongEmailOrPassword','tooManySignInAttempts','forgotPassword','setNewPassword','passwordSaved','resetLinkInvalid','checkYourEmailForAResetLink']) {
+ for(const key of ['passwordsDoNotMatch','wrongEmailOrPassword','tooManySignInAttempts','forgotPassword','setNewPassword','passwordSaved','forgotPasswordAsk','passwordLinkNeedsNew']) {
   assert.ok(en[key]?.trim(),`en has ${key}`);
   assert.ok(ar[key]?.trim(),`ar has ${key}`);
  }
@@ -58,7 +58,7 @@ test('the README install section describes the password first run and what the l
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
  const install=readme.split('## Install')[1].split('## Update')[0];
  assert.ok(install.includes('On a fresh install, enter your name, email, a password of at least 10 characters (twice) and your first company name; you are signed in at once, with no email step.'));
- assert.ok(install.includes('The local inbox at http://localhost:8025 receives password reset links.'));
+ assert.ok(install.includes('The local inbox at http://localhost:8025 receives no email from gtmworks: people join by Invite link, and a forgotten password is a password link an Administrator or a Manager makes from the Team page.'));
  assert.doesNotMatch(install,/follow the sign-in link/);
 });
 

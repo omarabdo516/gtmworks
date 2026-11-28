@@ -57,13 +57,8 @@ function install({signInAt,verifyAt='/auth/v1/verify',trustForwardedHost=false,c
    mail(JSON.parse(body).email,trustForwardedHost && forwarded ? `http://${forwarded}` : base,'magiclink',base);
    return json({});
   }
-  if(url.pathname==='/auth/v1/recover' && request.method==='POST' && request.headers.apikey==='anon') {
-   mail(JSON.parse(body).email,base,'recovery',url.searchParams.get('redirect_to'));
-   return json({});
-  }
-  if(url.pathname==='/auth/v1/verify' && url.searchParams.get('type')==='recovery') return send(303,{location:`${url.searchParams.get('redirect_to')}#access_token=a&refresh_token=r&type=${url.searchParams.get('type')}`});
   if(url.pathname==='/auth/v1/verify') return send(303,{location:`${url.searchParams.get('redirect_to')}&code=c`});
-  if(url.pathname==='/auth/accept' || url.pathname==='/auth/reset') return send(200);
+  if(url.pathname==='/auth/accept') return send(200);
   if(url.pathname===`/c/${slug}/home` && cookie.includes('session=s')) return send(200,{},'<h1>Proxy Company</h1>');
   send(404);
  });
@@ -85,15 +80,13 @@ test('the proxied install check follows the password first run to the Company ho
  assert.equal(status,0,output);
  assert.match(output,new RegExp(`Reached http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
  assert.match(output,new RegExp(`Invite link joined proxy-joined@example\\.com in http://127\\.0\\.0\\.1:\\d+/c/${slug}/home`));
- assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
  assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
 });
 
-test('an older release without Invite links skips that step, and first run, the reset and the forged sign-in still pass', async () => {
+test('an older release without Invite links skips that step, and first run and the forged sign-in still pass', async () => {
  const {status,output}=await check(await install({signInAt:base=>base,linksSupported:false}));
  assert.equal(status,0,output);
  assert.match(output,/Invite links: not in this release/);
- assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
  assert.match(output,/Sign-in link: not in this release/);
 });
 
@@ -121,10 +114,11 @@ test('the proxied install check fails when a redirect leaves the public origin f
  assert.match(output,new RegExp(`stays on http://127\\.0\\.0\\.1:\\d+: http://inside\\.internal:8080/c/${slug}/home`));
 });
 
-test('the proxied install check fails, naming the link, when the reset link misses the Auth path behind the gateway', async () => {
+// No email carries a password reset any more (#954): the emailed sign-in link is the one that proves it.
+test('the proxied install check fails, naming the link, when the emailed sign-in link misses the Auth path behind the gateway', async () => {
  const {status,output}=await check(await install({signInAt:base=>base,verifyAt:'/verify'}));
  assert.equal(status,1);
- assert.match(output,/the reset link opens Auth behind the gateway: http:\/\/127\.0\.0\.1:\d+\/verify\?token=t&type=recovery&redirect_to=/);
+ assert.match(output,/the emailed sign-in link opens Auth behind the gateway: http:\/\/127\.0\.0\.1:\d+\/verify\?token=t/);
 });
 
 // Auth builds an emailed link by resolving its path against API_EXTERNAL_URL; an absolute path replaces the URL's own

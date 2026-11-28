@@ -43,6 +43,7 @@ const teamActions = (data = teamData) => ({
  save: vi.fn(async () => ''),
  makeLink: vi.fn(async () => ({ link: 'http://127.0.0.1:3000/join#code=' + 'a'.repeat(64) })),
  cancelLink: vi.fn(async () => ''),
+ makePasswordLink: vi.fn(async () => ({})),
  add: vi.fn(async () => ({})),
 });
 const teamMenu = (language: Language, overrides: Partial<ComponentProps<typeof AccountMenuView>> = {}) => menu(language, {

@@ -12,6 +12,12 @@
   "ar": { "title": "غيّر اسم المحادثة، والقوايم مبتستناش", "body": "الشريط الجانبي و«كل المحادثات» بيعرضوا محادثاتك من محرك الوكيل، بعناوينها أو بأول كلامها لحد ما يبقى ليها عنوان، وبيحتفظوا بآخر قراية عشان التنقل بين الصفحات ميستناش؛ وتقدر تغيّر اسم المحادثة من القايمة بتاعتها، والأرشفة أو الكتابة فيها بتتحفظ في المحرك." }
 },
 {
+  "issue": 954,
+  "date": "2026-11-28",
+  "en": { "title": "Password links", "body": "A Member who forgot their password asks an Administrator or a Manager of their Company, who makes a password link from the Team page; it works once for 24 hours, signs them in with the new password and signs out their other devices, and the sign-in page no longer sends a reset email." },
+  "ar": { "title": "لينكات كلمة المرور", "body": "العضو اللي نسي كلمة المرور بيطلب من أدمن أو مدير في شركته، اللي بيعمله لينك كلمة مرور من صفحة الفريق؛ بيشتغل مرة واحدة لمدة 24 ساعة، وبيدخّله بكلمة المرور الجديدة ويخرّج أجهزته التانية، وصفحة الدخول مبقتش تبعت إيميل لتغيير كلمة المرور." }
+},
+{
   "issue": 953,
   "date": "2026-11-28",
   "en": { "title": "Invite links everywhere; no invitation emails", "body": "Every place that invited by email now makes an Invite link: the Team page and first run’s “Who’s on your team?” step show each link once to copy. An email invitation left over from before is ended and the Team table says so, and the app sends no email." },

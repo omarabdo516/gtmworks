@@ -2,7 +2,7 @@
 // (APP_ORIGIN http://localhost:3000, straight to the gateway) and through an HTTPS proxy in front of the gateway, with
 // APP_ORIGIN set to the proxy's public origin (README: a remote server). It goes the way a browser on that origin goes:
 // first run with a password, straight to the Company home (issue #41); an Invite link that joins a new Person with no
-// email, and a password reset whose emailed link returns to the app; and a sign-in request with a forged
+// email (a forgotten password is a password link, #954, with no email either); and a sign-in request with a forged
 // X-Forwarded-Host. Every redirect and link must stay on the public origin; one built from the request inside the
 // install says http and breaks the browser (issue #40).
 import assert from 'node:assert/strict';
@@ -109,23 +109,6 @@ if(linksTable.ok) {
  console.log('Invite links: not in this release');
 }
 
-// A password reset as "Forgot password?" asks for one (implicit flow): its link returns to /auth/reset with the session
-// in the fragment, and that page runs in the browser.
-const reset=`${origin}/auth/reset`;
-const recovered=await visit(`${origin}/auth/v1/recover?redirect_to=${encodeURIComponent(reset)}`,{method:'POST',
- headers:{apikey:anon,'content-type':'application/json'},body:JSON.stringify({email:owner.email})});
-assert.equal(recovered.status,200,`Auth sends the reset link (HTTP ${recovered.status})`);
-const resetLink=await emailedLink(owner.email,'reset');
-assert.ok(onOrigin(resetLink),`the reset link is on ${origin}: ${resetLink}`);
-assert.equal(new URL(resetLink).pathname,'/auth/v1/verify',`the reset link opens Auth behind the gateway: ${resetLink}`);
-const opened=await visit(resetLink);
-const landed=opened.headers.get('location') || '';
-assert.ok(opened.status>=300 && opened.status<400 && onOrigin(landed),`the reset link ${resetLink} returns to ${origin}: ${landed}`);
-assert.equal(landed.split('#')[0],reset,`the reset link returns to the reset page: ${landed}`);
-assert.equal(new URLSearchParams(new URL(landed).hash.slice(1)).get('type'),'recovery','the reset link carries a recovery session');
-assert.equal((await visit(reset)).status,200,'the reset page opens');
-console.log(`Reset link returned to ${reset}`);
-
 // A sign-in request whose client names another host: the emailed link still opens on APP_ORIGIN. It uses the account the
 // Invite link joined, a fresh one: an older release has no such account, so it is checked where the link is.
 if(joinedEmail) {
@@ -134,6 +117,7 @@ if(joinedEmail) {
  assert.equal(forged.status,200,`Auth sends the sign-in link (HTTP ${forged.status})`);
  const signIn=await emailedLink(joinedEmail,'forged sign-in');
  assert.equal(new URL(signIn).origin,new URL(origin).origin,`the emailed sign-in link ignores the forged X-Forwarded-Host: ${signIn}`);
+ assert.equal(new URL(signIn).pathname,'/auth/v1/verify',`the emailed sign-in link opens Auth behind the gateway: ${signIn}`);
  assert.ok(onOrigin(new URL(signIn).searchParams.get('redirect_to') || ''),`the emailed sign-in link returns to ${origin}: ${signIn}`);
  console.log(`Sign-in link on ${origin} despite X-Forwarded-Host: evil.example`);
 } else console.log('Sign-in link: not in this release');
