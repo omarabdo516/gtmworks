@@ -1,6 +1,6 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
-import { signIn, emailLink } from './sign-in';
+import { signIn } from './sign-in';
 
 // #10: a person working alone sees no channels, no Member permissions and no per-member Agents, and keeps the Activity
 // log; when the first invited Member accepts, the Company is a team and nothing earlier is moved or lost. RS
@@ -41,13 +41,13 @@ test('alone: the sidebar has no channels and keeps the log; settings has no memb
 
  await page.goto('/c/rs-consultations/settings');
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
- // The invitation to the first Member is on Members (#612).
+ // The Invite link for the first Member is on Members (#612, #953).
  await page.goto('/c/rs-consultations/settings?section=members');
- await expect(page.getByLabel('Member’s email')).toBeVisible();
- await expect(page.locator('#inv-role')).toHaveValue('contributor');
- await expect(page.locator('#inv-role-d')).toHaveText('Contributor: Writes with the agents you choose for them.');
- await page.locator('#inv-role').selectOption('viewer');
- await expect(page.locator('#inv-role-d')).toHaveText('Viewer: Reads only, without writing or approving.');
+ await page.getByRole('button',{name:'Make an invite link'}).click();
+ await expect(page.locator('#lnk-role')).toHaveValue('contributor');
+ await expect(page.locator('#lnk-role-d')).toHaveText('Contributor: Writes with the agents you choose for them.');
+ await page.locator('#lnk-role').selectOption('viewer');
+ await expect(page.locator('#lnk-role-d')).toHaveText('Viewer: Reads only, without writing or approving.');
  await expect(page.getByRole('heading',{name:'Members and the agents they work with'})).toHaveCount(0);
  await expect(page.getByRole('switch')).toHaveCount(0);
 
@@ -61,33 +61,39 @@ test('alone: the sidebar has no channels and keeps the log; settings has no memb
  await expect(page.locator('.member-form')).toHaveCount(0);
 });
 
-test('the first invited Member accepts: the Company is a team and every earlier Conversation, Card and log row is unchanged',async({page,context})=>{
- const email=`alone-${Date.now()}@example.com`;
+test('the first Person who joins with an Invite link makes the Company a team and every earlier Conversation, Card and log row is unchanged',async({page,browser})=>{
+ const label='Alone Person', email=`alone-${Date.now()}@example.com`;
  await signIn(page,'omar@example.com','/c/rs-consultations/settings?section=members');
- await page.getByLabel('Member’s email').fill(email);
- await page.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(page.locator('.toast')).toHaveText(`Invite sent to ${email}`);
- await expect(page).toHaveURL(/\/c\/rs-consultations\/settings\?section=members$/);
- // An invitation is not a Member yet: the Company stays alone until it is accepted.
+ await page.getByRole('button',{name:'Make an invite link'}).click();
+ await page.locator('#lnk-label').fill(label);
+ await page.getByRole('button',{name:'Make the link'}).click();
+ const field=page.getByLabel(`Invite link for ${label}`);
+ await expect(field).toHaveValue(/\/join#code=[a-f0-9]{64}$/);
+ const link=await field.inputValue();
+ await page.locator('section[aria-labelledby="lnk-h"]').getByRole('button',{name:'Done'}).click();
+ // A link is not a Member yet: the Company stays alone until its Person joins.
  await page.goto('/c/rs-consultations/settings');
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
  expect(rows(`select work_mode from public.companies where id='${company}'`)[0].work_mode).toBe('alone');
 
- const link=await emailLink(page,email);
- await context.clearCookies(); await page.goto(link);
- await page.getByLabel('New password').fill('alone-invited-password'); await page.getByLabel('Confirm password').fill('alone-invited-password');
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/c\/rs-consultations\//);
+ const fresh=await browser.newContext(); const person=await fresh.newPage();
+ await person.goto(link);
+ await person.getByLabel('Your name').fill(label);
+ await person.getByLabel('Email').fill(email);
+ await person.getByLabel('Password',{exact:true}).fill('alone-joined-password');
+ await person.getByLabel('Confirm password').fill('alone-joined-password');
+ await person.getByRole('button',{name:'Join and sign in'}).click();
+ await expect(person).toHaveURL(/\/c\/rs-consultations\/home$/);
+ await fresh.close();
  expect(rows(`select work_mode from public.companies where id='${company}'`)[0].work_mode).toBe('team');
 
- await context.clearCookies();
- await signIn(page,'omar@example.com','/c/rs-consultations/home');
+ // Omar's own page is still signed in: the new Person joined in a separate context.
+ await page.goto('/c/rs-consultations/home');
  await expect(channels(page)).toBeVisible();
  await page.goto('/c/rs-consultations/settings');
  await expect(page.getByText('With a team · 2 members')).toBeVisible();
  await page.goto('/c/rs-consultations/settings?section=members');
  await expect(page.getByRole('heading',{name:'Members and the agents they work with'})).toBeVisible();
- await expect(page.locator('#inv-email')).toHaveCount(0);
 
  expect(counts()).toEqual(before);
  const last=Number(earlierLog.at(-1)?.id ?? 0);

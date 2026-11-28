@@ -1,6 +1,6 @@
 import { test, expect, type Page, type BrowserContext } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { signIn, emailLink, seededPassword } from './sign-in';
 import { inbox } from './lane.mjs';
@@ -140,25 +140,20 @@ test('with a verified authenticator the password changes only after the second s
  await expect(page).toHaveURL(/\/no-company$/);
 });
 
-test('an invited Member sets a password from the invitation and signs in with it later',async({page,context})=>{
- const email=`password-invited-${Date.now()}@example.com`;
- // Only the Owner invites (#775).
- await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
- await page.request.delete(inbox);
- await page.getByRole('button',{name:'Invite a member'}).click();
- await page.getByLabel('Member’s email').fill(email);
- await page.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(page.getByText(`Invite sent to ${email}`)).toBeVisible();
- const link=await emailLink(page,email);
+// #953: a Person who joins with an Invite link chose a password there, and it signs them in later. Email invitations
+// are gone; the link is the way in.
+test('a Person who joins with an Invite link signs in with the password they chose',async({page,context,baseURL})=>{
+ const email=`password-link-${Date.now()}@example.com`, secret=randomBytes(32).toString('hex'), hash=createHash('sha256').update(secret).digest('hex');
+ query(`insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values ('10000000-0000-0000-0000-000000000001','invite','${hash}','20000000-0000-0000-0000-000000000001','Password Person','viewer',now()+interval '7 days')`);
+ await page.goto(`${baseURL}/join#code=${secret}`);
+ await page.getByLabel('Your name').fill('Password Person');
+ await page.getByLabel('Email').fill(email);
+ await page.getByLabel('Password',{exact:true}).fill('link-password-41');
+ await page.getByLabel('Confirm password').fill('link-password-41');
+ await page.getByRole('button',{name:'Join and sign in'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
  await context.clearCookies();
- await page.goto(link);
- await expect(page.getByRole('heading',{name:'Set a new password'})).toBeVisible();
- await page.getByLabel('New password').fill('invited-password-41');
- await page.getByLabel('Confirm password').fill('invited-password-41');
- await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/);
- await context.clearCookies();
- await signIn(page,email,'/c/rs-learning/home','invited-password-41');
+ await signIn(page,email,'/c/rs-learning/home','link-password-41');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
 });
 

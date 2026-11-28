@@ -3,10 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { signIn, openNavigation } from './sign-in';
 
 // #187: "Team" in the account menu, for an Owner and a Manager only, opening the Team dialog over the page. The table
-// is Settings, Company's, so a switch turned there is the same change and holds at once; the Owner invites from it and
-// a Manager has no invite button. A Company worked alone gets the narrower dialog. The dialog's keyboard and closing
-// are proven in tests/components/account-menu.test.tsx; the rows behind the table in supabase/tests/
-// member_agent_visibility.sql, member_invites.sql.
+// is Settings, Company's, so a switch turned there is the same change and holds at once; the Owner makes Invite links
+// from it (#950) and a Manager has no way to. A Company worked alone gets the narrower dialog. The dialog's keyboard and
+// closing are proven in tests/components/account-menu.test.tsx; the rows behind the table in supabase/tests/
+// member_agent_visibility.sql.
 const company='10000000-0000-0000-0000-000000000001';
 const alone='10000000-0000-0000-0000-000000000002';
 const aleem='10000000-0000-0000-0000-000000000003';
@@ -88,28 +88,6 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
  await expect(inSettings).toHaveAttribute('aria-checked','false');
 });
 
-test('the Owner invites a Member from inside the dialog, its errors shown, and the invitation joins the table',async({page})=>{
- const email=`team-${Date.now()}@example.com`;
- await signIn(page,'omar@example.com','/c/rs-learning/work/board');
- const {dialog}=await openTeam(page);
- await dialog.getByRole('button',{name:'Invite a member'}).click();
- const field=dialog.getByLabel('Member’s email');
- await expect(field).toBeFocused();
- await dialog.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(dialog.getByText('Write the member’s email.')).toBeVisible();
- await field.fill('nour@rslearning');
- await dialog.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(dialog.getByText('This email is missing something. Write it in full, like nour@rslearning.com')).toBeVisible();
- await field.fill(email);
- await dialog.getByRole('button',{name:'Invite',exact:true}).click();
- await expect(page.locator('.toast')).toHaveText(`Invite sent to ${email}`);
- // The invited row is drawn in the same dialog, marked as sent.
- const pending=dialog.locator('.ta-table tbody tr').filter({hasText:email});
- await expect(pending).toBeVisible();
- await expect(pending.getByText('Invite sent')).toBeVisible();
- await expect(dialog.getByRole('button',{name:'Done'})).toBeVisible();
-});
-
 // #952: the Owner adds a Person who is a Member of another Company they administer, with a Role and Agents and no link;
 // a Person from a Company they do not administer is not offered.
 test('the Owner adds a Person from another Company they administer, with a Role and an Agent and no link',async({page})=>{
@@ -134,15 +112,16 @@ test('the Owner adds a Person from another Company they administer, with a Role 
  expect(laneRows(`select count(*)::int n from public.company_links`)).toEqual([{n:0}]);
 });
 
-test('a Manager holds the Team table and can turn a switch, and has no invite button',async({page})=>{
+test('a Manager holds the Team table and can turn a switch, and makes no Invite link',async({page})=>{
+
  // A Manager's table holds the Agents shown to them, as Settings, Company does (hermes_agents_read): Meta Ads is shown
  // to them here, so its column is theirs to switch for another Member.
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${ads}') on conflict do nothing`);
  await signIn(page,'manager@example.com','/c/rs-learning/home');
  const {dialog}=await openTeam(page);
  await expect(dialog.locator('.ta-table')).toBeVisible();
- await expect(dialog.getByRole('button',{name:'Invite a member'})).toHaveCount(0);
- await expect(dialog.locator('#inv-email')).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:'Make an invite link'})).toHaveCount(0);
+ await expect(dialog.locator('#lnk-label')).toHaveCount(0);
  // Adding a Person from another Company is the Administrator's alone (#952).
  await expect(dialog.getByRole('button',{name:'Add someone from another company'})).toHaveCount(0);
  const toggle=dialog.locator('.ta-table tbody tr').filter({hasText:'عضو'}).getByRole('switch',{name:'عضو · Meta Ads'});
@@ -165,7 +144,7 @@ test('a Contributor and a Viewer have no Team item',async({page})=>{
  }
 });
 
-test('a Company worked alone opens the narrower dialog: the Owner’s row, the invite form already open and the note',async({page})=>{
+test('a Company worked alone opens the narrower dialog: the Owner’s row, the Invite link button and the note',async({page})=>{
  query(`update public.companies set work_mode='alone' where id='${alone}'`);
  await signIn(page,'omar@example.com','/c/rs-consultations/home');
  const {dialog,detail}=await openTeam(page);
@@ -173,7 +152,9 @@ test('a Company worked alone opens the narrower dialog: the Owner’s row, the i
  await expect(dialog.getByText(/It’s just you in this workspace for now/)).toBeVisible();
  await expect(dialog.getByText('(you)')).toBeVisible();
  await expect(dialog.getByText('Administrator · You see every agent and approve everything')).toBeVisible();
- await expect(dialog.getByLabel('Member’s email')).toBeFocused();
+ await expect(dialog.getByRole('button',{name:'Make an invite link'})).toBeFocused();
+ await dialog.getByRole('button',{name:'Make an invite link'}).click();
+ await expect(dialog.getByLabel('Person’s name')).toBeFocused();
  await expect(dialog.getByText('As soon as someone you invite joins, channels and per-member agents turn on by themselves.')).toBeVisible();
  const box=await page.locator('dialog.team-dlg--solo').boundingBox();
  expect(box?.width).toBeLessThan(700);
