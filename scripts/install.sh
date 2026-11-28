@@ -1410,7 +1410,7 @@ elif [ "$operation" = restore ]; then
   docker run --rm --env-file .env.install.tmp -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs validate complete
   resume=yes
   engine_stop
-  compose stop web worker gateway auth rest storage mail
+  compose stop web worker gateway auth rest storage
   empty=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
     'select not exists(select 1 from public.companies) and not exists(select 1 from auth.users) and not exists(select 1 from storage.objects);')
   test "$empty" = t || { echo 'Restore requires an empty install.' >&2; exit 1; }
@@ -1616,7 +1616,7 @@ docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" nod
 # A broken gateway config stops here, before migrations or any container changes, while the old version still serves.
 echo 'Checking gateway configuration...'
 compose run --rm --no-deps gateway nginx -t
-if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
+if [ "$operation" = install ]; then compose up -d --wait db auth rest storage; fi
 # The image every Company's work sandbox runs (#392, ADR 0020): pulled from the release's pin or built from this
 # checkout, and recorded before anything can make a Company's sandbox. It comes before the migrations (#397), so an
 # update whose image cannot be pulled stops with the schema as it was and the release it runs still serving.
@@ -1724,7 +1724,6 @@ mv .install-lock/work-sandbox-image .work-sandbox-image
 drop_moved_work_volumes
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
-echo 'Mail: http://localhost:8025'
 echo 'Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory.'
 # The last line: the one-time setup link while first run is open (issue #50), the sign-in address after.
 docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs ready "$setup"

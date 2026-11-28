@@ -145,13 +145,13 @@ reset_install() {
 # The setup an area starts from (#407, #408, #409): the source install, its output kept in the log named by the one
 # argument and its status kept under the proof's pipefail, and first run completed the way a browser does it on the
 # local install, straight to the gateway: the setup form's submission with the setup code in its body makes the first
-# Company and signs its Owner in, the invitation and sign-in links stay on APP_ORIGIN, and no key or code is printed
-# (issue #40, #50). first_install proves both steps, the repeat install still open between them; every other area runs
-# them and carries on. The caller owns each failure sentence, so an area names the step it was in.
+# Company and signs its Owner in, an Invite link joins a new Person on APP_ORIGIN with no email, and no key or code is
+# printed (issue #40, #50, #948). first_install proves both steps, the repeat install still open between them; every
+# other area runs them and carries on. The caller owns each failure sentence, so an area names the step it was in.
 install_source() { sh scripts/install.sh 2>&1 | tee "$1"; }
 complete_setup() {
   docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
-    -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+    -e APP_ORIGIN=http://localhost:3000 \
     node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs && main_agent_plugin_settled
 }
 # What an Agent was told, and the sign-in its Company made, written in an Engine's own data before an update (#385,

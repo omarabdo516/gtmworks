@@ -429,7 +429,7 @@ test('update recreates the auth service with its password settings and waits unt
  // compose up recreates a service whose settings changed; --wait needs auth's healthcheck to pass before success.
  assert.match(install.commands(),/up -d --no-deps --wait --wait-timeout 300 auth web worker\n/);
  assert.ok(compose.services.auth.healthcheck?.test,'auth has a healthcheck for --wait');
- assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_MAILER_OTP_EXP,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','86400','720h']);
+ assert.deepEqual([compose.services.auth.environment.GOTRUE_PASSWORD_MIN_LENGTH,compose.services.auth.environment.GOTRUE_SESSIONS_TIMEBOX],['10','720h']);
 });
 
 test('only a self-hosted install keeps Company and Agent profiles, and no install-wide Engine names one', () => {

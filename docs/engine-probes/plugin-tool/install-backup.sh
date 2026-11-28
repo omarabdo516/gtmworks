@@ -8,7 +8,7 @@
 #
 #   bash docs/engine-probes/plugin-tool/install-backup.sh     (commit first: it runs HEAD; about 20 minutes)
 #
-# It needs the ports a source install takes on 127.0.0.1 (3000, 8025) free, so stop `npm run cloud:up` first.
+# It needs the port a source install takes on 127.0.0.1 (3000) free, so stop `npm run cloud:up` first.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)

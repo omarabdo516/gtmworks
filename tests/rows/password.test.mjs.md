@@ -1,1 +1,1 @@
-| `password.test.mjs` | A password needs 10 characters (not bytes) and a matching confirmation. | 1.3 s | password.spec.ts | keep |
+| `password.test.mjs` | A password needs 10 characters (not bytes) and a matching confirmation; the install keeps the same rule and a 30 day session with no mailbox, and the README tells people to join by Invite link. (#948) | 1.3 s | password.spec.ts | keep |
