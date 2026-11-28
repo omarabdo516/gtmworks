@@ -226,7 +226,9 @@ export function ChatPlaceholder() {
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
 // `live` (#876): a Conversation whose messages are the Engine's draws its open Run from its own live read, the reply as
 // it is written and its steps, in place of the old record's steps read (app/api/run-steps).
-export type EngineLive={view:LiveRun|null,reply:string,working:boolean};
+// `ending` (#879): how its last turn ended when no reply came — a Run seen to fail or stop (`unfinished`), or the
+// person's last message with no Run open (`noReply`) — and `again` sends that message again.
+export type EngineLive={view:LiveRun|null,reply:string,working:boolean,ending?:'unfinished'|'noReply',again?:()=>void};
 export function ConversationTurns({slug,company,record,writer,asked,reread,details=false,live:engineLive}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean,live?:EngineLive}) {
  const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
@@ -395,6 +397,9 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.
    ?<p className="note convo-status" role="alert" data-outcome={modelOutcome(modelCause)}><ModelLine cause={modelCause} agent={record.modelRefused?.agent??conversation.agent_name} slug={slug} owner={(record.noModel??record.modelRefused)?.owner===true} resets={record.modelRefused?.resetsAt} ranOut={record.modelRefused?.ranOut}/></p>
+   // A Conversation on the Engine (#879): the reply did not finish, or none came, and Try again sends the words again.
+   :engineLive?.ending?<p className="note convo-status" role="alert" data-outcome={engineLive.ending==='noReply'?'no-reply':'unfinished'}>{c(engineLive.ending==='noReply'?'conversationNoReply':'conversationNotFinished')}
+    {writer&&engineLive.again&&<> <button type="button" className="link-btn" onClick={engineLive.again}>{c('conversationTryAgain')}</button></>}</p>
    :<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>)}
  </>;
 }

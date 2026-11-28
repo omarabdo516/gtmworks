@@ -6,6 +6,8 @@
   "conversationNoRefresh": "مقدرناش نحدّث. بنعرض آخر حاجة اتقرت.",
   "conversationEngineSummary": "ملخص المحرك للرسايل الأقدم",
   "conversationTryAgain": "جرّب تاني",
+  "conversationNotFinished": "الرد ده مكملش.",
+  "conversationNoReply": "مفيش رد وصل على الرسالة دي.",
   "conversationAnswerNotDelivered": "موصلتش: الوكيل كان بطّل يستنى الإجابة دي. ابعتها تاني في رسالة جديدة.",
   "conversationAddressed": "لـ {0} · الوكيل متسألش",
   "conversationStop": "وقّف {0}",

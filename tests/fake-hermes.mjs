@@ -469,7 +469,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,released?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,liveFailed?:boolean,released?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
   // The most rows a cron job's run history lists (#535: the pinned Engine lists 100 at most).
   cronRunsAtMost:100,startDelay:0,stallEvents:false,liveSteps:/** @type {(input:string)=>{tool:string,preview?:string|null,failed?:boolean}[]} */(()=>[]),livePace:10,liveHold:false,
   release(/** @type {string} */ id) { const run=settings.runs.find(each=>each.id===id); if(run) { run.released=true; run.release?.(); } },reply:input=>`Reply to: ${input}`,
@@ -789,6 +789,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    push(run.id,{event:'tool.completed',tool:step.tool,tool_call_id:call,error:step.failed===true});
    found.messages.push({role:'tool',tool_call_id:call,tool_name:step.tool,content:'{"success": true}',timestamp:at()});
   }
+  // A Run whose model call fails (#879; `ending` failed, `failure` its words) writes no reply: the session holds the
+  // person's message and the calls made, and the Run's record names the failure.
+  if(!run.stopped&&settings.ending==='failed') { run.liveFailed=true; endEvents(run.id,'run.failed'); return; }
   const reply=settings.reply(inputText(run.input),[],[]);
   for(const piece of run.stopped?[]:reply.match(/\S+\s*/g)??[]) {
    if(run.stopped) break;
@@ -965,7 +968,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     // As measured on the pinned release (#141, the install check): a Run's record has when it was made and nothing of when
     // it ended; its end is in its events.
     const times={created_at:run.created};
-    if(run.sessionId&&!run.stopped) return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveDone?'completed':'running',session_id:run.session,...times,pending_controls:[],...(run.liveDone?{output:settings.reply(inputText(run.input),[],[])}:{})});
+    if(run.sessionId&&!run.stopped) return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveFailed?'failed':run.liveDone?'completed':'running',session_id:run.session,...times,pending_controls:[],...(run.liveDone?{output:settings.reply(inputText(run.input),[],[])}:{}),...(run.liveFailed&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{})});
     if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times}); }
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
     // choices is marked recommended.
