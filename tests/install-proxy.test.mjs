@@ -94,7 +94,7 @@ test('an older release without Invite links skips that step, and first run, the 
  assert.equal(status,0,output);
  assert.match(output,/Invite links: not in this release/);
  assert.match(output,/Reset link returned to http:\/\/127\.0\.0\.1:\d+\/auth\/reset/);
- assert.match(output,/Sign-in link on http:\/\/127\.0\.0\.1:\d+ despite X-Forwarded-Host: evil\.example/);
+ assert.match(output,/Sign-in link: not in this release/);
 });
 
 test('the install check fails when first run opens without the setup code', async () => {
