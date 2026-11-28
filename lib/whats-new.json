@@ -1,5 +1,11 @@
 [
  {
+  "issue": 980,
+  "date": "2026-11-28",
+  "en": { "title": "Try again answers your last message, once", "body": "When a Conversation ends on your message with no reply, Try again starts the Agent again on that message, which stays once in the Conversation, instead of sending your words a second time." },
+  "ar": { "title": "«جرّب تاني» بيرد على آخر رسالة ليك، مرة واحدة", "body": "لما المحادثة تخلص على رسالتك ومفيش رد، «جرّب تاني» بيشغّل الوكيل تاني على الرسالة دي، وبتفضل مرة واحدة في المحادثة، بدل ما كلامك يتبعت تاني." }
+ },
+ {
   "issue": 877,
   "date": "2026-11-28",
   "en": { "title": "A message the engine can’t take stays in your box", "body": "When the agent engine is busy, has too many messages waiting, or can’t be reached, your message stays in the box with why it wasn’t sent and Try again, and a message you send while the agent works shows that it’s waiting its turn." },

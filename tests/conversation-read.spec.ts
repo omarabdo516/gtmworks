@@ -131,6 +131,24 @@ test('each reply lists the tool calls its own turn holds, with no matching by ti
  await expect(replies.first().locator('.steps__list .step')).toHaveText(['web_search · accounting courses CairoDone']);
 });
 
+test('the person\'s words repeated with no reply between are one unanswered message, drawn once',async({page})=>{
+ test.setTimeout(120000);
+ // #980: Try again starts a Run on the person's last message; the Engine stores that input, so the session holds the
+ // words twice with nothing between them. The page draws them once, and the reply after them keeps its own Steps.
+ const call=(id:string)=>({id,type:'function',function:{name:'web_search',arguments:JSON.stringify({query:'the week'})}});
+ const {conversation}=talk([
+  user(1,'Plan the week'),user(2,'Plan the week'),
+  {role:'assistant',content:'',tool_calls:[call('call_1')],timestamp:3},
+  {role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:4},
+  replied(5,'Here is the plan.')]);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await open(page,conversation);
+ const reply=page.locator('.msg[data-author=agent]');
+ await expect(reply.locator('.bubble--agent')).toHaveText('Here is the plan.',{timeout:20000});
+ await expect(page.locator('.msg[data-author=person]').filter({hasText:'Plan the week'})).toHaveCount(1);
+ await expect(reply.locator('.steps__toggle')).toHaveText(/Used 1 tool/);
+});
+
 test('a newest page of only tool calls loads the messages before it, and a page with nothing to draw is passed over',async({page})=>{
  test.setTimeout(120000);
  const call=(id:string)=>({id,type:'function',function:{name:'web_search',arguments:JSON.stringify({query:id})}});
@@ -141,8 +159,9 @@ test('a newest page of only tool calls loads the messages before it, and a page 
  await open(page,conversation);
  // The newest 50 are tool calls alone, so the first page has nothing to draw and no scrollbar: the read goes on to the
  // page that holds the person's message and the reply, without the person scrolling.
- await expect(page.getByText('The older message')).toBeVisible({timeout:15000});
- await expect(page.getByText('The older reply')).toBeVisible();
+ const drawn=page.getByRole('list',{name:'Messages'});
+ await expect(drawn.getByText('The older message')).toBeVisible({timeout:15000});
+ await expect(drawn.getByText('The older reply')).toBeVisible();
 });
 
 test('a Card step of an Agent hidden from the reader names no Card',async({page})=>{

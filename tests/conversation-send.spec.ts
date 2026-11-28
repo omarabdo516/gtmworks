@@ -272,7 +272,7 @@ test('a double press sends one message',async({page})=>{
  expect(runsOf('Only once')).toBe(1);
 });
 
-test('a Conversation whose last message is the person\'s, with no Run open, says no reply, and Try again asks again',async({page})=>{
+test('a Conversation whose last message is the person\'s, with no Run open, says no reply, and Try again runs it again, holding the words once',async({page})=>{
  test.setTimeout(180000);
  await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Plan the week',timestamp:3}]);
  const line=page.locator('[data-outcome=no-reply]');
@@ -281,6 +281,21 @@ test('a Conversation whose last message is the person\'s, with no Run open, says
  await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Plan the week/,{timeout:30000});
  await expect(line).toHaveCount(0);
  expect(runsOf('Plan the week')).toBe(1);
+ // The words are the Conversation's already (#980): drawn once, and not back in the box.
+ await expect(person(page).filter({hasText:'Plan the week'})).toHaveCount(1);
+ await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
+});
+
+test('a double press on Try again starts one Run',async({page})=>{
+ test.setTimeout(180000);
+ await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Ship the brief',timestamp:3}]);
+ const line=page.locator('[data-outcome=no-reply]');
+ await expect(line).toHaveText(/No reply/,{timeout:20000});
+ // Two presses before the page can draw the first: both are sent, and the same send key makes the Engine replay one Run.
+ await line.getByRole('button',{name:'Try again'}).evaluate(button=>{ const press=button as HTMLElement; press.click(); press.click(); });
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Ship the brief/,{timeout:30000});
+ expect(runsOf('Ship the brief'),'one message, one Run, however fast the second press').toBe(1);
+ await expect(person(page).filter({hasText:'Ship the brief'})).toHaveCount(1);
 });
 
 test('a Viewer, another Member\'s Conversation and an Agent the sender may not talk to are refused on the server, and no Run starts',async({browser})=>{

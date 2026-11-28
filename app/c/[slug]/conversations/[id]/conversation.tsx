@@ -425,13 +425,14 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  const [asking,setAsking]=useState(false);
  // One send key per message left with no reply: a second press after an answer that was lost replays that Run.
  const againKeys=useRef(new Map<number,string>());
+ // Try again answers the message already in the Conversation (#980): one Run on those words, drawn by the page once
+ // (lib/conversation-messages.ts pageMessages), never a second message of its own and never back in the box.
  const askAgain=async()=>{
   if(!said||asking) return;
   setAsking(true);
   const key=againKeys.current.get(said.id)??crypto.randomUUID(); againKeys.current.set(said.id,key);
-  const settle=sending(key,said.body,[]);
-  const {failure,answer}=await postMessageAnswer({company,conversation:conversation.id,message:said.body,sendKey:key});
-  settle(failure,answer); setAsking(false);
+  const {failure}=await postMessageAnswer({company,conversation:conversation.id,message:said.body,sendKey:key});
+  setAsking(false);
   if(failure) toast(t(failure),{icon:'alert'}); else run.follow();
  };
  return <div className="transcript" ref={box} onScroll={event=>{
