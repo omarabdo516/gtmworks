@@ -13,6 +13,8 @@ select json_build_object(
   and position('password_link_allowed(link.made_by,link.person_id)' in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0
   and not has_function_privilege('authenticated','public.password_link_allowed(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.password_link_allowed(uuid,uuid)','execute'),
+ 'install_owner_kept',position('install_owner' in pg_get_functiondef('public.make_password_link(uuid,uuid,text)'::regprocedure))>0
+  and position('install_owner' in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0,
  'one_make_at_a_time',pg_get_functiondef('public.make_password_link(uuid,uuid,text)'::regprocedure) ~ 'from public.people p where p.id=person for update',
  'server_opens_and_spends',(select bool_and(has_function_privilege('service_role',fn,'execute') and not has_function_privilege('authenticated',fn,'execute') and not has_function_privilege('anon',fn,'execute'))
   from unnest(array['public.password_link_open(text)','public.claim_password_link(text)']) fn),

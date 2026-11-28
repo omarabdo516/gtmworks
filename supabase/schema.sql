@@ -3704,6 +3704,7 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
+  or exists(select 1 from public.install_owner o where o.person_id=link.person_id)
   or not public.password_link_allowed(link.made_by,link.person_id) then
   raise exception 'passwordLinkEnded' using errcode='55000';
  end if;
@@ -7651,6 +7652,9 @@ begin
  if person is null or not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null) then
   raise exception 'memberNotFound' using errcode='P0002';
  end if;
+ -- The install owner's account opens the Engine's dashboard no other Administrator reaches (#915), so no one makes its
+ -- password link from the Team page: the gtmworks command on the server does (#955).
+ if exists(select 1 from public.install_owner o where o.person_id=person) then raise exception 'passwordLinkInstallOwner' using errcode='42501'; end if;
  if not public.password_link_allowed(auth.uid(),person) then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
  if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='22023'; end if;
  select p.name into named from public.people p where p.id=person for update;

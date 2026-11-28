@@ -19,7 +19,7 @@ export const makePasswordLink=withActionLog('makePasswordLink',async function ma
  const {error}=await db.rpc('make_password_link',{c:company,person,link_hash:linkSecretHash(secret)});
  if(error) {
   logActionFailure('makePasswordLink',{code:error.code,message:'make_password_link refused'});
-  return {error:error.code==='42501'?'passwordLinkNotAllowed':'passwordLinkFailed'};
+  return {error:error.message==='passwordLinkInstallOwner'?'passwordLinkInstallOwner':error.code==='42501'?'passwordLinkNotAllowed':'passwordLinkFailed'};
  }
  return {link:passwordLink(appUrl('/').origin,secret)};
 });

@@ -1819,5 +1819,6 @@
   "passwordLinkNotAllowed": "مش هتقدر تعمل لينك كلمة مرور للعضو ده: اللينك بيفتح كل الشركات اللي هو فيها، فلازم يعمله أدمن في كل واحدة منهم (أو مدير في الشركة اللي هو مش أدمن فيها).",
   "logActPasswordLinkMade": "عمل لينك كلمة مرور لـ",
   "logActPasswordLinkUsed": "غيّر كلمة المرور بلينك كلمة مرور",
-  "logActPasswordLinkCancelled": "وقّف لينك كلمة مرور قديم لـ"
+  "logActPasswordLinkCancelled": "وقّف لينك كلمة مرور قديم لـ",
+  "passwordLinkInstallOwner": "العضو ده هو صاحب التثبيت: لينك كلمة المرور بتاعه بييجي من أمر gtmworks على السيرفر، مش من صفحة الفريق."
 }

@@ -42,6 +42,9 @@ begin
  if person is null or not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null) then
   raise exception 'memberNotFound' using errcode='P0002';
  end if;
+ -- The install owner's account opens the Engine's dashboard no other Administrator reaches (#915), so no one makes its
+ -- password link from the Team page: the gtmworks command on the server does (#955).
+ if exists(select 1 from public.install_owner o where o.person_id=person) then raise exception 'passwordLinkInstallOwner' using errcode='42501'; end if;
  if not public.password_link_allowed(auth.uid(),person) then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
  if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='22023'; end if;
  select p.name into named from public.people p where p.id=person for update;
@@ -79,7 +82,7 @@ grant execute on function public.password_link_open(text) to service_role;
 -- Sending a password link's form spends it: the link's row is locked first, so of two sends at the same moment the
 -- second waits and then finds it used. The Member must still be one of the Company, and its maker must still have the
 -- authority password_link_allowed asks in every Company the Member is in, so a link made before a Role or a membership
--- changed gives no more than its maker may now.
+-- changed gives no more than its maker may now; nor is one ever spent on the install owner's account.
 -- Every session of the Member ends here (their refresh tokens go with them), so a lost device loses access; the server
 -- then sets the new password and signs this browser in. Returns the Member, their email and the Company's slug.
 create function public.claim_password_link(link_hash text) returns table(person uuid, email text, slug text)
@@ -92,6 +95,7 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
+  or exists(select 1 from public.install_owner o where o.person_id=link.person_id)
   or not public.password_link_allowed(link.made_by,link.person_id) then
   raise exception 'passwordLinkEnded' using errcode='55000';
  end if;

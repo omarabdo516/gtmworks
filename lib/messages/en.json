@@ -1819,5 +1819,6 @@
   "passwordLinkNotAllowed": "You can’t make a password link for this Member: it opens every Company they are in, so it takes an Administrator of each one (or a Manager where they are not an Administrator).",
   "logActPasswordLinkMade": "made a password link for",
   "logActPasswordLinkUsed": "set a new password with a password link",
-  "logActPasswordLinkCancelled": "ended an earlier password link for"
+  "logActPasswordLinkCancelled": "ended an earlier password link for",
+  "passwordLinkInstallOwner": "This Member is the install owner: their password link comes from the gtmworks command on the server, not from the Team page."
 }

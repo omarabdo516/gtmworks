@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(39);
 -- #954, ADR 0019: an Administrator or a Manager makes a password link for a Member of their Company; a Manager never for
 -- an Administrator. Only its secret's hash is kept, in the table no Member reads; it ends after 24 hours and works once.
 -- Sending its form claims it in one transaction that ends every session of the Member. Making and using it are written
@@ -8,8 +8,10 @@ select plan(37);
 -- Seed (supabase/seed.sql): Omar ...01 is the Administrator of every Company; in RS Learning (...0001) ...02 is a
 -- Manager, ...03 a Contributor and ...04 a Viewer.
 insert into auth.users(id,email) values ('a9540000-0000-0000-0000-000000000010','aleem-admin-954@example.test');
-insert into auth.users(id,email) values ('a9540000-0000-0000-0000-000000000011','two-companies-954@example.test'),('a9540000-0000-0000-0000-000000000012','elsewhere-954@example.test');
-insert into public.people(id,name) values ('a9540000-0000-0000-0000-000000000010','Aleem Admin'),('a9540000-0000-0000-0000-000000000011','Two Companies'),('a9540000-0000-0000-0000-000000000012','Elsewhere');
+insert into auth.users(id,email) values ('a9540000-0000-0000-0000-000000000011','two-companies-954@example.test'),('a9540000-0000-0000-0000-000000000012','elsewhere-954@example.test'),('a9540000-0000-0000-0000-000000000013','second-admin-954@example.test');
+insert into public.people(id,name) values ('a9540000-0000-0000-0000-000000000010','Aleem Admin'),('a9540000-0000-0000-0000-000000000011','Two Companies'),('a9540000-0000-0000-0000-000000000012','Elsewhere'),('a9540000-0000-0000-0000-000000000013','Second Admin');
+-- A second Administrator of RS Learning, who is not the install owner.
+insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000001','a9540000-0000-0000-0000-000000000013','owner');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','a9540000-0000-0000-0000-000000000010','owner');
 -- A Contributor of RS Learning who is an Administrator of Aleem, and one who is also a Contributor of a Company the
 -- RS Learning Manager is no Member of: one password is both Companies' way in.
@@ -43,9 +45,11 @@ select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000
 select set_config('request.jwt.claim.sub','a9540000-0000-0000-0000-000000000010',true);
 select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004',repeat('aa',32))$$,'42501','passwordLinkNotAllowed','nor another Company''s Administrator');
 select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004',repeat('aa',32))$$,'P0002','memberNotFound','an Administrator makes none for a Person outside their Company');
+-- Omar is the install owner (supabase/seed.sql) and a Member of Aleem: no other Administrator makes his password link.
+select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001',repeat('aa',32))$$,'42501','passwordLinkInstallOwner','no Administrator makes a password link for the install owner');
 -- A Manager makes one for a Viewer and another Manager's equal, never for an Administrator.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',repeat('aa',32))$$,'42501','passwordLinkNotAllowed','the database refuses a Manager''s password link for an Administrator');
+select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000001','a9540000-0000-0000-0000-000000000013',repeat('aa',32))$$,'42501','passwordLinkNotAllowed','the database refuses a Manager''s password link for an Administrator');
 select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000001','a9540000-0000-0000-0000-000000000011',repeat('aa',32))$$,'42501','passwordLinkNotAllowed','nor for a Contributor here who is an Administrator of another Company');
 select throws_ok($$select public.make_password_link('10000000-0000-0000-0000-000000000001','a9540000-0000-0000-0000-000000000012',repeat('aa',32))$$,'42501','passwordLinkNotAllowed','nor for one who is also in a Company the Manager is not in');
 select is((select count(*)::int from public.company_log where action='password_link_made'),0,'a refused link writes nothing to the log');
@@ -75,6 +79,9 @@ insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,e
  ('10000000-0000-0000-0000-000000000001','password',encode(extensions.digest(repeat('e',64),'sha256'),'hex'),'20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003',now()+interval '1 day');
 update public.members set role='owner' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
 select throws_ok($$select * from public.claim_password_link(encode(extensions.digest(repeat('e',64),'sha256'),'hex'))$$,'55000','passwordLinkEnded','a Manager''s link never sets an Administrator''s password');
+insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at) values
+ ('10000000-0000-0000-0000-000000000003','password',encode(extensions.digest(repeat('6',64),'sha256'),'hex'),'a9540000-0000-0000-0000-000000000010','20000000-0000-0000-0000-000000000001',now()+interval '1 day');
+select throws_ok($$select * from public.claim_password_link(encode(extensions.digest(repeat('6',64),'sha256'),'hex'))$$,'55000','passwordLinkEnded','nor is one, however it was written, ever spent on the install owner''s account');
 update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
 
 -- Sending the form spends it, ends every session of the Member, and writes the log.
