@@ -126,7 +126,7 @@ begin
  facts as (
   -- A Conversation's row holds the Run it works on until that Run's end is seen, and its last message is when that work
   -- began (#882).
-  select cv.agent_id, true open, cv.last_message_at began, null::timestamptz ended from chats cv where cardinality(cv.open_runs)>0
+  select cv.agent_id, true open, case when isfinite(cv.last_message_at) then cv.last_message_at end began, null::timestamptz ended from chats cv where cardinality(cv.open_runs)>0
   union all select w.agent_id, w.outcome is null
     and not exists(select 1 from public.channel_runs q where q.message_id=w.message_id and q.outcome is null and q.ordinal<w.ordinal),
    w.created_at, w.closed_at from channel_work w
@@ -224,7 +224,8 @@ end $$;
 -- No stored message of the old record is read for it.
 create or replace function public.agent_open_run(c uuid, agent uuid) RETURNS TABLE(started_at timestamp with time zone, my_conversation uuid)
 language sql stable security definer set search_path='' as $$
- select cv.last_message_at,case when cv.person_id=auth.uid() then cv.id end
+ -- A row whose last message is not stamped (its default, -infinity) began when the row was made.
+ select case when isfinite(cv.last_message_at) then cv.last_message_at else cv.created_at end,case when cv.person_id=auth.uid() then cv.id end
  from public.conversations cv
  where cv.company_id=c and cv.agent_id=agent and cardinality(cv.open_runs)>0 and public.can_see_agent(c,agent)
  order by cv.last_message_at desc,cv.id desc limit 1;

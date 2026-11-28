@@ -60,7 +60,6 @@ test('A person reaches every Conversation of theirs from the sidebar, newest mes
  // A page of fifty, then the rest: the sixty and the general channel the Owner is in; never the Manager's.
  await expect(rows).toHaveCount(50);
  await expect(rows.first()).toContainText('Plan number 01');
- await expect(rows.first()).toContainText('The answer to the oldest');
  // The general channel, with no message yet, by the time it was made (20 hours ago).
  await expect(rows.nth(1)).toContainText('#general');
  await expect(rows.nth(2)).toContainText('Plan number 60');

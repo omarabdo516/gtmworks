@@ -51,7 +51,7 @@ test('an Engine that is not running says so once in Settings, keeps a message in
   fake.settings.status=200; fake.settings.managementStatus=200;
   await line.getByRole('button',{name:'Try again'}).click();
   await expect.poll(()=>fake.settings.runs.length,{timeout:20000}).toBe(1);
-  await expect(page.locator('.msg[data-author=agent]')).toContainText('Reply to: Are you there?',{timeout:30000});
+  await expect(page.locator('.msg[data-author=agent]').filter({hasText:'Reply to: Are you there?'})).toBeVisible({timeout:30000});
   await expect(page.locator('.msg[data-author=person]').filter({hasText:'Are you there?'})).toHaveCount(1);
   await expect(composer.locator('.composer-error')).toHaveCount(0);
  } finally {

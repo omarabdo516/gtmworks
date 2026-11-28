@@ -11,7 +11,7 @@ const viewer='20000000-0000-0000-0000-000000000004';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const id=(n:number)=>`69000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [leadConnection,adsConnection,seoConnection,lead,ads,seo,conversation]=[1,2,3,4,5,6,7].map(id);
-// Copy (#184) has a question in its Conversation waiting on Omar, and the Contributor and the Viewer are shown it.
+// Copy (#184) has a mention in the general channel waiting on Omar, and the Contributor and the Viewer are shown it.
 const [copyConnection,copy]=[12,13].map(id);
 // A file the Agent handed over in a channel (#715); a Conversation's files are its Engine session's since #880.
 const bytes=Buffer.from('June audiences\n');
@@ -48,8 +48,10 @@ test.beforeAll(async({},testInfo)=>{
   -- Omar's Conversation with Meta Ads holds its open Engine Run (#883), begun with his last message.
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,open_runs,last_message_at) values
    ('${conversation}','${company}','${omar}','${ads}','Meta Ads','gtmworks-${conversation}',array['details-run'],now()-interval '5 minutes');
-  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(18)}','${company}','${omar}','${copy}','Copy');
-  insert into public.waiting_items(company_id,person_id,kind,title,conversation_id) values ('${company}','${omar}','question','Which tone for spring?','${id(18)}');
+  -- Copy's mention of Omar in the general channel waits on him alone; a question of a Conversation's Run on the old record
+  -- waits on nobody since #883.
+  with said as (insert into public.channel_messages(company_id,channel_id,author,agent_id,author_name,body) values ('${company}','69000000-0000-0000-0000-000000000001','agent','${copy}','Copy','@Omar which tone for spring?') returning id)
+  insert into public.waiting_items(company_id,person_id,kind,title,channel_message_id) select '${company}','${omar}','channel_mention','Which tone for spring?',id from said;
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
   -- Two earlier changes of Meta Ads in the company log, as log_agent_event writes them, dated in the past.
   insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)

@@ -86,7 +86,8 @@ test('in a Conversation the sent message and the reply rise once, the working li
   fake.settings.release(fake.settings.runs.at(-1)!.id);
   const reply=page.locator('.turn--agent').filter({hasText:`Reply to: ${text}`});
   await expect(reply).toBeVisible({timeout:20000});
-  expect(await motionOf(reply)).toEqual(rises);
+  // The reply rises once as its Run writes it, and the session's copy that lands in its place does not rise again.
+  await expect.poll(()=>starts(page,'gw-rise',`Reply to: ${text}`)).toBe(1);
   // Another message and its Run: the session is read again and drawn again, and nothing that arrived before rises a
   // second time.
   await page.getByLabel('Message',{exact:true}).fill('Thanks');

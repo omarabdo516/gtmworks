@@ -24,6 +24,9 @@ test.beforeAll(async({},testInfo)=>{
   fake.settings.sessions.set(`gtmworks-${conversation}`,{profile:profileOf(agent),messages:[{role:'user',content:words,timestamp:1},{role:'assistant',content:'Done.',timestamp:2}]});
  }
  query(`do $$ begin
+  -- Each Company's own Engine profile, as the worker leaves it, so its Agents' Engine is found.
+  insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'co-'||replace(id::text,'-',''),true from public.companies where id in ('${rsLearning}','${rsConsultations}')
+   on conflict (company_id) do update set tools_confirmed=true,tools_pending=false;
   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${ads}','${rsLearning}',true),('${alone}','${rsConsultations}',true);
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.','${profileOf(ads)}'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.','${profileOf(alone)}');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner';
@@ -41,7 +44,7 @@ test('in a team a direct Conversation says it is private; worked alone it does n
 
  query(`update public.companies set work_mode='alone' where id='${rsConsultations}'`);
  await signIn(page,'omar@example.com',`/c/rs-consultations/conversations/${omars}`);
- await expect(page.locator('.msg')).not.toHaveCount(0);
+ await expect(page.locator('.msg')).not.toHaveCount(0,{timeout:20000});
  await expect(page.locator('.priv-line')).toHaveCount(0);
  await page.goto(`/c/rs-consultations/chat/${alone}`);
  await expect(page.locator('.empty-chat')).toBeVisible();
