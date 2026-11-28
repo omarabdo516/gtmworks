@@ -8226,21 +8226,33 @@ begin
  end if;
  select * into chosen from public.hermes_agents where id=agent and company_id=c;
  if not found or not public.agent_visible_to(c,auth.uid(),agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
- -- A Conversation not yet on the Engine (new, or one with nothing in it yet) moves there only in a Company switched over.
- if (existing.hermes_session_id is null and not coalesce((select o.engine_conversations from public.companies o where o.id=c),false))
-  or (select a.person from public.conversation_addressee(c,message) a limit 1) is not null
-  or exists(select 1 from public.conversation_messages m where m.conversation_id=conversation)
-  or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation)
-  or exists(select 1 from public.conversation_notes n where n.conversation_id=conversation) then
-  return jsonb_build_object('state','old');
- end if;
  if existing.id is null then
+  -- A new Conversation starts on the Engine only in a Company switched over, and a message addressed to a Member is kept
+  -- as a note on the old record, as today.
+  if not coalesce((select o.engine_conversations from public.companies o where o.id=c),false)
+   or (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
+   return jsonb_build_object('state','old');
+  end if;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,last_message_at)
    values(conversation,c,auth.uid(),agent,chosen.name,session,now());
   held := session;
  else
-  update public.conversations set hermes_session_id=coalesce(hermes_session_id,session),last_message_at=greatest(last_message_at,now())
+  -- Only a Conversation this path made is on the Engine: it has its session and nothing on the old record. Any other
+  -- (one the old record holds, or a row made without a session, such as the Owner's empty first Conversation) stays there.
+  if existing.hermes_session_id is null
+   or exists(select 1 from public.conversation_messages m where m.conversation_id=conversation)
+   or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation)
+   or exists(select 1 from public.conversation_notes n where n.conversation_id=conversation) then
+   return jsonb_build_object('state','old');
+  end if;
+  -- A note to a Member has no place in an Engine session: it is refused, and the words stay in the box.
+  if (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
+   raise exception 'conversationAddressedOnEngine' using errcode='22023';
+  end if;
+  -- Writing in an archived Conversation brings it back, logged as the person's, as on the old record.
+  update public.conversations set last_message_at=greatest(last_message_at,now()),archived_at=null,archived_by=null
    where id=conversation returning hermes_session_id into held;
+  if existing.archived_at is not null then perform public.log_conversation_archive(conversation,false,auth.uid()); end if;
  end if;
  return jsonb_build_object('state','engine','agent',agent,'session',held,
   'note',(select n.note from public.member_notes n where n.company_id=c and n.person_id=auth.uid()));

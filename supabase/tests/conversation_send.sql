@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(21);
 -- #876: a send is checked before any Run starts. The person is an active Member and not a Viewer, the Conversation is
 -- theirs, and they may talk to its Agent; a new Conversation's row is written first, on the session id gtmworks chose.
 -- RS Learning's Owner (…01), Manager (…02), Contributor (…03) and Viewer (…04).
@@ -43,6 +43,11 @@ update public.companies set engine_conversations=false where id='10000000-0000-0
 set local role authenticated;
 select is(public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000005','a8760000-0000-0000-0000-000000000001','gtmworks-c8760000-0000-0000-0000-000000000005','Hi')->>'state','old','a Company not switched over keeps its new Conversations on the old record');
 select is(public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000001','a8760000-0000-0000-0000-000000000001','gtmworks-c8760000-0000-0000-0000-000000000005','Hi')->>'state','engine','a Conversation already on the Engine stays there');
+reset role;
+update public.conversations set archived_at=now(),archived_by='20000000-0000-0000-0000-000000000002' where id='c8760000-0000-0000-0000-000000000001';
+set local role authenticated;
+select is(public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000001','a8760000-0000-0000-0000-000000000001','gtmworks-c8760000-0000-0000-0000-000000000005','Back again')->>'state','engine','an archived Conversation on the Engine takes a message');
+select is((select archived_at from public.conversations where id='c8760000-0000-0000-0000-000000000001'),null,'and writing in it brings it back');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.open_engine_conversation('10000000-0000-0000-0000-000000000001','c8760000-0000-0000-0000-000000000004','a8760000-0000-0000-0000-000000000001','gtmworks-c8760000-0000-0000-0000-000000000004','Hi')$$,'42501',null,'a Viewer is refused');
 

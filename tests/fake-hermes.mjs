@@ -469,10 +469,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,released?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
   // The most rows a cron job's run history lists (#535: the pinned Engine lists 100 at most).
   cronRunsAtMost:100,startDelay:0,stallEvents:false,liveSteps:/** @type {(input:string)=>{tool:string,preview?:string|null,failed?:boolean}[]} */(()=>[]),livePace:10,liveHold:false,
-  release(/** @type {string} */ id) { const run=settings.runs.find(each=>each.id===id); run?.release?.(); },reply:input=>`Reply to: ${input}`,
+  release(/** @type {string} */ id) { const run=settings.runs.find(each=>each.id===id); if(run) { run.released=true; run.release?.(); } },reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -753,15 +753,23 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // A Run on a session gtmworks chose (#876; body `session_id`, docs/engine-probes/conversation-read.md answer 1) plays on
  // its own, as the pinned release's does: the person's message is in the session at once, then each tool call
  // `liveSteps` gives for its input starts and ends, then its reply is written a word at a time (message.delta), and
- // the Run completes with its turn stored in the session. `liveHold` keeps a new Run working until `release(run)`, and
- // `livePace` is the milliseconds between two events. A stopped Run ends cancelled.
- const play=async run=>{
+ // the Run completes with its turn stored in the session. A second Run on a session whose Run still works waits its turn
+ // (`queued`), its message stored only once it starts, as the probe measured. `liveHold` keeps each Run working, once
+ // it started, until `release(run)`, and `livePace` is the milliseconds between two events. A stopped Run ends cancelled.
+ const sessionTurns=new Map();
+ const play=run=>{
+  const before=sessionTurns.get(run.sessionId)??Promise.resolve();
+  const turn=before.then(()=>playTurn(run)).catch(()=>{});
+  sessionTurns.set(run.sessionId,turn);
+  return turn;
+ };
+ const playTurn=async run=>{
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const found=settings.sessions.get(run.sessionId)??{profile:run.profile,messages:[]};
   settings.sessions.set(run.sessionId,found);
   const at=()=>Date.now()/1000;
   found.messages.push({role:'user',content:inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
-  if(settings.liveHold) await new Promise(resolve=>{ run.release=resolve; });
+  if(settings.liveHold&&!run.released) await new Promise(resolve=>{ run.release=resolve; });
   push(run.id,{event:'run.started'});
   for(const step of settings.liveSteps(inputText(run.input))) {
    if(run.stopped) break;

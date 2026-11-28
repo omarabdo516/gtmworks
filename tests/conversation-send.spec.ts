@@ -118,6 +118,9 @@ test('in an open Conversation each message is drawn the moment it is sent, and e
  const second=fake.settings.runs.at(-1)!.id;
  fake.settings.release(first);
  await expect(page.locator('.msg[data-author=agent]').nth(1)).toHaveText(/Reply to: And the budget\?/,{timeout:30000});
+ // The second Run waits its turn in the Engine's queue; its message stays drawn while the session does not hold it yet.
+ await expect(page.locator('.msg[data-author=person]')).toHaveCount(3);
+ await expect(page.locator('.msg[data-author=person]').last()).toHaveText(/And the dates\?/);
  fake.settings.release(second);
  await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: And the dates\?/,{timeout:30000});
  await expect(page.locator('.msg[data-author=person]')).toHaveCount(3);

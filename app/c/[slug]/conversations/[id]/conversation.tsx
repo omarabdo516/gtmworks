@@ -181,7 +181,8 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    if(body.usage) setUsage(body.usage);
   } catch { /* The last usage read stays. */ }
  };
- const refresh=async()=>{
+ // Answers whether the Engine's read came back, so a Run's end lets go of its live words only once the session holds them.
+ const refresh=async():Promise<boolean>=>{
   const held=rememberedPage(storage);
   if(held&&!pageRef.current) { pageRef.current=held; setPage(held); setMode('engine'); }
   void readUsage();
@@ -208,12 +209,13 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
    } else if(modeRef.current==='engine'&&pageRef.current) setFailed(false);
    else if(oldRef.current()>0) setMode('fallback');
    else { const empty={messages:[],nextOffset:0,hasMore:false}; pageRef.current=empty; setPage(empty); setMode('engine'); }
-   return;
+   return true;
   }
   if(pageRef.current||modeRef.current==='engine') setFailed(true);
   else setMode('fallback');
+  return false;
  };
- const refreshRef=useRef<()=>Promise<void>>(async()=>{});
+ const refreshRef=useRef<()=>Promise<boolean>>(async()=>false);
  useEffect(()=>{ refreshRef.current=refresh; });
  // The last good read this browser kept shows at once, then a read asks the Engine again (and a tab that comes back
  // asks once more). A first read that fails or finds no messages leaves the old record in charge.
@@ -265,9 +267,9 @@ function useEnginePage(company:string,conversation:string,hasOldMessages:()=>num
 // route (app/api/conversation-live), never from the Engine. Its view is the Run's steps so far and the call it makes
 // now, its reply the words written so far. `follow` starts reading it, at once on a page that opened while a Run works
 // and after each send; once the Run's end is seen, `ended` reads the session again, which then holds the reply and its
-// steps, and only then are the live view and the sent message let go, so nothing is drawn twice or goes missing. A read
-// that is cut short is asked again, more slowly each time, while the Run still works.
-function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<void>) {
+// steps, and only once that read came back are the live view and the sent message let go, so nothing is drawn twice or
+// goes missing. A read that is cut short, or a session read that fails, is asked again, more slowly each time.
+function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>Promise<boolean>) {
  const [view,setView]=useState<LiveRun|null>(null);
  const [reply,setReply]=useState('');
  const [working,setWorking]=useState(open);
@@ -283,7 +285,8 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
    let end:string|null=null; let said='';
    try {
     const response=await fetch(`/api/conversation-live?company=${encodeURIComponent(company)}&conversation=${encodeURIComponent(conversation)}`,{cache:'no-store',signal:stopped.signal});
-    if(response.status===401) { end='none'; }
+    // Signed out, no longer allowed, or the Conversation or its Agent gone: no later read can answer, so the read ends.
+    if(response.status===401||response.status===403||response.status===404) { await response.arrayBuffer().catch(()=>{}); end='none'; }
     else {
      if(!response.ok||!response.body) throw new Error('unread');
      const reader=response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -303,7 +306,11 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
    } catch { if(stopped.signal.aborted) return; end='unreachable'; }
    if(stopped.signal.aborted) return;
    if(end==='ended'||end==='gone'||end==='none') {
-    await endedRef.current();
+    // The live words stay until a read of the session holds the reply: a read that fails is asked again.
+    for(let tries=0;!await endedRef.current();tries++) {
+     if(stopped.signal.aborted) return;
+     await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**tries,15000)));
+    }
     if(stopped.signal.aborted) return;
     reading.current=null; setView(null); setReply('');
     if(again.current) { again.current=false; follow(); } else setWorking(false);
@@ -321,17 +328,18 @@ function useEngineRun(company:string,conversation:string,open:boolean,ended:()=>
 
 export function EngineLoaded({initial,steps,team,open=false}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean,open?:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,reread,sending,reading}=useConversationRecord({company,initial,steps});
+ const {record,reread,sending,release}=useConversationRecord({company,initial,steps});
  const {c}=useConversationText();
  const engine=useEnginePage(company,conversation.id,()=>record.messages.length);
  // A Run's end reads the session again; the messages sent before it then leave the drawn list, as the session holds them.
- const run=useEngineRun(company,conversation.id,open,async()=>{ const drawn=reading(); await engine.refresh(); drawn(); });
+ // A Run's end reads the session again; a sent message leaves the drawn list only once a read holds it (below).
+ const run=useEngineRun(company,conversation.id,open,engine.refresh);
  // The first message of a new Conversation, sent from the Agent's empty chat, is drawn here at once (#876).
  useEffect(()=>{ const handed=takeSent(conversation.id); if(handed) sending(handed.key,handed.body,[])(null); },[conversation.id]); // eslint-disable-line react-hooks/exhaustive-deps
  // What the transcript draws: the Engine's messages when they were read, else the old record, which a first read that
  // fails leaves in charge (and which the composer and the title read either way). The old record's live states — the
  // working line, Stop, a question or a request to act — wait for #876 to #879, which bring them on this read.
- const shown=useMemo(()=>{
+ const sent=useMemo(()=>{
   // A message sent is drawn after the Engine's messages until a read of the session holds it (#876). A read that already
   // holds it draws it once: each of the person's messages with the same words, said since a minute before it was sent,
   // stands for one sent message, so the same words sent twice are drawn twice.
@@ -340,11 +348,17 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   const since=Math.min(...sent.map(message=>Date.parse(message.created_at)))-60000;
   for(const drawn of engine.page?.messages??[]) if(drawn.author==='person'&&Date.parse(drawn.created_at)>=since) held.set(drawn.body,(held.get(drawn.body)??0)+1);
   const waiting=sent.filter(message=>{ const left=held.get(message.body)??0; if(!left) return true; held.set(message.body,left-1); return false; });
-  const base=engine.page?{...record,messages:[...engine.page.messages,...waiting],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
+  return {waiting,held:sent.filter(message=>!waiting.includes(message)).map(message=>message.id)};
+ },[record.messages,engine.page]);
+ const shown=useMemo(()=>{
+  const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
- },[record,engine.page,engine.usage]);
+ },[record,engine.page,engine.usage,sent.waiting]);
  useLayoutEffect(()=>{ store.set({record:shown,asked:run.follow,sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
+ // The messages sent that a read of the session now holds are drawn from it alone: one still queued behind a working Run,
+ // which the session does not hold yet, stays drawn as sent.
+ useEffect(()=>{ release(sent.held); },[sent.held.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true); const preserve=useRef<{height:number,top:number}|null>(null);
  // The newest page opens on its last message; a page read above the oldest keeps the reader where they were.
  useLayoutEffect(()=>{

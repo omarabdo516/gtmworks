@@ -3,5 +3,5 @@
 ## Cases
 
 | `conversation-send.spec.ts` "a first message makes the Conversation's row on a session gtmworks chose, then its Run; the reply and its Step arrive live and stay on a reload" | stays | New (#876): the whole path a person sees, with the old record's tables counted before and after, the browser's requests watched for the Engine, and the note checked on the Run the Engine received. |
-| `conversation-send.spec.ts` "in an open Conversation each message is drawn the moment it is sent, and each reply arrives live, one after the other" | stays | New (#876): sends in a Conversation already on the Engine, drawn before their Runs start; a second send while the first Run works is followed once the first ends. |
+| `conversation-send.spec.ts` "in an open Conversation each message is drawn the moment it is sent, and each reply arrives live, one after the other" | stays | New (#876): sends in a Conversation already on the Engine, drawn before their Runs start; a second send while the first Run works waits its turn in the fake Engine's queue, stays drawn until the session holds it, and is followed once the first ends. |
 | `conversation-send.spec.ts` "a Viewer, another Member's Conversation and an Agent the sender may not talk to are refused on the server, and no Run starts" | stays | New (#876): the route's refusals, with the Engine asked for nothing. |

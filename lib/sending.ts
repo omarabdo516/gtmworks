@@ -11,7 +11,8 @@ import { reportWait } from './waits';
 export type Sending={id:number,key:string,body:string,files:string[],at:string,posting:boolean};
 export type Send=(key:string,body:string,files:readonly {name:string}[])=>(failure:string|null)=>void;
 // In a Conversation (`place`), the time from the press until the message is drawn is reported once (#762).
-export function useSending(place?:{company:string,conversation:string}):{list:Sending[],start:Send,reading:()=>()=>void} {
+// `release` (#876) lets go of the drawn messages a read already holds, by their drawn ids, and of no other.
+export function useSending(place?:{company:string,conversation:string}):{list:Sending[],start:Send,reading:()=>()=>void,release:(ids:readonly number[])=>void} {
  const [list,setList]=useState<Sending[]>([]);
  const [pressed]=useState(()=>new Map<number,number>());
  const [calls]=useState(()=>{
@@ -34,7 +35,11 @@ export function useSending(place?:{company:string,conversation:string}):{list:Se
     setList(current=>current.filter(sending=>!held.has(sending.key)));
    };
   };
-  return {start,reading};
+  const release=(ids:readonly number[])=>{
+   if(!ids.length) return;
+   setList(current=>{ const gone=current.filter(sending=>ids.includes(sending.id)); for(const sending of gone) accepted.delete(sending.key); return current.filter(sending=>!ids.includes(sending.id)); });
+  };
+  return {start,reading,release};
  });
  const company=place?.company; const conversation=place?.conversation;
  useEffect(()=>{

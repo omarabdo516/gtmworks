@@ -98,7 +98,7 @@ export function useConversationText() {
 export function useConversationRecord({company,initial,steps:firstSteps}:{company:string,initial:ConversationRecord,steps?:Promise<ConversationSteps|null>}) {
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
- const {list:sendingList,start:sending,reading}=useSending({company,conversation:id});
+ const {list:sendingList,start:sending,reading,release}=useSending({company,conversation:id});
  const {messages,pending}=record;
  // What lives outside the Conversation comes from the server render: an Agent made in it (the sidebar's Agents) is
  // drawn again when it changes, and nothing else is (#767): sending, storing and a reply landing never redraw the page.
@@ -176,7 +176,7 @@ export function useConversationRecord({company,initial,steps:firstSteps}:{compan
   return ()=>stopped.abort();
  },[replies,opened,company,id]);
  const drawn=useMemo(()=>{ const shown=withSteps(withSending(record,sendingList),steps); return unread?{...shown,unread:true as const}:shown; },[record,sendingList,steps,unread]);
- return {record:drawn,asked,reread,sending,reading};
+ return {record:drawn,asked,reread,sending,reading,release};
 }
 // The page's own read of each reply's steps (#766), streamed after the messages: drawn by the server once it answers, so
 // a reply shows its steps before the page's script has run, and replaced by the record's own once the hook has it.
