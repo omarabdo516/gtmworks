@@ -6313,21 +6313,22 @@ end $_$;
 ALTER FUNCTION public.hold_agent_change(c uuid, agent uuid, act text, skill text, note text, body text) OWNER TO postgres;
 
 --
--- Name: hold_conversation_run(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: hold_conversation_run(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.hold_conversation_run(conversation uuid, run text) RETURNS boolean
+CREATE FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) RETURNS boolean
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO ''
     AS $_$
  with held as (
   update public.conversations v set open_run=run
-  where v.id=conversation and v.person_id=auth.uid() and public.conversation_can_write(v.company_id) and run ~ '^[A-Za-z0-9_.:-]{1,200}$'
+  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$'
+   and exists(select 1 from public.members m where m.company_id=v.company_id and m.person_id=person and m.removed_at is null and m.role<>'viewer')
   returning 1)
  select exists(select 1 from held);
 $_$;
 
-ALTER FUNCTION public.hold_conversation_run(conversation uuid, run text) OWNER TO postgres;
+ALTER FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) OWNER TO postgres;
 
 --
 -- Name: in_channel(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -20709,11 +20710,11 @@ REVOKE ALL ON FUNCTION public.hold_agent_change(c uuid, agent uuid, act text, sk
 GRANT ALL ON FUNCTION public.hold_agent_change(c uuid, agent uuid, act text, skill text, note text, body text) TO authenticated;
 
 --
--- Name: FUNCTION hold_conversation_run(conversation uuid, run text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION hold_conversation_run(conversation uuid, person uuid, run text); Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON FUNCTION public.hold_conversation_run(conversation uuid, run text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.hold_conversation_run(conversation uuid, run text) TO authenticated;
+REVOKE ALL ON FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.hold_conversation_run(conversation uuid, person uuid, run text) TO service_role;
 
 --
 -- Name: FUNCTION in_channel(ch uuid); Type: ACL; Schema: public; Owner: postgres

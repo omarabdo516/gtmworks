@@ -97,7 +97,7 @@ test('a first message makes the Conversation\'s row on a session gtmworks chose,
  expect(counted(),'nothing of the message, the reply or the Step was written to the database').toEqual(before);
 });
 
-test('in an open Conversation the next message is drawn the moment it is sent, and its reply arrives live',async({page})=>{
+test('in an open Conversation each message is drawn the moment it is sent, and each reply arrives live, one after the other',async({page})=>{
  test.setTimeout(180000);
  const conversation=randomUUID(); const session=`gtmworks-${randomUUID()}`;
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}')`);
@@ -110,9 +110,17 @@ test('in an open Conversation the next message is drawn the moment it is sent, a
  await send(page,'And the budget?');
  await expect(page.locator('.msg[data-author=person]').last()).toHaveText(/And the budget\?/,{timeout:3000});
  await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+1);
- fake.settings.release(fake.settings.runs.at(-1)!.id);
- await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: And the budget\?/,{timeout:30000});
- await expect(page.locator('.msg[data-author=person]')).toHaveCount(2);
+ const first=fake.settings.runs.at(-1)!.id;
+ // A second message while the first Run works is drawn at once too, and its own Run is followed once the first ends.
+ await send(page,'And the dates?');
+ await expect(page.locator('.msg[data-author=person]').last()).toHaveText(/And the dates\?/,{timeout:3000});
+ await expect.poll(()=>fake.settings.counts().runStart??0).toBe(starts+2);
+ const second=fake.settings.runs.at(-1)!.id;
+ fake.settings.release(first);
+ await expect(page.locator('.msg[data-author=agent]').nth(1)).toHaveText(/Reply to: And the budget\?/,{timeout:30000});
+ fake.settings.release(second);
+ await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: And the dates\?/,{timeout:30000});
+ await expect(page.locator('.msg[data-author=person]')).toHaveCount(3);
  expect(counted()).toEqual(before);
 });
 

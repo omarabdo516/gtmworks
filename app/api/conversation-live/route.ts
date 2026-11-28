@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { agentEngine } from '@/lib/engine/handle.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { liveLines, type LiveLine } from '@/lib/live-steps.mjs';
+import { liveLines, type LiveDelta, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
 
 // The open Run of a Conversation whose messages are the Engine's, as it happens (#876): gtmworks's web server follows the
@@ -10,7 +10,7 @@ import { uuid } from '@/lib/conversations';
 // Screen's stream (ADR 0011: no browser reaches the Engine or holds its key). A view line is the Run's steps so far and
 // the call it makes now; a `{delta}` line is the next words of the reply as the model writes them; the last line says
 // how it ended. Once the Run's end is seen the row no longer holds it (end_conversation_run). Nothing of it is kept.
-type Line=LiveLine|{delta:string};
+type Line=LiveLine|LiveDelta;
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
 const refuse=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});

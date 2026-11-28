@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { agentEngine, companyEngine } from '@/lib/engine/handle.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { liveLines, type LiveLine } from '@/lib/live-steps.mjs';
+import { liveLines, type LiveDelta, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
 
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};
 const refuse=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});
 const encoder=new TextEncoder();
-const line=(value:LiveLine|{delta:string})=>encoder.encode(`${JSON.stringify(value)}\n`);
+const line=(value:LiveLine|LiveDelta)=>encoder.encode(`${JSON.stringify(value)}\n`);
 const only=(value:LiveLine)=>new Response(line(value),{headers});
 
 export async function GET(request:NextRequest) {

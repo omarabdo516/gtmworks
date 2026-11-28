@@ -1,11 +1,5 @@
 [
 {
-  "issue": 876,
-  "date": "2026-11-28",
-  "en": { "title": "A reply appears as it is written", "body": "A message you send to an Agent goes straight to its Engine session, and you read the reply word by word as the Agent writes it, with each step it takes shown as it starts and ends; nothing of the Conversation is copied into gtmworks." },
-  "ar": { "title": "الرد بيظهر وهو بيتكتب", "body": "الرسالة اللي بتبعتها للوكيل بتروح على طول لجلسته في المحرك، وبتقرا الرد كلمة كلمة وهو بيكتبه، وكل خطوة بياخدها بتظهر أول ما تبدأ ولما تخلص؛ ومفيش حاجة من المحادثة بتتنسخ في gtmworks." }
-},
-{
   "issue": 875,
   "date": "2026-11-27",
   "en": { "title": "A Conversation opens on its last messages", "body": "Opening a Conversation reads its last 50 messages from the Agent’s Engine session, and the 50 before as you scroll back; your older words stay yours after the Engine compacts them, and its summary is drawn as the Engine’s." },

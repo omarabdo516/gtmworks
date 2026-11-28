@@ -56,20 +56,23 @@ revoke all on function public.open_engine_conversation(uuid,uuid,uuid,text,text)
 grant all on function public.open_engine_conversation(uuid,uuid,uuid,text,text) to authenticated;
 
 -- The Run the Engine started for the person's message is the Conversation's open Run until its end is seen. Only the
--- Conversation's own person, while they may write in its Company.
-create or replace function public.hold_conversation_run(conversation uuid, run text)
+-- server holds it, right after the Engine answered the start it made (lib/conversation-send.ts), for the Conversation's
+-- own person while they may write in its Company: no browser names a Run for the row to hold, so the live read follows
+-- only a Run this Conversation's own send started.
+create or replace function public.hold_conversation_run(conversation uuid, person uuid, run text)
  returns boolean
  language sql security definer
  set search_path to ''
 as $$
  with held as (
   update public.conversations v set open_run=run
-  where v.id=conversation and v.person_id=auth.uid() and public.conversation_can_write(v.company_id) and run ~ '^[A-Za-z0-9_.:-]{1,200}$'
+  where v.id=conversation and v.person_id=person and run ~ '^[A-Za-z0-9_.:-]{1,200}$'
+   and exists(select 1 from public.members m where m.company_id=v.company_id and m.person_id=person and m.removed_at is null and m.role<>'viewer')
   returning 1)
  select exists(select 1 from held);
 $$;
-revoke all on function public.hold_conversation_run(uuid,text) from public;
-grant all on function public.hold_conversation_run(uuid,text) to authenticated;
+revoke all on function public.hold_conversation_run(uuid,uuid,text) from public, anon, authenticated;
+grant execute on function public.hold_conversation_run(uuid,uuid,text) to service_role;
 
 -- The end of that Run was seen (it ended, or the Engine no longer knows it): the row no longer holds it. A later Run the
 -- row holds by now is left as it is.

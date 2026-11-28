@@ -36,7 +36,7 @@ const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies Pe
 // Images go with the message (#155): the check runs before anything is uploaded or stored, and they are kept with the
 // turn before it is stored, so its Run reads them from the Conversation's files (lib/conversation-files.ts). Nothing of
 // the request is logged.
-async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
+async function send(db:Database,person:string,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined) return refuse('conversationFailed',400);
  if(typeof body.message!=='string'||body.message.length>20000) return refuse('conversationFailed',400);
@@ -49,8 +49,13 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  const messageKey=body.sendKey as string; const company=body.company as string;
  // A message with no images in a Conversation whose messages are the Engine's, or in a new one, is one Run on its
  // Engine session, and nothing of it is stored here (#876). A Conversation the old record still holds goes on below.
- if(!chosen.length) {
-  const engine=await sendToEngine(db,{company,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey});
+ // Images go to the Engine with #880; until then a Conversation on the Engine takes none, so that none of its messages
+ // is written to the old record (which would hold it there).
+ if(chosen.length) {
+  const {data:onEngine}=await db.from('conversations').select('hermes_session_id').eq('id',conversation).eq('company_id',company).not('hermes_session_id','is',null).maybeSingle();
+  if(onEngine&&(await db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',conversation)).count===0) return refuse('conversationFailed',400);
+ } else {
+  const engine=await sendToEngine(db,service(),{company,person,conversation,agent:body.agent as string|undefined,message:body.message,sendKey:messageKey});
   if(engine.state==='started') return reply({conversation,run:engine.run,engine:true});
   if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
  }
@@ -287,7 +292,7 @@ async function respond(request:NextRequest) {
   // The route's permission (lib/route-permissions.mjs), with the role read now: a Viewer's send is refused here, and
   // the database refuses it again (conversation_can_write) before the engine is called.
   if(!await routeAllowed(db,'app/api/conversations/route.ts',request.method,body.company,user.id)) return refuse('conversationNotAllowed',403);
-  if(writing) return await (typeof body.intent==='string'&&Object.hasOwn(writes,body.intent)?writes[body.intent as keyof typeof writes](db,body):send(db,body,chosen));
+  if(writing) return await (typeof body.intent==='string'&&Object.hasOwn(writes,body.intent)?writes[body.intent as keyof typeof writes](db,body):send(db,user.id,body,chosen));
   if(body.conversation===undefined) {
    // What the composer needs: whether this person may chat (any Member but a Viewer, #287), and the company's agents.
    const {data:writer}=await db.rpc('conversation_can_write',{c:body.company});
