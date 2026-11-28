@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(27);
 -- #955, ADR 0019: a Company's last Administrator gets a password link from the server's `gtmworks company password-link`
 -- command, which only the service role asks. It names an active Administrator of that Company, ends any earlier live link
 -- for the Person, and is kept as the link's hash with no Person as its maker, `made_by` null. Sending that link's form
@@ -53,6 +53,11 @@ select is((select count(*)::int from auth.sessions where user_id='20000000-0000-
 insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
  values ('10000000-0000-0000-0000-000000000001','password',repeat('e',64),'20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001',now()+interval '1 day');
 select throws_ok($$select * from public.claim_password_link(repeat('e',64))$$,'55000','passwordLinkEnded','a Team-page link is still never spent on the install owner');
+-- A Team-page link whose maker was deleted empties `made_by` (it is on delete set null), but it is no server link: the
+-- mark, not an empty maker, says which kind it is, and without its maker it gives nothing.
+insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
+ values ('10000000-0000-0000-0000-000000000001','password',repeat('7',64),null,'20000000-0000-0000-0000-000000000002',now()+interval '1 day');
+select throws_ok($$select * from public.claim_password_link(repeat('7',64))$$,'55000','passwordLinkEnded','a Team-page link whose maker is gone gives nothing');
 
 -- A server link gives nothing once its Administrator is demoted: the command makes it for an Administrator, and the
 -- claim asks that of the Person it names again. A Member who left the Company gives nothing too.

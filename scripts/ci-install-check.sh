@@ -740,7 +740,7 @@ printf '%s\n' "$password_link" | grep -Eqx 'Password link for proxy-owner@exampl
   || fail 'company password-link names the Company and the address and prints only its link'
 password_secret=${password_link##*#code=}
 password_hash=$(printf '%s' "$password_secret" | sha256sum | cut -d' ' -f1)
-[[ $(db -c "select count(*) from public.company_links where kind='password' and secret_hash='$password_hash' and made_by is null and used_at is null and cancelled_at is null") == 1 ]] \
+[[ $(db -c "select count(*) from public.company_links where kind='password' and secret_hash='$password_hash' and made_on_server and made_by is null and used_at is null and cancelled_at is null") == 1 ]] \
   || fail 'the password link is kept hashed, made by the server, waiting'
 [[ $(db -c "select count(*) from public.company_links where secret_hash='$password_secret'") == 0 ]] || fail 'the password link secret is stored nowhere'
 [[ $(db -c "select count(*) from public.company_log where action='password_link_made' and company_id=(select id from public.companies where name='Proxy Company') and actor_kind='system' and person_id=(select person_id from public.members where company_id=(select id from public.companies where name='Proxy Company') and role='owner')") == 1 ]] \

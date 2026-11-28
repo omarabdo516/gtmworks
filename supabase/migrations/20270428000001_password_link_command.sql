@@ -1,9 +1,13 @@
 -- #955, ADR 0019: a Company's last Administrator, and the install owner, whom no Administrator may link from the Team
 -- page (#915), gets a password link from the server: `gtmworks company password-link` makes it with the service role.
--- It is the password link of #954 with no Person as its maker, `made_by` null, which is what the command leaves behind.
--- Only an active Administrator of the named Company is named, a newer link for the same Person ends the earlier ones as
--- on the Team page, and making it is in the Company log as the server's act. Additive but for the claim below: the
--- previous app version makes and spends Team-page links as before.
+-- It is the password link of #954, marked `made_on_server` and naming no Person as its maker, which is what the command
+-- leaves behind. Only an active Administrator of the named Company is named, a newer link for the same Person ends the
+-- earlier ones as on the Team page, and making it is in the Company log as the server's act. Additive but for the claim
+-- below: the previous app version makes and spends Team-page links as before.
+-- The mark is a column of its own, not an empty `made_by`: that column is `on delete set null`, so a Team-page link whose
+-- maker is deleted empties it too and must never pass for the server's.
+alter table public.company_links add column made_on_server boolean not null default false;
+alter table public.company_links add constraint company_links_made_on_server_check check (not made_on_server or made_by is null);
 create function public.make_administrator_password_link(c uuid, person uuid, link_hash text) returns uuid
 language plpgsql security definer set search_path='' as $function$
 declare made uuid; named text;
@@ -21,8 +25,8 @@ begin
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
   select ended.company_id,null,'system','gtmworks command','member',person,'password_link_cancelled',
    jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now() from ended;
- insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
-  values(c,'password',link_hash,null,person,now()+interval '24 hours') returning id into made;
+ insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at,made_on_server)
+  values(c,'password',link_hash,null,person,now()+interval '24 hours',true) returning id into made;
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
   values(c,null,'system','gtmworks command','member',person,'password_link_made',
    jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
@@ -32,11 +36,12 @@ revoke all on function public.make_administrator_password_link(uuid,uuid,text) f
 grant execute on function public.make_administrator_password_link(uuid,uuid,text) to service_role;
 
 -- Sending a server-made link's form spends it as a Team-page link's is spent: the row is locked first, so of two sends at
--- the same moment the second waits and finds it used. A server-made link (made_by null, #955) is one the command made for
--- an Administrator of its Company: it asks no maker's authority, but only while that Person is still an active
--- Administrator there. It is how a Company's last Administrator and the install owner, whose account no Team-page link
--- may ever set, get back in. Any other link is still refused for the install owner's account and once its maker no
--- longer has the authority it was made with.
+-- the same moment the second waits and finds it used. A link the command made (made_on_server, #955) is for an
+-- Administrator of its Company: it asks no maker's authority, but only while that Person is still an active Administrator
+-- there. It is how a Company's last Administrator and the install owner, whose account no Team-page link may ever set, get
+-- back in. Any other link is refused for the install owner's account, and once its maker no longer has the authority it
+-- was made with; a Team-page link whose maker is deleted has emptied `made_by` but is no server link, so it is refused
+-- too.
 create or replace function public.claim_password_link(link_hash text) returns table(person uuid, email text, slug text)
 language plpgsql security definer set search_path='' as $function$
 declare link public.company_links; named text;
@@ -47,8 +52,8 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
-  or (link.made_by is null and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
-  or (link.made_by is not null and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
+  or (link.made_on_server and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
+  or (not link.made_on_server and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
    or not public.password_link_allowed(link.made_by,link.person_id))) then
   raise exception 'passwordLinkEnded' using errcode='55000';
  end if;

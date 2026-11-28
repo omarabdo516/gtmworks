@@ -3764,8 +3764,8 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
-  or (link.made_by is null and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
-  or (link.made_by is not null and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
+  or (link.made_on_server and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
+  or (not link.made_on_server and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
    or not public.password_link_allowed(link.made_by,link.person_id))) then
   raise exception 'passwordLinkEnded' using errcode='55000';
  end if;
@@ -7807,8 +7807,8 @@ begin
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
   select ended.company_id,null,'system','gtmworks command','member',person,'password_link_cancelled',
    jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now() from ended;
- insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
-  values(c,'password',link_hash,null,person,now()+interval '24 hours') returning id into made;
+ insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at,made_on_server)
+  values(c,'password',link_hash,null,person,now()+interval '24 hours',true) returning id into made;
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
   values(c,null,'system','gtmworks command','member',person,'password_link_made',
    jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
@@ -13436,12 +13436,14 @@ CREATE TABLE public.company_links (
     used_by uuid,
     cancelled_at timestamp with time zone,
     person_id uuid,
+    made_on_server boolean DEFAULT false NOT NULL,
     CONSTRAINT company_links_check CHECK (((kind <> 'invite'::text) OR ((label IS NOT NULL) AND (role IS NOT NULL)))),
     CONSTRAINT company_links_check1 CHECK ((ends_at > created_at)),
     CONSTRAINT company_links_check2 CHECK (((used_by IS NULL) OR (used_at IS NOT NULL))),
     CONSTRAINT company_links_check3 CHECK (((used_at IS NULL) OR (cancelled_at IS NULL))),
     CONSTRAINT company_links_kind_check CHECK ((kind = ANY (ARRAY['invite'::text, 'password'::text]))),
     CONSTRAINT company_links_label_check CHECK (((label IS NULL) OR ((length(btrim(label)) >= 1) AND (length(btrim(label)) <= 120)))),
+    CONSTRAINT company_links_made_on_server_check CHECK (((NOT made_on_server) OR (made_by IS NULL))),
     CONSTRAINT company_links_password_check CHECK (((kind <> 'password'::text) OR ((person_id IS NOT NULL) AND (role IS NULL) AND (label IS NULL)))),
     CONSTRAINT company_links_role_check CHECK ((role = ANY (ARRAY['manager'::text, 'contributor'::text, 'viewer'::text]))),
     CONSTRAINT company_links_secret_hash_check CHECK ((secret_hash ~ '^[a-f0-9]{64}$'::text))

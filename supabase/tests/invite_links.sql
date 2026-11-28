@@ -25,7 +25,7 @@ select ok(not has_table_privilege('anon','public.company_links','select') and no
 select ok(not has_table_privilege('authenticated','public.company_link_agents','select,insert,update,delete'),'nor its Agents');
 select ok(has_table_privilege('service_role','public.company_links','select'),'only the server role reads it');
 select is((select array_agg(column_name::text order by column_name) from information_schema.columns where table_schema='public' and table_name='company_links'),
- array['cancelled_at','company_id','created_at','ends_at','id','kind','label','made_by','person_id','role','secret_hash','used_at','used_by'],'the link holds one secret column, its hash');
+ array['cancelled_at','company_id','created_at','ends_at','id','kind','label','made_by','made_on_server','person_id','role','secret_hash','used_at','used_by'],'the link holds one secret column, its hash');
 select ok(has_function_privilege('authenticated','public.make_invite_link(uuid,text,text,uuid[],text)','execute') and not has_function_privilege('anon','public.make_invite_link(uuid,text,text,uuid[],text)','execute'),'a signed-in person asks to make a link');
 select ok(not has_function_privilege('authenticated','public.claim_invite_link(text,uuid,text,text)','execute') and not has_function_privilege('anon','public.claim_invite_link(text,uuid,text,text)','execute')
  and has_function_privilege('service_role','public.claim_invite_link(text,uuid,text,text)','execute'),'only the server spends a link');
