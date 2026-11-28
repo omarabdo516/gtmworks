@@ -343,6 +343,7 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  // those can be that send, so the same words said before (a second "Yes") never stand in for it. Kept as state, set while
  // drawing the first time a sent message is seen.
  const [before,setBefore]=useState<ReadonlyMap<number,ReadonlySet<number>>>(new Map());
+ const [spent,setSpent]=useState<ReadonlyMap<number,number>>(new Map());
  const people=(engine.page?.messages??[]).filter(message=>message.author==='person');
  const drawnSent=record.messages.filter(message=>message.kind==='sending');
  if(drawnSent.some(message=>!before.has(message.id))) {
@@ -353,15 +354,15 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  const sent=useMemo(()=>{
   // A message sent is drawn after the Engine's messages until a read of the session holds it (#876): one of the person's
   // messages with the same words, not on the page when it was sent, stands for it, and each stands for one send.
-  const used=new Set<number>(); const held:number[]=[];
+  const used=new Set<number>(); const held:{id:number,by:number}[]=[];
   const waiting=drawnSent.filter(message=>{
    const seen=before.get(message.id)??new Set(people.map(drawn=>drawn.id));
-   const found=people.find(drawn=>drawn.body===message.body&&!seen.has(drawn.id)&&!used.has(drawn.id));
+   const found=people.find(drawn=>drawn.body===message.body&&!seen.has(drawn.id)&&!used.has(drawn.id)&&(spent.get(drawn.id)??message.id)===message.id);
    if(!found) return true;
-   used.add(found.id); held.push(message.id); return false;
+   used.add(found.id); held.push({id:message.id,by:found.id}); return false;
   });
   return {waiting,held};
- },[record.messages,engine.page,before]); // eslint-disable-line react-hooks/exhaustive-deps
+ },[record.messages,engine.page,before,spent]); // eslint-disable-line react-hooks/exhaustive-deps
  const shown=useMemo(()=>{
   const base=engine.page?{...record,messages:[...engine.page.messages,...sent.waiting],pending:false,asking:undefined,failed:false,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
@@ -370,7 +371,10 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
  useLayoutEffect(()=>{ store.set({record:shown,asked:run.follow,sending,engine:true}); },[shown]); // eslint-disable-line react-hooks/exhaustive-deps
  // The messages sent that a read of the session now holds are drawn from it alone: one still queued behind a working Run,
  // which the session does not hold yet, stays drawn as sent.
- useEffect(()=>{ release(sent.held); },[sent.held.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+ // A message that stood for one send is spent on it, kept as state set while drawing: it never stands for another send
+ // of the same words, also once the first is let go.
+ if(sent.held.some(each=>!spent.has(each.by))) setSpent(new Map([...spent,...sent.held.map(each=>[each.by,each.id] as const)]));
+ useEffect(()=>{ release(sent.held.map(each=>each.id)); },[sent.held.map(each=>each.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true); const preserve=useRef<{height:number,top:number}|null>(null);
  // The newest page opens on its last message; a page read above the oldest keeps the reader where they were.
  useLayoutEffect(()=>{
