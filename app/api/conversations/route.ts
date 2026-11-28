@@ -18,6 +18,7 @@ import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-
 import { unarchiveOnWrite } from '@/lib/conversation-session-marks';
 import { conversationSteps } from '@/lib/conversation-steps';
 import { sendToEngine } from '@/lib/conversation-send';
+import { answerEngineRun, permitEngineRun, stopEngineRun } from '@/lib/conversation-steer';
 import { agentAppStates } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -27,6 +28,11 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
+// A Run the browser follows on a Conversation whose messages are the Engine's (#878), and an id the Engine gave what it
+// waits on: lib/conversation-steer.ts checks both against the row and the Run's own record.
+const runId=(value:unknown):value is string=>typeof value==='string'&&/^[\w.:-]{1,200}$/.test(value);
+const askedId=(value:unknown):value is string=>typeof value==='string'&&/^[\w@-]{1,120}$/.test(value);
+const steered=(done:object)=>'error' in done?refuse(String(done.error),Number((done as {status?:unknown}).status)||500):reply(done);
 
 // A message is checked and stored by lib/conversation-runs.mjs (ADR 0029, #764): the answer goes once it is stored, and
 // its Run starts after it, through the one starter of turns (after(), and the worker's pass over waiting turns). This
@@ -89,8 +95,11 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
 }
 
 // Stop works for the person who started the open run, or a Manager or Owner of the Company (the database decides).
+// On a Conversation whose messages are the Engine's (#878), the browser names the Run it follows, and only its person
+// stops it, with the Run's own stop.
 async function stop(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)) return refuse('conversationFailed',400);
+ if(body.run!==undefined) return runId(body.run)?steered(await stopEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run})):refuse('conversationFailed',400);
  const stopped=await stopConversationRun(db,{company:body.company as string,conversation:body.conversation});
  if('code' in stopped) return stopped.message==='conversationNothingToStop'?reply({stopped:false}):refuseFor(stopped.code);
  if('error' in stopped) return refuse(stopped.error,stopped.status);
@@ -107,10 +116,18 @@ async function stop(db:Database,body:Record<string,unknown>) {
 // where several may be picked the picked choices' indexes (#648), and one key per card on the page, so a second click is
 // the same claim. Only the Conversation's person claims it (answer_question);
 // the answer then goes to the waiting Run. Typed words answer it through send.
+// On a Conversation whose messages are the Engine's (#878), an answer names the Run and the question the Engine gave it,
+// and is a pick, several picks or the person's typed words, which go to the Run's own route.
 async function answer(db:Database,body:Record<string,unknown>) {
- if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
  const isChoiceIndex=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<4;
  const picks=Array.isArray(body.choice)&&body.choice.length>=1&&body.choice.length<=4&&body.choice.every(isChoiceIndex)?body.choice as number[]:null;
+ if(body.run!==undefined) {
+  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.question)) return refuse('conversationFailed',400);
+  const given=typeof body.text==='string'?(body.text.trim()&&body.text.length<=20000?{text:body.text}:null):isChoiceIndex(body.choice)?{pick:body.choice}:picks?{picks}:null;
+  if(!given) return refuse('conversationFailed',400);
+  return steered(await answerEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,question:body.question,answer:given}));
+ }
+ if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
  if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(isChoiceIndex(body.choice)||picks)) return refuse('conversationFailed',400);
  const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,...(picks?{picks}:{choice:body.choice as number}),answerKey:body.answerKey as string});
  if('code' in answered) return answered.code==='22023'?refuse('conversationFailed',400):refuseFor(answered.code);
@@ -146,7 +163,13 @@ async function done(db:Database,body:Record<string,unknown>) {
 // once the choice is kept, as "Done it" is, and the choice then goes to the waiting Run after the answer. A second
 // press, another tab, or a request the Engine no longer waits on answers what the card shows now. Nothing of the
 // request is logged.
+// On a Conversation whose messages are the Engine's (#878), the choice names the Run and the request the Engine gave it;
+// "Always allow" from a Role that may not send it is refused here (permission_choices) before the Engine is asked.
 async function permit(db:Database,body:Record<string,unknown>) {
+ if(body.run!==undefined) {
+  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!runId(body.run)||!askedId(body.permission)||!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
+  return steered(await permitEngineRun(db,{company:body.company as string,conversation:body.conversation,run:body.run,permission:body.permission,choice:body.choice as PermissionChoice}));
+ }
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
  if(!permissionChoices.includes(body.choice)) return refuse('conversationFailed',400);
  const decided=await decidePermission(db,service(),{company:body.company as string,conversation:body.conversation,card:body.card,choice:body.choice as PermissionChoice,later:after});

@@ -469,10 +469,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,liveFailed?:boolean,turnStarted?:boolean,liveEnded?:boolean,released?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,runsAtOnce:0,sessionQueueLimit:32,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,sessionId?:string,liveDone?:boolean,liveFailed?:boolean,turnStarted?:boolean,liveEnded?:boolean,released?:boolean,release?:(value?:unknown)=>void,input:any,instructions?:string,told?:string[],card?:{title:string,body?:string,assignee:string},history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,output?:string,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null,live?:boolean}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null,live?:boolean}[]}[]} */([]),pendingReads:0,loseStarts:0,runsAtOnce:0,sessionQueueLimit:32,heldElsewhere:/** @type {((run:string)=>boolean)|null} */(null),openNow:0,openAtMost:0,answerDelay:0,managed:/** @type {{method?:string,path?:string}[]} */([]),managedFail:/** @type {((method:string,path:string)=>number|null)|null} */(null),managedDelay:/** @type {((method:string,path:string)=>number|null)|null} */(null),
   // The most rows a cron job's run history lists (#535: the pinned Engine lists 100 at most).
   cronRunsAtMost:100,startDelay:0,stallEvents:false,liveSteps:/** @type {(input:string)=>{tool:string,preview?:string|null,failed?:boolean}[]} */(()=>[]),livePace:10,liveHold:false,
-  release(/** @type {string} */ id) { const run=settings.runs.find(each=>each.id===id); if(run) { run.released=true; run.release?.(); } },reply:input=>`Reply to: ${input}`,
+  release(/** @type {string} */ id) { const run=settings.runs.find(each=>each.id===id); if(run) { run.released=true; run.release?.(); } },reply:/** @type {(input:string,answers:(string|null)[],choices:(string|null)[])=>string} */(input=>`Reply to: ${input}`),
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -787,7 +787,23 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   found.messages.push({role:'user',content:Array.isArray(run.input)?run.input.at(-1)?.content??'':inputText(run.input),timestamp:at(),display_kind:'internal_notification',display_metadata:{submission_id:run.id}});
   if(settings.liveHold&&!run.released) await new Promise(resolve=>{ run.release=resolve; });
   push(run.id,{event:'run.started'});
-  for(const step of settings.liveSteps(inputText(run.input))) {
+  // Its questions, then its requests to act (#878), one at a time, each waiting until it is answered, its time limit
+  // passes (expire, expireApproval) or the Run is stopped; a request whose kept key the profile already allows is not
+  // asked. Its record names the one it waits on (`live`) while it waits.
+  for(const asked of run.asked) {
+   if(run.stopped) break;
+   asked.live=true;
+   while(!asked.settled&&!run.stopped) await wait(20);
+   asked.live=false;
+  }
+  for(const asking of run.approvals) {
+   if(run.stopped) break;
+   if(asking.kept.some(key=>allowlistOf(run.profile).includes(key))) { Object.assign(asking,{settled:'answered',choice:'standing'}); continue; }
+   asking.live=true;
+   while(!asking.settled&&!run.stopped) await wait(20);
+   asking.live=false;
+  }
+  for(const step of run.stopped?[]:settings.liveSteps(inputText(run.input))) {
    if(run.stopped) break;
    const call=`call_${randomUUID().replaceAll('-','').slice(0,12)}`;
    push(run.id,{event:'tool.started',tool:step.tool,preview:step.preview??null,tool_call_id:call});
@@ -799,7 +815,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // A Run whose model call fails (#879; `ending` failed, `failure` its words) writes no reply: the session holds the
   // person's message and the calls made, and the Run's record names the failure.
   if(!run.stopped&&settings.ending==='failed') { run.liveFailed=true; run.liveEnded=true; endEvents(run.id,'run.failed'); return; }
-  const reply=settings.reply(inputText(run.input),[],[]);
+  const reply=settings.reply(inputText(run.input),run.asked.map(asked=>asked.answer??null),run.approvals.map(asking=>asking.choice??null));
+  run.output=reply;
   for(const piece of run.stopped?[]:reply.match(/\S+\s*/g)??[]) {
    if(run.stopped) break;
    await wait(settings.livePace);
@@ -984,7 +1001,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     // As measured on the pinned release (#141, the install check): a Run's record has when it was made and nothing of when
     // it ended; its end is in its events.
     const times={created_at:run.created};
-    if(run.sessionId&&!run.stopped) return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveFailed?'failed':run.liveDone?'completed':run.turnStarted?'running':'queued',session_id:run.session,...times,pending_controls:[],...(run.liveDone?{output:settings.reply(inputText(run.input),[],[])}:{}),...(run.liveFailed&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{})});
+    if(run.sessionId&&!run.stopped) {
+     // What a Run on a chosen session waits on now (#878), in the record's own shape, as below.
+     const question=run.asked.find(asked=>asked.live&&!asked.settled);
+     const approval=run.approvals.find(asking=>asking.live&&!asking.settled);
+     return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveFailed?'failed':run.liveDone?'completed':approval?'waiting_for_approval':run.turnStarted?'running':'queued',session_id:run.session,...times,
+      pending_controls:question?[{kind:'clarify',prompt_id:question.prompt_id,execution_generation:1,question:`${question.question}\nReply "skip" to skip this question.`,choices:question.choices.map((choice,index)=>index===0&&question.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:question.multi_select}]:[],
+      ...(approval?{last_event:'approval.request',approval:{command:approval.command,description:approval.description,pattern_key:approval.patternKeys[0],pattern_keys:approval.patternKeys,request_id:approval.request_id,timeout_s:300,event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:approval.choices}}:{}),
+      ...(run.liveDone?{output:run.output??settings.reply(inputText(run.input),[],[])}:{}),...(run.liveFailed&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{})});
+    }
     if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times}); }
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
     // choices is marked recommended.
@@ -1024,7 +1049,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const choice=String(body.choice??'').trim().toLowerCase(); const id=typeof body.request_id==='string'?body.request_id.trim():'';
      if(body.request_id!==undefined&&(!id||id.length>256)) return permitted(400,{error:{message:'Approval request_id is invalid.',code:'invalid_approval_request'}});
      if(!['once','session','always','deny'].includes(choice)) return permitted(400,{error:{message:'Invalid approval choice',code:'invalid_approval_choice'}});
-     const ended=run.stopped||!run.asked.some(each=>!each.settled)&&!run.approvals.some(each=>!each.settled)&&run.reads>settings.pendingReads;
+     const ended=run.stopped||run.liveDone||!run.asked.some(each=>!each.settled)&&!run.approvals.some(each=>!each.settled)&&run.reads>settings.pendingReads;
      if(ended) return permitted(409,{error:{message:`Run has no active approval session: ${run.id}`,code:'approval_not_active'}});
      const asking=run.approvals.find(each=>!each.settled&&(!id||each.request_id===id));
      if(!asking) return permitted(409,{error:{message:`Run has no pending approval: ${run.id}`,code:'approval_not_pending'}});
@@ -1036,7 +1061,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!body||typeof body!=='object'||Object.keys(body).sort().join()!=='answer,execution_generation,request_id'||typeof body.answer!=='string') return answered(400,{error:{message:'Invalid parameters',code:'invalid_params'}});
     if(!run) return answered(404,{error:{message:`Run not found: ${runAction[1]}`,code:'run_not_found'}});
     const asked=run.asked?.find(each=>each.prompt_id===body.request_id);
-    const ended=run.stopped||!run.asked?.some(each=>!each.settled)&&run.reads>settings.pendingReads;
+    const ended=run.stopped||run.liveDone||!run.asked?.some(each=>!each.settled)&&run.reads>settings.pendingReads;
     if(!asked||body.execution_generation!==1||ended||asked.settled==='expired') return answered(409,{error:{message:'Stale generation',code:'stale_generation'}});
     if(asked.settled) return answered(409,{error:{message:'No clarify request is pending',code:'approval_not_pending'}});
     Object.assign(asked,{settled:'answered',answer:body.answer});
