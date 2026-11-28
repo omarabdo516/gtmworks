@@ -28,21 +28,18 @@ const teamData = {
   { person_id: 'p-omar', role: 'owner', people: { name: 'Omar' } },
   { person_id: 'p-nour', role: 'contributor', people: { name: 'Nour' } },
  ],
- invitations: [],
+ ended: [],
  links: [],
  agents: [
   { id: 'a-lead', connection_id: 'c-lead', name: 'Lead', is_default: true },
   { id: 'a-ads', connection_id: 'c-ads', name: 'Ads', is_default: false },
  ],
  allowed: [],
- invitedAllowed: [],
 };
 const soloData = { ...teamData, members: [teamData.members[0]] };
 const teamActions = (data = teamData) => ({
  load: vi.fn(async () => data),
  save: vi.fn(async () => ''),
- saveInvitation: vi.fn(async () => ''),
- invite: vi.fn(async () => ({})),
  makeLink: vi.fn(async () => ({ link: 'http://127.0.0.1:3000/join#code=' + 'a'.repeat(64) })),
  cancelLink: vi.fn(async () => ''),
 });
@@ -142,7 +139,7 @@ for (const [how, close] of [['the x', 'x'], ['Escape', 'escape'], ['a press outs
  await expect.element(accountButton(screen)).toHaveFocus();
 });
 
-test('in Arabic the item and the dialog are the reference’s words, and a Manager gets no invite form', async () => {
+test('in Arabic the item and the dialog are the reference’s words, and a Manager gets no Invite link button', async () => {
  const screen = await teamMenu('ar', { role: 'Manager' });
  await screen.getByRole('button', { name: 'قائمة الحساب' }).click();
  const arabicTeam = screen.getByRole('menuitem', { name: /^الفريق/ });
@@ -150,11 +147,11 @@ test('in Arabic the item and the dialog are the reference’s words, and a Manag
  await arabicTeam.click();
  await expect.element(screen.getByRole('dialog', { name: 'الفريق' })).toBeVisible();
  await expect.element(screen.getByRole('button', { name: 'خلصت' })).toBeVisible();
- await expect.element(screen.getByRole('button', { name: 'اعزم عضو' })).not.toBeInTheDocument();
- expect(document.getElementById('inv-email')).toBeNull();
+ await expect.element(screen.getByRole('button', { name: 'اعمل لينك دعوة' })).not.toBeInTheDocument();
+ expect(document.getElementById('lnk-label')).toBeNull();
 });
 
-test('a Company worked alone opens the narrower dialog with the Owner’s row, the invite form already open and the note', async () => {
+test('a Company worked alone opens the narrower dialog with the Owner’s row, the Invite link button and the note', async () => {
  const actions = teamActions(soloData);
  const screen = await teamMenu('en', { alone: true, owner: true, team: actions });
  await screen.getByRole('button', { name: 'Account menu' }).click();
@@ -168,9 +165,11 @@ test('a Company worked alone opens the narrower dialog with the Owner’s row, t
  await expect.element(dialog.getByText('Omar')).toBeVisible();
  await expect.element(dialog.getByText('(you)')).toBeVisible();
  await expect.element(dialog.getByText('Owner · You see every agent and approve everything')).toBeVisible();
- await expect.element(dialog.getByRole('textbox')).toBeVisible();
+ await expect.element(dialog.getByRole('button', { name: 'Make an invite link' })).toBeVisible();
  await expect.element(dialog.getByText('As soon as someone you invite joins, channels and per-member agents turn on by themselves.')).toBeVisible();
- await expect.poll(() => document.activeElement === document.getElementById('inv-email')).toBe(true);
+ await expect.poll(() => document.activeElement === document.getElementById('lnk-toggle')).toBe(true);
+ await dialog.getByRole('button', { name: 'Make an invite link' }).click();
+ await expect.poll(() => document.activeElement === document.getElementById('lnk-label')).toBe(true);
  await screen.getByRole('button', { name: 'Done' }).click();
  await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
  await expect.element(accountButton(screen)).toHaveFocus();

@@ -1,0 +1,1 @@
+| `email-invitations-migration.mjs` | replays the email invitation ending migration (#953): an invitation left pending is ended by it and makes no Member when claimed, a Member makes no email invitation, the email invitation maker and its Agent switch are gone, and the table takes no write from a Member (tests/db.sh) | — | — | helper, new |

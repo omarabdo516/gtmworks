@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { safeNext } from '@/lib/navigation';
 import { appUrl } from '@/lib/app-origin.mjs';
-import { logActionFailure } from '@/lib/diagnostics.mjs';
-// A sign-in link: the session, then the person's open invitations (claim_invitations). A claim that fails is logged and
-// told on the sign-in page (#775), never passed over so the person lands where their invitation did not apply.
+// A sign-in link: the code becomes the person's session, then the next page opens. Email invitations are gone (#953), so
+// nothing is claimed here; a link that carries no code returns to the sign-in page.
 export async function GET(req: NextRequest) {
  const code=req.nextUrl.searchParams.get('code');
  if(!code) return NextResponse.redirect(appUrl('/sign-in'));
  const db=await supabase();
  const {error}=await db.auth.exchangeCodeForSession(code);
  if(error) return NextResponse.redirect(appUrl('/sign-in'));
- const claim=await db.rpc('claim_invitations');
- if(claim.error) { logActionFailure('claimInvitations',{code:claim.error.code,message:'the invitations were not claimed'}); return NextResponse.redirect(appUrl('/sign-in?invitation=failed')); }
  return NextResponse.redirect(appUrl(safeNext(req.nextUrl.searchParams.get('next'))));
 }

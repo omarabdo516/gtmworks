@@ -1,7 +1,7 @@
 import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
-import { appOrigin, inbox, mail } from './lane.mjs';
+import { appOrigin } from './lane.mjs';
 // Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the next
 // case reads the English faces (#257); Arabic at 390 is held to the design system (#805).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
@@ -117,28 +117,33 @@ test('members controls, the Role list, viewer access, and no all-companies list'
 });
 
 // A Manager is offered nothing guard_member refuses (#774): no control on an Owner's row, none on their own Role and
-// Grants, and no invitation, which is the Owner's alone (#775); they still change a Viewer as before.
+// Grants, and no way to make an Invite link, which is the Owner's alone (#950); they still change a Viewer as before.
 test('a Manager has no control on an Owner\'s row or their own, and still changes a Viewer',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/settings/members');
  await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
  const row=(name:string)=>page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${name}$`)})});
  for(const name of ['عمر','مدير']) { await expect(row(name).getByRole('button',{name:"Remove"})).toHaveCount(0); await expect(row(name).getByRole('combobox')).toHaveCount(0); await expect(row(name).getByRole('checkbox')).toHaveCount(0); }
  await expect(row('عمر')).toContainText('Administrator');
- await expect(page.getByRole('button',{name:"Invite a member"})).toHaveCount(0);
+ await page.goto('/c/rs-learning/settings?section=members');
+ await expect(page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:"Make an invite link"})).toHaveCount(0);
  await row('مشاهد').getByLabel("Publishing").check(); await row('مشاهد').getByRole('button',{name:"Save"}).click();
  await expect(page.getByRole('status').filter({hasText:'Change saved.'})).toContainText('Change saved.');
  await expect(row('مشاهد').getByLabel("Publishing")).toBeChecked();
 });
 
-test('invite link signs the new member into the company',async({page,context})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings/members');
- await page.request.delete(inbox);
- await page.getByRole('button',{name:"Invite a member"}).click(); await page.getByLabel("Member’s email").fill('invited@example.com'); await page.getByRole('button',{name:"Invite",exact:true}).click(); await expect(page.getByText('Invite sent to')).toBeVisible();
- let link=''; for(let i=0;i<30&&!link;i++){const mailbox=await (await page.request.get(inbox)).json(); const item=mailbox.messages?.find((m:{To:{Address:string}[]})=>m.To.some(t=>t.Address==='invited@example.com')); if(item){const message=await (await page.request.get(`${mail}/api/v1/message/${item.ID}`)).json(); link=(message.HTML||message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url:string)=>url.includes('/verify'))?.replaceAll('&amp;','&')||'';} if(!link) await page.waitForTimeout(1000);}
- expect(link).toBeTruthy(); await context.clearCookies(); await page.goto(link);
- // A new Member chooses a password before the Company opens (#41).
- await page.getByLabel('New password').fill('invited-password'); await page.getByLabel('Confirm password').fill('invited-password'); await page.getByRole('button',{name:'Save password'}).click();
- await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/); await expect(page.getByRole('heading',{name:"Team members"})).toBeVisible();
+test('Invite link signs the new member into the company',async({page,context})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
+ await page.getByRole('button',{name:"Make an invite link"}).click();
+ await page.getByLabel("Person’s name").fill('Invited Person');
+ await page.getByRole('button',{name:"Make the link"}).click();
+ const link=await page.getByLabel('Invite link for Invited Person').inputValue();
+ expect(link).toMatch(/\/join#code=[a-f0-9]{64}$/);
+ await context.clearCookies(); await page.goto(link);
+ // A new Person chooses a password on the link's page before the Company opens (#41, #950).
+ await page.getByLabel('Your name').fill('Invited Person'); await page.getByLabel('Email').fill('invited@example.com');
+ await page.getByLabel('Password',{exact:true}).fill('invited-password'); await page.getByLabel('Confirm password').fill('invited-password');
+ await page.getByRole('button',{name:'Join and sign in'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/home$/); await expect(page.locator('.home-dashboard')).toBeVisible();
 });
 
 test('the Owner of every company lands on a Company home from the sign-in page and opens each one with no extra verification step',async({page})=>{

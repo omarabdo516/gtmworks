@@ -1,1 +1,1 @@
-| `proxy/production-shape.spec.ts` | Behind a proxy on https and a public-looking host, sign-in, settings and invitations work. (own config) | 14 s | install job (the same through a real install) | keep |
+| `proxy/production-shape.spec.ts` | Behind a proxy on https and a public-looking host, sign-in, settings and Invite links work. (own config) | 14 s | install job (the same through a real install) | keep |

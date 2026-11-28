@@ -30,7 +30,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  if(!reader) { const asked=await searchParams; const kept=new URLSearchParams(Object.entries({section:asked.section,agent:asked.agent,period:asked.period,card:asked.card}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();
   redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}${kept?`?${kept}`:''}`)}`); }
  const {user,company,role}=reader; if(!company || !sections[section]) notFound(); const title=t(sections[section]);
- // A Company worked alone has no Member permissions to set (#10); its invitation form is in the settings overlay.
+ // A Company worked alone has no Member permissions to set (#10); its Invite link form is in the settings overlay.
  if(section==='settings/members'&&company.work_mode==='alone') redirect(`/c/${slug}/settings?section=members`);
  const canCreate=canCreateCard({role:role});
  const manage=['owner','manager'].includes(role); const canOwner=role==='owner';

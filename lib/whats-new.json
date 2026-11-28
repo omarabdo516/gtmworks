@@ -1,5 +1,11 @@
 [
 {
+  "issue": 953,
+  "date": "2026-11-28",
+  "en": { "title": "Invite links everywhere; no invitation emails", "body": "Every place that invited by email now makes an Invite link: the Team page and first run’s “Who’s on your team?” step show each link once to copy. An email invitation left over from before is ended and the Team table says so, and the app sends no email." },
+  "ar": { "title": "لينكات الدعوة في كل مكان؛ ومفيش دعوات بالإيميل", "body": "كل مكان كان بيعزم بالإيميل بقى بيعمل لينك دعوة: صفحة الفريق وخطوة «مين معاك في التيم؟» في أول تشغيل بيعرضوا كل لينك مرة واحدة عشان تنسخه. وأي دعوة إيميل قديمة اتقفلت وصفحة الفريق بتقول كده، والتطبيق مبقاش يبعت إيميل." }
+},
+{
   "issue": 951,
   "date": "2026-11-28",
   "en": { "title": "Invite links you can see and cancel", "body": "The Team page lists every invite link still waiting for its Person, with the Role it gives, who made it and the day it ends. Cancel stops one at once, and a Person who opens a link that was used, cancelled or ended sees a clear page telling them to ask the Administrator for a new one." },

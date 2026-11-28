@@ -11,15 +11,15 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 const agents = [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', is_default: true }, { id: 'a-2', connection_id: 'c-2', name: 'Meta Ads', is_default: false }];
 const save = vi.fn<SaveSwitch>(async () => '');
 const table = (allowed: string[]) => <LanguageProvider language="en">
- <TeamTable company="co-1" members={[{ person_id: 'p-1', role: 'contributor', people: { name: 'Nour' } }]} invitations={[]} agents={agents}
-  allowed={new Set(allowed)} invitedAllowed={new Set()} userId="p-1" owner={false} save={save} saveInvitation={save} send={vi.fn(async () => ({}))}/>
+ <TeamTable company="co-1" members={[{ person_id: 'p-1', role: 'contributor', people: { name: 'Nour' } }]} ended={[]} agents={agents}
+  allowed={new Set(allowed)} userId="p-1" owner={false} save={save}/>
 </LanguageProvider>;
 const switchOf = () => document.querySelector<HTMLButtonElement>('.switch')!;
 
 test('a switch shows the access the table was read with again, not the value it first drew', async () => {
  const screen = await render(table([]));
  expect(switchOf().getAttribute('aria-checked')).toBe('false');
- // The dialog read the table again (after an invite, or a refresh) and this Member now sees the Agent.
+ // The dialog read the table again (after a link was made, or a refresh) and this Member now sees the Agent.
  await screen.rerender(table(['p-1:a-2']));
  await expect.poll(() => switchOf().getAttribute('aria-checked')).toBe('true');
  // And back off again.
@@ -27,15 +27,15 @@ test('a switch shows the access the table was read with again, not the value it 
  await expect.poll(() => switchOf().getAttribute('aria-checked')).toBe('false');
 });
 
-// #902: the Role that can do everything reads Administrator / أدمن in the Team table, the invitation form under it
-// and the role's description; the old name, Owner / مالك, is nowhere.
+// #902: the Role that can do everything reads Administrator / أدمن in the Team table and the role's description; the old
+// name, Owner / مالك, is nowhere.
 for (const [language, name, seesAll, description] of [
  ['en', 'Administrator', 'Administrators see every agent', 'Sees every agent, approves everything, and is the only Role that approves a change to any agent’s model or tools.'],
  ['ar', 'أدمن', 'الأدمنز بيشوفوا كل الوكلاء', 'بيشوف كل الوكلاء، وبيوافق على كل حاجة، والأدمن بس هو اللي يوافق على تغيير موديل أو أدوات أي وكيل.'],
-] as const) test(`in ${language} the Team table and its invitation form name the Role ${name}`, async () => {
+] as const) test(`in ${language} the Team table and the Invite link form name the Role ${name}`, async () => {
  const screen = await render(<LanguageProvider language={language}>
-  <TeamTable company="co-1" members={[{ person_id: 'p-0', role: 'owner', people: { name: 'Omar' } }, { person_id: 'p-1', role: 'contributor', people: { name: 'Nour' } }]} invitations={[]} agents={agents}
-   allowed={new Set()} invitedAllowed={new Set()} userId="p-0" owner={true} save={save} saveInvitation={save} send={vi.fn(async () => ({}))}/>
+  <TeamTable company="co-1" members={[{ person_id: 'p-0', role: 'owner', people: { name: 'Omar' } }, { person_id: 'p-1', role: 'contributor', people: { name: 'Nour' } }]} ended={[]} agents={agents}
+   allowed={new Set()} userId="p-0" owner={true} save={save}/>
  </LanguageProvider>);
  const omar = screen.getByRole('row').filter({ hasText: 'Omar' });
  await expect.element(omar.getByText(name, { exact: true })).toBeVisible();
@@ -48,8 +48,8 @@ for (const [language, name, seesAll, description] of [
 // stops it and it leaves the table, and a refusal says why and keeps it.
 const link:TeamLink={id:'l-1',label:'Nour Salah',role:'viewer',made_by_name:'Omar',ends_at:'2026-12-04T10:00:00+00:00'};
 const tableWithLinks = (cancelLink:CancelLink, links:TeamLink[] = [link]) => <LanguageProvider language="en">
- <TeamTable company="co-1" members={[]} invitations={[]} links={links} agents={agents}
-  allowed={new Set()} invitedAllowed={new Set()} userId="p-0" owner={true} save={save} saveInvitation={save} send={vi.fn(async () => ({}))} cancelLink={cancelLink}/>
+ <TeamTable company="co-1" members={[]} ended={[]} links={links} agents={agents}
+  allowed={new Set()} userId="p-0" owner={true} save={save} cancelLink={cancelLink}/>
 </LanguageProvider>;
 
 test('a pending Invite link shows its label, Role, maker and end, and Cancel stops it and takes it away', async () => {
@@ -69,4 +69,17 @@ test('a cancel the database refuses says why and keeps the link in the table', a
  await screen.getByRole('button', {name:'Cancel Nour Salah’s invite link'}).click();
  await expect.element(screen.getByText('Couldn’t cancel the link. Try again.')).toBeVisible();
  await expect.element(screen.getByText('Nour Salah')).toBeVisible();
+});
+
+// #953: an email invitation left pending at the release is ended by the migration and shows as ended; no switch is drawn
+// for it and it cannot be claimed, so the Administrator makes the person an Invite link instead.
+test('an ended email invitation shows the name made from its email, its Role and "Email invite ended", with no switch', async () => {
+ const screen=await render(<LanguageProvider language="en">
+  <TeamTable company="co-1" members={[]} ended={[{id:'i-1',email:'nour.salah@example.test',role:'viewer'}]} agents={agents}
+   allowed={new Set()} userId="p-0" owner={true} save={save}/>
+ </LanguageProvider>);
+ const row=screen.getByRole('row').filter({hasText:'Nour'});
+ await expect.element(row.getByText('Viewer · nour.salah@example.test')).toBeVisible();
+ await expect.element(row.getByText('Email invite ended', {exact:true})).toBeVisible();
+ expect(document.querySelector('.switch')).toBeNull();
 });

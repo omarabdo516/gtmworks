@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '../offline-browser';
-import { inbox, mail } from '../lane.mjs';
+
 import { signIn } from '../sign-in';
 
 // Everything here runs against the production image behind a reverse proxy on https://app.gtmworks.test.
@@ -25,46 +25,25 @@ test('the page is served over https from the public host name through the proxy'
   expect(new URL(page.url()).hostname).toBe('app.gtmworks.test');
 });
 
-test('Send invitation shows its confirmation, the address gets the link and the link signs the member in', async ({ page, context }) => {
+test('Make an invite link shows it on the public origin, and the new Person joins through it', async ({ page, context }) => {
   watch(page);
-  // Only the Owner invites (#775).
+  // Only the Owner makes a link (#950).
   await signIn(page, 'omar@example.com', '/c/rs-learning/settings/members');
-  await page.request.delete(inbox);
-  await page.getByRole('button', { name: 'Invite a member' }).click();
-  await page.getByLabel('Member’s email').fill('proxy-invited@example.com');
-  await page.getByRole('button', { name: 'Invite', exact: true }).click();
-  await expect(page.getByText('Invite sent to proxy-invited@example.com')).toBeVisible({ timeout: 15000 });
-  let link = '';
-  for (let i = 0; i < 30 && !link; i++) {
-    const mailbox = await (await page.request.get(inbox)).json();
-    const item = mailbox.messages?.find((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === 'proxy-invited@example.com'));
-    if (item) { const message = await (await page.request.get(`${mail}/api/v1/message/${item.ID}`)).json(); link = (message.HTML || message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find((url: string) => url.includes('/verify'))?.replaceAll('&amp;', '&') || ''; }
-    if (!link) await page.waitForTimeout(1000);
-  }
-  expect(link).toBeTruthy();
+  await page.getByRole('button', { name: 'Make an invite link' }).click();
+  await page.getByLabel('Person’s name').fill('Proxy Invited');
+  await page.getByRole('button', { name: 'Make the link' }).click();
+  const link = await page.getByLabel('Invite link for Proxy Invited').inputValue();
+  expect(link.startsWith('https://app.gtmworks.test/join#code=')).toBe(true);
   await context.clearCookies();
   await page.goto(link);
-  // A new Member chooses a password before the Company opens (#41).
-  await page.getByLabel('New password').fill('invited-password');
-  await page.getByLabel('Confirm password').fill('invited-password');
-  await page.getByRole('button', { name: 'Save password' }).click();
-  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\/members/);
-  await expect(page.getByRole('heading', { name: 'Team members' })).toBeVisible();
-});
-
-test('inviting someone who already has an account sends them a sign-in link', async ({ page }) => {
-  watch(page);
-  // reviewer@example.com has an account and is no Member of Aleem; an invitation is the Owner's (#775).
-  await signIn(page, 'omar@example.com', '/c/aleem/settings/members');
-  await page.request.delete(inbox);
-  await page.getByRole('button', { name: 'Invite a member' }).click();
-  await page.getByLabel('Member’s email').fill('reviewer@example.com');
-  await page.getByRole('button', { name: 'Invite', exact: true }).click();
-  await expect(page.getByText('Invite sent to reviewer@example.com')).toBeVisible({ timeout: 15000 });
-  await expect(async () => {
-    const mailbox = await (await page.request.get(inbox)).json();
-    expect(mailbox.messages?.some((m: { To: { Address: string }[] }) => m.To.some(to => to.Address === 'reviewer@example.com'))).toBe(true);
-  }).toPass({ timeout: 30000 });
+  // A new Person chooses a password on the link's page before the Company opens (#41, #950).
+  await page.getByLabel('Your name').fill('Proxy Invited');
+  await page.getByLabel('Email').fill('proxy-invited@example.com');
+  await page.getByLabel('Password', { exact: true }).fill('proxy-invited-password');
+  await page.getByLabel('Confirm password').fill('proxy-invited-password');
+  await page.getByRole('button', { name: 'Join and sign in' }).click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
+  await expect(page.locator('.home-dashboard')).toBeVisible();
 });
 
 test('the old all-companies address is not found through the proxy', async ({ page }) => {

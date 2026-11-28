@@ -11,28 +11,28 @@ import { untilDrawn, fakeClock } from './fake-clock';
 import '@/app/tokens.css';
 import '@/app/first-run-choice.css';
 
-// #186: first run's second step, "Who’s on your team?", as the approved reference draws it (design-reference/app.js:
-// frHTML, frRow). The action is a prop, so the test needs no server.
+// #186, #953: first run's second step, "Who’s on your team?", as the approved reference draws it (design-reference/app.js:
+// frHTML, frRow), now making an Invite link for each Person instead of an email invitation. The action is a prop, so the
+// test needs no server.
 const push = vi.hoisted(() => vi.fn<(href: string) => void>());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 const finish = vi.fn<(state: FirstRunState, form: FormData) => Promise<FirstRunState>>();
-afterEach(() => { vi.useRealTimers(); finish.mockReset(); finish.mockResolvedValue({}); push.mockReset(); });
+afterEach(() => { vi.useRealTimers(); finish.mockReset(); finish.mockResolvedValue({}); push.mockReset(); vi.unstubAllGlobals(); });
 
 const show = (language: Language = 'en') => render(<LanguageProvider language={language}>
  <FirstRunChoice slug="acme-abcd1234" company="10000000-0000-0000-0000-000000000090" companyName="Acme" personName="Omar"
   lead={{ id: 'f0000000-0000-0000-0000-000000000090', name: 'Lead' }} brand={<>gtm<span>works</span></>} mark={<span/>} finish={finish}/>
 </LanguageProvider>);
-const fields = () => [...document.querySelectorAll<HTMLInputElement>('.fr-row input[type=email]')];
+const fields = () => [...document.querySelectorAll<HTMLInputElement>('.fr-row input[type=text]')];
 const roles = () => [...document.querySelectorAll<HTMLSelectElement>('.fr-row select')];
 const removeButtons = () => [...document.querySelectorAll<HTMLButtonElement>('.fr-row__rm')].filter(button => button.tagName === 'BUTTON');
-const errors = () => [...document.querySelectorAll<HTMLElement>('.fr-row .set-err')];
 const choice = (name: string) => document.querySelector<HTMLInputElement>(`input[value="${name}"]`)!;
 const showStepTwo = async (screen: Awaited<ReturnType<typeof show>>) => {
  await screen.getByRole('radio', { name: 'With a team' }).click();
  await screen.getByRole('button', { name: 'Continue' }).click();
 };
 
-test('"With a team" turns the button into Continue, which opens step two with the focus in the first email field; Back and Escape return to the question with the team chosen and nothing sent', async () => {
+test('"With a team" turns the button into Continue, which opens step two with the focus in the first name field; Back and Escape return to the question with the team chosen and nothing made', async () => {
  const screen = await show();
  expect(screen.getByRole('button', { name: 'Open the workspace' }).element()).toBeDisabled();
  await screen.getByRole('radio', { name: 'With a team' }).click();
@@ -107,92 +107,65 @@ test('"Add a member" adds a focused row that starts as Contributor; a row can be
  expect(removeButtons()).toHaveLength(0);
 });
 
-test('a malformed email and the same email twice show their errors under their rows, the first takes the focus, and nothing is sent; an empty row is ignored', async () => {
+test('only rows with a name are sent, trimmed, with their Roles; an empty row is ignored', async () => {
  const screen = await show();
  await showStepTwo(screen);
  await screen.getByRole('button', { name: 'Add a member' }).click();
  await screen.getByRole('button', { name: 'Add a member' }).click();
- await screen.getByRole('button', { name: 'Add a member' }).click();
- await userEvent.type(fields()[1], 'nour@rslearning');
- await userEvent.type(fields()[2], 'karim@example.test');
- await userEvent.type(fields()[3], 'KARIM@example.test');
- await screen.getByRole('button', { name: 'Open the workspace' }).click();
- await expect.poll(() => errors()[1].hidden).toBe(false);
- expect(errors()[1].textContent).toBe('This email is missing something. Write it in full, like nour@rslearning.com');
- await expect.poll(() => errors()[3].hidden).toBe(false);
- expect(errors()[3].textContent).toBe('This email has already been invited.');
- expect(errors()[0].hidden).toBe(true);
- await expect.poll(() => document.activeElement).toBe(fields()[1]);
- expect(finish).not.toHaveBeenCalled();
-
- // Fixing the first still leaves the duplicate: the first bad row left takes the focus, and still nothing is sent.
- await userEvent.clear(fields()[1]);
- await userEvent.type(fields()[1], 'nour@example.test');
- await screen.getByRole('button', { name: 'Open the workspace' }).click();
- await expect.poll(() => document.activeElement).toBe(fields()[3]);
- expect(finish).not.toHaveBeenCalled();
-
- // With the duplicate gone, only the rows with an email are sent.
- await userEvent.clear(fields()[3]);
+ await userEvent.type(fields()[0], '  Nour Salah ');
+ await userEvent.selectOptions(roles()[0], 'manager');
+ await userEvent.type(fields()[2], 'Karim Adel');
+ await userEvent.selectOptions(roles()[2], 'viewer');
  await screen.getByRole('button', { name: 'Open the workspace' }).click();
  await expect.poll(() => finish.mock.calls.length).toBe(1);
  expect(JSON.parse(String(finish.mock.calls[0][1].get('rows')))).toEqual([
-  { id: 1, email: 'nour@example.test', role: 'contributor' },
-  { id: 2, email: 'karim@example.test', role: 'contributor' },
+  { id: 0, label: 'Nour Salah', role: 'manager' },
+  { id: 2, label: 'Karim Adel', role: 'viewer' },
  ]);
 });
 
-test('an email already invited comes back under its row with the focus there and the step still open', async () => {
- finish.mockResolvedValue({ rowErrors: { 0: 'inviteEmailTaken' }, firstError: 0, sent: [] });
+// #953: the links are made by the action and shown once, each in full with a copy button; the question stays until the
+// Owner has copied them and presses "Open the workspace".
+test('the made Invite links are shown once to copy, and the question leaves only when the Owner opens the workspace', async () => {
+ const copied: string[] = [];
+ vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: async (text: string) => { copied.push(text); } } });
+ const links = [{ label: 'Nour Salah', link: `http://127.0.0.1:3000/join#code=${'a'.repeat(64)}` }, { label: 'Karim Adel', link: `http://127.0.0.1:3000/join#code=${'b'.repeat(64)}` }];
+ finish.mockResolvedValue({ opened: '/c/acme-abcd1234/conversations/cv-1?first=team&invites=2', links });
  const screen = await show();
  await showStepTwo(screen);
- await userEvent.type(fields()[0], 'nour@example.test');
+ await userEvent.type(fields()[0], 'Nour Salah');
  await screen.getByRole('button', { name: 'Open the workspace' }).click();
- await expect.poll(() => errors()[0].hidden).toBe(false);
- expect(errors()[0].textContent).toBe('This email has already been invited.');
- await expect.poll(() => document.activeElement).toBe(fields()[0]);
- expect(screen.getByRole('dialog', { name: 'Who’s on your team?' }).element()).toBeVisible();
- expect(JSON.parse(String(finish.mock.calls[0][1].get('rows')))).toEqual([{ id: 0, email: 'nour@example.test', role: 'contributor' }]);
+ await expect.element(screen.getByRole('dialog', { name: 'Your invite links' })).toBeVisible();
+ const linkFields = [...document.querySelectorAll<HTMLInputElement>('.fr-row input[type=text]')];
+ expect(linkFields.map(field => field.value)).toEqual(links.map(link => link.link));
+ expect(linkFields.every(field => field.readOnly)).toBe(true);
+ await expect.element(screen.getByLabelText('Invite link for Nour Salah')).toBeVisible();
+ await screen.getByRole('button', { name: 'Copy the link' }).first().click();
+ expect(copied).toEqual([links[0].link]);
+ await expect.element(screen.getByRole('button', { name: 'Copied' })).toBeVisible();
+ // Nothing has navigated: the links are the point of the step.
+ fakeClock();
+ (screen.getByRole('button', { name: 'Open the workspace' }).element() as HTMLButtonElement).click();
+ await untilDrawn(() => !!document.querySelector('.fr')?.classList.contains('is-closing'), 'the leave');
+ expect(push).not.toHaveBeenCalled();
+ await vi.advanceTimersByTimeAsync(190);
+ expect(push.mock.calls).toEqual([['/c/acme-abcd1234/conversations/cv-1?first=team&invites=2']]);
 });
 
-test('a refusal stays on its own email when the row above it is removed', async () => {
- finish.mockImplementation(async (_state, form) => {
-  const sent = JSON.parse(String(form.get('rows'))) as { id: number, email: string }[];
-  return { rowErrors: { [sent[1].id]: 'inviteEmailTaken' }, firstError: sent[1].id, sent: [] };
- });
- const screen = await show();
- await showStepTwo(screen);
- await screen.getByRole('button', { name: 'Add a member' }).click();
- await userEvent.type(fields()[0], 'nour@example.test');
- await userEvent.type(fields()[1], 'karim@example.test');
- await screen.getByRole('button', { name: 'Open the workspace' }).click();
- await expect.poll(() => errors()[1].hidden).toBe(false);
- expect(errors()[1].textContent).toBe('This email has already been invited.');
- await expect.poll(() => document.activeElement).toBe(fields()[1]);
- // The row above goes: the refusal and the focus stay with Karim's email, not with a place.
- await screen.getByRole('button', { name: 'Remove member 1' }).click();
- expect(fields()).toHaveLength(1);
- expect(fields()[0].value).toBe('karim@example.test');
- await expect.poll(() => errors()[0].hidden).toBe(false);
- expect(errors()[0].textContent).toBe('This email has already been invited.');
- expect(document.activeElement).toBe(fields()[0]);
-});
-
-test('in Arabic the second step keeps its words, its email field left to right and the example the invite form uses', async () => {
+test('in Arabic the second step keeps its words, the name field follows the name, and the link step reads as the reference words it', async () => {
  const screen = await show('ar');
  await screen.getByRole('radio', { name: 'مع تيم' }).click();
  await screen.getByRole('button', { name: 'كمّل' }).click();
  expect(document.querySelector('.fr__eyebrow')?.textContent).toBe('مع تيم · الخطوة 2 من 2');
- expect(fields()[0].getAttribute('dir')).toBe('ltr');
- expect(fields()[0].placeholder).toBe('nour@rslearning.com');
+ expect(fields()[0].getAttribute('dir')).toBe('auto');
  expect(screen.getByRole('button', { name: 'اتخطى' }).element()).toBeVisible();
  expect(screen.getByRole('button', { name: 'افتح المساحة' }).element()).toBeVisible();
 });
 
-test('Enter in an email field opens the workspace with its invitations, never Skip, the form\'s first submit button', async () => {
+test('Enter in a name field opens the links, never Skip, the form\'s first submit button', async () => {
  const screen = await show();
  await showStepTwo(screen);
- await userEvent.fill(fields()[0], 'nour@example.com');
+ await userEvent.fill(fields()[0], 'نور');
  await userEvent.keyboard('{Enter}');
  await expect.poll(() => finish.mock.calls.length).toBe(1);
  expect(finish.mock.calls[0][1].get('choice')).toBe('open');
