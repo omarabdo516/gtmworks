@@ -1,9 +1,9 @@
 import { test, expect, type Page, type BrowserContext } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { signIn, emailLink, seededPassword } from './sign-in';
 import { inbox } from './lane.mjs';
+import { totp } from './totp';
 
 // Signing in with an email and a password (#41). Passwords go only to the auth service (GoTrue).
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -18,11 +18,6 @@ async function attempt(page:Page,email:string,password:string) {
  return response;
 }
 const alertWith=(page:Page,text:string)=>page.getByRole('alert').filter({hasText:text});
-// The current six-digit code for an authenticator secret (RFC 6238, SHA-1, 30 seconds).
-function totp(secret:string) {
- const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits=''; for(const c of secret.replace(/=+$/,'').toUpperCase()) bits+=alphabet.indexOf(c).toString(2).padStart(5,'0');
- const key=Buffer.from(bits.match(/.{8}/g)?.map(b=>parseInt(b,2)) || []); const counter=Buffer.alloc(8); counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000))); const hash=createHmac('sha1',key).update(counter).digest(); const offset=hash[19]&15; return String((hash.readUInt32BE(offset)&0x7fffffff)%1000000).padStart(6,'0');
-}
 
 test('the right email and password reach the Company home; a wrong password and an unknown email get the same answer and no session',async({page,context})=>{
  await page.goto('/sign-in');

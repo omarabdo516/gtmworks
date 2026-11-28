@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(41);
 -- #954, ADR 0019: an Administrator or a Manager makes a password link for a Member of their Company; a Manager never for
 -- an Administrator. Only its secret's hash is kept, in the table no Member reads; it ends after 24 hours and works once.
 -- Sending its form claims it in one transaction that ends every session of the Member. Making and using it are written
@@ -73,6 +73,12 @@ select is((select count(*)::int from public.company_log where action='password_l
 select is((select company from public.password_link_open(encode(extensions.digest(repeat('c',64),'sha256'),'hex'))),'RS Learning','opening the link names the Company');
 select is((select email from public.password_link_open(encode(extensions.digest(repeat('c',64),'sha256'),'hex'))),'viewer@example.com','and the Member''s email');
 select is((select used_at from public.company_links where secret_hash=encode(extensions.digest(repeat('c',64),'sha256'),'hex')),null::timestamptz,'and uses nothing');
+-- A password link never goes around the second step (Omar, #954): the page learns whether the account has a verified
+-- authenticator, and asks for its code.
+select is((select two_step from public.password_link_open(encode(extensions.digest(repeat('c',64),'sha256'),'hex'))),false,'an account with no authenticator is asked no code');
+insert into auth.mfa_factors(id,user_id,friendly_name,factor_type,status,created_at,updated_at,secret)
+ values ('a9540000-0000-0000-0000-0000000000f1','20000000-0000-0000-0000-000000000004','Authenticator','totp','verified',now(),now(),'JBSWY3DPEHPK3PXP');
+select is((select two_step from public.password_link_open(encode(extensions.digest(repeat('c',64),'sha256'),'hex'))),true,'one with a verified authenticator is asked its code');
 
 -- A Manager's link made for a Member who is an Administrator by the time it is sent gives nothing.
 insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at) values

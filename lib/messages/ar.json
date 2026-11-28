@@ -1827,5 +1827,6 @@
   "logActPasswordLinkMade": "عمل لينك كلمة مرور لـ",
   "logActPasswordLinkUsed": "غيّر كلمة المرور بلينك كلمة مرور",
   "logActPasswordLinkCancelled": "وقّف لينك كلمة مرور قديم لـ",
-  "passwordLinkInstallOwner": "العضو ده هو صاحب التثبيت: لينك كلمة المرور بتاعه بييجي من أمر gtmworks على السيرفر، مش من صفحة الفريق."
+  "passwordLinkInstallOwner": "العضو ده هو صاحب التثبيت: لينك كلمة المرور بتاعه بييجي من أمر gtmworks على السيرفر، مش من صفحة الفريق.",
+  "passwordLinkCodeRefused": "الكود ده مش صح. ضيّعت تطبيق المصادقة كمان؟ صاحب التثبيت يقدر يجيبلك لينك كلمة مرور من أمر gtmworks على السيرفر."
 }

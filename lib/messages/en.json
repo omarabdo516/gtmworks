@@ -1827,5 +1827,6 @@
   "logActPasswordLinkMade": "made a password link for",
   "logActPasswordLinkUsed": "set a new password with a password link",
   "logActPasswordLinkCancelled": "ended an earlier password link for",
-  "passwordLinkInstallOwner": "This Member is the install owner: their password link comes from the gtmworks command on the server, not from the Team page."
+  "passwordLinkInstallOwner": "This Member is the install owner: their password link comes from the gtmworks command on the server, not from the Team page.",
+  "passwordLinkCodeRefused": "That code is not right. Lost your authenticator app too? The install owner gets you a password link from the gtmworks command on the server."
 }

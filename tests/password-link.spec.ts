@@ -2,6 +2,8 @@ import { test, expect, freshSeed, laneRows, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { signIn, openNavigation, seededPassword } from './sign-in';
+import { createClient } from '@supabase/supabase-js';
+import { totp, wrongCode } from './totp';
 
 // #954, ADR 0019: a Member who forgot their password gets back in through a password link an Administrator or a
 // Manager of their Company makes from the Team page. Opening the link, as a chat app's preview does, uses nothing; its
@@ -162,4 +164,61 @@ test('an Administrator makes a password link for a Manager; an ended link and on
  // The Manager's password never changed.
  await page.context().clearCookies();
  await signIn(page,'manager@example.com','/c/rs-learning/home');
+});
+
+// #954, Omar's decision on the review: a password link never goes around the second step. For an account with a
+// verified authenticator the page asks for its code, and the password is set only with a valid one; a refused code says
+// in one line how a Member who lost the authenticator too gets back in (the server command, #955).
+test('a password link for an account with a verified authenticator sets the password only with a valid code',async({page,browser})=>{
+ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'});
+ const value=(name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1];
+ const options={auth:{persistSession:false,autoRefreshToken:false}};
+ const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),options);
+ const email=`two-step-954-${Date.now()}@example.com`;
+ const {data:{user},error:created}=await service.auth.admin.createUser({email,password:'old-password-954',email_confirm:true});
+ expect(created).toBeNull();
+ query(`insert into public.people(id,name,language) values ('${user!.id}','Two-step Member','en')`);
+ query(`insert into public.members(company_id,person_id,role) values ('${company}','${user!.id}','contributor')`);
+ // The Member sets up an authenticator and verifies it once.
+ const own=createClient(value('API_URL'),value('ANON_KEY'),options);
+ expect((await own.auth.signInWithPassword({email,password:'old-password-954'})).error).toBeNull();
+ const {data:factor,error:enrolled}=await own.auth.mfa.enroll({factorType:'totp',friendlyName:'Authenticator'});
+ expect(enrolled).toBeNull();
+ const window=Math.floor(Date.now()/30000);
+ expect((await own.auth.mfa.challengeAndVerify({factorId:factor!.id,code:totp(factor!.totp.secret)})).error).toBeNull();
+ const signsIn=async(password:string)=>!(await createClient(value('API_URL'),value('ANON_KEY'),options).auth.signInWithPassword({email,password})).error;
+
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const dialog=await openTeam(page);
+ await dialog.getByRole('button',{name:'Make a password link for Two-step Member'}).click();
+ const link=await dialog.getByRole('textbox',{name:'Password link for Two-step Member'}).inputValue();
+ const secret=link.split('#code=')[1];
+ const unused=()=>rows<{used_at:string|null}>(`select used_at from public.company_links where secret_hash='${hash(secret)}'`)[0].used_at;
+
+ const fresh=await browser.newContext();
+ const person=await fresh.newPage();
+ await person.goto(link);
+ await expect(person.getByLabel('Verification code')).toBeVisible();
+ // Without a code, and with a wrong one, nothing is set and the link stays unused.
+ await person.request.post('/password/submit',{form:{code:secret,language:'en',password:'new-password-954',confirm:'new-password-954'}});
+ expect(await signsIn('new-password-954')).toBe(false);
+ expect(unused()).toBeNull();
+ await person.getByLabel('New password').fill('new-password-954');
+ await person.getByLabel('Confirm password').fill('new-password-954');
+ await person.getByLabel('Verification code').fill(wrongCode(factor!.totp.secret));
+ await person.getByRole('button',{name:'Save and sign in'}).click();
+ await expect(alertWith(person,'That code is not right. Lost your authenticator app too? The install owner gets you a password link from the gtmworks command on the server.')).toBeVisible();
+ expect(await signsIn('new-password-954')).toBe(false);
+ expect(await signsIn('old-password-954')).toBe(true);
+ expect(unused()).toBeNull();
+ // A code is used once: wait for the next one after the code that verified the authenticator.
+ if(Math.floor(Date.now()/30000)===window) await person.waitForTimeout(30000-Date.now()%30000+500);
+ await person.getByLabel('New password').fill('new-password-954');
+ await person.getByLabel('Confirm password').fill('new-password-954');
+ await person.getByLabel('Verification code').fill(totp(factor!.totp.secret));
+ await person.getByRole('button',{name:'Save and sign in'}).click();
+ await expect(person).toHaveURL(/\/c\/rs-learning\/home$/);
+ expect(await signsIn('new-password-954')).toBe(true);
+ expect(unused()).not.toBeNull();
+ await fresh.close();
 });

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { appUrl } from '@/lib/app-origin.mjs';
 import { cappedForm } from '@/lib/request-body.mjs';
+import { verifySecondStep } from '@/lib/second-step';
 
 // Sending a password link's form (#954, ADR 0019) sets the Member's new password, ends their other sessions and signs
 // this browser in. The link is spent by this request, in claim_password_link's one transaction, never by opening the
@@ -30,17 +31,30 @@ export async function POST(request:NextRequest) {
   logActionFailure('password_link_read',error);
   throw new Error('The password link could not be read');
  }
- const link=(open as {company:string,person_name:string,email:string}[]|null)?.[0];
+ const link=(open as {company:string,person_name:string,email:string,two_step:boolean}[]|null)?.[0];
  if(!link) {
   logActionFailure('password_link_refused',new Error('The password link is unknown, used, cancelled or ended'));
   // The page's own check gets a refusal it reads; a sent form opens the page's clear refusal.
   return form.get('check')==='1'?refusal(language,'passwordLinkNeedsNew',410):NextResponse.redirect(appUrl(`/password?language=${language}`),303);
  }
  // The page asks whose password waits behind its link before it shows the form; the answer changes nothing.
- if(form.get('check')==='1') return NextResponse.json({company:link.company,person:link.person_name,email:link.email});
+ if(form.get('check')==='1') return NextResponse.json({company:link.company,person:link.person_name,email:link.email,twoStep:link.two_step===true});
  const password=form.get('password'), problem=passwordProblem(password,form.get('confirm') ?? '');
  // Back to the form with the secret in the fragment, as the link carries it, so the next request does not.
- if(problem || typeof password!=='string') return NextResponse.redirect(appUrl(`/password?invalid=${problem ?? 'passwordTooShort'}&language=${language}#code=${secret}`),303);
+ const again=(invalid:string)=>NextResponse.redirect(appUrl(`/password?invalid=${invalid}&language=${language}#code=${secret}`),303);
+ if(problem || typeof password!=='string') return again(problem ?? 'passwordTooShort');
+ // A password link never goes around the second step (Omar, #954): with a verified authenticator, its code is checked
+ // by the auth service before the link is spent, so a wrong code sets nothing and the link stays usable.
+ if(link.two_step) {
+  const code=String(form.get('verification') ?? '').replace(/\s+/g,'');
+  if(!code) return again('passwordNeedsVerificationCode');
+  const step=await verifySecondStep(admin,link.email,code);
+  if(step==='failed') {
+   logActionFailure('password_link_second_step',new Error('The second step could not be checked'));
+   throw new Error('The second step could not be checked');
+  }
+  if(step==='refused') return again('passwordLinkCodeRefused');
+ }
  const {data:claimed,error:failure}=await admin.rpc('claim_password_link',{link_hash:hash});
  const member=(claimed as {person:string,email:string,slug:string}[]|null)?.[0];
  if(failure || !member) {

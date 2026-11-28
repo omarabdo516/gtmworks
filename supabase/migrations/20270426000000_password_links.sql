@@ -65,11 +65,13 @@ revoke all on function public.make_password_link(uuid,uuid,text) from public,ano
 grant execute on function public.make_password_link(uuid,uuid,text) to authenticated;
 
 -- Whether a password link can still be used, with the Company, the Member's name and their email, for the page to show
--- before its form (the email goes in the form for the browser's password manager). It reads and writes nothing else,
--- so opening the page (or a link preview fetching it) never uses the link up.
-create function public.password_link_open(link_hash text) returns table(company text, person_name text, email text)
+-- before its form (the email goes in the form for the browser's password manager), and whether the account has a
+-- verified authenticator: a password link never goes around the second step (Omar, #954), so the page then asks for its
+-- code and the server checks it before the link is spent. It reads and writes nothing else, so opening the page (or a
+-- link preview fetching it) never uses the link up.
+create function public.password_link_open(link_hash text) returns table(company text, person_name text, email text, two_step boolean)
 language sql stable security definer set search_path='' as $function$
- select c.name,p.name,u.email::text from public.company_links l
+ select c.name,p.name,u.email::text,exists(select 1 from auth.mfa_factors f where f.user_id=l.person_id and f.status='verified') from public.company_links l
   join public.companies c on c.id=l.company_id
   join public.people p on p.id=l.person_id
   join auth.users u on u.id=l.person_id

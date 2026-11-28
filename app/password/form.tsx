@@ -5,8 +5,9 @@ import { setupCodeFromHash } from '@/lib/setup-link.mjs';
 import { Button } from '@/components/paperclip/ui/button';
 import { Input } from '@/components/paperclip/ui/input';
 const onHashChange=(changed:()=>void)=>{ window.addEventListener('hashchange',changed); return ()=>window.removeEventListener('hashchange',changed); };
-export type PasswordLinkInvalid='passwordTooShort'|'passwordsDoNotMatch';
-type Checked={code:string,state:'open'|'refused',company?:string,person?:string,email?:string};
+export type PasswordLinkInvalid='passwordTooShort'|'passwordsDoNotMatch'|'passwordNeedsVerificationCode'|'passwordLinkCodeRefused';
+export const passwordLinkInvalid:readonly string[]=['passwordTooShort','passwordsDoNotMatch','passwordNeedsVerificationCode','passwordLinkCodeRefused'];
+type Checked={code:string,state:'open'|'refused',company?:string,person?:string,email?:string,twoStep?:boolean};
 
 // A password link's page (#954, ADR 0019). Its secret sits after `#`, so the page reads it from the fragment and sends
 // it only in a request body. It first asks the server whether the link is open, and for whom; that check changes
@@ -24,8 +25,8 @@ export default function PasswordLinkForm({invalid}:{invalid?:PasswordLinkInvalid
   body.set('check','1');
   fetch('/password/submit',{method:'POST',body}).then(async response=>{
    if(!response.ok) return null;
-   const answer=await response.json().catch(()=>null) as {company?:unknown,person?:unknown,email?:unknown}|null;
-   return answer&&typeof answer.company==='string'&&answer.company&&typeof answer.person==='string'&&typeof answer.email==='string'?{company:answer.company,person:answer.person,email:answer.email}:null;
+   const answer=await response.json().catch(()=>null) as {company?:unknown,person?:unknown,email?:unknown,twoStep?:unknown}|null;
+   return answer&&typeof answer.company==='string'&&answer.company&&typeof answer.person==='string'&&typeof answer.email==='string'?{company:answer.company,person:answer.person,email:answer.email,twoStep:answer.twoStep===true}:null;
   },()=>null).then(open=>{
    if(current) setChecked(open?{code,state:'open',...open}:{code,state:'refused'});
   });
@@ -43,6 +44,8 @@ export default function PasswordLinkForm({invalid}:{invalid?:PasswordLinkInvalid
   <label className="block text-xs text-muted-foreground">{t('newPassword')}<Input className="field max-md:min-h-11" dir="ltr" name="password" type="password" autoComplete="new-password" required aria-describedby="link-password-rule"/></label>
   <p className="text-xs text-muted-foreground" id="link-password-rule">{t('passwordTooShort')}</p>
   <label className="block text-xs text-muted-foreground">{t('confirmPassword')}<Input className="field max-md:min-h-11" dir="ltr" name="confirm" type="password" autoComplete="new-password" required/></label>
+  {/* With a verified authenticator the server checks its code before it spends the link (Omar, #954). */}
+  {checked.twoStep && <label className="block text-xs text-muted-foreground">{t('verificationCode')}<Input className="field max-md:min-h-11" dir="ltr" name="verification" inputMode="numeric" autoComplete="one-time-code" required/></label>}
   {invalid && <p role="alert">{t(invalid)}</p>}
   <Button className="w-full max-md:min-h-11" type="submit" disabled={pending}>{t('passwordLinkSave')}</Button>
  </form>;

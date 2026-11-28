@@ -8468,11 +8468,11 @@ ALTER FUNCTION public.password_link_allowed(maker uuid, person uuid) OWNER TO po
 -- Name: password_link_open(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.password_link_open(link_hash text) RETURNS TABLE(company text, person_name text, email text)
+CREATE FUNCTION public.password_link_open(link_hash text) RETURNS TABLE(company text, person_name text, email text, two_step boolean)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
- select c.name,p.name,u.email::text from public.company_links l
+ select c.name,p.name,u.email::text,exists(select 1 from auth.mfa_factors f where f.user_id=l.person_id and f.status='verified') from public.company_links l
   join public.companies c on c.id=l.company_id
   join public.people p on p.id=l.person_id
   join auth.users u on u.id=l.person_id

@@ -19,5 +19,6 @@ select json_build_object(
  'server_opens_and_spends',(select bool_and(has_function_privilege('service_role',fn,'execute') and not has_function_privilege('authenticated',fn,'execute') and not has_function_privilege('anon',fn,'execute'))
   from unnest(array['public.password_link_open(text)','public.claim_password_link(text)']) fn),
  'claim_locks_first',pg_get_functiondef('public.claim_password_link(text)'::regprocedure) ~ 'secret_hash=link_hash[^;]*for update',
+ 'page_asks_second_step',position('auth.mfa_factors' in pg_get_functiondef('public.password_link_open(text)'::regprocedure))>0,
  'claim_ends_sessions',position('delete from auth.sessions' in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0
 );
