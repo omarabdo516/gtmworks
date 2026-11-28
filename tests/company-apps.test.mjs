@@ -1,5 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 import { withDriver, engineServing } from './engine-records.mjs';
 import { provideProfile } from '../lib/engine/agents.mjs';
 import { readApps, testApp, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/engine/apps.mjs';
@@ -472,6 +476,80 @@ test('Test probes a new server without leaving it in the profile', async () => {
   assert.equal(result.body.state,'connected');
   assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'the profile is unchanged');
   assert.deepEqual(omar.logged,[],'a probe is not a connect');
+ } finally { await fake.close(); }
+});
+
+// #947: a server that was added but did not answer comes back with the Engine's own reason, never the token pasted in.
+test('a server the Engine cannot reach answers with the Engine’s own reason, and never the token that was pasted', async () => {
+ const fake=await engineServing(company);
+ try {
+  makeProfile(fake,companyProfile(company));
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  const answered='Unsupported MCP-Protocol-Version: 2025-11-25';
+  fake.settings.appErrors['my-crm']=answered;
+  const add=(extra={})=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none',...extra});
+  assert.deepEqual(await add(),{status:200,body:{key:'my-crm',state:'attention',reason:answered}},'Add carries the reason');
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'my-crm',action:'connect'}),{status:200,body:{status:'attention',reason:answered}},'the one-press connect carries it too');
+  // A probe (Test) answers the same reason for a server it never leaves behind.
+  fake.settings.appErrors['my-probe-crm_probe']=answered;
+  assert.deepEqual(await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My Probe CRM',url:'https://probe.example/mcp',kind:'none'}),{status:200,body:{key:'my-probe-crm',state:'attention',tools:[],reason:answered}});
+  // A token pasted for a server the Engine echoes back leaves as [redacted]: Add, the one-press connect and Test alike.
+  const token='header.payload.signature-value';
+  const echoed=`Bearer ${token} refused`;
+  fake.settings.appErrors['token-crm']=echoed;
+  const added=await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'Token CRM',url:'https://token-crm.example/mcp',kind:'header',token});
+  assert.deepEqual(added,{status:200,body:{key:'token-crm',state:'attention',reason:'Bearer [redacted] refused'}});
+  assert.equal(JSON.stringify(added).includes(token),false,'the token never reaches the browser');
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'token-crm',action:'connect',token}),{status:200,body:{status:'attention',reason:'Bearer [redacted] refused'}},'the one-press connect redacts it too');
+  fake.settings.appErrors['probe-token-crm_probe']=echoed;
+  assert.deepEqual(await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'Probe Token CRM',url:'https://probe.example/mcp',kind:'header',token}),{status:200,body:{key:'probe-token-crm',state:'attention',tools:[],reason:'Bearer [redacted] refused'}},'Test redacts it too');
+  // A token longer than the card's line, alone in one word: the word is dropped whole, so no prefix of it can leave.
+  const long='b'.repeat(300);
+  fake.settings.appErrors['long-token-crm']=long;
+  const bare=await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'Long Token CRM',url:'https://long-token-crm.example/mcp',kind:'header',token:long});
+  assert.deepEqual(bare,{status:200,body:{key:'long-token-crm',state:'attention'}},'no reason line, and no token prefix');
+  assert.equal(JSON.stringify(bare).includes(long.slice(0,60)),false,'no part of the token reaches the browser');
+  // The API accepts a token with trailing spaces; the reason is flattened before it is shown, so the token's trimmed form
+  // is the one taken out.
+  const spaced='spaced-token ';
+  fake.settings.appErrors['spaced-token-crm']=`Bearer ${spaced} refused`;
+  const flattened=await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'Spaced Token CRM',url:'https://spaced-token-crm.example/mcp',kind:'header',token:spaced});
+  assert.deepEqual(flattened,{status:200,body:{key:'spaced-token-crm',state:'attention',reason:'Bearer [redacted] refused'}},'a token with a trailing space is redacted after the reason is flattened');
+  assert.equal(flattened.body.reason.includes('spaced-token'),false,'no part of it reaches the browser');
+ } finally { await fake.close(); }
+});
+
+// The route hands the service's answer on unchanged, the Engine's reason included (#947).
+test('the own-servers route answers the browser with the Engine’s reason the service gave', async () => {
+ const reason='Unsupported MCP-Protocol-Version: 2025-11-25';
+ const sent=[]; const exports={};
+ const {outputText}=ts.transpileModule(readFileSync('app/api/company-servers/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ESNext,esModuleInterop:true}});
+ const require=createRequire(import.meta.url);
+ const imports={'@/lib/supabase':{supabase:async()=>({auth:{getUser:async()=>({data:{user:{id:owner}}})}})},
+  '@/lib/app-origin.mjs':{crossSiteWrite:()=>false},
+  '@/lib/route-permissions.mjs':{routeAllowed:async()=>true},
+  '@/lib/company-servers.mjs':{changeCompanyServer:async(db,request)=>{ sent.push(request); return {status:200,body:{key:'my-crm',state:'attention',reason}}; }}};
+ runInNewContext(outputText,{exports,require:name=>imports[name]??require(name),URL,URLSearchParams,Error,Response,Request,Headers,process});
+ const {NextRequest}=require('next/server');
+ const response=await exports.POST(new NextRequest('http://app.test/api/company-servers',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none'})}));
+ assert.deepEqual(await response.json(),{key:'my-crm',state:'attention',reason});
+ assert.equal(response.headers.get('cache-control'),'no-store');
+ assert.deepEqual(sent.map(request=>[request.company,request.agent,request.action,request.name]),[[company,lead,'add','My CRM']]);
+});
+
+// #947: a catalogue app's declared field is often a key too, and the reason scrubs the values typed with the token.
+test('a catalogue app’s field value never reaches the browser in a reason', async () => {
+ const fake=await engineServing(company);
+ try {
+  makeProfile(fake,companyProfile(company));
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  fake.settings.catalog.push('alltrails');
+  fake.settings.catalogEnv.alltrails=[{name:'ALLTRAILS_TOKEN',prompt:'Token',required:true}];
+  const secret='field-secret-value';
+  fake.settings.appErrors['alltrails']=`Invalid key ${secret} refused`;
+  const answered=await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'alltrails',action:'connect',fields:{ALLTRAILS_TOKEN:secret}});
+  assert.deepEqual(answered,{status:200,body:{status:'attention',reason:'Invalid key [redacted] refused'}});
+  assert.equal(answered.body.reason.includes(secret),false,'the field value never reaches the browser');
  } finally { await fake.close(); }
 });
 

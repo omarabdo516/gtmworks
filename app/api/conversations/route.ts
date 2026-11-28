@@ -15,6 +15,7 @@ import { discardConversationFiles, keepConversationFiles, type ConversationFiles
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { conversationRecord } from '@/lib/conversation-record';
 import { conversationMessagesPage, conversationUsage } from '@/lib/conversation-messages';
+import { unarchiveOnWrite } from '@/lib/conversation-session-marks';
 import { conversationSteps } from '@/lib/conversation-steps';
 import { agentAppStates } from '@/lib/company-app-items';
 
@@ -50,12 +51,20 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  // the key still holds (#727).
  const files:ConversationFiles={company,conversation,messageKey,attempt:randomUUID()};
  const keepFiles=chosen.length?()=>keepConversationFiles(db,service(),{...files,files:chosen}):undefined;
- const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.agent as string|undefined,message:body.message,keepFiles,later:after});
+ // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer,
+ // with the send's own work and before its Run starts, so the stored turn's acknowledgement never waits on the Engine.
+ // An Engine that does not answer leaves it in the archive, and the message is sent all the same.
+ const clearing=unarchiveOnWrite(db,company,conversation).catch(()=>null);
+ let unarchived:Promise<void>|null=null;
+ const unarchive=()=>unarchived??=clearing.then(clear=>clear?.()).catch(()=>{});
+ const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.agent as string|undefined,message:body.message,keepFiles,later:work=>after(async()=>{ await unarchive(); await work(); })});
  // Refused before the turn was stored: nothing was, so the images kept for it go too, and the words go back to the box.
  if('code' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuseFor(sent.code); }
  if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files); return refuse(sent.error,sent.status); }
  // A note to a person and an answer to a question store no turn, so nothing can sit under one: their images go.
  if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files);
+ // A send that starts no Run (a note to a Member, an answer) is a write all the same: it clears the mark after the answer.
+ after(()=>unarchive());
  return reply(sent);
 }
 

@@ -61,14 +61,14 @@ test('a Conversation of 2 000 messages opens on its last 50, and scrolling back 
  const rows=page.locator('.msg');
  await expect(rows).toHaveCount(50,{timeout:20000});
  await expect(rows.last()).toContainText('Reply 1998');
- await expect(page.getByText('Message 1950')).toBeVisible();
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 1950')).toBeVisible();
  // The 50 before, then the 50 before that, and on until the first: each page starts where the last one ended.
  for(let count=100;count<=2000;count+=50) {
   // Setting the top and dispatching the scroll makes the read start even when the element was already at the top.
   await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
   await expect(rows).toHaveCount(count,{timeout:20000});
  }
- await expect(page.getByText('Message 0',{exact:true})).toBeVisible();
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 0',{exact:true})).toBeVisible();
 });
 
 test('the frame, the Agent and the composer are in the first response; the messages arrive on a request of their own',async({page})=>{
@@ -175,13 +175,13 @@ test('a tab that comes back keeps the pages the person scrolled back through',as
  await expect(rows).toHaveCount(50,{timeout:20000});
  await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
  await expect(rows).toHaveCount(100,{timeout:20000});
- await expect(page.getByText('Message 100')).toBeVisible();
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 100')).toBeVisible();
  // Past the debounce, a tab that comes back reads the newest page again. It merges into what is drawn: the page the
  // person scrolled back to stays, and so does its place.
  await page.waitForTimeout(1100);
  await page.evaluate(()=>{ window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
  await expect(rows).toHaveCount(100,{timeout:15000});
- await expect(page.getByText('Message 100')).toBeVisible();
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 100')).toBeVisible();
 });
 
 test('a reply split across the page boundary is drawn once',async({page})=>{
@@ -216,19 +216,19 @@ test('a tab that comes back after more than a page replaces the window, never le
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  await open(page,conversation);
  await expect(page.locator('.msg')).toHaveCount(50,{timeout:20000});
- await expect(page.getByText('Message 150',{exact:true})).toBeVisible();
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 150',{exact:true})).toBeVisible();
  // Sixty raw messages arrive while the tab is away: the newest page no longer overlaps what was drawn, so that page is
  // replaced rather than joined to it with a gap (ADR 0030's last read still holds when the Engine does not answer).
  for(let n=0;n<30;n++) fake.settings.sessions.get(session)!.messages.push(user(5000+n*2,`New ${n*2}`),replied(5001+n*2,`New ${n*2+1}`));
  // Scrolling back first reads a window shifted by the new messages: the newer tail is not prepended, the older page
  // before the drawn one is.
  await page.locator('.transcript').evaluate(element=>{ element.scrollTop=0; element.dispatchEvent(new Event('scroll')); });
- await expect(page.getByText('Message 112',{exact:true})).toBeVisible({timeout:20000});
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 112',{exact:true})).toBeVisible({timeout:20000});
  await expect(page.getByText('New 10',{exact:true})).toHaveCount(0);
  await page.waitForTimeout(1100);
  await page.evaluate(()=>{ window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
  await expect(page.getByText('New 10',{exact:true})).toBeVisible({timeout:15000});
- await expect(page.getByText('Message 150',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('list',{name:'Messages'}).getByText('Message 150',{exact:true})).toHaveCount(0);
 });
 
 test('with the Engine stopped after one good read, the Conversation keeps what it last read and says it could not refresh',async({page})=>{

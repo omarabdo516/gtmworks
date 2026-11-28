@@ -9,6 +9,7 @@ import '@/app/globals.css';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }), usePathname: () => '/c/rs/home', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/conversation-archive', () => ({ useConversationArchive: () => ({ archive: vi.fn(), confirm: null }) }));
+vi.mock('@/app/conversation-rename', () => ({ useConversationRename: () => ({ rename: vi.fn(), dialog: null }) }));
 
 const drawn = (company: string, chats: { id: string, title: string, at: string }[] | null, person = 'p-1') => <LanguageProvider language="en"><SidebarSearchProvider>
  <RecentChats person={person} slug="rs" company={company} chats={chats} lead="Lead"/>

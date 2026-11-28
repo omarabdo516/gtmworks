@@ -8,9 +8,8 @@ import { uuid } from '@/lib/conversations';
 import type { SidebarNow } from '@/app/sidebar-live';
 import { readScreenHands } from '@/lib/agent-screen.mjs';
 import { ReadFailed } from '@/lib/read-failed';
-import { chatsOf, recentChats } from '@/lib/sidebar-chats';
+import { recentChats } from '@/lib/sidebar-chats';
 import { approvalQueue } from '@/lib/approval-queue';
-import { getI18n } from '@/lib/i18n-server';
 
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 
@@ -32,12 +31,12 @@ export async function GET(request:NextRequest) {
   const allowed=await routePermission(db,'app/api/sidebar/route.ts','GET',company,user.id);
   if(allowed==='failed') return reply({error:'channelNotRead'},503);
   if(allowed==='refused') return reply({error:'channelNotFound'},404);
-  const [channels,faces,handed,chats,waiting,{t,language}]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company),readScreenHands(db,company),
-   recentChats(db,company),approvalQueue(db,company,user.id).then(({rows})=>rows,()=>undefined),getI18n()]);
+  const [channels,faces,handed,chats,waiting]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company),readScreenHands(db,company),
+   recentChats(db,company),approvalQueue(db,company,user.id).then(({rows})=>rows,()=>undefined)]);
   // Any of the three that could not be read is an error: the sidebar keeps what it shows, never idle faces or no steps.
   // Chats or a count that could not be read are left out, and the sidebar keeps the ones it shows.
   if(!faces.available||!handed) return reply({error:'channelNotRead'},503);
-  return reply({channels,agents:faces.states,handed,chats:chats&&chatsOf(chats,t,language),approvals:waiting} satisfies SidebarNow);
+  return reply({channels,agents:faces.states,handed,chats,approvals:waiting} satisfies SidebarNow);
  } catch(error) {
   // A read that failed answers an error (#776): the sidebar keeps the Conversations and channels it shows.
   if(error instanceof ReadFailed) return reply({error:'channelNotRead'},503);

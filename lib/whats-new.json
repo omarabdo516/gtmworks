@@ -1,4 +1,16 @@
 [
+ {
+  "issue": 947,
+  "date": "2026-11-28",
+  "en": { "title": "A tool that fails its test says why", "body": "When a tool you added does not answer the engine, its page now says so and shows the engine's own reason under the line, in the direction it was written, instead of guessing at the address or the token." },
+  "ar": { "title": "الأداة اللي اختبارها بيفشل بقت تقول السبب", "body": "لما أداة انت ضفتها مردّتش على المحرك، صفحتها بقت تقول كده وبتعرض سبب المحرك نفسه تحت السطر، في اتجاهه، بدل ما تخمّن في العنوان أو التوكن." }
+ },
+{
+  "issue": 881,
+  "date": "2026-11-28",
+  "en": { "title": "Rename a Conversation, and lists that never wait", "body": "The sidebar and All conversations list your Conversations from the Agent’s Engine, by their titles or, before they have one, by their first words, and keep what they last read so moving between pages never waits; rename a Conversation from its menu, and archiving or writing in it is kept on the Engine." },
+  "ar": { "title": "غيّر اسم المحادثة، والقوايم مبتستناش", "body": "الشريط الجانبي و«كل المحادثات» بيعرضوا محادثاتك من محرك الوكيل، بعناوينها أو بأول كلامها لحد ما يبقى ليها عنوان، وبيحتفظوا بآخر قراية عشان التنقل بين الصفحات ميستناش؛ وتقدر تغيّر اسم المحادثة من القايمة بتاعتها، والأرشفة أو الكتابة فيها بتتحفظ في المحرك." }
+},
 {
   "issue": 954,
   "date": "2026-11-28",
