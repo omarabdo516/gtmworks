@@ -98,7 +98,7 @@ export function noteSession(company:string,profile:string,session:string,change:
 
 /** A session of the Company's as the last good read holds it, or null when it holds none: a Conversation's own page
  * draws its title and archived mark from it, never waiting on the Engine (ADR 0030). */
-export function heldSession(company:string,session:string):SessionListed|null {
+function heldSession(company:string,session:string):SessionListed|null {
  for(const [key,kept] of memory) if(key.startsWith(`${company}:`)&&kept.sessions.has(session)) return kept.sessions.get(session)!;
  return null;
 }
