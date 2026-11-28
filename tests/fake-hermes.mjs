@@ -627,6 +627,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   archivedSessions:/** @type {Set<string>} */(new Set()),
   sessionMarks:/** @type {{profile:string,session:string,body:any,authorization?:string}[]} */([]),
   sessionMarkStatus:/** @type {number|null} */(null),
+  // Each session's title on a profile ("profile:session", #881), as the Engine titles it after its first turn or a
+  // person renames it; a session with none is listed untitled (title null) and drawn by its preview. A title another
+  // session of the profile already holds is refused, as hermes_state set_session_title refuses a duplicate.
+  sessionTitles:/** @type {Map<string,string>} */(new Map()),
+  // The status the list of a profile's sessions answers with instead (#881): an Engine busy or stopped.
+  sessionListStatus:/** @type {number|null} */(null),
+  // Sessions the list leaves out while the Engine still holds them (#881): one that moved to a page already read while a
+  // paged list was taken.
+  listSkips:/** @type {Set<string>} */(new Set()),
   // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value. A key in revealFail is
   // answered 500, as an Engine that could not read the .env.
   reveals:/** @type {{profile:string,key:string}[]} */([]),revealFail:/** @type {Set<string>} */(new Set()),
@@ -840,8 +849,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(Object.keys(body).some(field=>!['title','end_reason','pinned','archived','hidden','unread'].includes(field))) return send(response,400,{error:{message:'Unsupported session fields',code:'unsupported_session_field'}});
     const kept=settings.sessions.get(id)?.profile===owner||settings.runs.some(run=>run.session===id&&run.profile===owner);
     if(!kept) return send(response,404,{error:{message:`Session not found: ${id}`,code:'session_not_found'}});
+    if('title' in body) {
+     const title=String(body.title??'').trim();
+     if(title.length>100||title&&[...settings.sessionTitles].some(([held,taken])=>taken===title&&held!==`${owner}:${id}`&&held.startsWith(`${owner}:`))) return send(response,400,{error:{message:`Title '${title}' is already in use`,code:'invalid_title'}});
+     if(title) settings.sessionTitles.set(`${owner}:${id}`,title); else settings.sessionTitles.delete(`${owner}:${id}`);
+    }
     if(body.archived===true) settings.archivedSessions.add(`${owner}:${id}`); else if(body.archived===false) settings.archivedSessions.delete(`${owner}:${id}`);
-    return send(response,200,{object:'hermes.session',session:{id,archived:settings.archivedSessions.has(`${owner}:${id}`)}});
+    return send(response,200,{object:'hermes.session',session:{id,title:settings.sessionTitles.get(`${owner}:${id}`)??null,archived:settings.archivedSessions.has(`${owner}:${id}`)}});
    }
    const runPath=request.url.match(/^\/p\/[^/]+\/v1\/runs(?:\/([^/]+))?$/);
    if(runPath&&request.method==='POST'&&!runPath[1]) {
@@ -1127,6 +1141,38 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(settings.transcriptionStatus!==200) return send(response,settings.transcriptionStatus,{detail:settings.transcriptionDetail});
     return send(response,200,{ok:true,transcript:settings.transcriptionTranscript,provider:'local'});
    }
+   // The list of a profile's sessions (#881; hermes_cli/web_routers/sessions.py get_sessions): newest activity first
+   // with `order=recent`, `archived` exclude (the default), only or include, at most 100 a page from `offset`, with the
+   // total. Each row is the session's id, its title, a preview of its first message (the first 63 characters, as the
+   // Engine's _sql_preview_raw cuts it), its last activity and start in seconds, its message count and archived mark. A
+   // profile the Engine does not know is 404.
+   if(url.pathname==='/api/sessions'&&request.method==='GET') {
+    if(settings.sessionListStatus) return send(response,settings.sessionListStatus,{detail:'Session store is busy (disk I/O or lock). Retry; the list was not cleared.'});
+    const profile=url.searchParams.get('profile')||'default';
+    if(profile!=='default'&&!settings.profiles.has(profile)&&![...settings.sessions.values()].some(session=>session.profile===profile)&&!settings.runs.some(run=>run.profile===profile&&!settings.unknownProfiles.includes(profile))) return send(response,404,{detail:`Profile '${profile}' not found`});
+    const limit=Number(url.searchParams.get('limit')??20); const offset=Number(url.searchParams.get('offset')??0); const archived=url.searchParams.get('archived')??'exclude';
+    if(!Number.isInteger(limit)||limit<0||limit>100) return send(response,422,{detail:'limit'});
+    if(!['exclude','only','include'].includes(archived)) return send(response,400,{detail:'archived must be one of: exclude, only, include'});
+    // A Run on a session makes it, as the Engine stores a Run's turns in its session: one this fake holds no messages
+    // for is listed from its Runs, the first one's input as its first words and their starts as its activity.
+    const held=new Map([...settings.sessions].filter(([,session])=>session.profile===profile));
+    for(const run of settings.runs) if(run.session&&(run.profile||'default')===profile&&!held.has(run.session)) held.set(run.session,{profile,messages:[]});
+    for(const [id,session] of held) if(!session.messages.length) {
+     const ran=settings.runs.filter(run=>run.session===id);
+     held.set(id,{...session,messages:ran.map(run=>({role:'user',content:inputText(run.input),timestamp:Number(run.created)||0}))});
+    }
+    const rows=[...held].map(([id,session])=>{
+     const times=session.messages.map(message=>Number(message.timestamp)).filter(Number.isFinite);
+     const started=session.started_at??times[0]??0;
+     const first=session.messages.find(message=>message.role==='user'&&message.display_kind!=='hidden');
+     const words=typeof first?.content==='string'?first.content.replace(/\s+/g,' ').trim():'';
+     return {id,title:settings.sessionTitles.get(`${profile}:${id}`)??null,preview:words.length>63?`${words.slice(0,63)}...`:words,started_at:started,
+      last_active:Math.max(started,...times),message_count:session.messages.length,archived:settings.archivedSessions.has(`${profile}:${id}`),pinned:false};
+    }).filter(row=>(archived==='include'||(archived==='only')===row.archived)&&!settings.listSkips.has(row.id));
+    if(url.searchParams.get('order')==='recent') rows.sort((a,b)=>b.last_active-a.last_active||b.started_at-a.started_at||(a.id<b.id?1:-1));
+    else rows.sort((a,b)=>b.started_at-a.started_at||(a.id<b.id?1:-1));
+    return send(response,200,{sessions:rows.slice(offset,offset+limit),total:rows.length,limit,offset,storage:{}});
+   }
    const sessionMessages=url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
    if(sessionMessages&&request.method==='GET') {
     const id=decodeURIComponent(sessionMessages[1]); const found=settings.sessions.get(id);
@@ -1161,8 +1207,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    const sessionDetail=url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
    if(sessionDetail&&request.method==='GET') {
-    const id=decodeURIComponent(sessionDetail[1]); const found=settings.sessions.get(id);
-    if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
+    const id=decodeURIComponent(sessionDetail[1]); const asked=url.searchParams.get('profile')||'default';
+    // A Run on a session makes it (#881), as on the list.
+    const ran=settings.runs.find(run=>run.session===id&&(run.profile||'default')===asked);
+    const found=settings.sessions.get(id)??(ran&&{profile:asked,messages:[]});
+    if(!found||found.profile!==asked) return send(response,404,{detail:'Session not found'});
     return send(response,200,{id,profile:found.profile,started_at:found.started_at??Date.now()/1000,message_count:found.messages.length,input_tokens:found.input_tokens??0,output_tokens:found.output_tokens??0});
    }
    // A profile list that answers with this status instead (an Engine busy or going away).
@@ -1180,6 +1229,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(name==='default'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) return send(response,400,{detail:name==='default'?'Cannot delete the default profile (~/.hermes).':`Invalid profile name '${name}'`});
     if(!settings.profiles.has(name)) return send(response,404,{detail:`Profile '${name}' does not exist.`});
     settings.profiles.delete(name); settings.unknownProfiles.push(name);
+    // The profile's sessions go with its home (#881): its state.db is in it.
+    for(const [id,session] of settings.sessions) if(session.profile===name) settings.sessions.delete(id);
     const path=`/opt/data/profiles/${name}`;
     return send(response,200,settings.settlementPending?{ok:true,path,identity_settled:false,settlement_pending:true,retry_command:`hermes profile delete ${name}`}:{ok:true,path});
    }

@@ -18,6 +18,8 @@ insert into decisions
   'public.archive_conversations(uuid,uuid[])','public.restore_conversations(uuid,uuid[])','public.restore_written_conversation()',
   'public.conversation_sessions_to_mark()','public.conversation_session_marked(uuid,boolean)','public.conversation_session_missing(uuid,boolean)',
   'public.screen_hands(uuid)']) fn
+ union all select 'public.log_conversations_archived(uuid,uuid[],boolean)','asks','logs an archive or a restore its person made on the session (#881) and clears the old record''s mark by archived_at, so the worker never writes the session''s mark back'
+ union all select fn,'exempt','the worker''s slow drift check (#881): it lists and forgets the rows whose sessions are gone from the Engine, archived or not, and lists none to a person' from unnest(array['public.conversation_drift()','public.forget_conversations(uuid,text[])']) fn
  union all select 'public.conversation_sessions_later(uuid[])','exempt','the worker''s: it puts off the Engine marks of the Conversations the worker names, whichever way they go, and lists none'
  union all select 'public.log_conversation_archive(uuid,boolean,uuid)','exempt','inside the database only: it writes the log row of the one Conversation an archive, a restore or a message just changed, and lists none'
  union all select fn,'exempt','answers for, or writes in, the one Conversation its caller names, archived or not: an archived Conversation still opens and reads as it was, and a message its person writes there brings it back (restore_written_conversation); it lists no Conversations' from unnest(array[

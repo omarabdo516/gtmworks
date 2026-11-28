@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
-import { chatsOf, recentChats } from '@/lib/sidebar-chats';
+import { recentChats } from '@/lib/sidebar-chats';
 import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
 import { Birth } from '@/components/face-moments';
 import ApprovalsCount from './approvals-count';
@@ -69,10 +69,9 @@ type Company = {id:string,slug:string,name:string};
 export default async function Shell({company,companies,personId,personName,role,owner=false,manage=false,canWrite=false,children,approvalCount=0}:{company?:Company,companies:Company[],personId:string,personName:string,role:string,owner?:boolean,manage?:boolean,canWrite?:boolean,children:ReactNode,approvalCount?:number|Promise<number|undefined>}) { const {t,theme,language}=await getI18n();
  const slug=company?.slug;
  const id=company?.id;
- const [[agents,states],conversations,workMode,channels,looks,handed]=await sidebarReads(id);
+ const [[agents,states],chats,workMode,channels,looks,handed]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
- const chats=conversations&&chatsOf(conversations,t,language);
  const asksForAgents=writer&&!owner;
  // What the sidebar already knows of the open page's Agent (app/shell-place): Lead's chat at /chat, and the Agent of each
  // listed Conversation.
