@@ -92,30 +92,6 @@ test('a reply shown later never shows a tag: what is left of one is named as a f
  assert.deepEqual(shownReply('Plan for Social MEDIA: tips, posts and ads.'),{body:'Plan for Social MEDIA: tips, posts and ads.',missed:[]},'words after the tag\'s name in a sentence are no file');
 });
 
-test('a Conversation\'s finished Run is closed with the files its reply hands over, kept in the Conversation\'s folder',async()=>{
- const { closeOpenRuns }=await import('../lib/conversation-runs.mjs');
- const conversation='c7080000-0000-0000-0000-000000000002';
- const open={message:1,company,conversation,run:'run_14e4b42663b646029c0198fd2d50badb',person:'p',profile};
- const closes=[]; const uploads=[];
- const db={
-  rpc:async(name,args)=>{
-   if(name==='open_conversation_runs') return {data:closes.length?[]:[open],error:null};
-   if(name==='track_run_question'||name==='track_run_permission') return {data:[],error:null};
-   if(name==='close_conversation_run') { closes.push(args); return {data:true,error:null}; }
-   return {data:null,error:{message:`unexpected ${name}`}};
-  },
-  storage:{from:bucket=>({upload:async(path,body,options)=>{ uploads.push({bucket,path,type:options.contentType,upsert:options.upsert}); return {error:null}; }})},
- };
- const engine={read:async()=>({state:'completed',reply:`تمام، التقرير أهو.\nMEDIA:/work/${profile}/report/market.pdf\nMEDIA:/opt/data/auth.json`,session:'s1',usage:null,toolCalls:[]})};
- const fake=await workFolder();
- try { assert.equal(await withEngineContract(()=>/** @type {any} */(engine),()=>closeOpenRuns(db,{conversation})),1); } finally { await fake.close(); }
- assert.equal(closes.length,1);
- assert.equal(closes[0].reply,'تمام، التقرير أهو.');
- assert.deepEqual(closes[0].missed_files,['auth.json']);
- assert.deepEqual(closes[0].reply_files.map(file=>file.name),['market.pdf']);
- assert.deepEqual(uploads,[{bucket:'creatives',path:replyFilePath({company,folder:'conversations',scope:conversation},open.run,0),type:'application/pdf',upsert:true}]);
-});
-
 test('a channel reply is closed with its file, kept in the channel\'s folder for every Member of it',async()=>{
  const { driveChannelRuns }=await import('../lib/channel-runs.mjs');
  const channel='69000000-0000-0000-0000-000000000001'; const closes=[]; const uploads=[];

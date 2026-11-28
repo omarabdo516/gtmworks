@@ -68,10 +68,6 @@
       {
         "file": "tests/conversations.spec.ts",
         "test": "A Contributor starts a conversation and gets the reply; nobody else reads it"
-      },
-      {
-        "file": "tests/conversation-runs-roles.test.mjs",
-        "test": "a Contributor's message goes to the agent's pinned profile, and a refused Viewer reaches no engine"
       }
     ]
   }

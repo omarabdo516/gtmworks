@@ -355,7 +355,7 @@ begin
    union all select unnest(array[p.agent_id, p.proposed_by]) from public.agent_change_proposals p
     where w.kind='agent_change' and p.id=w.id and p.company_id=c
    union all select r.agent_id from public.agent_access_requests r where w.kind='agent_access' and r.id=w.id and r.company_id=c
-  ) x where x.agent is not null and w.kind not in ('approval','mention'));
+  ) x where x.agent is not null and w.kind not in ('approval','mention','question','hand','permission'));
  return query
  select a.agent,
   case when s.waiting then 'waiting' when a.working then 'working' when f.failed_at is not null then 'stuck'
@@ -567,12 +567,10 @@ CREATE FUNCTION public.agent_open_run(c uuid, agent uuid) RETURNS TABLE(started_
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
- select m.created_at,case when cv.person_id=auth.uid() then cv.id end
+ select cv.last_message_at,case when cv.person_id=auth.uid() then cv.id end
  from public.conversations cv
- cross join lateral public.conversation_open_run(cv.id) o
- join public.conversation_messages m on m.id=o.message
- where cv.company_id=c and cv.agent_id=agent and public.can_see_agent(c,agent)
- order by m.created_at desc,m.id desc limit 1;
+ where cv.company_id=c and cv.agent_id=agent and cardinality(cv.open_runs)>0 and public.can_see_agent(c,agent)
+ order by cv.last_message_at desc,cv.id desc limit 1;
 $$;
 
 ALTER FUNCTION public.agent_open_run(c uuid, agent uuid) OWNER TO postgres;
@@ -1017,14 +1015,6 @@ begin
  ),
  -- The channels the reader is in, asked once each.
  my_channels as (select k.id from public.channels k where k.company_id=c and public.in_channel(k.id)),
- -- A Conversation's person's messages, each with whether its Run is still open (conversation_open_run's rule).
- asked as (
-  select cv.agent_id, m.created_at, m.run_id,
-   not exists(select 1 from public.conversation_messages r where r.conversation_id=m.conversation_id and r.author='agent' and r.run_id=m.run_id)
-   and not exists(select 1 from public.conversation_run_ends u where u.conversation_id=m.conversation_id and u.run_id=m.run_id)
-   and not exists(select 1 from public.agent_handovers h where h.conversation_id=m.conversation_id and h.run_id=m.run_id and h.answers_person) open
-  from chats cv join public.conversation_messages m on m.conversation_id=cv.id where m.author='person'
- ),
  channel_work as (
   select r.agent_id, r.message_id, r.ordinal, r.channel_id, r.created_at, r.closed_at, r.outcome from public.channel_runs r
   join seen_agents a on a.id=r.agent_id where r.company_id=c
@@ -1050,11 +1040,9 @@ begin
  ),
  -- Every fact of work, one row each: whether it is open, when it began, when it ended.
  facts as (
-  select agent_id, open, case when run_id is not null then created_at end began, null::timestamptz ended from asked
-  union all select cv.agent_id, false, null, e.recorded_at from chats cv join public.conversation_run_ends e on e.conversation_id=cv.id
-  -- A Conversation whose messages are the Engine's (#882): its row holds the Run it works on until that Run's end is seen,
-  -- and its last message is when that work began.
-  union all select cv.agent_id, true, cv.last_message_at, null from chats cv where cardinality(cv.open_runs)>0
+  -- A Conversation's row holds the Run it works on until that Run's end is seen, and its last message is when that work
+  -- began (#882).
+  select cv.agent_id, true open, cv.last_message_at began, null::timestamptz ended from chats cv where cardinality(cv.open_runs)>0
   union all select w.agent_id, w.outcome is null
     and not exists(select 1 from public.channel_runs q where q.message_id=w.message_id and q.outcome is null and q.ordinal<w.ordinal),
    w.created_at, w.closed_at from channel_work w
@@ -1070,12 +1058,7 @@ begin
  ),
  -- The ended Runs the reader can see, each where it ran.
  seen as (
-  select cv.agent_id, e.recorded_at at, e.outcome, cv.id conversation, null::uuid channel, null::bigint card
-   from chats cv join public.conversation_run_ends e on e.conversation_id=cv.id
-   where cv.person_id=reader
-    and not exists(select 1 from public.agent_handovers h where h.conversation_id=cv.id and h.run_id=e.run_id and h.answers_person)
-  union all
-  select w.agent_id, w.closed_at, w.outcome, null, w.channel_id, null from channel_work w join my_channels k on k.id=w.channel_id
+  select w.agent_id, w.closed_at at, w.outcome, null::uuid conversation, w.channel_id channel, null::bigint card from channel_work w join my_channels k on k.id=w.channel_id
    where w.outcome is not null
   union all
   select n.agent_id, n.closed_at, n.outcome, null, null, n.card_id from note_work n join seen_cards v on v.card_id=n.card_id
@@ -1091,9 +1074,10 @@ begin
  facts_of as (
   select a.id, a.created_at, w.working, w.started_at, w.worked_at, l.at ended_at, l.outcome,
    l.conversation, l.channel, l.card,
+   -- A Conversation's failure is followed once its person wrote after it: its last message is then later.
    case when l.at is null then false
-    when l.conversation is not null then exists(select 1 from public.conversation_messages m
-     where m.conversation_id=l.conversation and m.author='person' and m.created_at>l.at)
+    when l.conversation is not null then exists(select 1 from public.conversations v
+     where v.id=l.conversation and v.last_message_at>l.at)
     when l.channel is not null then exists(select 1 from public.channel_messages m
      where m.channel_id=l.channel and m.author='person' and m.created_at>l.at)
     else exists(select 1 from public.work_comments w
@@ -8527,38 +8511,18 @@ begin
  end if;
  select * into chosen from public.hermes_agents where id=agent and company_id=c;
  if not found or not public.agent_visible_to(c,auth.uid(),agent) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ if (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
+  raise exception 'conversationAddressedOnEngine' using errcode='22023';
+ end if;
  if existing.id is null then
-  -- A new Conversation starts on the Engine only in a Company switched over, and a message addressed to a Member is kept
-  -- as a note on the old record, as today.
-  if not coalesce((select o.engine_conversations from public.companies o where o.id=c),false)
-   or (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
-   return jsonb_build_object('state','old');
-  end if;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id,last_message_at)
    values(conversation,c,auth.uid(),agent,chosen.name,'gtmworks-'||gen_random_uuid()::text,now())
    returning * into existing;
   held := existing.hermes_session_id;
  else
-  -- Only a Conversation this path made is on the Engine: it has its session and nothing on the old record. Any other
-  -- (one the old record holds, or a row made without a session, such as the Owner's empty first Conversation) stays there,
-  -- but the one the main Agent opened in a Company switched over, which takes its session with its first send.
-  if existing.hermes_session_id is null and existing.lead_opening
-   and coalesce((select o.engine_conversations from public.companies o where o.id=c),false) then
-   update public.conversations set hermes_session_id='gtmworks-'||gen_random_uuid()::text where id=conversation
-    returning * into existing;
-  end if;
-  if existing.hermes_session_id is null
-   or exists(select 1 from public.conversation_messages m where m.conversation_id=conversation)
-   or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation)
-   or exists(select 1 from public.conversation_notes n where n.conversation_id=conversation) then
-   return jsonb_build_object('state','old');
-  end if;
-  -- A note to a Member has no place in an Engine session: it is refused, and the words stay in the box.
-  if (select a.person from public.conversation_addressee(c,message) a limit 1) is not null then
-   raise exception 'conversationAddressedOnEngine' using errcode='22023';
-  end if;
-  -- Writing in an archived Conversation brings it back, logged as the person's, as on the old record.
-  update public.conversations set last_message_at=greatest(last_message_at,now()),archived_at=null,archived_by=null
+  -- Writing in an archived Conversation brings it back, logged as the person's.
+  update public.conversations set hermes_session_id=coalesce(hermes_session_id,'gtmworks-'||gen_random_uuid()::text),
+   last_message_at=greatest(last_message_at,now()),archived_at=null,archived_by=null
    where id=conversation returning hermes_session_id into held;
   if existing.archived_at is not null then perform public.log_conversation_archive(conversation,false,auth.uid()); end if;
  end if;
@@ -8585,51 +8549,22 @@ declare lead public.hermes_agents; target uuid; written boolean;
 begin
  perform 1 from public.companies where id=c for update;
  if not found then return null; end if;
- if coalesce((select o.engine_conversations from public.companies o where o.id=c),false) then
-  written := exists(select 1 from public.conversations v where v.company_id=c and v.hermes_session_id is not null)
-   or exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
-   or exists(select 1 from public.conversation_run_reservations r where r.company_id=c);
-  select v.id into target from public.conversations v where v.company_id=c and v.lead_opening and v.person_id=person;
-  if found then return case when not written then target end; end if;
-  if written or exists(select 1 from public.conversations v where v.company_id=c and v.lead_opening) then return null; end if;
-  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then return null; end if;
-  select * into lead from public.hermes_agents a where a.company_id=c and a.is_default;
-  if not found then return null; end if;
-  -- The Owner's empty Conversation with it (first run makes one), else a new one under the given id.
-  select v.id into target from public.conversations v where v.company_id=c and v.person_id=person and v.agent_id=lead.id
-   and v.hermes_session_id is null and not exists(select 1 from public.conversation_messages m where m.conversation_id=v.id)
-   and not exists(select 1 from public.conversation_queued_turns q where q.conversation_id=v.id)
-   and not exists(select 1 from public.conversation_notes n where n.conversation_id=v.id)
-   order by v.id=conversation desc,v.created_at,v.id limit 1;
-  if target is null then
-   target:=conversation;
-   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(target,c,person,lead.id,lead.name);
-  end if;
-  update public.conversations set lead_opening=true where id=target;
-  return target;
- end if;
- -- Opened already: until anyone writes in the Company, the Owner's visit goes back to it, whichever visit wrote it
- -- (a link's prefetch renders the page too, and its move to the Conversation goes nowhere).
- select m.conversation_id into target from public.conversation_messages m join public.conversations v on v.id=m.conversation_id
-  where m.company_id=c and m.run_id='lead-opening' and v.person_id=person;
- if found then
-  return case when not exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
-   and not exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then target end;
- end if;
- -- Opened for another Owner, or written in: never a second opening.
- if exists(select 1 from public.conversation_messages m where m.company_id=c and (m.run_id='lead-opening' or public.written_message(m)))
-  or exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then return null; end if;
+ written := exists(select 1 from public.conversations v where v.company_id=c and v.hermes_session_id is not null);
+ select v.id into target from public.conversations v where v.company_id=c and v.lead_opening and v.person_id=person;
+ if found then return case when not written then target end; end if;
+ if written or exists(select 1 from public.conversations v where v.company_id=c and v.lead_opening) then return null; end if;
  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then return null; end if;
  select * into lead from public.hermes_agents a where a.company_id=c and a.is_default;
  if not found then return null; end if;
+ -- The Owner's empty Conversation with it (first run makes one), else a new one under the given id.
  select v.id into target from public.conversations v where v.company_id=c and v.person_id=person and v.agent_id=lead.id
+  and v.hermes_session_id is null
   order by v.id=conversation desc,v.created_at,v.id limit 1;
  if target is null then
   target:=conversation;
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values(target,c,person,lead.id,lead.name);
  end if;
- insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id)
-  values(c,target,'agent',lead.id,lead.name,body,'lead-opening');
+ update public.conversations set lead_opening=true where id=target;
  return target;
 end $$;
 
@@ -11172,15 +11107,7 @@ CREATE FUNCTION public.screen_hands(c uuid) RETURNS TABLE(card bigint, conversat
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
- select r.id,v.id,v.agent_id,h.name,r.title,r.content->>'app',r.content->>'step',r.created_at
- from public.reply_cards r
- join public.conversations v on v.id=r.conversation_id
- join public.hermes_agents h on h.id=v.agent_id and h.company_id=c
- where r.company_id=c and v.company_id=c and r.kind='hand' and r.state='open' and r.content->'screen'='true'::jsonb
-  and v.person_id=auth.uid() and v.archived_at is null
-  and public.conversation_can_write(c) and public.can_see_agent(c,v.agent_id)
- order by r.id desc
- limit 20;
+ select null::bigint,null::uuid,null::uuid,null::text,null::text,null::text,null::text,null::timestamptz where false;
 $$;
 
 ALTER FUNCTION public.screen_hands(c uuid) OWNER TO postgres;
@@ -13348,7 +13275,6 @@ CREATE TABLE public.companies (
     name text NOT NULL,
     work_mode text DEFAULT 'team'::text,
     engine_id uuid,
-    engine_conversations boolean DEFAULT false NOT NULL,
     CONSTRAINT companies_work_mode_check CHECK ((work_mode = ANY (ARRAY['alone'::text, 'team'::text])))
 );
 

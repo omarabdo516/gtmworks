@@ -163,7 +163,7 @@ test('the installer ends with the setup link, prints the code nowhere else, repe
 });
 
 // The worker reaches the database through the gateway (NEXT_PUBLIC_SUPABASE_URL). Recreating the gateway once the worker
-// runs makes its loops log `Conversation runs worker: fetch failed`, which the install job reads as a worker that cannot reach the
+// runs makes its loops log `Channel runs worker: fetch failed`, which the install job reads as a worker that cannot reach the
 // database. With the code in the fragment no request line carries it, so the gateway needs no new log rules.
 test('install and update restart no service once the worker runs', t => {
  const install=installDirectory(t);

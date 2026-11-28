@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mentionedAgent } from '../lib/conversation-runs.mjs';
+import { mentionedAgent } from '../lib/composer-mentions.mjs';
 
 // #153: a new chat's first message goes to the Agent it calls, read as the channel reads a call
 // (public.channel_mention, supabase/migrations/20261219000000_general_channel.sql), among the Agents the sender sees.

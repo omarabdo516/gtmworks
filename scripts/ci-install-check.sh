@@ -353,7 +353,7 @@ for file in supabase/migrations/*.verify.sql scripts/check-rls.sql; do
 done
 [[ $(compose exec -T worker node -e 'console.log(process.pid>0)') == true ]] || fail 'worker process running'
 worker_logs=$(compose logs worker) || fail 'read worker logs'
-if grep -q 'Conversation runs worker:' <<< "$worker_logs"; then fail 'worker reaches the database'; fi
+if grep -q 'Channel runs worker:' <<< "$worker_logs"; then fail 'worker reaches the database'; fi
 }
 
 # companies: Companies and their Engines (#382, ADR 0018): the first Engine answering an Arabic message, `company add`

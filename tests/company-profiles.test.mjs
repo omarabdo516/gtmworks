@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withEngineContract } from '../lib/engine/handle.mjs';
 import { engineRecord, engineServing, withDriver, withNoEngine } from './engine-records.mjs';
 import { readFileSync } from 'node:fs';
 import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, forbiddenOf, companyProfile } from '../lib/agent-toolsets.mjs';
@@ -764,56 +763,6 @@ test('the install job proves profiles per company on the pinned release, after t
  assert.match(script,/assert\.deepEqual\(\[await listsSkill\(otherEngine,other\.profile\),await listsSkill\(otherEngine,other\.secondProfile\)\],\[false,false\]/);
 });
 
-// The person's session and the service role, as sendMessage sees them; every call is recorded in order. A send stores
-// its turn (#764); the one starter claims it on the profile the database pins (`profile`), or finds none to claim
-// (`claim` false: the profile's tools are not yet the fixed set, so the claim waits).
-function conversationDatabases({profile,claim=true}) {
- const order=[]; const args={}; let stored=null; let settled=false;
- const answer=(name,given)=>{ args[name]=given;
-  if(name==='conversation_agent') return {data:null,error:null};
-  if(name==='queue_conversation_turn') { stored=given; return {data:{state:'queued'},error:null}; }
-  if(name==='queued_conversations') return {data:stored&&!settled?[{conversation:'c'}]:[],error:null};
-  if(name==='claim_conversation_turn') return {data:stored&&!settled&&claim?[{company:two,agent:stored.agent,person:'p',send_key:stored.message_key,message:stored.message,connection:'f9000000-0000-0000-0000-000000000001',profile,note:null,retry:false,has_files:false}]:[],error:null};
-  if(name==='begin_turn_start') return {data:1,error:null};
-  if(name==='conversation_handover_agents') return {data:[],error:null};
-  if(name==='pin_run') return {data:{tools:null,rules:[]},error:null};
-  if(['pin_run_history','pin_run_model','pin_run_brief'].includes(name)) return {data:null,error:null};
-  if(name==='record_conversation_turn'||name==='fail_conversation_turn') { settled=true; return {data:true,error:null}; }
-  return {data:null,error:{message:'unexpected'}};
- };
- const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001',instructions:null},error:null})};
- const db={rpc:async(name,given)=>{ order.push(name); return answer(name,given); },from:()=>chain};
- const service={rpc:async(name,given)=>{ order.push(`service ${name}`); return answer(name,given); },from:()=>chain};
- return {db,service,order,args};
-}
-const engine=order=>({engineFor:connection=>({start:async()=>{ order.push(`start ${connection.profile}`); return 'run_1'; }})});
-const hermes={address:'http://hermes:8642',key:'test-only-key'};
-// The Company's Engine record, as the database holds it; the fake of the contract answers for the Engine.
-engineRecord(two,hermes);
-
-test('a message is stored before Hermes is called, and its Run starts on its pinned profile after', async () => {
- const {sendMessage}=await import('../lib/conversation-runs.mjs');
- const {db,service,order,args}=conversationDatabases({profile:companyProfile(two)});
- const sent=await withEngineContract(engine(order).engineFor,()=>sendMessage(db,service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi'}));
- assert.deepEqual(sent,{conversation:'c'});
- assert.equal(args.queue_conversation_turn.message,'Hi');
- // The record names the pin the run started on, the one the claim made.
- assert.equal(args.record_conversation_turn.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order.slice(0,2),['conversation_agent','queue_conversation_turn']);
- assert.deepEqual(order.filter(step=>step.startsWith('service ')||step.startsWith('start ')).filter(step=>step!=='service pin_run_brief'),['service queued_conversations','service claim_conversation_turn','service pin_run','service pin_run_history','service pin_run_model','service begin_turn_start',`start ${companyProfile(two)}`,'service record_conversation_turn']);
-});
-
-test('a run never starts on another company\'s profile, nor while the profile\'s tools are not the fixed set', async () => {
- const {sendMessage}=await import('../lib/conversation-runs.mjs');
- const borrowed=conversationDatabases({profile:companyProfile(three)});
- assert.deepEqual(await withEngineContract(engine(borrowed.order).engineFor,()=>sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi'})),{error:'conversationHermesFailed',status:502});
- assert.ok(!borrowed.order.some(step=>step.startsWith('start')));
- assert.deepEqual(borrowed.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:0},'the message stays, not sent');
- // The claim waits while the profile's tools are pending: the message is stored and waits, and nothing starts.
- const pending=conversationDatabases({profile:companyProfile(two),claim:false});
- assert.deepEqual(await withEngineContract(engine(pending.order).engineFor,()=>sendMessage(pending.db,pending.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi'})),{conversation:'c',queued:true});
- assert.ok(!pending.order.some(step=>step.startsWith('start')));
-});
 
 test('a profile the Engine reports with other tools is marked as changing, written the fixed set and recorded', async () => {
  const fake=await bothServing();
@@ -856,29 +805,6 @@ test('a write that cannot be recorded keeps the profile pending until a later re
   assert.equal(db.rows[0].tools_pending,false);
   assert.equal(toolsDiffer((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets),false);
  } finally { await fake.close(); }
-});
-
-test('the worker abandons unrecorded reservations in one database update and never calls the engine', async () => {
- const {abandonConversationReservations}=await import('../lib/company-profiles.mjs');
- const calls=[];
- const db={rpc:async name=>{ calls.push(name); return {data:3,error:null}; }};
- assert.equal(await abandonConversationReservations(db),3);
- assert.deepEqual(calls,['abandon_conversation_reservations']);
- const source=readFileSync('lib/company-profiles.mjs','utf8');
- assert.doesNotMatch(source,/settle|engineFor|\.start\(/,'no replay path is left');
-});
-
-test('a run the Engine refused fails its turn for that attempt; a started one is recorded and never failed', async () => {
- const {sendMessage}=await import('../lib/conversation-runs.mjs');
- const refused=conversationDatabases({profile:companyProfile(two)});
- const refusing={engineFor:connection=>({start:async()=>{ refused.order.push(`start ${connection.profile}`); return null; }})};
- assert.deepEqual(await withEngineContract(refusing.engineFor,()=>sendMessage(refused.db,refused.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi'})),{error:'conversationHermesFailed',status:502});
- assert.deepEqual(refused.order.slice(-2),[`start ${companyProfile(two)}`,'service fail_conversation_turn']);
- assert.deepEqual(refused.args.fail_conversation_turn,{conversation:'c',message_key:'k',attempt:1});
- // A run that started is recorded, never failed: the record ends its reservation.
- const started=conversationDatabases({profile:companyProfile(two)});
- assert.deepEqual(await withEngineContract(engine(started.order).engineFor,()=>sendMessage(started.db,started.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi'})),{conversation:'c'});
- assert.ok(!started.order.includes('service fail_conversation_turn'));
 });
 
 // Each Agent's own profile (ADR 0016), as the worker sees it: the profiles it never confirmed and those marked as

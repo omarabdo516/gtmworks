@@ -29,7 +29,7 @@ for attempt in $(seq 1 30); do
 done
 # Let the worker perform at least one poll, and fail if it exits or logs a worker error.
 sleep 3
-if [[ "$healthy" != true ]] || [[ $(docker inspect -f '{{.State.Running}}' gtmworks-worker-ci) != true ]] || docker logs gtmworks-worker-ci 2>&1 | grep -q 'Conversation runs worker:'; then
+if [[ "$healthy" != true ]] || [[ $(docker inspect -f '{{.State.Running}}' gtmworks-worker-ci) != true ]] || docker logs gtmworks-worker-ci 2>&1 | grep -q 'Channel runs worker:'; then
   docker logs gtmworks-ci
   docker logs gtmworks-worker-ci
   exit 1
