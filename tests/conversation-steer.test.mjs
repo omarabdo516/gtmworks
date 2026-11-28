@@ -5,6 +5,7 @@ import { answerRun, permitRun, readRunEvents, startSessionRun, stopRun } from '.
 import { hermesEngine } from '../lib/engine/contract.mjs';
 import { liveLines } from '../lib/live-steps.mjs';
 import { conversationLines } from '../lib/conversation-live.mjs';
+import { runEnd } from '../lib/run-outcome.mjs';
 import { claimAnswer, confirmAnswer, forgetAnswer } from '../lib/run-answers.mjs';
 
 // #878 on the fake Engine server: a person steers the open Run of their Conversation through the Run's own routes. Its
@@ -33,7 +34,7 @@ test('the question a Run asks is on its live read, the answer reaches the Run, a
   const asked=lines.find(line=>'asking' in line)?.asking;
   assert.deepEqual({...asked,id:undefined},{kind:'question',run,id:undefined,text:'Which city?',choices:['Cairo','Giza'],multiple:false},'the Engine\'s own hint and mark are not the Agent\'s words');
   assert.equal(lines.map(line=>'delta' in line?line.delta:'').join(''),'Plan for Giza','the Agent went on with the answer');
-  assert.deepEqual(lines.at(-1),{end:'ended',outcome:'completed'});
+  assert.deepEqual(lines.at(-1),{end:'ended'});
  } finally { await fake.close(); }
 });
 
@@ -83,7 +84,9 @@ test('Stop ends the open Run, a card it waited on with it, and its end says it w
   const run=await start(fake,'Write the plan');
   const lines=await follow(fake,run,async line=>{ if('asking' in line) assert.equal(await stopRun({...connection(fake),run}),true); });
   assert.deepEqual(lines.find(line=>'settled' in line)?.settled,{kind:'question',id:lines.find(line=>'asking' in line)?.asking.id,closed:true});
-  assert.deepEqual(lines.at(-1),{end:'ended',outcome:'stopped'});
+  assert.deepEqual(lines.at(-1),{end:'ended'});
+  // How it ended is the Run's own record, as the live route tells the page (#879): stopped.
+  assert.deepEqual(runEnd(await hermesEngine(connection(fake)).read(run)),{end:'ended',outcome:'stopped'});
  } finally { await fake.close(); }
 });
 
@@ -186,6 +189,6 @@ test('a Run that ends before its delivered choice is confirmed settles the card 
   });
   const asked=lines.find(line=>'asking' in line)?.asking;
   assert.deepEqual(lines.filter(line=>'settled' in line).map(line=>line.settled),[{kind:'permission',id:asked?.id,choice:'once'}]);
-  assert.deepEqual(lines.at(-1),{end:'ended',outcome:'completed'});
+  assert.deepEqual(lines.at(-1),{end:'ended'});
  } finally { await fake.close(); }
 });

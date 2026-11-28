@@ -66,7 +66,7 @@ async function send(db:Database,person:string,body:Record<string,unknown>,chosen
   if(engine.state==='started') {
    // Writing in an archived Conversation brings it back (#881): its session's archived mark is cleared after the answer.
    after(async()=>{ try { await (await unarchiveOnWrite(db,company,conversation))?.(); } catch { /* It stays in the archive; the message was sent. */ } });
-   return reply({conversation,run:engine.run,engine:true});
+   return reply({conversation,run:engine.run,engine:true,...(engine.queued?{queued:true}:{})});
   }
   if(engine.state==='refused') return engine.code?(engine.code==='22023'?refuse('conversationFailed',400):refuseFor(engine.code)):refuse(engine.error??'conversationFailed',engine.status??500);
  }

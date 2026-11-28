@@ -13,7 +13,7 @@ import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
-import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
+import { MessageBox, postMessage, postMessageAnswer, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, RunStepCard, SavedRule } from '@/lib/conversations';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import { LiveTurn, WorkingLine, useLanding, useLiveSteps, type LiveRun } from '@/app/run-activity';
@@ -197,7 +197,7 @@ const withSteps=(record:ConversationRecord,read:ConversationSteps|null):Conversa
 // The record as drawn: the messages just sent after it, and the Agent working on them.
 const withSending=(record:ConversationRecord,list:Sending[]):ConversationRecord=>!list.length?record:{...record,pending:true,
  messages:[...record.messages,...list.map(sending=>({id:sending.id,author:'person' as const,author_name:'',body:sending.body,created_at:sending.at,kind:'sending' as const,
-  ...(sending.posting?{posting:true as const}:{}),...(sending.files.length?{files:sending.files.map((name,at)=>({id:at,name}))}:{})}))]};
+  ...(sending.posting?{posting:true as const}:{}),...(sending.run?{run:sending.run}:{}),...(sending.queued?{behind:true as const}:{}),...(sending.files.length?{files:sending.files.map((name,at)=>({id:at,name}))}:{})}))]};
 
 // The transcript while the Conversation is still loading (#172; design-reference: skeletonHTML): the person's message,
 // a reply with its face, and a reply with a card.
@@ -226,9 +226,10 @@ export function ChatPlaceholder() {
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
 // `live` (#876): a Conversation whose messages are the Engine's draws its open Run from its own live read, the reply as
 // it is written and its steps, in place of the old record's steps read (app/api/run-steps).
-// `card` is what the Run waits on its person for (#878), drawn in its live turn; `stopped` says the Run was stopped,
-// mid-reply or before it wrote any, until the next message is sent.
-export type EngineLive={view:LiveRun|null,reply:string,working:boolean,card?:ReactNode,stopped?:'reply'|'before'|null};
+// `ending` (#879): a Run seen to fail or stop did not finish, and `again` sends the person's message again; `stopped`
+// (#878): its person stopped it, mid-reply or before it wrote any. `card` is what the Run waits on its person for,
+// drawn in its live turn.
+export type EngineLive={view:LiveRun|null,reply:string,working:boolean,ending?:'unfinished',stopped?:'reply'|'before'|null,again?:()=>void,card?:ReactNode};
 export function ConversationTurns({slug,company,record,writer,asked,reread,details=false,live:engineLive}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean,live?:EngineLive}) {
  const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
@@ -363,12 +364,12 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    :message.author==='engine'?<li key={`summary${message.id}`} className={`note note--icon${rise(index)}`} data-author="engine" data-kind="summary"><ShellIcon name="spark" className="note__icon"/><span><b>{c('conversationEngineSummary')}</b>{!!message.body&&<> <bdi dir="auto">{message.body}</bdi></>}</span></li>
    // #477: a job an asked Agent handed on is its own quiet row between the turns, as a channel draws every handover.
    :message.kind==='handedOn'&&message.cards?.[0]?.kind==='handed'?handed(message.cards[0],`handedOn${message.id}`,'li',rise(index).trim()||undefined)
-   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><ReaderTime at={message.created_at} className="sender__time"/></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&message.behind?' is-queued':''}${message.posting?' is-sending':''}${rise(index)}`} data-author="person" data-kind={message.kind} aria-busy={message.posting?true:undefined}>
+   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><ReaderTime at={message.created_at} className="sender__time"/></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${(message.kind==='queued'||message.kind==='sending')&&message.behind?' is-queued':''}${message.posting?' is-sending':''}${rise(index)}`} data-author="person" data-kind={message.kind} aria-busy={message.posting?true:undefined}>
    {!!message.body.trim()&&<div className="bubble-row"><ReaderTime at={message.created_at} className="bubble__time"/><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {/* A message being sent has no stored files to open yet: their names alone (#756). */}
    {!!message.files?.length&&message.kind==='sending'&&<div className="msg-files">{message.files.map(file=><span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>)}</div>}
    {!!message.files?.length&&message.kind!=='sending'&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
-   {message.kind==='queued'&&message.behind&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
+   {(message.kind==='queued'||message.kind==='sending')&&message.behind&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
    {/* Not sent (#764): the Engine refused its Run or was not reached; the message stays, and "Try again" starts the same
        turn. One refused for the Conversation's model goes back to the box instead (#158). */}
    {message.kind==='queued'&&message.failed&&<p className="note" role="alert" data-outcome="not-sent">{c('conversationNotSent')}
@@ -394,14 +395,18 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:step.card?[<CardLine key={at} slug={slug} card={step.card} rise={rise(index)}/>]:[])}</Fragment>)}
    {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled} reply={engineLive?.reply}>{engineLive?.card}</LiveTurn>}</ol>
   {working&&!waitsOnPerson&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
-  {/* A Run its person stopped (#878; design-reference: stopRun's note): it stopped mid-reply, or before it replied. */}
-  {!working&&engineLive?.stopped&&<p className="note note--icon convo-status" data-outcome="stopped"><ShellIcon name="stop" className="note__icon"/><span>{cb(engineLive.stopped==='reply'?'conversationStoppedMidReply':'conversationStoppedBefore',conversation.agent_name)}</span></p>}
   {/* The record could not be read three times in a row (#768): what was drawn stays above, and Try again reads it now. */}
   {record.unread&&<p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')}{reread&&<> <button type="button" className="link-btn" onClick={()=>void reread()}>{c('conversationTryAgain')}</button></>}</p>}
   {failed&&(modelCause
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.
    ?<p className="note convo-status" role="alert" data-outcome={modelOutcome(modelCause)}><ModelLine cause={modelCause} agent={record.modelRefused?.agent??conversation.agent_name} slug={slug} owner={(record.noModel??record.modelRefused)?.owner===true} resets={record.modelRefused?.resetsAt} ranOut={record.modelRefused?.ranOut}/></p>
+   // A Conversation on the Engine (#879): the reply did not finish, or none came, and Try again sends the words again.
+   // A Run its person stopped (#878; design-reference: stopRun's note): it stopped mid-reply, or before it replied.
+   :engineLive?.ending&&engineLive.stopped?<p className="note note--icon convo-status" role="status" data-outcome="stopped"><ShellIcon name="stop" className="note__icon"/><span>{cb(engineLive.stopped==='reply'?'conversationStoppedMidReply':'conversationStoppedBefore',conversation.agent_name)}
+    {writer&&engineLive.again&&<> <button type="button" className="link-btn" onClick={engineLive.again}>{c('conversationTryAgain')}</button></>}</span></p>
+   :engineLive?.ending?<p className="note convo-status" role="alert" data-outcome="unfinished">{c('conversationNotFinished')}
+    {writer&&engineLive.again&&<> <button type="button" className="link-btn" onClick={engineLive.again}>{c('conversationTryAgain')}</button></>}</p>
    :<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>)}
  </>;
 }
@@ -431,8 +436,8 @@ export function ConversationComposer({company,conversation,record,writer,asked,s
   }}:undefined} drawn={!!sending&&!steer?.answer} send={async(message,sendKey,files)=>{
    if(steer?.answer&&!files.length) return await steer.answer(message);
    const settled=sending?.(sendKey,message,files);
-   const failure=files.length?await postMessageWithFiles({company,conversation:conversation.id,message,sendKey},files):await postMessage({company,conversation:conversation.id,message,sendKey});
-   settled?.(failure);
+   const {failure,answer}=files.length?{failure:await postMessageWithFiles({company,conversation:conversation.id,message,sendKey},files),answer:null}:await postMessageAnswer({company,conversation:conversation.id,message,sendKey});
+   settled?.(failure,answer);
    if(!failure) { asked(); sent?.(); }
    return failure;
   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}

@@ -39,23 +39,14 @@ services:
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_DISABLE_SIGNUP: "true"
+      # Sign-in is with email and password, which GoTrue reads as its email provider; no SMTP is set and the app sends no
+      # email (ADR 0019, #948): people join by Invite link and a forgotten password is a password link.
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
-      GOTRUE_MAILER_AUTOCONFIRM: "true"
-      GOTRUE_SMTP_HOST: mail
-      GOTRUE_SMTP_PORT: 1025
-      GOTRUE_SMTP_ADMIN_EMAIL: no-reply@gtmworks.local
-      # Emailed links resolve these paths against API_EXTERNAL_URL, whose /auth/v1 an absolute path replaces; the gateway
-      # serves Auth under /auth/v1, so the default "/verify" would open the app instead (magic links use the recovery path).
-      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
       GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"
       GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
-      # Passwords: the rule gtmworks shows (lib/password.mjs), a reset link that works for 24 hours, and a sign-in that
-      # lasts 30 days. Repeated wrong passwords are limited by GoTrue's own sign-in rate limit.
+      # Passwords: the rule gtmworks shows (lib/password.mjs) and a sign-in that lasts 30 days. Repeated wrong passwords
+      # are limited by GoTrue's own sign-in rate limit.
       GOTRUE_PASSWORD_MIN_LENGTH: "10"
-      GOTRUE_MAILER_OTP_EXP: "86400"
       GOTRUE_SESSIONS_TIMEBOX: 720h
       # GoTrue applies its rate limits only to requests carrying this header, one allowance per value. The gateway writes
       # it from the visitor's address (scripts/install-nginx.conf); browsers sign in through the gateway.
@@ -102,10 +93,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 60
-  mail:
-    image: axllent/mailpit:v1.27.10@sha256:b1f1be18af530d939a11ee8820b379e0c88eeec204d904bfad68862adced3a5a
-    restart: unless-stopped
-    ports: [127.0.0.1:8025:8025]
   gateway:
     image: nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
     restart: unless-stopped

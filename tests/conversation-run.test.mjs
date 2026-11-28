@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
-import { readRunEvents, startSessionRun } from '../lib/engine/runs.mjs';
+import { readRun, readRunEvents, startSessionRun } from '../lib/engine/runs.mjs';
 import { readSessionMessages } from '../lib/engine/sessions.mjs';
 import { liveLines } from '../lib/live-steps.mjs';
+import { hermesEngine } from '../lib/engine/contract.mjs';
+import { runEnd } from '../lib/run-outcome.mjs';
 
 // #876 on the fake Engine server: a person's message is one Run on the Conversation's own session, whose id gtmworks
 // chose (docs/engine-probes/conversation-read.md, answer 1), with the Member's note as its instructions. The Run's event
@@ -30,7 +32,7 @@ test('a message is a Run on the session gtmworks chose, its reply streamed as wr
   const views=lines.filter(line=>'steps' in line);
   assert.deepEqual(views.at(-1),{run,steps:[{tool:'web_search',preview:'accounting courses Cairo',state:'done'}],now:null});
   assert.ok(views.some(view=>view.now?.tool==='web_search'),'the step shows as it starts');
-  assert.deepEqual(lines.at(-1),{end:'ended',outcome:'completed'});
+  assert.deepEqual(lines.at(-1),{end:'ended'});
   // Once it ended, the session holds the turn: the person's words, the call, its result and the reply.
   const read=await readSessionMessages(connection(fake),session,{offset:0,limit:50});
   assert.equal(read.state,'found');
@@ -63,5 +65,93 @@ test('a start whose answers were lost is unknown, and asking again with the same
   const found=await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'send-4',retry:true});
   assert.equal(typeof found,'string');
   assert.equal(fake.settings.runs.length,1,'one Run, never two');
+ } finally { await fake.close(); }
+});
+
+// #879: how the Run ended is read from its own record, once its events end or before they are followed at all.
+test('a Run that ran out of usage did not finish, and its record says why and when the usage resets',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.ending='failed'; fake.settings.failure=fake.settings.noAccountText;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  const run=/** @type {string} */(await startSessionRun({...connection(fake),session,input:'Plan the ads',idempotencyKey:'send-5'}));
+  const lines=await collect(liveLines(run,readRunEvents({...connection(fake),run}),{reply:true}));
+  assert.equal(lines.some(line=>'delta' in line),false,'no reply is written');
+  assert.deepEqual(lines.at(-1),{end:'ended'});
+  const told=runEnd(await hermesEngine(connection(fake)).read(run));
+  assert.equal(told?.end,'ended');
+  assert.equal(told&&'outcome' in told&&told.outcome,'failed');
+  assert.equal(told&&'cause' in told&&told.cause,'access');
+  const wait=Date.parse(told&&'resetsAt' in told&&told.resetsAt||'')-Date.now();
+  assert.ok(wait>120*3600e3&&wait<121*3600e3,'it resets in about 121 hours, as the Engine said');
+  // The session holds the person's message, and no reply.
+  const read=await readSessionMessages(connection(fake),session,{offset:0,limit:50});
+  assert.deepEqual(read.state==='found'&&read.messages.map(message=>message.role),['user']);
+ } finally { await fake.close(); }
+});
+
+test('a finished Run read after it ended has ended, and one the Engine lost is gone',async()=>{
+ const fake=await fakeHermes();
+ try {
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  const run=/** @type {string} */(await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'send-6'}));
+  await collect(readRunEvents({...connection(fake),run}));
+  assert.deepEqual(runEnd(await hermesEngine(connection(fake)).read(run)),{end:'ended'});
+  fake.settings.runs.splice(fake.settings.runs.findIndex(each=>each.id===run),1); fake.settings.sweep(run);
+  assert.deepEqual(runEnd(await hermesEngine(connection(fake)).read(run)),{end:'gone'});
+ } finally { await fake.close(); }
+});
+
+// #877: the Engine takes so many Runs at once (gateway.api_server.max_concurrent_runs) and answers "retry" for the next,
+// 429 rate_limit_exceeded with Retry-After; a session holds so many waiting Runs and refuses the next, 409 queue_full; a
+// Run started while another works on its session reads `queued` until its turn. None of the refused is a Run.
+test('a start the Engine is too busy for is "busy", and goes through once the Engine takes it',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true; fake.settings.runsAtOnce=1;
+  const other=await startSessionRun({...connection(fake),session:`gtmworks-${crypto.randomUUID()}`,input:'Working',idempotencyKey:'busy-1'});
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  assert.deepEqual(await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'busy-2'}),{state:'busy',retryAfter:1});
+  assert.equal(fake.settings.runs.length,1,'no Run was made for it');
+  fake.settings.release(/** @type {string} */(other));
+  await new Promise(resolve=>setTimeout(resolve,300));
+  assert.equal(typeof await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'busy-2'}),'string');
+ } finally { await fake.close(); }
+});
+
+test('a session whose queue is full refuses the next message as "queueFull"',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true; fake.settings.sessionQueueLimit=1;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  await startSessionRun({...connection(fake),session,input:'One',idempotencyKey:'full-1'});
+  await startSessionRun({...connection(fake),session,input:'Two',idempotencyKey:'full-2'});
+  assert.deepEqual(await startSessionRun({...connection(fake),session,input:'Three',idempotencyKey:'full-3'}),{state:'queueFull'});
+  assert.equal(fake.settings.runs.length,2);
+ } finally { await fake.close(); }
+});
+
+test('a Run started while another works on its session reads queued until its turn',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  const first=/** @type {string} */(await startSessionRun({...connection(fake),session,input:'One',idempotencyKey:'queue-1'}));
+  const second=/** @type {string} */(await startSessionRun({...connection(fake),session,input:'Two',idempotencyKey:'queue-2'}));
+  assert.equal((await readRun({...connection(fake),run:first})).queued,undefined,'the working one is not queued');
+  assert.equal((await readRun({...connection(fake),run:second})).queued,true);
+  fake.settings.release(first);
+  await new Promise(resolve=>setTimeout(resolve,300));
+  assert.equal((await readRun({...connection(fake),run:second})).queued,undefined,'its turn came');
+ } finally { await fake.close(); }
+});
+
+test('a start whose answer was lost stays unknown when the next attempt is answered "retry": the lost one may be the Run that filled the Engine',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.liveHold=true; fake.settings.runsAtOnce=1; fake.settings.loseStarts=1;
+  const session=`gtmworks-${crypto.randomUUID()}`;
+  assert.deepEqual(await startSessionRun({...connection(fake),session,input:'Hello',idempotencyKey:'lost-busy'}),{state:'unknown'});
+  assert.equal(fake.settings.runs.length,1,'the lost start did make its Run');
  } finally { await fake.close(); }
 });

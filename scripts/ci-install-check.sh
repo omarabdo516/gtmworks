@@ -33,6 +33,8 @@ cd "$root"
 area_setup
 reset_install
 install_source first-install.log || fail 'first install'
+# The install sends no email (#948, ADR 0019).
+no_mailbox
 # The work sandbox image every Company's sandbox runs (#392, ADR 0020): the source install built it from
 # sandbox/Dockerfile (or CI loaded it), and its own check proves in a container of it what an install owner and an Agent see.
 [[ -f .work-sandbox-image ]] || fail 'the install names the work sandbox image it got'
@@ -116,10 +118,11 @@ gateway_id=$(compose ps -q gateway) && [[ -n $gateway_id ]] || fail 'the first i
 { sh scripts/install.sh || fail 'repeat install before setup'; } 2>&1 | tee repeat-before-setup.log
 [[ $(compose ps -q gateway) == "$gateway_id" ]] || fail 'a repeat install before setup keeps the unchanged gateway container'
 [[ $(tail -n 1 repeat-before-setup.log) == "$link" ]] || fail 'a repeat install before setup prints the same setup link'
-# The local install on http://localhost:3000, straight to the gateway, while first run is still open: the emailed
-# sign-in link reaches the Company home, an invitation link returns to the app, and a sign-in request with a forged
-# X-Forwarded-Host still gets a link on APP_ORIGIN (issue #40). Every other area completes the same first run (#407).
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
+# The local install on http://localhost:3000, straight to the gateway, while first run is still open: first run
+# reaches the Company home, and an Invite link joins a new Person on APP_ORIGIN with no email (issue #40, #948). Every
+# other area completes the same first run (#407).
+complete_setup | tee complete-setup.log || fail 'first run and its Invite link on the local install'
+grep -q '^Invite link joined proxy-joined@example.com in ' complete-setup.log || fail 'first run makes an Invite link'
 # That check opened first run and completed setup with the code in the submit body: the gateway's access log holds
 # those requests and not the code.
 gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'
@@ -362,7 +365,7 @@ cd "$root"
 area_setup
 reset_install
 install_source companies-install.log || fail 'the Companies area install'
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
+complete_setup || fail 'first run and its Invite link on the local install'
 engine_key=$(first_engine_key)
 [[ $engine_key =~ ^[a-f0-9]{64}$ ]] || fail 'the Engine key is in .engines/first/.env'
 # The first Company's Engine is the template's own container (ADR 0018): no host port, and an Arabic message gets
@@ -725,6 +728,41 @@ sh scripts/install.sh > companies-raise.log 2>&1 || { cat companies-raise.log; f
 grep -F "had 768m of memory: raised to $(sandbox_default mem_limit)" companies-raise.log || fail 'the run says it raised the lower limit'
 [[ $(limits_of "$second_sandbox") == "$(sandbox_memory_bytes) 1000000000" ]] || fail "the second Company's lower memory limit is raised to the default"
 [[ $(limits_of gtmworks-sandbox-first) == '3221225472 1500000000' ]] || fail "the first Company's limit above the default is kept"
+# `gtmworks company password-link` (#955, ADR 0019): the server prints a password link for an Administrator of a Company,
+# the way back in for its last Administrator and for the install owner, whom the Team page may not link (#915). The
+# command names the Company and the address, only the hash is kept, the secret reaches no log, and a Member who is not an
+# Administrator there or an unknown Company is refused. Sending the link's form then sets the new password, spends the
+# link and signs the Administrator in. It runs last in this area because it sets the install owner's password, which the
+# checks above sign in with.
+password_link=$(sh scripts/install.sh company password-link 'Proxy Company' --email proxy-owner@example.com 2> password-link-refusal.log) \
+  || { cat password-link-refusal.log; fail 'company password-link prints a link for an Administrator'; }
+printf '%s\n' "$password_link" | grep -Eqx 'Password link for proxy-owner@example\.com in "Proxy Company": http://localhost:3000/password#code=[a-f0-9]{64}' \
+  || fail 'company password-link names the Company and the address and prints only its link'
+password_secret=${password_link##*#code=}
+password_hash=$(printf '%s' "$password_secret" | sha256sum | cut -d' ' -f1)
+[[ $(db -c "select count(*) from public.company_links where kind='password' and secret_hash='$password_hash' and made_on_server and made_by is null and used_at is null and cancelled_at is null") == 1 ]] \
+  || fail 'the password link is kept hashed, made by the server, waiting'
+[[ $(db -c "select count(*) from public.company_links where secret_hash='$password_secret'") == 0 ]] || fail 'the password link secret is stored nowhere'
+[[ $(db -c "select count(*) from public.company_log where action='password_link_made' and company_id=(select id from public.companies where name='Proxy Company') and actor_kind='system' and person_id=(select person_id from public.members where company_id=(select id from public.companies where name='Proxy Company') and role='owner')") == 1 ]] \
+  || fail 'making the password link is in the Company log as the server made it'
+password_logs=$(compose logs 2>&1) || fail 'read container logs'
+if grep -qF "$password_secret" <<< "$password_logs"; then fail 'the password link secret is in a container log'; fi
+if sh scripts/install.sh company password-link 'Proxy Company' --email proxy-joined@example.com > password-link-not-admin.log 2>&1; then
+  cat password-link-not-admin.log
+  fail 'company password-link must refuse a Member who is not an Administrator'
+fi
+grep -Fxq 'proxy-joined@example.com is not an Administrator of "Proxy Company". Nothing was changed.' password-link-not-admin.log \
+  || fail 'the refusal names the Person and the Company'
+[[ $(db -c "select count(*) from public.company_links where kind='password'") == 1 ]] || fail 'a refused password link is written nowhere'
+if sh scripts/install.sh company password-link 'No Company' --email proxy-owner@example.com > password-link-unknown-company.log 2>&1; then
+  cat password-link-unknown-company.log
+  fail 'company password-link must refuse an unknown Company'
+fi
+grep -Fq 'No Company in this install is named No Company.' password-link-unknown-company.log || fail 'the refusal names the unknown Company'
+compose exec -T -e LINK_SECRET="$password_secret" web node --input-type=module - < scripts/check-install-password-link.mjs > password-link-proof \
+  || fail 'sending the password link sets the new password and signs its Administrator in'
+cat password-link-proof
+[[ $(db -c "select count(*) from public.company_links where secret_hash='$password_hash' and used_at is not null") == 1 ]] || fail 'the password link is used once'
 }
 
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
@@ -765,7 +803,7 @@ cd "$root"
 area_setup
 reset_install
 install_source agents-install.log || fail 'first install'
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
+complete_setup || fail 'first run and its Invite link on the local install'
 engine_id=$(first_engine_id) || fail 'the Engine container'
 engine_key=$(first_engine_key)
 # The Engine answers a Run with no subscription through the fake model provider served from the web container (#378).
@@ -827,7 +865,7 @@ cd "$root"
 area_setup
 reset_install
 install_source agents-sandbox-install.log || fail 'first install'
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
+complete_setup || fail 'first run and its Invite link on the local install'
 engine_id=$(first_engine_id) || fail 'the Engine container'
 engine_key=$(first_engine_key)
 point_engine_at_fake_model "$engine_id"
@@ -1331,16 +1369,15 @@ dashboard_theme() {
   engine_node "$1" -e "const answer=await fetch(process.env.HERMES_MANAGEMENT_ADDRESS+'/api/dashboard/themes',{headers:{Authorization:'Bearer '+process.env.ENGINE_KEY}}); console.log((await answer.json()).active);" < /dev/null
 }
 
-# proxy: the public address behind a proxy (issue #40, #41): first run, the emailed sign-in and invitation links on
-# APP_ORIGIN over HTTPS, and the sign-in rate limit per visitor behind it.
+# proxy: the public address behind a proxy (issue #40, #41): first run and the Invite link on APP_ORIGIN over HTTPS,
+# and the sign-in rate limit per visitor behind it.
 proxy() {
 cd "$root"
 area_setup
 # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
-# First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
-# invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40). The area makes its own fresh
-# install (#406): the public origin is in the settings before the first install runs, and no earlier area's install is
-# needed or kept.
+# First run and the Invite link must stay on that origin and reach the Company home (issue #40, #948). The area makes
+# its own fresh install (#406): the public origin is in the settings before the first install runs, and no earlier area's
+# install is needed or kept.
 public=https://app.gtmworks.test:4443
 reset_install
 docker run --rm -v "$root/lib:/code:ro" node:22.14.0-alpine3.21 node /code/install-env.mjs generate > .env.install
@@ -1355,8 +1392,8 @@ for attempt in $(seq 1 60); do docker exec install-proxy cat /data/caddy/pki/aut
 [[ -s ca.crt ]] || { docker logs install-proxy; fail 'HTTPS proxy certificate authority'; }
 docker run --rm -i --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/ca.crt:/ca.crt:ro" \
   --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
-  -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" -e MAIL_URL=http://127.0.0.1:8025 \
-  node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run, sign-in and invitation links through the HTTPS proxy'; }
+  -e NODE_EXTRA_CA_CERTS=/ca.crt -e APP_ORIGIN="$public" \
+  node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs || { docker logs install-proxy; fail 'first run and the Invite link through the HTTPS proxy'; }
 # First run here was the proxy check's own, so the main Agent's plugin is waited for as complete_setup waits for it, and
 # no check below meets the Engine mid-restart.
 main_agent_plugin_settled || fail "the main Agent's plugin is in place after first run"
@@ -1550,7 +1587,7 @@ key=$(sed -n 's/^HERMES_API_KEY=//p' .env.install)
 # First run as the person who installed it: the Company and its main Agent, on the previous release's Engine.
 code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
-  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" \
   || fail 'first run on the previous release'
 company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the previous release Company'
@@ -1657,6 +1694,7 @@ docker exec gtmworks-install-hermes-1 grep -qF "$marker" "/opt/data/profiles/$pr
 # previous release ran, and leaves the Company answering from its record.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail 'release update'
+no_mailbox
 main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(first_engine_key) == "$key" ]] || fail 'the update adopted the Engine key'
 # The Engine the update brought up has gtmworks's theme as its dashboard's default (#872).
@@ -1718,6 +1756,7 @@ compose exec -T web node --input-type=module - sandbox "$marker" < "$root/script
 # The next release's migration is applied through the running database's bind mount.
 cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" . || fail 'next release files in place'
 sh install.sh update || fail 'next release update'
+no_mailbox
 main_agent_plugin_settled || fail "the main Agent's plugin is offered on every Company after the update"
 [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] \
   || fail 'the next release migration applied through the running bind mount'
@@ -1813,7 +1852,7 @@ cd "$dir"
 [[ $(cat .install-release) == "$(sed -n 's/^release_image=//p' install.sh)" ]] || fail "the install runs the image $stable pins"
 probe "on $stable"
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY|SETUP_CODE)=' .env.install) \
-  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail "first run on $stable"
 company=$(db -c "select id from public.companies where name='Proxy Company'") || fail "read the Company $stable made"
 [[ -n $company ]] || fail "first run made the Company on $stable"
@@ -1933,7 +1972,7 @@ sandbox_parts() {
 [[ -f .engines/first/.env && ! -e .work-sandbox-image && -z $(sandbox_parts) ]] || fail 'that release runs its first Engine from its own folder and makes no sandbox'
 code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
-  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run on the release before the work sandbox'
 second_company install.sh || fail "that release's company add makes the second Company"
 for attempt in $(seq 1 240); do
@@ -2138,7 +2177,7 @@ cd release-install
 sh install.sh || fail 'install a release with two Companies'
 code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
-  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run before company add'
 second_company install.sh || fail 'company add before the update'
 for attempt in $(seq 1 240); do
@@ -2413,7 +2452,7 @@ grep -F "'$HOME/.local/bin/gtmworks' updater > /dev/null 2>&1 # gtmworks updater
 cd "$dir"
 # First run as complete_setup makes it, read from the checkout: this area stands in the install folder.
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY|SETUP_CODE)=' .env.install) \
-  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$workspace/scripts/check-install-proxy.mjs" || fail 'first run makes the Owner who asks for the update'
 owner() {
   docker run --rm -i --network host --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
@@ -2508,7 +2547,7 @@ sh "$dir/install.sh" || fail 'install the release before the staged removal'
 cd "$dir"
 code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
-  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run on the release before the staged removal'
 company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the Company'
 for attempt in $(seq 1 240); do
@@ -2633,7 +2672,7 @@ cd "$dir"
 [[ $(cat .work-sandbox-image) == "$sandbox" ]] || fail 'the install records the work sandbox image its release pins'
 code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
-  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 \
   node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run before the failed updates'
 second_company install.sh || fail 'company add makes the second Company'
 for attempt in $(seq 1 240); do
@@ -2741,7 +2780,7 @@ cd "$root"
 area_setup
 reset_install
 install_source sizes-install.log || fail 'the sizes area install'
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
+complete_setup || fail 'first run and its Invite link on the local install'
 second_company || fail 'company add makes the second Company'
 engine_id=$(first_engine_id) || fail 'the Engine container'
 sandbox_image=$(cat .work-sandbox-image)
@@ -2917,7 +2956,7 @@ cd "$root"
 area_setup
 reset_install
 install_source measure-install.log || fail 'first install'
-complete_setup || fail 'emailed sign-in and invitation links on the local install'
+complete_setup || fail 'first run and its Invite link on the local install'
 # The second Company on its own Engine: the agents area's prepare step, which records the first Company's profile the
 # measurement reads, looks for two Companies on two Engines (scripts/check-install-profiles.mjs).
 second_company || fail 'company add makes the second Company'

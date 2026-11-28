@@ -57,7 +57,7 @@ run 44848354569, which prints these numbers on every run) and the Company's Scre
 measured on the pinned Engine (#711):
 
 - **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
-  (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
+  (web app, worker, Postgres, sign-in, REST, Storage and gateway) use
   493 MiB, the first Company's idle Engine 466 MiB and its idle work sandbox 1 MiB: about
   1 GB for one Company, which leaves room for the system, an Engine at work, the
   Company's Screen awake and a few more Companies.
@@ -140,23 +140,22 @@ the install up, not whoever reaches the address first. Lost it? Run the line
 again: until setup is finished it prints the same link, and afterwards the
 sign-in address instead.
 
-Port **3000** (app and Supabase gateway)
-and **8025** (local email inbox) must be free; both bind **only to 127.0.0.1**.
-For a remote server, forward them over SSH (`ssh -L 3000:localhost:3000
--L 8025:localhost:8025 your-server`) and open the setup link there. Do not expose the
-mailbox publicly. On a fresh install, enter your name, email, a password of at
-least 10 characters (twice) and your first company name; you are signed in
-at once, with no email step. You become the first company's
-Administrator. Setup then closes permanently and the setup link stops working; later
-visits sign in with email and password, and a sign-in lasts 30 days on that
-browser unless you sign out. Public sign-ups stay disabled. No demo people or
-companies are created.
-The local inbox at http://localhost:8025 receives no email from gtmworks: people join by Invite link, and a forgotten password is a password link an Administrator or a Manager makes from the Team page.
-No SMTP account is needed for it.
+Port **3000** (app and Supabase gateway) must be free; it binds **only to
+127.0.0.1**. For a remote server, forward it over SSH
+(`ssh -L 3000:localhost:3000 your-server`) and open the setup link there. On a
+fresh install, enter your name, email, a password of at least 10 characters
+(twice) and your first company name; you are signed in at once, with no email
+step. You become the first company's Administrator. Setup then closes
+permanently and the setup link stops working; later visits sign in with email
+and password, and a sign-in lasts 30 days on that browser unless you sign out.
+Public sign-ups stay disabled. No demo people or companies are created. People
+join by Invite link, and a forgotten password is a password link an
+Administrator or a Manager makes from the Team page, or `gtmworks company
+password-link` on the server for a Company's last Administrator.
 
 The install starts the web app, worker, Postgres,
-GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
-first Company's Engine. gtmworks makes that Engine from a fixed template shipped
+GoTrue, PostgREST, file Storage, an Nginx gateway and the first Company's
+Engine. gtmworks makes that Engine from a fixed template shipped
 with the release: the official Hermes image, pinned by tag and digest and kept
 unmodified, with its own data volume, its own generated key and its own network.
 The app and the worker join the Engine's network; the Engine joins nothing else,
@@ -188,6 +187,7 @@ template when the install owner adds it on the server:
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
 gtmworks company add --name "Third Company"     # prints a first-Administrator link instead
+gtmworks company password-link "Second Company" --email person@example.com   # a password link for its Administrator
 gtmworks company list
 ```
 
@@ -287,7 +287,7 @@ Persistent data lives in Docker named volumes `gtmworks-install_database`
 `gtmworks-install_files` (Storage files) and `gtmworks-install_hermes` (the first
 Company's Engine data); each later Company's Engine keeps its own
 `gtmworks-engine-<name>` volume, under Docker's data root (normally
-`/var/lib/docker/volumes`). The local email inbox is temporary. Never use `down -v`
+`/var/lib/docker/volumes`). Never use `down -v`
 on live data.
 
 ### From source
@@ -310,6 +310,7 @@ gtmworks company add --name "Third Company"     # prints a first-Administrator l
 gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5 --disk 20g
 gtmworks company limits "Second Company" --memory 3g --cpus 3 --disk 30g   # its work sandbox's limits
 gtmworks company link "Third Company"          # a fresh link for a Company still waiting
+gtmworks company password-link "Second Company" --email person@example.com   # a password link for its Administrator
 gtmworks company list
 ```
 
@@ -317,7 +318,14 @@ gtmworks company list
 healthy, and makes the Company with that existing Person as its Administrator; with no
 `--owner` it prints a first-Administrator link instead and makes the Company when that link is
 sent. `company link` prints a fresh link for a Company still waiting and ends the
-earlier one. A failed Engine leaves nothing behind and the same command can be run
+earlier one. `company password-link` prints a password link for an Administrator of an
+existing Company, one use for 24 hours, for when that Administrator forgot their password
+and no other Administrator or Manager can make one from the Team page; it names the Company
+and the address and refuses a Person who is not an Administrator there. A Company's last
+Administrator, and the install owner, whose link no Administrator makes, get theirs this
+way. The secret is only in the printed link; only its hash is kept.
+
+A failed Engine leaves nothing behind and the same command can be run
 again. `company limits` changes a Company's work sandbox memory, CPUs and disk and starts
 only that sandbox again, and its Engine too when the disk changes (see **Server size**
 and **Each Company's disk** under Install). `company list` shows
@@ -542,7 +550,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - 🟡 Board, Cards, Projects and Routines (merged, waiting for the release, #572)
 - ✅ Company knowledge, Skills, memory and team lessons
 - 🟡 Connect any MCP server, and run command tools in the sandbox (merged, waiting for the release, #572)
-- ✅ Roles, invite links and per-Member Agent access
+- ✅ Roles, Invite links without email and per-Member Agent access [#948]
 - 🟡 Good morning message from the main Agent (merged, waiting for the release, #572)
 - ✅ English and Egyptian Arabic, dictation in Egyptian Arabic
 - 🟡 Open Design, installed by you and connected from Apps: Agents make designs

@@ -253,7 +253,7 @@ test('a release install refuses a compose file from another release and an updat
  assert.match(release.commands().replace(/^(volume ls -q|network ls --format \{\{\.Name\}\})\n/gm,''),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
  assert.match(release.commands(),/^pull /m);
  // A release pins every service by digest: update lets compose recreate whatever the new release changed (a database,
- // gateway or mail digest, not only the app), and the gateway reloads the configuration the extraction replaced.
+ // gateway or Storage digest, not only the app), and the gateway reloads the configuration the extraction replaced.
  const commands=release.commands().split('\n');
  const up=commands.findIndex(line=>/ up -d /.test(line));
  assert.match(commands[up],/ up -d --wait --wait-timeout 300$/);

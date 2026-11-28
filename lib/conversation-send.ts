@@ -6,9 +6,11 @@ import { noteInstructions } from './conversation-runs.mjs';
 import { logActionFailure } from './diagnostics.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
+// How long a send the Engine answers "retry" for is asked again before it is left in the box as not sent (#877).
+const busyFor=8000;
 // What a send on the Engine path answers: the Run started (the reply follows on the Conversation's live read), `old`
 // for a Conversation the old record still holds (the caller sends it there), or a refusal with nothing started.
-export type EngineSend={state:'started',conversation:string,run:string}|{state:'old'}|{state:'refused',code?:string,error?:string,status?:number};
+export type EngineSend={state:'started',conversation:string,run:string,queued:boolean}|{state:'old'}|{state:'refused',code?:string,error?:string,status?:number};
 
 // A person's message in a Conversation whose messages are the Engine's (#876, ADR 0033 item 1): checked on the server
 // (open_engine_conversation: an active Member, not a Viewer, their own Conversation, an Agent they may talk to), a new
@@ -32,16 +34,32 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
  const instructions=noteInstructions(checked.note);
  // The same send key is the same Run: a start whose answer was lost is asked again with it, which replays that Run, a
  // few times; one still unknown is refused, and the person's Try again (the same key) replays it rather than start another.
+ // The Engine answering "retry" (#877: it runs as many Runs at once as it takes) is asked again when it says, for a short
+ // time (busyFor), then refused as busy; a session whose queue is full is refused at once. Neither made a Run.
  const start={session:checked.session,input:message,...(instructions?{instructions}:{}),idempotencyKey:`${conversation}:${sendKey}`};
+ const began=Date.now(); let lost=false; let unsure=0;
  let run=await target.engine.sessions.send(start);
- for(let attempt=0;run!==null&&typeof run==='object'&&run.state!=='keyConflict'&&attempt<3;attempt++) {
-  await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
-  run=await target.engine.sessions.send({...start,retry:run.state==='unknown'});
+ for(;;) {
+  if(run===null||typeof run!=='object'||run.state==='keyConflict'||run.state==='queueFull') break;
+  let wait:number;
+  if(run.state==='busy') { wait=run.retryAfter*1000; if(Date.now()-began+wait>busyFor) break; }
+  else { if(unsure>=3) break; lost||=run.state==='unknown'; wait=500*++unsure; }
+  await new Promise(resolve=>setTimeout(resolve,wait));
+  run=await target.engine.sessions.send({...start,retry:lost});
  }
- if(typeof run!=='string') return {state:'refused',error:'conversationHermesFailed',status:502};
+ if(typeof run!=='string') {
+  // Once an answer was lost the Run may exist, so only Try again with the same key can say.
+  if(!lost&&run?.state==='busy') return {state:'refused',error:'conversationEngineBusy',status:503};
+  if(!lost&&run?.state==='queueFull') return {state:'refused',error:'conversationQueueFull',status:409};
+  return {state:'refused',error:'conversationHermesFailed',status:502};
+ }
+ // A Run started while the row holds another may wait its turn in the Engine's queue: the Engine says whether it does,
+ // and the page draws the message as waiting until its Run is followed.
+ const {data:held}=await db.from('conversations').select('open_runs').eq('id',conversation).maybeSingle<{open_runs:string[]|null}>();
+ const queued=(held?.open_runs??[]).some(other=>other!==run)&&await target.engine.sessions.queued(run).catch(()=>false);
  // The Run is on the Engine now; a row that could not take its id still gets the reply in the session, read on the next
  // open, so the send is not refused for it.
  const {error:unheld}=await service.rpc('hold_conversation_run',{conversation,person,run});
  if(unheld) logActionFailure('conversation',new Error('Open Run not held on its Conversation'));
- return {state:'started',conversation,run};
+ return {state:'started',conversation,run,queued};
 }
