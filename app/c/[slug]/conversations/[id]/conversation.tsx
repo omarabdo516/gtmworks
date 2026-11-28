@@ -440,8 +440,8 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
  // One send key per message left with no reply: a second press after an answer that was lost replays that Run.
  const againKeys=useRef(new Map<number,string>());
  // Under a reply that did not finish (#879), and on a message left with no reply (#980), it answers the words already in
- // the Conversation: one Run on them, drawn by the page once (lib/conversation-messages.ts pageMessages), never a second
- // message of its own and never back in the box.
+ // the Conversation: one Run on them, whose Engine turn adopts the message the session holds (`resume_unanswered`), never
+ // a second message of its own and never back in the box.
  // A person's images on the Engine as files to send again, from their own address; null when one cannot be read now.
  const imagesOf=async(message:{files?:{id:number,key?:string}[]}):Promise<File[]|null>=>{
   try {
@@ -460,7 +460,7 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   // The message's images go again with its words (#880), read back from the session that holds them: gtmworks has no copy.
   const images=await imagesOf(said);
   if(!images) { setAsking(false); toast(t('conversationFailed'),{icon:'alert'}); return; }
-  const fields={company,conversation:conversation.id,message:said.body,sendKey:key};
+  const fields={company,conversation:conversation.id,message:said.body,sendKey:key,rerun:true};
   const {failure}=images.length?await postMessageWithFilesAnswer(fields,images):await postMessageAnswer(fields);
   setAsking(false);
   if(failure) toast(t(failure),{icon:'alert'}); else run.follow();

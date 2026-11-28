@@ -782,9 +782,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   settings.sessions.set(run.sessionId,found);
   const at=()=>Date.now()/1000;
   run.turnStarted=true;
-  // A message that carries images (#880) is kept as its input's own parts, each image the data URL the Run was sent,
-  // as the pinned release keeps a native-vision turn (tui_gateway/session_history.py _build_persist_user_message).
-  found.messages.push({role:'user',content:Array.isArray(run.input)?run.input.at(-1)?.content??'':inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
+  // Try again on the session's unanswered last words (#980) asks the Engine to resume that row, as a re-run of a failed
+  // delivery turn does (agent/session_persistence.py adopt_unanswered_turn): the Run answers the message the session
+  // holds instead of appending the same words again. Any other Run keeps its own message, images included (#880), as the
+  // pinned release keeps a native-vision turn (tui_gateway/session_history.py _build_persist_user_message).
+  const tail=found.messages.at(-1);
+  const adopting=run.resume&&tail?.role==='user'&&inputText(tail.content)===inputText(run.input);
+  if(!adopting) found.messages.push({role:'user',content:Array.isArray(run.input)?run.input.at(-1)?.content??'':inputText(run.input),timestamp:at(),display_kind:'internal_notification'});
   if(settings.liveHold&&!run.released) await new Promise(resolve=>{ run.release=resolve; });
   push(run.id,{event:'run.started'});
   for(const step of settings.liveSteps(inputText(run.input))) {
@@ -932,7 +936,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const runProfile=decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||'default');
      const asks=settings.routineAsks(inputText(sent.input));
      if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
-     run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000,
+     run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,resume:sent.resume_unanswered===true,body:raw,reads:0,asked,approvals,created:Date.now()/1000,
       told:(settings.sessions.get(request.headers['x-hermes-session-key'])?.messages??[]).filter(message=>message.role==='user'&&String(message.content).startsWith('[kanban]')).map(message=>message.content)}; settings.runs.push(run);
      const card=enabledToolsets(profileOf(runProfile)?.config).includes('kanban')?settings.kanbanAsks(inputText(sent.input),String(sent.instructions??'')):null;
      if(card) run.card=card;

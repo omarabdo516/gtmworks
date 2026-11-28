@@ -87,24 +87,6 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:Sessi
  const shown:PageMessage[]=[];
  // The turn a message belongs to, by its first message's own key, so a page read later names the same turn.
  const turnKey=(at:number)=>String(all[at]?.message_uid??all[at]?.id??idOf(all[at]));
- // The person's words repeated with no reply between are one unanswered message, the first standing for both (#980):
- // Try again starts a Run on the message already in the Conversation, whose input the Engine stores, and the page draws
- // it once (`repeats` below). The turn still starts at the repeated message, so the rerun's reply keeps its own Steps,
- // and the repeated row stays in the read for the page's sent-message matching (app/c/[slug]/conversations/[id]).
- const repeats=new Set<number>();
- let lastPersonAt=-1;
- for(let index=0;index<all.length;index++) {
-  const message=all[index];
-  if(message?.role==='user'&&startsTurn(message)) {
-   const body=textOf(message.content);
-   if(summary.test(body)) lastPersonAt=-1;
-   else { if(lastPersonAt>=0&&textOf(all[lastPersonAt].content)===body) repeats.add(index); lastPersonAt=index; }
-  // A reply the person read ends the unanswered message; a turn's tool calls do not, so a rerun after a lost Run's
-  // calls is still the same unanswered words.
-  } else if(message?.role==='assistant'&&!toolTurn(message)&&replyText(message).trim()) lastPersonAt=-1;
- }
- // shortcut: a page whose first message is the repeated one has no message before it, so that page draws it; upgrade by
- // reading one message before a page that starts on a person's words.
  // The last message of each turn that has words is its reply: Hermes keeps the interim narration ("Let me check…")
  // beside the call it made, and the old record showed the Run's final output alone.
  const lastText=new Map<number,number>();
@@ -123,7 +105,7 @@ function pageMessages(page:SessionMessage[],prefix:SessionMessage[],suffix:Sessi
    if(summary.test(body)) { shown.push({id:idOf(message),author:'engine',author_name:'',body:summaryText(textOf(message.content)),created_at:atOf(message),kind:'summary',turn:turnKey(turn)}); continue; }
    if(message.display_kind==='hidden') continue;
    const {files}=namedFiles(message,idOf(message),profile);
-   if(body.trim()||files.length) shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn),...(files.length?{files}:{}),...(repeats.has(index)?{repeated:true as const}:{})});
+   if(body.trim()||files.length) shown.push({id:idOf(message),author:'person',author_name:'',body,created_at:atOf(message),turn:turnKey(turn),...(files.length?{files}:{})});
    continue;
   }
   if(message?.role==='assistant'&&lastText.get(turn)===index&&hasReply(message)) {

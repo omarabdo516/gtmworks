@@ -274,15 +274,17 @@ test('a double press sends one message',async({page})=>{
 
 test('a Conversation whose last message is the person\'s, with no Run open, says no reply, and Try again runs it again, holding the words once',async({page})=>{
  test.setTimeout(180000);
- await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Plan the week',timestamp:3}]);
+ const {session}=await openConversation(page,[{role:'user',content:'Hello',timestamp:1},{role:'assistant',content:'Hi Omar.',timestamp:2},{role:'user',content:'Plan the week',timestamp:3}]);
  const line=page.locator('[data-outcome=no-reply]');
  await expect(line).toHaveText(/No reply/,{timeout:20000});
  await line.getByRole('button',{name:'Try again'}).click();
  await expect(page.locator('.msg[data-author=agent]').last()).toHaveText(/Reply to: Plan the week/,{timeout:30000});
  await expect(line).toHaveCount(0);
  expect(runsOf('Plan the week')).toBe(1);
- // The words are the Conversation's already (#980): drawn once, and not back in the box.
+ // The words are the Conversation's already (#980): one drawn message, the Engine's session holds them once, and the
+ // box is empty.
  await expect(person(page).filter({hasText:'Plan the week'})).toHaveCount(1);
+ expect(fake.settings.sessions.get(session)!.messages.filter(message=>message.role==='user'&&message.content==='Plan the week'),'the session holds the words once').toHaveLength(1);
  await expect(page.getByLabel('Message',{exact:true})).toHaveValue('');
 });
 

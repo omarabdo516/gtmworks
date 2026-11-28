@@ -140,9 +140,8 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 export type MessageFile={id:number,name:string,image?:true,key?:string,state?:'notNow'};
 // A message its person just sent is drawn by the page before its record holds it (`sending`, #756, lib/sending.ts),
 // `posting` until the send is answered; no record the server reads has one. On the Engine (#877) it names its Run once
-// the Engine took it (`run`), and is `behind` while the Engine says it waits its turn behind another. `repeated` is the
-// same unanswered words said again by Try again's Run (#980): the page draws the first alone.
-export type ConversationMessage={id:number,author:'person'|'agent'|'engine',author_name:string,body:string,turn?:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'asked'|'answer'|'handed'|'handedOn'|'sending'|'summary',to?:string,failed?:boolean,behind?:true,key?:string,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[],run?:string,repeated?:true};
+// the Engine took it (`run`), and is `behind` while the Engine says it waits its turn behind another.
+export type ConversationMessage={id:number,author:'person'|'agent'|'engine',author_name:string,body:string,turn?:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'asked'|'answer'|'handed'|'handedOn'|'sending'|'summary',to?:string,failed?:boolean,behind?:true,key?:string,posting?:true,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[],missed?:string[],run?:string};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null,missed_files?:string[]|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at,missed_files';
 export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
