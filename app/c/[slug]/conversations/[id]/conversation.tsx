@@ -467,7 +467,7 @@ export function EngineLoaded({initial,team,open=false,owner=false}:{initial:Conv
  const shown=useMemo(()=>{
   // A Run waiting on its question is not working for the box (#138), which keeps its send arrow: the typed words answer it.
   const questioning=run.asking?.card.kind==='question'&&!run.asking.settled;
-  const ended=cause==='noModel'?{noModel:{owner}}:cause?{modelRefused:{reason:cause,owner,...(run.unfinished?.resetsAt?{resetsAt:run.unfinished.resetsAt}:{})}}:{};
+  const ended=cause==='noModel'?{noModel:{owner}}:cause?{modelRefused:{reason:cause,owner,...(run.unfinished?.resetsAt?{resetsAt:run.unfinished.resetsAt}:{}),...(run.unfinished?.ranOut?.length?{ranOut:run.unfinished.ranOut}:{})}}:{};
   // A retry's Run adds its own copy of the words it answers (#980); the Engine's row for it is hidden while the original
   // message is drawn, so the words stand alone. The original may be on an older page not read yet: then the retry's row
   // is the only copy and stays drawn until the person scrolls to it.
@@ -579,6 +579,8 @@ export function EngineLoaded({initial,team,open=false,owner=false}:{initial:Conv
    run.follow();
   }
  };
+ // Until the first read lands the placeholder is the transcript, as the frame's own loading state draws it (#172).
+ if(!engine.page&&engine.mode==='reading') return <ChatPlaceholder/>;
  return <div className="transcript" ref={box} onScroll={event=>{
   const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80;
   if(view.scrollTop<80&&view.scrollHeight>view.clientHeight+80&&engine.hasMore&&!engine.older) {
@@ -588,7 +590,7 @@ export function EngineLoaded({initial,team,open=false,owner=false}:{initial:Conv
  }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  {!engine.page&&engine.mode==='reading'?<ChatPlaceholder/>:!engine.page&&engine.mode==='unread'?<ConversationNotRead again={()=>void engine.refresh()}/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} details={!!agent} live={{...(stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working,
+  {!engine.page&&engine.mode==='unread'?<ConversationNotRead again={()=>void engine.refresh()}/>:<ConversationTurns slug={slug} company={company} record={shown} writer={writer} asked={()=>run.follow()} details={!!agent} live={{...(stored?{view:null,reply:'',working:false}:{view:run.view,reply:run.reply,working:run.working,
    card:run.asking?<AskingCard key={run.asking.card.id} company={company} conversation={conversation.id} asking={run.asking} writer={writer} chips={agent?.main===true} settle={run.settle}/>:undefined}),
    ending:ending??undefined,stopped:ending&&run.unfinished?.outcome==='stopped'?(run.unfinished.said?'reply':'before'):null,again:asking?undefined:()=>void askAgain()}}/>}
   {noReply&&!ending&&<p className="note convo-status" role="alert" data-outcome="no-reply">{c('conversationNoReply')} <button type="button" className="link-btn" disabled={asking} onClick={()=>void askAgain()}>{c('conversationTryAgain')}</button></p>}

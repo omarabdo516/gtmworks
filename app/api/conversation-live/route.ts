@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { agentEngine } from '@/lib/engine/handle.mjs';
+import { agentEngine, companyEngine } from '@/lib/engine/handle.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { liveLines, type LiveDelta, type LiveLine } from '@/lib/live-steps.mjs';
 import { uuid } from '@/lib/conversations';
-import { runEnd } from '@/lib/run-outcome.mjs';
+import { runEnd, type RunEnd } from '@/lib/run-outcome.mjs';
+import { ranOutAccounts } from '@/lib/ran-out-accounts.mjs';
+import { placedName, readProviderNames } from '@/lib/provider-names.mjs';
 import { conversationLines, type LiveAskingLine } from '@/lib/conversation-live.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 
@@ -50,7 +52,20 @@ export async function GET(request:NextRequest) {
   const engine=target.engine;
   // How the Run ended is the Run's own record (#879). A person who comes back after it ended is told so at once, and
   // its reply is the session's, read next; a Run the Engine no longer knows is let go the same way.
-  const told=async()=>{ try { return runEnd(await engine.runs.read(run)); } catch { return null; } };
+  // A Run that ran out of every account it could use names the accounts of its Agent's own provider that ran out (#731),
+ // as Settings › Providers names them, read from the Engine's credential pool now; one that cannot be read names none.
+ const named=async(end:RunEnd|null):Promise<RunEnd|null>=>{
+  if(!end||end.end!=='ended'||end.cause!=='access') return end;
+  try {
+   const whole=await companyEngine(company); if(!whole) return end;
+   const out=await ranOutAccounts(whole,target.agent.profile);
+   const rows=out.accounts.filter(row=>!out.ownProvider||row.provider===out.ownProvider).sort((a,b)=>a.provider.localeCompare(b.provider)||a.place-b.place);
+   if(!rows.length) return end;
+   const names=await readProviderNames(db,company);
+   return {...end,ranOut:rows.map(row=>placedName(names,row.provider,row.account,row.place))};
+  } catch { return end; }
+ };
+ const told=async()=>{ try { return await named(runEnd(await engine.runs.read(run))); } catch { return null; } };
   const settled=await told();
   if(settled) { await db.rpc('end_conversation_run',{conversation,run}); return only(settled); }
   const stopped=new AbortController();

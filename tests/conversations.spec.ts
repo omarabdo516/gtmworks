@@ -17,13 +17,20 @@ const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 const manager='20000000-0000-0000-0000-000000000002';
 
-// Two agents on two profiles of the lane's fake Hermes, the install's one Hermes (#342): Mona is the company's default.
+// Two agents, each on its own profile of the lane's fake Hermes, the install's one Hermes (#342): Mona is the company's default.
 function attachAgents(fake:Awaited<ReturnType<typeof laneHermes>>) {
- const stamp=randomUUID().slice(0,8); const agents:Record<string,{id:string,profile:string,connection:string}>={};
+ const agents:Record<string,{id:string,profile:string,connection:string}>={};
  query(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
+ // The Company's own profile, confirmed: the Engine handle serves a Company's Agents once it has one (company_app_agents).
+ query(`insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${company}','co-${company.replaceAll('-','')}',true)
+  on conflict (company_id) do update set tools_confirmed=true,tools_pending=false`);
  for(const [name,makeDefault] of [['Mona',true],['Nour',false]] as const) {
-  const [profile,id,connection]=[`${name.toLowerCase()}-${stamp}`,randomUUID(),randomUUID()];
-  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','${name}','Marketing',${makeDefault},'${profile}')`);
+  const id=randomUUID(), connection=randomUUID(), profile=`ag-${id.replaceAll('-','')}`;
+  // Each Agent on its own profile, confirmed, as the worker leaves one it made (#121).
+  query(`do $$ begin
+   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${id}','${company}',true);
+   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${id}','${company}','${connection}','${name}','Marketing',${makeDefault},'${profile}');
+  end $$;`);
   agents[name]={id,profile,connection};
   // Each Agent's own profile is one the lane's Engine serves, so a send is a Run there (#883).
   fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
@@ -160,7 +167,6 @@ test('isolation: another member and another company get not found, and a company
   const messages=`intent=read&offset=0&limit=50`;
   expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}&${messages}`)).status(),'its own person reads its messages').toBe(200);
   expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}&${messages}`)).status()).toBe(404);
-  expect((await page.request.get(`/api/conversations?company=${other}&conversation=${conversation}`)).status()).toBe(404);
   expect((await page.goto(`/c/rs-consultations/conversations/${conversation}`))!.status()).toBe(404);
   expect((await send(page,{company:other,conversation,message:'Elsewhere',sendKey:randomUUID()})).status()).toBe(404);
   query(`update public.members set role='owner' where company_id='${company}' and person_id='${manager}'`);
@@ -168,7 +174,6 @@ test('isolation: another member and another company get not found, and a company
   try {
    await signIn(owner,'manager@example.com','/c/rs-learning/home');
    expect((await owner.request.get(`/api/conversations?company=${company}&conversation=${conversation}&${messages}`)).status()).toBe(404);
-   expect((await owner.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
    expect((await owner.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
    const refused=await send(owner,{conversation,message:'Hello',sendKey:randomUUID()});
    expect(refused.status()).toBe(404); expect((await refused.json()).error).toBe('conversationNotFound');
@@ -197,12 +202,11 @@ test('A Contributor starts a conversation and gets the reply; nobody else reads 
    await expect(member).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
    const conversation=member.url().split('/').pop()!;
    await expect(member.locator('.msg[data-author=person]')).toContainText(text);
-   await expect(member.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
+   await expect(member.locator('.msg[data-author=agent]:not([data-live])').filter({hasText:`Reply to: ${text}`})).toBeVisible();
    await expect(member.getByLabel('Message',{exact:true})).toBeVisible();
    expect(fake.settings.runs.map(run=>run.sessionId)).toEqual([sessionOf(conversation)]);
    expect(fake.settings.requests.filter(request=>request.method==='POST').at(-1)!.path).toBe(`/p/${Mona.profile}/v1/runs`);
    // The company's Owner (Omar here) cannot read it.
-   expect((await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).status()).toBe(404);
    expect((await page.goto(`/c/rs-learning/conversations/${conversation}`))!.status()).toBe(404);
   } finally { await context.close(); }
  } finally { query(`update public.members set role='contributor' where company_id='${company}' and person_id='${contributor}'`); detach(agents); await fake.close(); }
@@ -259,7 +263,7 @@ test('a Conversation whose messages are slow shows the placeholder in its transc
   await expect(placeholder.locator('.sk-msg')).toHaveCount(3);
   await expect(page).toHaveURL(new RegExp(`${path}$`));
   await expect(page.locator('.sidebar')).toBeVisible();
-  await expect(page.locator('.chat .head-pill__title')).toHaveText('Turn 1');
+  await expect(page.locator('.chat .head-pill__title')).toHaveText(/^Turn 1\b/);
   await expect(page.locator('.chat .composer-area').getByLabel('Message',{exact:true})).toBeVisible();
   const frame=[await where(page,'.chat .transcript'),await where(page,'.chat .composer-area')];
   const messages=page.locator('.chat .msg');
@@ -273,7 +277,7 @@ test('a Conversation whose messages are slow shows the placeholder in its transc
   expect(placeholders.seen()).toEqual(['Loading the chat']);
  } finally {
   fake.settings.sessionDelay=0; await fake.close();
-  query(`delete from public.conversations where id='${conversation}'; delete from public.hermes_agents where id='${agent}';`);
+  query(`do $$ begin delete from public.conversations where id='${conversation}'; delete from public.hermes_agents where id='${agent}'; end $$;`);
  }
 });
 

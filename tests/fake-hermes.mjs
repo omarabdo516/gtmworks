@@ -814,7 +814,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   }
   // A Run whose model call fails (#879; `ending` failed, `failure` its words) writes no reply: the session holds the
   // person's message and the calls made, and the Run's record names the failure.
-  if(!run.stopped&&settings.ending==='failed') { run.liveFailed=true; run.liveEnded=true; endEvents(run.id,'run.failed'); return; }
+  // So does a Run every account of whose ran out (#622, `outOfQuota`): its record names the Engine's own usage words.
+  if(!run.stopped&&(settings.ending==='failed'||run.outOfAccounts)) { run.liveFailed=true; run.liveEnded=true; endEvents(run.id,'run.failed'); return; }
   const reply=settings.reply(inputText(run.input),run.asked.map(asked=>asked.answer??null),run.approvals.map(asking=>asking.choice??null));
   run.output=reply;
   for(const piece of run.stopped?[]:reply.match(/\S+\s*/g)??[]) {
@@ -1008,7 +1009,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      return send(response,200,{object:'hermes.run',run_id:run.id,status:run.liveFailed?'failed':run.liveDone?'completed':approval?'waiting_for_approval':run.turnStarted?'running':'queued',session_id:run.session,...times,
       pending_controls:question?[{kind:'clarify',prompt_id:question.prompt_id,execution_generation:1,question:`${question.question}\nReply "skip" to skip this question.`,choices:question.choices.map((choice,index)=>index===0&&question.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:question.multi_select}]:[],
       ...(approval?{last_event:'approval.request',approval:{command:approval.command,description:approval.description,pattern_key:approval.patternKeys[0],pattern_keys:approval.patternKeys,request_id:approval.request_id,timeout_s:300,event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:approval.choices}}:{}),
-      ...(run.liveDone?{output:run.output??settings.reply(inputText(run.input),[],[])}:{}),...(run.liveFailed&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{})});
+      ...(run.liveDone?{output:run.output??settings.reply(inputText(run.input),[],[])}:{}),...(run.liveFailed&&run.outOfAccounts?{output:settings.modelCalls.some(call=>call.run===run.id)?settings.noAccountText:settings.usageLimitText}:run.liveFailed&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{})});
     }
     if(run.stopped) { endEvents(run.id,'run.cancelled'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'cancelled',session_id:run.session,pending_controls:[],...times}); }
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
