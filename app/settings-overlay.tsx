@@ -12,7 +12,7 @@ import { pickSection, pageReadAt, overlayHref, agentsMainFirst, agentTab, agentT
 import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
-import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, InviteLink, PendingInviteLinks, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
+import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, InviteLink, PendingInviteLinks, AddMember, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
 import { LookRow } from './agent-look-window';
 import { InfoTip } from './settings-info';
@@ -39,6 +39,7 @@ import { AboutSection } from './settings-about';
 import { ProposalNote, ProposalMark } from './settings-proposal';
 import { readWaitingChange, readWaitingAgents, countWaitingChanges, waitingChangeHref } from '@/lib/agent-change-waiting.mjs';
 import { ownerNames } from '@/lib/company-owners.mjs';
+import { addablePeople } from '@/lib/addable-people.mjs';
 import { markSettingsOpen } from '@/lib/settings-open-timing';
 import { readStoredLearning } from '@/lib/company-learning.mjs';
 
@@ -102,6 +103,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // and the note is the open Agent's oldest one. A read that fails leaves Settings as if nothing waited, and says so in the
  // server's log; with the Owners' names unread the note waits for "the Owner".
  const failed=<T,>(what:string,fallback:T)=>(failure:unknown):T=>{ console.error(`Settings: ${what} not read:`,company.id,(failure as {message?:string})?.message||'unknown error'); return fallback; };
+ // The People an Administrator may add from another Company they administer (#952), for the Team table's add section.
+ const candidates:{person_id:string,name:string,company:string}[]=section==='members'&&owner?await addablePeople(db,company.id).catch(failed('people from other Companies',[])):[];
  const agentsWaiting=owner?await countWaitingChanges(db,company.id).catch(failed('waiting proposals count',0)):0;
  const waitingAgents=owner&&section==='agents'&&!agent&&agentsWaiting>0?await readWaitingAgents(db,company.id).catch(failed('Agents with a waiting proposal',new Set<string>())):new Set<string>();
  const change=agent?await readWaitingChange(db,company.id,agent.id).catch(failed('waiting proposal',null)):null;
@@ -120,7 +123,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // A learned Skill's page (#181) at ?agent=…&skill=…; one this person has no page for opens Learning once read.
  const skillAsked=!!(query.agent&&query.skill);
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} count={memberCount} owner={owner} ro={ro} readAt={readAt}/>
-  :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} links={links} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
+  :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} links={links} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} candidates={candidates} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} status={stateOf(agent.id).state} main={agents[0]} rules={rules} readAt={readAt} morningFocus={query.focus==='time'} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} app={query.app} failed={query.signin==='failed'}/>
   // Voice is the Owner's and the Managers' (#863): pickSection opens it for no other Role, and only the Owner changes it.
@@ -166,17 +169,17 @@ function CompanySection({t,company,solo,count,owner,ro,readAt}:{t:T,company:{id:
 
 // The Company's Members on their own page (#612): who is in the team and which Agents each one sees, for an Owner or a
 // Manager; the names and Roles for anyone else; and, for a Company worked alone, the Owner's invitation to the first one.
-function MembersSection({t,company,solo,members,invitations,links,agents,allowed,invitedAllowed,userId,slug,owner,canManage,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],links:InviteLink[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
+function MembersSection({t,company,solo,members,invitations,links,agents,allowed,invitedAllowed,candidates,userId,slug,owner,canManage,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],links:InviteLink[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,candidates:{person_id:string,name:string,company:string}[],userId:string,slug:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const inviteRoles=teamInviteRoles(t);
  const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem" info={t('settingsTeamHint')}>{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
-  <SettingsTeamTable company={company.id} slug={slug} members={members} invitations={invitations} links={links} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}/>
+  <SettingsTeamTable company={company.id} slug={slug} members={members} invitations={invitations} links={links} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} candidates={candidates}/>
  </div></section>;
  // Alone (#10): no members, no per-member Agents; the Owner invites the first Member here, and the Company becomes a
  // team when that Member accepts. A link made for that first Member waits here (#951), with its Cancel, until it is used.
  const invite=owner&&<>
   {links.length>0&&<section className="dp-sec" aria-labelledby="co-h-links"><Label id="co-h-links">{t('inviteLinks')}</Label><PendingInviteLinks company={company.id} links={links}/></section>}
-  <Invite mode="alone" company={company.id} slug={slug} roles={inviteRoles}/><InviteLink company={company.id} agents={agents}/></>;
+  <Invite mode="alone" company={company.id} slug={slug} roles={inviteRoles}/><InviteLink company={company.id} agents={agents}/><AddMember company={company.id} candidates={candidates} agents={agents}/></>;
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('members')}/>{ro}{solo?invite:canManage?table:list}</>;

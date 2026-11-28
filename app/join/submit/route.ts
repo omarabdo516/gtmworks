@@ -10,9 +10,12 @@ import { appUrl } from '@/lib/app-origin.mjs';
 import { cappedForm } from '@/lib/request-body.mjs';
 
 // Sending an Invite link's form (#950, ADR 0019) makes the new Person's account, makes them a Member of the link's
-// Company with its Role and Agents, and signs them in. The link is spent by this request, in claim_invite_link's one
-// transaction, never by opening the page: the page's check (check=1) only asks whether it is open, so a link preview
-// fetching the page uses nothing. Only the link's hash is held here, so no log or address receives its secret.
+// Company with its Role and Agents, and signs them in. A Person who already has an account signs in first, on the same
+// page, and the session that reaches this route is the one that joins (#952): no second account is made. A Person who is
+// already an active Member is told so and nothing changes; the link stays unused (#775). The link is spent by this
+// request, in claim_invite_link's one transaction, never by opening the page: the page's check (check=1) only asks
+// whether it is open, so a link preview fetching the page uses nothing. Only the link's hash is held here, so no log or
+// address receives its secret.
 const refused=(language:'en'|'ar')=>new NextResponse(i18n(language).t('inviteLinkNeedsNew'),{status:410,headers:{'content-type':'text/plain; charset=utf-8'}});
 const redacted=(error:{name:string,code?:string,status?:number,message:string})=>({name:error.name,code:error.code,status:error.status,message:error.message.replace(/\S+@\S+/g,'[redacted]')});
 
@@ -36,11 +39,41 @@ export async function POST(request:NextRequest) {
   logActionFailure('invite_link_refused',new Error('The Invite link is unknown, used, cancelled or ended'));
   return refused(language);
  }
- // The page asks which Company and Role wait behind its link before it shows the form; the answer changes nothing.
- if(form.get('check')==='1') return NextResponse.json({company:link.company,role:link.role});
- const input=inviteLinkInput(form);
+ // The page asks which Company and Role wait behind its link before it shows the form, and whether the signed-in person
+ // is already a Member (an answer that spends nothing). Opening the link never uses it up.
+ if(form.get('check')==='1') {
+  const db=await supabase();
+  const {data:{user}}=await db.auth.getUser();
+  let member=false;
+  if(user) {
+   const {data,error:membership}=await admin.rpc('invite_link_member',{link_hash:hash,person:user.id});
+   if(membership) logActionFailure('invite_link_member',membership);
+   else member=data===true;
+  }
+  return NextResponse.json({company:link.company,role:link.role,member});
+ }
  // Back to the form with the secret in the fragment, as the link carries it, so the next request does not.
  const again=(problem:string)=>appUrl(`/join?invalid=${problem}&language=${language}#code=${secret}`);
+ // A Person with an account signed in on the page, so the browser sent the form with their session and no password.
+ if(form.get('mode')==='signin') {
+  const db=await supabase();
+  const {data:{user},error:who}=await db.auth.getUser();
+  if(who || !user) {
+   logActionFailure('invite_link_signin',who?redacted(who):new Error('The signed-in session was not read'));
+   return NextResponse.redirect(appUrl(`/join?invalid=signIn&mode=signin&language=${language}#code=${secret}`),303);
+  }
+  const {data:slug,error:failure}=await admin.rpc('claim_invite_link',{link_hash:hash,person:user.id,person_name:null,language});
+  if(failure || !slug) {
+   logActionFailure(failure?'claim_invite_link':'invite_link_empty_slug',failure ?? new Error('The claim returned no company slug'));
+   // An active Member is told so by the page's own check of this still-unused link; their Role and Agents are unchanged
+   // (#775, #952).
+   if(failure?.code==='23505' || /alreadyMember/.test(failure?.message ?? '')) return NextResponse.redirect(appUrl(`/join?language=${language}#code=${secret}`),303);
+   if(failure?.code==='55000') return refused(language);
+   return NextResponse.redirect(appUrl(`/join?invalid=1&mode=signin&language=${language}#code=${secret}`),303);
+  }
+  return NextResponse.redirect(appUrl(`/c/${slug}/home`),303);
+ }
+ const input=inviteLinkInput(form);
  if(!input) {
   logActionFailure('invite_link_invalid_input',new Error('Invalid Invite link input'));
   return NextResponse.redirect(again(passwordProblem(form.get('password'),form.get('confirm') ?? '') ?? '1'),303);

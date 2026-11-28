@@ -18,6 +18,12 @@
   "ar": { "title": "لينكات كلمة المرور", "body": "العضو اللي نسي كلمة المرور بيطلب من أدمن أو مدير في شركته، اللي بيعمله لينك كلمة مرور من صفحة الفريق؛ بيشتغل مرة واحدة لمدة 24 ساعة، وبيدخّله بكلمة المرور الجديدة ويخرّج أجهزته التانية، وصفحة الدخول مبقتش تبعت إيميل لتغيير كلمة المرور." }
 },
 {
+  "issue": 952,
+  "date": "2026-11-28",
+  "en": { "title": "People join with the account they have", "body": "A person who already has an account signs in on the invite link and joins with the link's Role and Agents, without making a second account; a person who is already a Member keeps their Role and Agents, and the link stays unused. From the Team page an Administrator also adds a Member of another company they administer, with a Role and Agents and no link." },
+  "ar": { "title": "الناس بتنضم بالحساب اللي عندها", "body": "اللي عنده حساب بالفعل بيدخل من لينك الدعوة وبينضم بدور اللينك والوكلاء اللي فيه، من غير ما يعمل حساب تاني؛ واللي عضو بالفعل بيفضل دوره والوكلاء اللي بيشوفهم زي ما هما واللينك بيفضل ما اتستخدموش. ومن صفحة الفريق الأدمن بيضيف كمان عضو من شركة تانية بيديرها، بدور ووكلاء ومن غير لينك." }
+},
+{
   "issue": 951,
   "date": "2026-11-28",
   "en": { "title": "Invite links you can see and cancel", "body": "The Team page lists every invite link still waiting for its Person, with the Role it gives, who made it and the day it ends. Cancel stops one at once, and a Person who opens a link that was used, cancelled or ended sees a clear page telling them to ask the Administrator for a new one." },

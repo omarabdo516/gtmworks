@@ -9,6 +9,7 @@ import { SettingsIcon } from './settings-icons';
 import { InviteSection } from './invite-section';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
 import { PasswordLinkButton, PasswordLinkMade, type MakePasswordLink, type MadePasswordLink } from './password-link-section';
+import { AddMemberSection, type AddMember } from './add-member-section';
 import { toast } from './toast';
 
 // The Team table (#15, #185, #187; design-reference: teamTableHTML): one row per Member, the main Agent shown to all,
@@ -18,7 +19,10 @@ export type TeamAgent={id:string,connection_id:string,name:string,is_default?:bo
 export type TeamMember={person_id:string,role:string,people:{name:string|null}|null};
 export type TeamInvitation={id:string,email:string,role:string};
 export type TeamLink={id:string,label:string,role:string,made_by_name:string|null,ends_at:string};
-export type TeamData={members:TeamMember[],invitations:TeamInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:string[],invitedAllowed:string[]};
+// A Person the Administrator may add from another Company they administer (#952): the Company they come from is shown
+// beside their name, as two People may share one.
+export type TeamCandidate={person_id:string,name:string,company:string};
+export type TeamData={members:TeamMember[],invitations:TeamInvitation[],links:TeamLink[],agents:TeamAgent[],allowed:string[],invitedAllowed:string[],candidates:TeamCandidate[]};
 export type SaveSwitch=(company:string,target:{member:string}|{invitation:string},agent:string,visible:boolean)=>Promise<string>;
 export type SendInvite=(email:string,role:string)=>Promise<{error?:string}>;
 export type CancelLink=(link:string)=>Promise<string>;
@@ -95,7 +99,7 @@ export function PendingLinks({links,cancelLink}:{links:TeamLink[],cancelLink:Can
  </ul>;
 }
 
-export function TeamTable({company,members,invitations,links=[],agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,makeLink,cancelLink,makePasswordLink,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,makeLink?:MakeLink,cancelLink?:CancelLink,makePasswordLink?:MakePasswordLink,hint?:boolean}) {
+export function TeamTable({company,members,invitations,links=[],agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,makeLink,cancelLink,add,candidates,makePasswordLink,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],links?:TeamLink[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,makeLink?:MakeLink,cancelLink?:CancelLink,add?:AddMember,candidates?:TeamCandidate[],makePasswordLink?:MakePasswordLink,hint?:boolean}) {
  const {t}=useI18n();
  const [passwordLink,setPasswordLink]=useState<MadePasswordLink|null>(null);
  // A password link (#954): an Administrator makes one for any other Member, a Manager for any but an Administrator.
@@ -121,5 +125,7 @@ export function TeamTable({company,members,invitations,links=[],agents,allowed,i
  {hint&&<p className="set-hint ta-hint">{t('settingsTeamHint')}</p>}
  {owner&&<InviteSection mode="table" roles={inviteRoles(t)} send={send}/>}
  {/* An Invite link (#950): the Administrator's way in for a new Person, with the Agents they will see. */}
- {owner&&makeLink&&<InviteLinkSection agents={others} make={makeLink}/>}</>;
+ {owner&&makeLink&&<InviteLinkSection agents={others} make={makeLink}/>}
+ {/* A Person from another Company the Administrator administers, with a Role and Agents and no link (#952). */}
+ {owner&&add&&candidates&&candidates.length>0&&<AddMemberSection people={candidates} agents={others} add={add}/>}</>;
 }

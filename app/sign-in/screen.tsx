@@ -10,7 +10,7 @@ import PasswordLinkForm, { passwordLinkInvalid, type PasswordLinkInvalid } from 
 
 type Mode='sign-in'|'first-run'|'first-owner'|'join'|'forgot'|'password-link';
 const copy={'sign-in':['signIn','welcomeBackToYourWorkspace'],'first-run':['setUpGtmworks','firstRunDescription'],'first-owner':['setUpGtmworks','firstOwnerDescription'],join:['joinTitle','joinDescription'],forgot:['forgotPassword','forgotPasswordDescription'],'password-link':['setNewPassword','passwordLinkDescription']} as const;
-export default function SignInScreen({next,wordmark,mode='sign-in',invalid,initialLanguage,notice}:{next:string,wordmark:ReactNode,mode?:Mode,invalid?:'setupInvalid'|'passwordTooShort'|'passwordsDoNotMatch'|'firstOwnerEmailTaken'|JoinInvalid|PasswordLinkInvalid,initialLanguage?:Language,notice?:'couldNotAcceptTheInvitation'}) {
+export default function SignInScreen({next,wordmark,mode='sign-in',invalid,initialLanguage,notice,signIn=false}:{next:string,wordmark:ReactNode,mode?:Mode,invalid?:'setupInvalid'|'passwordTooShort'|'passwordsDoNotMatch'|'firstOwnerEmailTaken'|JoinInvalid|PasswordLinkInvalid,initialLanguage?:Language,notice?:'couldNotAcceptTheInvitation',signIn?:boolean}) {
  const initial=useI18n().language;
  const [language,setLanguage]=useState<Language>(initialLanguage??initial);
  const {t}=i18n(language);
@@ -22,9 +22,9 @@ export default function SignInScreen({next,wordmark,mode='sign-in',invalid,initi
  const [title,description]=copy[mode];
  // Each form takes only the problems it can have; the password link's own two are no other form's.
  const shared=invalid==='passwordNeedsVerificationCode'||invalid==='passwordLinkCodeRefused'?undefined:invalid;
- const firstRun=shared==='inviteLinkEmailTaken'?undefined:shared;
+ const firstRun=shared==='inviteLinkEmailTaken'||shared==='couldNotSignIn'?undefined:shared;
  return <LanguageProvider language={language}>
   <div className="absolute top-4 end-4 z-10"><label className="text-xs text-muted-foreground">{t('interfaceLanguage')} <select className={mode==='first-run'?'max-md:min-h-11':undefined} value={language} onChange={event=>setLanguage(event.target.value as Language)}><option value="en">{t('english')}</option><option value="ar">{t('arabic')}</option></select></label></div>
-  <Auth wordmark={wordmark} title={t(title)} description={t(description)}>{mode==='first-run'?<FirstRunForm invalid={firstRun}/>:mode==='first-owner'?<FirstRunForm owner invalid={firstRun}/>:mode==='join'?<JoinForm invalid={shared==='firstOwnerEmailTaken'?undefined:shared}/>:mode==='forgot'?<ForgotNote/>:mode==='password-link'?<PasswordLinkForm invalid={invalid&&passwordLinkInvalid.includes(invalid)?invalid as PasswordLinkInvalid:undefined}/>:<Form next={next} notice={notice}/>}</Auth>
+  <Auth wordmark={wordmark} title={t(title)} description={t(description)}>{mode==='first-run'?<FirstRunForm invalid={firstRun}/>:mode==='first-owner'?<FirstRunForm owner invalid={firstRun}/>:mode==='join'?<JoinForm invalid={shared==='firstOwnerEmailTaken'?undefined:shared} signIn={signIn}/>:mode==='forgot'?<ForgotNote/>:mode==='password-link'?<PasswordLinkForm invalid={invalid&&passwordLinkInvalid.includes(invalid)?invalid as PasswordLinkInvalid:undefined}/>:<Form next={next} notice={notice}/>}</Auth>
  </LanguageProvider>;
 }

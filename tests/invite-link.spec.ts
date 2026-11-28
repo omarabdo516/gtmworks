@@ -1,7 +1,7 @@
 import { test, expect, freshSeed, laneRows, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { signIn, openNavigation } from './sign-in';
+import { signIn, openNavigation, seededPassword } from './sign-in';
 import type { Locator } from '@playwright/test';
 
 // #950, ADR 0019: an Administrator makes an Invite link in the Team dialog with the Person's name, a Role and the
@@ -10,9 +10,12 @@ import type { Locator } from '@playwright/test';
 // main one. The link works once, also when two sends race. The rows behind it are proven in supabase/tests/invite_links.sql.
 const company='10000000-0000-0000-0000-000000000001';
 const omar='20000000-0000-0000-0000-000000000001';
+const manager='20000000-0000-0000-0000-000000000002';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const id=(n:number)=>`95000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [lead,ads,seo]=[1,2,3].map(n=>id(10+n));
+// A Person with an account who is no Member of the Company yet (#952).
+const existing={id:id(20),name:'Hala Farouk',email:'hala-952@example.test',password:'hala-farouk-password'};
 const names=(page:Page)=>page.locator('.sidebar .agent-tile:not(.agent-tile--new) .agent-tile__name');
 const hash=(secret:string)=>createHash('sha256').update(secret).digest('hex');
 const joiner={name:'Nour Salah',email:'nour-950@example.test',password:'nour-salah-password'};
@@ -28,6 +31,11 @@ test.beforeAll(({},testInfo)=>{
    ('${ads}','${company}','${id(2)}','Meta Ads','Runs the Meta ads.',false,'team-ads'),
    ('${seo}','${company}','${id(3)}','SEO','Writes for search.',false,'team-seo')
   on conflict (id) do nothing;
+  insert into auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,created_at,updated_at,raw_app_meta_data,raw_user_meta_data,confirmation_token,email_change,email_change_token_new,recovery_token) values
+   ('00000000-0000-0000-0000-000000000000','${existing.id}','authenticated','authenticated','${existing.email}',extensions.crypt('${existing.password}',extensions.gen_salt('bf')),now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','','');
+  insert into auth.identities(id,user_id,identity_data,provider,provider_id,last_sign_in_at,created_at,updated_at)
+   values ('${existing.id}','${existing.id}',jsonb_build_object('sub','${existing.id}','email','${existing.email}'),'email','${existing.email}',now(),now(),now());
+  insert into public.people(id,name) values ('${existing.id}','${existing.name}');
  end $$;`);
 });
 
@@ -117,6 +125,60 @@ test('the Administrator makes an Invite link, a preview leaves it unused, and th
  expect(again.status()).toBe(410);
  expect(laneRows(`select count(*)::int n from auth.users where email='late-950@example.test'`)).toEqual([{n:0}]);
  await fresh.close();
+});
+
+// #952: a Person who already has an account signs in on the link page instead of making a second one, and joins with the
+// link's Role and Agents. The link is spent once.
+test('a Person with an account signs in on the link page, joins with the link’s Role and Agents, and uses it up',async({browser})=>{
+ const secret=randomBytes(32).toString('hex');
+ query(`insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values ('${company}','invite','${hash(secret)}','${omar}','Existing account','viewer',now()+interval '7 days')`);
+ query(`insert into public.company_link_agents(company_id,link_id,agent_id) select '${company}',id,'${ads}' from public.company_links where secret_hash='${hash(secret)}'`);
+ const fresh=await browser.newContext();
+ const person=await fresh.newPage();
+ try {
+  await person.goto(`/join#code=${secret}`);
+  await expect(person.getByText('You’re joining RS Learning as Viewer.')).toBeVisible();
+  await person.getByRole('button',{name:'I already have an account'}).click();
+  await person.getByLabel('Email',{exact:true}).fill(existing.email);
+  await person.getByLabel('Password',{exact:true}).fill(existing.password);
+  await person.getByRole('button',{name:'Sign in and join'}).click();
+  await expect(person).toHaveURL(/\/c\/rs-learning\/home$/);
+  await expect(names(person)).toHaveText(['Lead','Meta Ads']);
+  expect(laneRows(`select m.role,p.name,m.person_id from public.members m join public.people p on p.id=m.person_id join auth.users u on u.id=m.person_id where m.company_id='${company}' and u.email='${existing.email}'`))
+   .toMatchObject([{role:'viewer',name:existing.name}]);
+  expect(laneRows(`select used_by from public.company_links where secret_hash='${hash(secret)}'`)).toEqual([{used_by:existing.id}]);
+  expect(laneRows(`select actor_id,person_id,details->>'label' label from public.company_log where action='invite_link_used' and person_id='${existing.id}'`))
+   .toEqual([{actor_id:existing.id,person_id:existing.id,label:'Existing account'}]);
+ } finally { await fresh.close(); }
+});
+
+// #952 (#775): an existing Member who signs in on a link keeps their Role and Agents, and the link is left unused. While
+// signed in, opening that link again says so without showing the form.
+test('an existing Member who opens a link keeps their Role and Agents, and the link is left unused',async({browser})=>{
+ const secret=randomBytes(32).toString('hex');
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${ads}') on conflict do nothing`);
+ query(`insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,ends_at) values ('${company}','invite','${hash(secret)}','${omar}','Existing member','contributor',now()+interval '7 days')`);
+ query(`insert into public.company_link_agents(company_id,link_id,agent_id) select '${company}',id,'${seo}' from public.company_links where secret_hash='${hash(secret)}'`);
+ const fresh=await browser.newContext();
+ const person=await fresh.newPage();
+ try {
+  await person.goto(`/join#code=${secret}`);
+  await expect(person.getByText('You’re joining RS Learning as Contributor.')).toBeVisible();
+  await person.getByRole('button',{name:'I already have an account'}).click();
+  await person.getByLabel('Email',{exact:true}).fill('manager@example.com');
+  await person.getByLabel('Password',{exact:true}).fill(seededPassword);
+  await person.getByRole('button',{name:'Sign in and join'}).click();
+  await expect(person).toHaveURL(/\/join\?language=en#code=/);
+  await expect(person.getByText('You’re already a member of this company, so your role and agents stay as they are.')).toBeVisible();
+  expect(laneRows(`select role from public.members where company_id='${company}' and person_id='${manager}'`)).toEqual([{role:'manager'}]);
+  expect(laneRows(`select agent_id from public.member_agent_access where company_id='${company}' and person_id='${manager}'`)).toEqual([{agent_id:ads}]);
+  expect(laneRows(`select used_at is null unused from public.company_links where secret_hash='${hash(secret)}'`)).toEqual([{unused:true}]);
+  // Signed in now, opening the same link says so at once and still spends nothing.
+  await person.goto(`/join#code=${secret}`);
+  await expect(person.getByText('You’re already a member of this company, so your role and agents stay as they are.')).toBeVisible();
+  await expect(person.getByLabel('Your name')).toHaveCount(0);
+  expect(laneRows(`select used_at is null unused from public.company_links where secret_hash='${hash(secret)}'`)).toEqual([{unused:true}]);
+ } finally { await fresh.close(); }
 });
 
 test('two sends of one link at the same moment: one Person joins and the other is refused with no account left behind',async({page})=>{
