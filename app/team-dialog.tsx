@@ -4,6 +4,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { leave } from '@/lib/motion';
 import { ShellIcon } from '@/components/shell-icon';
 import { InviteLinkSection, type MakeLink } from './invite-link-section';
+import type { MakePasswordLink } from './password-link-section';
 import { AddMemberSection, type AddMember } from './add-member-section';
 import { TeamTable, PendingLinks, EndedInvitations, type SaveSwitch, type TeamData } from './team-table';
 import './settings.css';
@@ -15,7 +16,7 @@ import './team-dialog.css';
 // links from it (#950, #953: an invitation is never emailed), and adds a Person from another Company (#952). A Company
 // worked alone gets the narrower form: the Owner's own row, the link form and the note on what joining turns on. The
 // data is read by the server for an Owner or a Manager only, so the dialog holds nothing else; a refused read closes it.
-export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,makeLink:MakeLink,cancelLink:(link:string)=>Promise<string>,add:AddMember};
+export type TeamActions={load:(company:string)=>Promise<TeamData|null>,save:SaveSwitch,makeLink:MakeLink,cancelLink:(link:string)=>Promise<string>,add:AddMember,makePasswordLink:MakePasswordLink};
 
 const leaveMs=190;
 
@@ -82,7 +83,7 @@ export default function TeamDialog({company,alone,userId,owner,role,personName,a
     {owner&&data&&<AddMemberSection people={data.candidates} agents={data.agents.filter(agent=>!agent.is_default)} add={addMember}/>}
     <p className="inv-note"><ShellIcon name="team"/><span>{t('settingsModeAloneD')}</span></p>
    </div>
-   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} ended={data.ended} links={data.links} agents={data.agents} allowed={allowed} userId={userId} owner={owner} save={actions.save} makeLink={makeLink} cancelLink={cancelLink} add={addMember} candidates={data.candidates}/>}</div>}
+   :<div className="modal__body ta sov-ta" aria-busy={!data||undefined}>{data&&<TeamTable company={company} members={data.members} ended={data.ended} links={data.links} agents={data.agents} allowed={allowed} userId={userId} owner={owner} save={actions.save} makeLink={makeLink} cancelLink={cancelLink} add={addMember} candidates={data.candidates} makePasswordLink={actions.makePasswordLink}/>}</div>}
    <footer className="modal__foot modal__foot--end"><button type="button" className={alone?'btn btn--secondary':'btn btn--primary'} onClick={requestClose}>{t('teamDone')}</button></footer>
   </div>
  </dialog>;
