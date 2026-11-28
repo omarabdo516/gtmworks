@@ -5,7 +5,7 @@ import { answerRun, permitRun, readRunEvents, startSessionRun, stopRun } from '.
 import { hermesEngine } from '../lib/engine/contract.mjs';
 import { liveLines } from '../lib/live-steps.mjs';
 import { conversationLines } from '../lib/conversation-live.mjs';
-import { keepAnswer } from '../lib/run-answers.mjs';
+import { claimAnswer, confirmAnswer, forgetAnswer } from '../lib/run-answers.mjs';
 
 // #878 on the fake Engine server: a person steers the open Run of their Conversation through the Run's own routes. Its
 // live read carries the question or the request to act the Run waits on, read from the Run's record, and says how it
@@ -44,7 +44,7 @@ test('a request to act waits with the choices the person may send; allowed once 
   fake.settings.reply=(input,answers,choices)=>`${input}: ${choices[0]}`;
   for(const choice of /** @type {const} */(['once','deny'])) {
    const run=await start(fake,`Clean up ${choice}`);
-   const lines=await follow(fake,run,async line=>{ if('asking' in line) { assert.equal(await permitRun({...connection(fake),run,permission:line.asking.id,choice}),'answered'); keepAnswer(run,line.asking.id,{choice}); } },['once','deny']);
+   const lines=await follow(fake,run,async line=>{ if('asking' in line) { assert.ok(claimAnswer(run,line.asking.id,{choice})); assert.equal(await permitRun({...connection(fake),run,permission:line.asking.id,choice}),'answered'); confirmAnswer(run,line.asking.id); } },['once','deny']);
    const asked=lines.find(line=>'asking' in line)?.asking;
    assert.equal(asked?.kind,'permission');
    assert.equal(asked?.description,'recursive delete'); assert.equal(asked?.command,'rm -rf build');
@@ -63,7 +63,7 @@ test('a card answered in another tab closes with that answer, and one the Engine
   // Two tabs follow the same Run; the first answers it through this server, the second only sees the Engine stop waiting.
   const asked=await start(fake,'ask');
   const [mine,other]=await Promise.all([
-   follow(fake,asked,async line=>{ if('asking' in line) { assert.equal(await answerRun({...connection(fake),run:asked,question:line.asking.id,text:'Cairo'}),'answered'); keepAnswer(asked,line.asking.id,{answer:'Cairo'}); } }),
+   follow(fake,asked,async line=>{ if('asking' in line) { assert.ok(claimAnswer(asked,line.asking.id,{answer:'Cairo'})); assert.equal(await answerRun({...connection(fake),run:asked,question:line.asking.id,text:'Cairo'}),'answered'); confirmAnswer(asked,line.asking.id); } }),
    follow(fake,asked)]);
   for(const lines of [mine,other]) assert.deepEqual(lines.find(line=>'settled' in line)?.settled,{kind:'question',id:lines.find(line=>'asking' in line)?.asking.id,answer:'Cairo'});
   // Nobody answers: the Engine's time limit passes.
@@ -84,5 +84,35 @@ test('Stop ends the open Run, a card it waited on with it, and its end says it w
   const lines=await follow(fake,run,async line=>{ if('asking' in line) assert.equal(await stopRun({...connection(fake),run}),true); });
   assert.deepEqual(lines.find(line=>'settled' in line)?.settled,{kind:'question',id:lines.find(line=>'asking' in line)?.asking.id,closed:true});
   assert.deepEqual(lines.at(-1),{end:'ended',outcome:'stopped'});
+ } finally { await fake.close(); }
+});
+
+test('a choice still on its way never shows as taken: one the Engine did not take settles as not allowed',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.approvals=()=>[{description:'Send the email',command:'send mail'}];
+  const run=await start(fake,'Send it');
+  // This tab claimed "Allow once", but the Engine's time limit passed before the choice reached it.
+  const lines=await follow(fake,run,async line=>{
+   if(!('asking' in line)) return;
+   assert.ok(claimAnswer(run,line.asking.id,{choice:'once'}));
+   assert.ok(!claimAnswer(run,line.asking.id,{choice:'deny'}),'one claim per card');
+   fake.settings.expireApproval(run);
+   await new Promise(resolve=>setTimeout(resolve,300));
+   assert.equal(await permitRun({...connection(fake),run,permission:line.asking.id,choice:'once'}),'gone');
+   forgetAnswer(run,line.asking.id);
+  });
+  const asked=lines.find(line=>'asking' in line)?.asking;
+  assert.deepEqual(lines.find(line=>'settled' in line)?.settled,{kind:'permission',id:asked?.id,choice:'deny',expired:true});
+ } finally { await fake.close(); }
+});
+
+test('a question whose choices cannot all be drawn is drawn with none, to be answered in words',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.questions=()=>[{question:'Which day?',choices:['Sun','Mon','Tue','Wed','Thu']}];
+  const run=await start(fake,'Plan the week');
+  const lines=await follow(fake,run,async line=>{ if('asking' in line) await stopRun({...connection(fake),run}); });
+  assert.deepEqual(lines.find(line=>'asking' in line)?.asking.choices,[]);
  } finally { await fake.close(); }
 });

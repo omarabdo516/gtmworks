@@ -446,10 +446,15 @@ export function EngineLoaded({initial,steps,team,open=false}:{initial:Conversati
   const post=async(body:object)=>postMessage({company,conversation:conversation.id,run:followed,...body});
   return {
    ...(run.working?{stop:()=>post({intent:'stop'})}:{}),
+   // The card shows the answer the Run took, which is another tab's when that one was first.
    ...(waiting?.kind==='question'?{answer:async(text:string)=>{
-    const failure=await post({intent:'answer',question:waiting.id,text});
-    if(!failure) run.settle({kind:'question',id:waiting.id,answer:text});
-    return failure;
+    try {
+     const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,run:followed,intent:'answer',question:waiting.id,text})});
+     const body=await response.json() as {answer?:string|string[],error?:string};
+     if(!response.ok) return body.error||'conversationFailed';
+     if(body.answer!==undefined) run.settle({kind:'question',id:waiting.id,answer:body.answer});
+     return null;
+    } catch { return 'conversationFailed'; }
    }}:{}),
   };
  },[writer,followed,run.working,waiting,company,conversation.id]); // eslint-disable-line react-hooks/exhaustive-deps
