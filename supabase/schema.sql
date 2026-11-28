@@ -2360,6 +2360,28 @@ $$;
 ALTER FUNCTION public.can_see_conversation_agent(c uuid, conversation uuid) OWNER TO postgres;
 
 --
+-- Name: cancel_invite_link(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.cancel_invite_link(c uuid, link uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare stopped public.company_links;
+begin
+ if c is null or not public.is_company_owner(c) then raise exception 'inviteLinkNotAllowed' using errcode='42501'; end if;
+ update public.company_links set cancelled_at=now()
+  where id=link and company_id=c and kind='invite' and used_at is null and cancelled_at is null
+  returning * into stopped;
+ if not found then return; end if;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
+  values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member','invite_link_cancelled',
+   jsonb_build_object('label',stopped.label,'role',stopped.role,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+end $$;
+
+ALTER FUNCTION public.cancel_invite_link(c uuid, link uuid) OWNER TO postgres;
+
+--
 -- Name: card_archive_stops(uuid, bigint[]); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -8277,6 +8299,24 @@ CREATE FUNCTION public.own_conversations(c uuid) RETURNS SETOF public.conversati
 $$;
 
 ALTER FUNCTION public.own_conversations(c uuid) OWNER TO postgres;
+
+--
+-- Name: pending_invite_links(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.pending_invite_links(c uuid) RETURNS TABLE(id uuid, label text, role text, made_by_name text, ends_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+ if c is null or not public.is_company_owner(c) then raise exception 'inviteLinkNotAllowed' using errcode='42501'; end if;
+ return query select l.id,l.label,l.role,p.name,l.ends_at
+  from public.company_links l left join public.people p on p.id=l.made_by
+  where l.company_id=c and l.kind='invite' and l.used_at is null and l.cancelled_at is null and l.ends_at>now()
+  order by l.created_at;
+end $$;
+
+ALTER FUNCTION public.pending_invite_links(c uuid) OWNER TO postgres;
 
 --
 -- Name: permission_allows_of(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
@@ -19581,6 +19621,13 @@ REVOKE ALL ON FUNCTION public.can_see_conversation_agent(c uuid, conversation uu
 GRANT ALL ON FUNCTION public.can_see_conversation_agent(c uuid, conversation uuid) TO authenticated;
 
 --
+-- Name: FUNCTION cancel_invite_link(c uuid, link uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.cancel_invite_link(c uuid, link uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.cancel_invite_link(c uuid, link uuid) TO authenticated;
+
+--
 -- Name: FUNCTION card_archive_stops(c uuid, cards bigint[]); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -21470,6 +21517,13 @@ GRANT SELECT ON TABLE public.conversations TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION public.own_conversations(c uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION pending_invite_links(c uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.pending_invite_links(c uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pending_invite_links(c uuid) TO authenticated;
 
 --
 -- Name: FUNCTION permission_allows_of(asking jsonb, kept jsonb); Type: ACL; Schema: public; Owner: postgres

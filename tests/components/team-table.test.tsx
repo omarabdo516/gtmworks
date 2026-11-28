@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { TeamTable, type SaveSwitch } from '@/app/team-table';
+import { TeamTable, type CancelLink, type SaveSwitch, type TeamLink } from '@/app/team-table';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n } from '@/lib/i18n.mjs';
 import { roleDescription } from '@/lib/member-roles.mjs';
@@ -42,4 +42,31 @@ for (const [language, name, seesAll, description] of [
  await expect.element(omar.getByText(seesAll, { exact: true })).toBeVisible();
  expect(i18n(language).t(roleDescription.owner)).toBe(description);
  expect(document.body.textContent).not.toMatch(/Owner|مالك/);
+});
+
+// #951: an Administrator sees each Invite link still waiting for its Person with its label, Role, maker and end; Cancel
+// stops it and it leaves the table, and a refusal says why and keeps it.
+const link:TeamLink={id:'l-1',label:'Nour Salah',role:'viewer',made_by_name:'Omar',ends_at:'2026-12-04T10:00:00+00:00'};
+const tableWithLinks = (cancelLink:CancelLink, links:TeamLink[] = [link]) => <LanguageProvider language="en">
+ <TeamTable company="co-1" members={[]} invitations={[]} links={links} agents={agents}
+  allowed={new Set()} invitedAllowed={new Set()} userId="p-0" owner={true} save={save} saveInvitation={save} send={vi.fn(async () => ({}))} cancelLink={cancelLink}/>
+</LanguageProvider>;
+
+test('a pending Invite link shows its label, Role, maker and end, and Cancel stops it and takes it away', async () => {
+ const cancelLink=vi.fn<CancelLink>(async () => '');
+ const screen=await render(tableWithLinks(cancelLink));
+ const row=screen.getByRole('row').filter({hasText:'Nour Salah'});
+ await expect.element(row.getByText('Viewer · Made by Omar · Ends Dec 4')).toBeVisible();
+ await expect.element(row.getByText('Invite link', {exact:true})).toBeVisible();
+ await screen.getByRole('button', {name:'Cancel Nour Salah’s invite link'}).click();
+ expect(cancelLink).toHaveBeenCalledWith('l-1');
+ await screen.rerender(tableWithLinks(cancelLink, []));
+ await expect.element(screen.getByText('Nour Salah')).not.toBeInTheDocument();
+});
+
+test('a cancel the database refuses says why and keeps the link in the table', async () => {
+ const screen=await render(tableWithLinks(async () => 'inviteLinkCancelFailed'));
+ await screen.getByRole('button', {name:'Cancel Nour Salah’s invite link'}).click();
+ await expect.element(screen.getByText('Couldn’t cancel the link. Try again.')).toBeVisible();
+ await expect.element(screen.getByText('Nour Salah')).toBeVisible();
 });

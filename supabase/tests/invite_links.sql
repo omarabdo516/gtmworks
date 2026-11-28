@@ -1,10 +1,11 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(54);
 -- #950, ADR 0019: an Administrator makes an Invite link with a label, a Role and the Agents the new Person will see. Only
 -- its secret's hash is kept, in a table no Member reads; the link ends after 7 days and never gives the Administrator
 -- role. Sending its form claims it once, in one transaction, and the new Member sees the chosen Agents and the main one.
--- Making and using a link are written in the Company log.
+-- Making and using a link are written in the Company log. #951 adds the list of links still waiting and cancelling one,
+-- which stops it at once and is written in the log too.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('a9500000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f9500000-0000-0000-0000-000000000001','Lead','General',true,'default'),
  ('a9500000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f9500000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
@@ -91,6 +92,53 @@ insert into public.company_links(company_id,kind,secret_hash,made_by,label,role,
  ('10000000-0000-0000-0000-000000000001','invite',repeat('ef',32),'20000000-0000-0000-0000-000000000001','Old','viewer',now()-interval '8 days',now()-interval '1 day');
 set local role service_role;
 select throws_ok($$select public.claim_invite_link(repeat('ef',32),'a9500000-0000-0000-0000-000000000012','Late','en')$$,'55000','inviteLinkEnded','a link past its end is refused');
+reset role;
+
+-- #951: an Administrator lists the links still waiting, and cancels one. A link used, cancelled or past its end waits in
+-- no list, Cancel touches no such link, and cancelling is written in the log by the Administrator who stopped it.
+insert into public.company_links(id,company_id,kind,secret_hash,made_by,label,role,created_at,ends_at,used_at,used_by) values
+ ('b9510000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','invite',repeat('11',32),'20000000-0000-0000-0000-000000000001','Pending One','viewer',now(),now()+interval '7 days',null,null),
+ ('b9510000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','invite',repeat('22',32),'20000000-0000-0000-0000-000000000001','Already Gone','manager',now()-interval '2 days',now()+interval '5 days',null,null),
+ ('b9510000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','invite',repeat('33',32),'20000000-0000-0000-0000-000000000001','Old Two','viewer',now()-interval '8 days',now()-interval '1 day',null,null),
+ ('b9510000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003','invite',repeat('44',32),'a9500000-0000-0000-0000-000000000010','Other Company','viewer',now(),now()+interval '7 days',null,null),
+ ('b9510000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','invite',repeat('55',32),'20000000-0000-0000-0000-000000000001','Spent One','viewer',now()-interval '2 days',now()+interval '5 days',now()-interval '1 day','a9500000-0000-0000-0000-000000000011');
+update public.company_links set cancelled_at=now() where id='b9510000-0000-0000-0000-000000000002';
+
+select ok(has_function_privilege('authenticated','public.pending_invite_links(uuid)','execute')
+ and not has_function_privilege('anon','public.pending_invite_links(uuid)','execute')
+ and not has_function_privilege('service_role','public.pending_invite_links(uuid)','execute')
+ and has_function_privilege('authenticated','public.cancel_invite_link(uuid,uuid)','execute')
+ and not has_function_privilege('anon','public.cancel_invite_link(uuid,uuid)','execute')
+ and not has_function_privilege('service_role','public.cancel_invite_link(uuid,uuid)','execute'),'only a signed-in person reaches the list and the cancel, checked again in the database');
+
+set local role authenticated;
+select set_config('request.jwt.claims','{"aal":"aal1"}',true);
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select count(*)::int from public.pending_invite_links('10000000-0000-0000-0000-000000000001')),1,'an Administrator lists only the link still waiting: not cancelled, not used, not ended');
+select is((select label||' '||role||' '||made_by_name from public.pending_invite_links('10000000-0000-0000-0000-000000000001')),
+ (select 'Pending One viewer '||name from public.people where id='20000000-0000-0000-0000-000000000001'),'with its label, Role and maker');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select count(*) from public.pending_invite_links('10000000-0000-0000-0000-000000000001')$$,'42501','inviteLinkNotAllowed','a Manager lists no link');
+select set_config('request.jwt.claim.sub','a9500000-0000-0000-0000-000000000010',true);
+select throws_ok($$select count(*) from public.pending_invite_links('10000000-0000-0000-0000-000000000001')$$,'42501','inviteLinkNotAllowed','nor another Company''s Administrator');
+select is((select count(*)::int from public.pending_invite_links('10000000-0000-0000-0000-000000000003')),1,'each Administrator lists its own Company''s links only');
+select throws_ok($$select public.cancel_invite_link('10000000-0000-0000-0000-000000000001','b9510000-0000-0000-0000-000000000001')$$,'42501','inviteLinkNotAllowed','and cancels none of another Company''s');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select lives_ok($$select public.cancel_invite_link('10000000-0000-0000-0000-000000000001','b9510000-0000-0000-0000-000000000001')$$,'the Administrator cancels a link still waiting');
+select is((select count(*)::int from public.pending_invite_links('10000000-0000-0000-0000-000000000001')),0,'a cancelled link leaves the list');
+select lives_ok($$select public.cancel_invite_link('10000000-0000-0000-0000-000000000001','b9510000-0000-0000-0000-000000000001')$$,'cancelling it again changes nothing');
+select lives_ok($$select public.cancel_invite_link('10000000-0000-0000-0000-000000000001','b9510000-0000-0000-0000-000000000005')$$,'a used link is never marked cancelled');
+reset role;
+
+select ok((select cancelled_at is not null from public.company_links where id='b9510000-0000-0000-0000-000000000001')
+ and (select cancelled_at is null and used_at is not null from public.company_links where id='b9510000-0000-0000-0000-000000000005'),'the cancelled link is marked cancelled, and the used one is left as it was');
+select is((select count(*)::int from public.company_log where action='invite_link_cancelled'),1,'cancelling is written in the log once, however often Cancel is pressed');
+select is((select actor_id::text||' '||(details->>'label')||' '||(details->>'role') from public.company_log where action='invite_link_cancelled'),
+ '20000000-0000-0000-0000-000000000001 Pending One viewer','by the Administrator, with the link''s label and Role');
+
+set local role service_role;
+select is((select count(*)::int from public.invite_link_open(repeat('11',32))),0,'a cancelled link is no longer open');
+select throws_ok($$select public.claim_invite_link(repeat('11',32),'a9500000-0000-0000-0000-000000000012','Late','en')$$,'55000','inviteLinkCancelled','and sending its form is refused');
 reset role;
 select * from finish();
 rollback;
