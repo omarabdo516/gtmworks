@@ -474,7 +474,15 @@ export function EngineLoaded({initial,steps,team,open=false,owner=false}:{initia
   // is the only copy and stays drawn until the person scrolls to it.
   const original=(message:{author:string,body:string,run?:string})=>message.author==='person'&&!(message.run&&retryRuns.has(message.run));
   const drawn=new Set((engine.page?.messages??[]).filter(original).map(message=>message.body));
-  const page=engine.page?{...engine.page,messages:engine.page.messages.filter(message=>!(message.author==='person'&&message.run&&retryRuns.has(message.run)&&drawn.has(message.body)))}:null;
+  // One retry row per message stands in while the original is off-page: a chain of retries keeps its first copy drawn and
+  // hides the rest, and all of them go once the original is drawn.
+  const kept=new Set<string>();
+  const page=engine.page?{...engine.page,messages:engine.page.messages.filter(message=>{
+   if(message.author!=='person'||!message.run||!retryRuns.has(message.run)) return true;
+   if(drawn.has(message.body)) return false;
+   if(kept.has(message.body)) return false;
+   kept.add(message.body); return true;
+  })}:null;
   const base=page?{...record,messages:[...page.messages,...sent.waiting],pending:false,asking:questioning?true as const:undefined,failed:!!ending,noModel:undefined,modelRefused:undefined,...ended,working:null,canStop:false,handover:undefined,unread:undefined}:record;
   const usage=engine.usage??base.usage;
   return usage===base.usage?base:{...base,usage};
