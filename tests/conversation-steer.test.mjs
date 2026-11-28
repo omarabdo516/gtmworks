@@ -116,3 +116,24 @@ test('a question whose choices cannot all be drawn is drawn with none, to be ans
   assert.deepEqual(lines.find(line=>'asking' in line)?.asking.choices,[]);
  } finally { await fake.close(); }
 });
+
+test('a stream cut short leaves the card open: only the Run\'s end or a record read settles it',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.questions=()=>[{question:'Which city?',choices:['Cairo','Giza']}];
+  const run=await start(fake,'Write the plan');
+  const engine=hermesEngine(connection(fake));
+  // The Engine's stream drops once the card is drawn; the Run still waits.
+  const cut=new AbortController();
+  const lines=[];
+  for await(const line of conversationLines(run,liveLines(run,readRunEvents({...connection(fake),run,signal:cut.signal}),{reply:true}),{read:()=>engine.read(run),may:['once','deny'],every:50})) {
+   lines.push(line);
+   if('asking' in line) cut.abort();
+  }
+  assert.ok(lines.some(line=>'asking' in line));
+  assert.ok(!lines.some(line=>'settled' in line),'the card is not settled by a cut stream');
+  assert.notEqual(lines.at(-1)?.end,'ended');
+  assert.equal(fake.settings.runs.at(-1)?.asked[0].settled,null,'the Engine still waits');
+  await stopRun({...connection(fake),run});
+ } finally { await fake.close(); }
+});
