@@ -1,5 +1,11 @@
 [
  {
+  "issue": 882,
+  "date": "2026-11-28",
+  "en": { "title": "The model, the first Conversation and the agent’s face on the engine", "body": "In a Conversation kept on the agent engine, the model you pick goes with every reply and stays picked after a reload, the main agent still opens a new company’s first Conversation with its questions, dictation sends as typing does, and the agent’s face shows it working until its reply ends, even when you left the page." },
+  "ar": { "title": "الموديل وأول محادثة ووش الوكيل على المحرك", "body": "في المحادثة اللي محفوظة على محرك الوكلاء، الموديل اللي بتختاره بيمشي مع كل رد وبيفضل مختار بعد ما تعمل ريلود، والوكيل الرئيسي لسه بيفتح أول محادثة للشركة الجديدة بأسئلته، والإملاء بالصوت بيتبعت زي الكتابة بالظبط، ووش الوكيل بيبيّن إنه شغال لحد ما رده يخلص، حتى لو قفلت الصفحة." }
+ },
+ {
   "issue": 880,
   "date": "2026-11-28",
   "en": { "title": "Images and an agent’s files go straight through", "body": "An image you attach reaches the agent and stays under your message, and a file the agent names in its reply opens straight from its work folder; gtmworks keeps no copy of either, and while the work sandbox is stopped the file says it can’t be read now." },

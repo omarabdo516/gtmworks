@@ -12,7 +12,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 const busyFor=8000;
 // What a send on the Engine path answers: the Run started (the reply follows on the Conversation's live read), `old`
 // for a Conversation the old record still holds (the caller sends it there), or a refusal with nothing started.
-export type EngineSend={state:'started',conversation:string,run:string,queued:boolean}|{state:'old'}|{state:'refused',code?:string,error?:string,status?:number};
+export type EngineSend={state:'started',conversation:string,run?:string,queued:boolean}|{state:'old'}|{state:'refused',code?:string,error?:string,status?:number};
 
 // A person's message in a Conversation whose messages are the Engine's (#876, ADR 0033 item 1): checked on the server
 // (open_engine_conversation: an active Member, not a Viewer, their own Conversation, an Agent they may talk to), a new
@@ -78,6 +78,10 @@ export async function sendToEngine(db:Database,service:{rpc:(name:string,args:ob
   await new Promise(resolve=>setTimeout(resolve,wait));
   run=await target.engine.sessions.send({...start,retry:lost});
  }
+ // A key the Engine still says was used with another body was admitted by an earlier start of this send, whose body
+ // was made from names since changed (the Company's, the person's language): the message was sent, and its Run's reply
+ // is the session's, read next. Leaving it in the box would refuse every Try again with the same key.
+ if(run&&typeof run==='object'&&run.state==='keyConflict') return {state:'started',conversation,queued:false};
  if(typeof run!=='string') {
   // A start the Engine refused outright while it named the Conversation's model is refused for that model: the
   // Conversation goes back to the model it had, and the person is told so, with their words still in the box.
