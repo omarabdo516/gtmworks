@@ -3764,6 +3764,7 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
+  or (link.made_by is null and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
   or (link.made_by is not null and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
    or not public.password_link_allowed(link.made_by,link.person_id))) then
   raise exception 'passwordLinkEnded' using errcode='55000';

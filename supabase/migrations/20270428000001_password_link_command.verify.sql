@@ -8,6 +8,7 @@ select json_build_object(
   and not has_function_privilege('anon','public.make_administrator_password_link(uuid,uuid,text)','execute'),
  'administrator_of_that_company',position($$m.role='owner'$$ in pg_get_functiondef('public.make_administrator_password_link(uuid,uuid,text)'::regprocedure))>0,
  'server_link_has_no_maker',position($$values(c,'password',link_hash,null,person$$ in pg_get_functiondef('public.make_administrator_password_link(uuid,uuid,text)'::regprocedure))>0,
+ 'server_link_needs_its_administrator',position($$m.role='owner'$$ in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0,
  'server_link_spends_on_the_install_owner',position('link.made_by is not null' in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0
   and position('install_owner' in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0,
  'maker_still_checked',position('password_link_allowed(link.made_by,link.person_id)' in pg_get_functiondef('public.claim_password_link(text)'::regprocedure))>0

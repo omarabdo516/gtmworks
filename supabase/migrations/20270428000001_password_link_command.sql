@@ -32,10 +32,11 @@ revoke all on function public.make_administrator_password_link(uuid,uuid,text) f
 grant execute on function public.make_administrator_password_link(uuid,uuid,text) to service_role;
 
 -- Sending a server-made link's form spends it as a Team-page link's is spent: the row is locked first, so of two sends at
--- the same moment the second waits and finds it used. A server-made link (made_by null, #955) names an Administrator of
--- its Company, its Company and the Person are still there, so it asks no maker's authority: it is how a Company's last
--- Administrator and the install owner, whose account no Team-page link may ever set, get back in. Any other link is
--- still refused for the install owner's account and once its maker no longer has the authority it was made with.
+-- the same moment the second waits and finds it used. A server-made link (made_by null, #955) is one the command made for
+-- an Administrator of its Company: it asks no maker's authority, but only while that Person is still an active
+-- Administrator there. It is how a Company's last Administrator and the install owner, whose account no Team-page link
+-- may ever set, get back in. Any other link is still refused for the install owner's account and once its maker no
+-- longer has the authority it was made with.
 create or replace function public.claim_password_link(link_hash text) returns table(person uuid, email text, slug text)
 language plpgsql security definer set search_path='' as $function$
 declare link public.company_links; named text;
@@ -46,6 +47,7 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
+  or (link.made_by is null and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
   or (link.made_by is not null and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
    or not public.password_link_allowed(link.made_by,link.person_id))) then
   raise exception 'passwordLinkEnded' using errcode='55000';

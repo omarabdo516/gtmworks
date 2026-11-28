@@ -743,9 +743,10 @@ password_hash=$(printf '%s' "$password_secret" | sha256sum | cut -d' ' -f1)
 [[ $(db -c "select count(*) from public.company_links where kind='password' and secret_hash='$password_hash' and made_by is null and used_at is null and cancelled_at is null") == 1 ]] \
   || fail 'the password link is kept hashed, made by the server, waiting'
 [[ $(db -c "select count(*) from public.company_links where secret_hash='$password_secret'") == 0 ]] || fail 'the password link secret is stored nowhere'
-[[ $(db -c "select count(*) from public.company_log where action='password_link_made' and company_id=(select id from public.companies where name='Proxy Company') and actor_kind='system' and person_id=(select id from public.members where company_id=(select id from public.companies where name='Proxy Company') and role='owner')") == 1 ]] \
+[[ $(db -c "select count(*) from public.company_log where action='password_link_made' and company_id=(select id from public.companies where name='Proxy Company') and actor_kind='system' and person_id=(select person_id from public.members where company_id=(select id from public.companies where name='Proxy Company') and role='owner')") == 1 ]] \
   || fail 'making the password link is in the Company log as the server made it'
-if compose logs 2>&1 | grep -qF "$password_secret"; then fail 'the password link secret is in a container log'; fi
+password_logs=$(compose logs 2>&1) || fail 'read container logs'
+if grep -qF "$password_secret" <<< "$password_logs"; then fail 'the password link secret is in a container log'; fi
 if sh scripts/install.sh company password-link 'Proxy Company' --email proxy-joined@example.com > password-link-not-admin.log 2>&1; then
   cat password-link-not-admin.log
   fail 'company password-link must refuse a Member who is not an Administrator'

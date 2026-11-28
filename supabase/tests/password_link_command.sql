@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(26);
 -- #955, ADR 0019: a Company's last Administrator gets a password link from the server's `gtmworks company password-link`
 -- command, which only the service role asks. It names an active Administrator of that Company, ends any earlier live link
 -- for the Person, and is kept as the link's hash with no Person as its maker, `made_by` null. Sending that link's form
@@ -54,10 +54,14 @@ insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,e
  values ('10000000-0000-0000-0000-000000000001','password',repeat('e',64),'20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001',now()+interval '1 day');
 select throws_ok($$select * from public.claim_password_link(repeat('e',64))$$,'55000','passwordLinkEnded','a Team-page link is still never spent on the install owner');
 
--- A server link whose Member left the Company before it was sent gives nothing.
+-- A server link gives nothing once its Administrator is demoted: the command makes it for an Administrator, and the
+-- claim asks that of the Person it names again. A Member who left the Company gives nothing too.
 select lives_ok($$select public.make_administrator_password_link('10000000-0000-0000-0000-000000000001','a9550000-0000-0000-0000-000000000011',repeat('f',64))$$,'a link is made for a Member who is still an Administrator');
-update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='a9550000-0000-0000-0000-000000000011';
-select throws_ok($$select * from public.claim_password_link(repeat('f',64))$$,'55000','passwordLinkEnded','a link whose Member left the Company gives nothing');
+update public.members set role='viewer' where company_id='10000000-0000-0000-0000-000000000001' and person_id='a9550000-0000-0000-0000-000000000011';
+select throws_ok($$select * from public.claim_password_link(repeat('f',64))$$,'55000','passwordLinkEnded','a link whose Administrator was demoted gives nothing');
+select lives_ok($$select public.make_administrator_password_link('10000000-0000-0000-0000-000000000001','a9550000-0000-0000-0000-000000000010',repeat('9',64))$$,'another link is made for an Administrator');
+update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='a9550000-0000-0000-0000-000000000010';
+select throws_ok($$select * from public.claim_password_link(repeat('9',64))$$,'55000','passwordLinkEnded','a link whose Member left the Company gives nothing');
 
 select * from finish();
 rollback;
