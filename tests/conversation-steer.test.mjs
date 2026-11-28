@@ -170,3 +170,22 @@ test('a reader that comes back with a card still drawn has it settled when the E
   await stopRun({...connection(fake),run});
  } finally { await fake.close(); }
 });
+
+test('a Run that ends before its delivered choice is confirmed settles the card with that choice, never as not allowed',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.approvals=()=>[{description:'Send the email',command:'send mail'}];
+  const run=await start(fake,'Send it');
+  const lines=await follow(fake,run,async line=>{
+   if(!('asking' in line)) return;
+   const id=line.asking.id;
+   assert.ok(claimAnswer(run,id,{choice:'once'}));
+   assert.equal(await permitRun({...connection(fake),run,permission:id,choice:'once'}),'answered');
+   // The Engine took it and the Run ends at once; the confirmation comes back only afterwards.
+   setTimeout(()=>confirmAnswer(run,id),600);
+  });
+  const asked=lines.find(line=>'asking' in line)?.asking;
+  assert.deepEqual(lines.filter(line=>'settled' in line).map(line=>line.settled),[{kind:'permission',id:asked?.id,choice:'once'}]);
+  assert.deepEqual(lines.at(-1),{end:'ended',outcome:'completed'});
+ } finally { await fake.close(); }
+});
