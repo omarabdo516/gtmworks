@@ -126,6 +126,8 @@ test('a Manager has no control on an Owner\'s row or their own, and still change
  await expect(row('عمر')).toContainText('Administrator');
  await page.goto('/c/rs-learning/settings?section=members');
  await expect(page.getByRole('dialog',{name:'Settings'}).getByRole('button',{name:"Make an invite link"})).toHaveCount(0);
+ // The editable Members page is the standalone one; the overlay draws the Team table without its row forms.
+ await page.goto('/c/rs-learning/settings/members');
  await row('مشاهد').getByLabel("Publishing").check(); await row('مشاهد').getByRole('button',{name:"Save"}).click();
  await expect(page.getByRole('status').filter({hasText:'Change saved.'})).toContainText('Change saved.');
  await expect(row('مشاهد').getByLabel("Publishing")).toBeChecked();

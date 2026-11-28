@@ -27,8 +27,8 @@ test('the page is served over https from the public host name through the proxy'
 
 test('Make an invite link shows it on the public origin, and the new Person joins through it', async ({ page, context }) => {
   watch(page);
-  // Only the Owner makes a link (#950).
-  await signIn(page, 'omar@example.com', '/c/rs-learning/settings/members');
+  // Only the Owner makes a link (#950), from the Members settings overlay.
+  await signIn(page, 'omar@example.com', '/c/rs-learning/settings?section=members');
   await page.getByRole('button', { name: 'Make an invite link' }).click();
   await page.getByLabel('Person’s name').fill('Proxy Invited');
   await page.getByRole('button', { name: 'Make the link' }).click();
