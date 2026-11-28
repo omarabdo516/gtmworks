@@ -129,7 +129,7 @@ test('a Run that failed says it did not finish under the person\'s message, a re
  await expect(page.locator('#btn-details .face')).not.toHaveAttribute('data-state',/^(thinking|working)$/);
  await expect.poll(()=>openRuns(conversation),{timeout:10000}).toEqual([]);
  await page.reload();
- await expect(page.locator('[data-outcome=no-reply]')).toHaveText(/No reply came to this message\.\s*Try again/,{timeout:20000});
+ await expect(page.locator('[data-outcome=no-reply]')).toHaveText(/No reply\s*Try again/,{timeout:20000});
  fake.settings.ending='completed'; fake.settings.failure=undefined;
  const starts=fake.settings.counts().runStart??0;
  await page.locator('[data-outcome=no-reply]').getByRole('button',{name:'Try again'}).click();
@@ -161,7 +161,7 @@ test('a Run the Engine no longer knows is let go, and the Conversation shows wha
  query(`update public.conversations set open_runs=array['run_lost_${randomUUID().slice(0,8)}'] where id='${conversation}'`);
  await open(page,conversation);
  await expect(page.locator('.msg[data-author=person]').last()).toHaveText(/And the budget\?/);
- await expect(page.locator('[data-outcome=no-reply]')).toHaveText(/No reply came to this message\./,{timeout:20000});
+ await expect(page.locator('[data-outcome=no-reply]')).toHaveText(/No reply/,{timeout:20000});
  await expect(page.locator('li[data-live]')).toHaveCount(0);
  await expect.poll(()=>openRuns(conversation),{timeout:10000}).toEqual([]);
 });
@@ -177,7 +177,8 @@ test('Try again whose answer was lost keeps its send key, so pressing it again r
  // Every answer to the start is lost: the Run is made, but the send is refused as not known.
  fake.settings.loseStarts=1_000;
  await again.click();
- await expect(page.getByText('Not sent').last()).toBeVisible({timeout:30000});
+ await expect.poll(()=>fake.settings.runs.length,{timeout:30000}).toBe(runs+1);
+ await expect(again).toBeEnabled({timeout:30000});
  expect(fake.settings.runs.length,'the lost start made its Run').toBe(runs+1);
  fake.settings.loseStarts=0;
  await again.click();

@@ -8,8 +8,10 @@ import { reportWait } from './waits';
 // While the send is on its way the message is `posting`; refused, it goes, and the composer takes its words back.
 // Kept in the page's memory only, by its send key, so sending the same key again (a retry) draws it once.
 // `id` is the drawn message's own, in the order sent, so one going leaves the others' as they were.
-export type Sending={id:number,key:string,body:string,files:string[],at:string,posting:boolean};
-export type Send=(key:string,body:string,files:readonly {name:string}[])=>(failure:string|null)=>void;
+// A send the Engine took as a Run names it (`run`, #877), and whether the Engine queued it behind another (`queued`).
+export type Sending={id:number,key:string,body:string,files:string[],at:string,posting:boolean,run?:string,queued?:true};
+export type Accepted={run?:string,queued?:boolean};
+export type Send=(key:string,body:string,files:readonly {name:string}[])=>(failure:string|null,accepted?:Accepted|null)=>void;
 // In a Conversation (`place`), the time from the press until the message is drawn is reported once (#762).
 // `release` (#876) lets go of the drawn messages a read already holds, by their drawn ids, and of no other.
 export function useSending(place?:{company:string,conversation:string}):{list:Sending[],start:Send,reading:()=>()=>void,release:(ids:readonly number[])=>void} {
@@ -20,10 +22,11 @@ export function useSending(place?:{company:string,conversation:string}):{list:Se
   const start:Send=(key,body,files)=>{
    accepted.delete(key); const id=++sent; pressed.set(id,performance.now());
    setList(current=>[...current.filter(sending=>sending.key!==key),{id,key,body,files:files.map(file=>file.name),at:new Date().toISOString(),posting:true}]);
-   return failure=>{
+   return (failure,answer)=>{
     if(failure) { setList(current=>current.filter(sending=>sending.key!==key)); return; }
     accepted.add(key);
-    setList(current=>current.map(sending=>sending.key===key?{...sending,posting:false}:sending));
+    const run=typeof answer?.run==='string'?answer.run:undefined;
+    setList(current=>current.map(sending=>sending.key===key?{...sending,posting:false,...(run?{run}:{}),...(run&&answer?.queued===true?{queued:true as const}:{})}:sending));
    };
   };
   // A read of the record begins: what was answered by now is in it. Call what it returns once that read is drawn.

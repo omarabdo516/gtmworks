@@ -243,9 +243,9 @@ test('the model line goes when the refused message is no longer the latest, keep
  const unreachable = async () => 'conversationHermesFailed';
  const other = await render(box(refused, unreachable));
  await other.getByRole('button', { name: 'Send' }).click();
- await expect.element(other.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it.');
+ await expect.element(other.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it. Try again');
  await other.rerender(box(undefined, unreachable));
- await expect.element(other.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it.');
+ await expect.element(other.getByRole('alert')).toHaveTextContent('The agent engine could not be reached. Your message was not sent; it is still in the box. Ask the install owner to start it. Try again');
  await expect.element(other.getByRole('textbox')).toHaveValue('Now the email version');
 });
 
