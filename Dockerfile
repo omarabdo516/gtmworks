@@ -31,7 +31,7 @@ COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/worker ./worker
 COPY --from=build --chown=node:node /app/lib ./lib
 # The installer registers the install's Engine record through this script (#380); a release image needs it too.
-COPY --from=build --chown=node:node /app/scripts/install-engine.mjs /app/scripts/company-add.mjs /app/scripts/company-list.mjs ./scripts/
+COPY --from=build --chown=node:node /app/scripts/install-engine.mjs /app/scripts/company-add.mjs /app/scripts/company-list.mjs /app/scripts/company-password-link.mjs ./scripts/
 # gtmworks's own web server (ADR 0029): Next's standalone build, and the Screen's live stream on the same address.
 COPY --from=build --chown=node:node /app/scripts/web-server.mjs ./scripts/
 COPY --from=build --chown=node:node /app/package.json ./package.json

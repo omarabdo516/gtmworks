@@ -3764,8 +3764,9 @@ begin
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
  if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
-  or exists(select 1 from public.install_owner o where o.person_id=link.person_id)
-  or not public.password_link_allowed(link.made_by,link.person_id) then
+  or (link.made_on_server and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.role='owner' and m.removed_at is null))
+  or (not link.made_on_server and (exists(select 1 from public.install_owner o where o.person_id=link.person_id)
+   or not public.password_link_allowed(link.made_by,link.person_id))) then
   raise exception 'passwordLinkEnded' using errcode='55000';
  end if;
  update public.company_links set used_at=now(),used_by=link.person_id where id=link.id;
@@ -7782,6 +7783,39 @@ begin
 end $_$;
 
 ALTER FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, act text) OWNER TO postgres;
+
+--
+-- Name: make_administrator_password_link(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.make_administrator_password_link(c uuid, person uuid, link_hash text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare made uuid; named text;
+begin
+ if c is null or person is null then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
+ if not exists(select 1 from public.companies co where co.id=c) then raise exception 'companyNotFound' using errcode='P0002'; end if;
+ if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then
+  raise exception 'passwordLinkNotAdministrator' using errcode='42501';
+ end if;
+ if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='22023'; end if;
+ select p.name into named from public.people p where p.id=person for update;
+ -- A Member has one live password link at a time, whichever Company or command made it: a new one ends the earlier ones.
+ with ended as (update public.company_links set cancelled_at=now()
+  where kind='password' and person_id=person and used_at is null and cancelled_at is null and ends_at>now() returning company_id)
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
+  select ended.company_id,null,'system','gtmworks command','member',person,'password_link_cancelled',
+   jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now() from ended;
+ insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at,made_on_server)
+  values(c,'password',link_hash,null,person,now()+interval '24 hours',true) returning id into made;
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
+  values(c,null,'system','gtmworks command','member',person,'password_link_made',
+   jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now());
+ return made;
+end $_$;
+
+ALTER FUNCTION public.make_administrator_password_link(c uuid, person uuid, link_hash text) OWNER TO postgres;
 
 --
 -- Name: make_invite_link(uuid, text, text, uuid[], text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -13402,12 +13436,14 @@ CREATE TABLE public.company_links (
     used_by uuid,
     cancelled_at timestamp with time zone,
     person_id uuid,
+    made_on_server boolean DEFAULT false NOT NULL,
     CONSTRAINT company_links_check CHECK (((kind <> 'invite'::text) OR ((label IS NOT NULL) AND (role IS NOT NULL)))),
     CONSTRAINT company_links_check1 CHECK ((ends_at > created_at)),
     CONSTRAINT company_links_check2 CHECK (((used_by IS NULL) OR (used_at IS NOT NULL))),
     CONSTRAINT company_links_check3 CHECK (((used_at IS NULL) OR (cancelled_at IS NULL))),
     CONSTRAINT company_links_kind_check CHECK ((kind = ANY (ARRAY['invite'::text, 'password'::text]))),
     CONSTRAINT company_links_label_check CHECK (((label IS NULL) OR ((length(btrim(label)) >= 1) AND (length(btrim(label)) <= 120)))),
+    CONSTRAINT company_links_made_on_server_check CHECK (((NOT made_on_server) OR (made_by IS NULL))),
     CONSTRAINT company_links_password_check CHECK (((kind <> 'password'::text) OR ((person_id IS NOT NULL) AND (role IS NULL) AND (label IS NULL)))),
     CONSTRAINT company_links_role_check CHECK ((role = ANY (ARRAY['manager'::text, 'contributor'::text, 'viewer'::text]))),
     CONSTRAINT company_links_secret_hash_check CHECK ((secret_hash ~ '^[a-f0-9]{64}$'::text))
@@ -21731,6 +21767,13 @@ GRANT ALL ON FUNCTION public.log_screen_woken(c uuid, agent uuid) TO authenticat
 
 REVOKE ALL ON FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, act text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.log_skill_change(c uuid, agent uuid, skill text, act text) TO authenticated;
+
+--
+-- Name: FUNCTION make_administrator_password_link(c uuid, person uuid, link_hash text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.make_administrator_password_link(c uuid, person uuid, link_hash text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.make_administrator_password_link(c uuid, person uuid, link_hash text) TO service_role;
 
 --
 -- Name: FUNCTION make_invite_link(c uuid, label text, link_role text, agents uuid[], link_hash text); Type: ACL; Schema: public; Owner: postgres

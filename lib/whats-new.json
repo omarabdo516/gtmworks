@@ -6,6 +6,18 @@
   "ar": { "title": "الرسالة اللي المحرك مياخدهاش بتفضل في المربع", "body": "لما محرك الوكلاء يبقى مشغول، أو فيه رسايل كتير مستنية، أو مش عارف توصله، رسالتك بتفضل في المربع ومعاها سبب إنها ما اتبعتتش و«جرّب تاني»، والرسالة اللي بتبعتها والوكيل شغال بتبيّن إنها مستنية دورها." }
  },
  {
+  "issue": 956,
+  "date": "2026-11-28",
+  "en": { "title": "No mailbox in the install; people join by Invite link", "body": "The install's local mailbox is gone and gtmworks has no email setting: an Administrator brings a Person in with an Invite link from the Team page, and a Member who forgot their password gets a password link from their Administrator or Manager." },
+  "ar": { "title": "مفيش صندوق بريد في التثبيت؛ الناس بتنضم بلينك دعوة", "body": "صندوق البريد المحلي اللي كان جوه التثبيت اتشال، ومبقى فيه أي إعداد إيميل في gtmworks: الأدمن بيجيب شخص جديد بلينك دعوة من صفحة الفريق، والعضو اللي نسي كلمة المرور بياخد لينك كلمة مرور من الأدمن أو المدير بتاعه." }
+ },
+ {
+  "issue": 955,
+  "date": "2026-11-28",
+  "en": { "title": "A password link from the server", "body": "A Company's last Administrator who forgot their password gets a link from `gtmworks company password-link <Company> --email <address>` on the server, which names the Company and the address in its one line and refuses a Person who is not an Administrator there." },
+  "ar": { "title": "لينك كلمة مرور من السيرفر", "body": "آخر أدمن في الشركة اللي نسي كلمة المرور بياخد لينك من أمر `gtmworks company password-link <Company> --email <address>` على السيرفر، والأمر بيسمّي الشركة والإيميل في سطر واحد، وبيترفض لأي حد مش أدمن في الشركة." }
+ },
+ {
   "issue": 947,
   "date": "2026-11-28",
   "en": { "title": "A tool that fails its test says why", "body": "When a tool you added does not answer the engine, its page now says so and shows the engine's own reason under the line, in the direction it was written, instead of guessing at the address or the token." },

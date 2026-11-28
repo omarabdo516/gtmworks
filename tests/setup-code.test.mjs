@@ -117,6 +117,8 @@ case "$*" in
  *' config --hash gateway') echo "gateway $(cat "$STATE/compose-hash" 2> /dev/null || echo one)";;
  *'inspect -f'*'config-hash'*) cat "$STATE/gateway-label";;
  *' start worker') touch "$STATE/worker";;
+ *'ps -aq --filter '*com.docker.compose.service=mail*) if [ -f "$STATE/mail" ]; then echo mail-1; fi;;
+ 'rm -f mail-1') rm -f "$STATE/mail";;
  *' ps -q --status running '*) service=\${all##* }; if [ -f "$STATE/$service" ]; then echo "$service-1"; fi;;
  *' stop '*) for argument in \${all##* stop }; do rm -f "$STATE/$argument"; done;;
  *' up -d '*)
@@ -225,6 +227,18 @@ test('a repeat install or update recreates the gateway only when its inputs chan
  assert.ok(existsSync(join(install.directory,'state/worker')),'the worker runs again');
 });
 
+test('an update removes the mailbox container an earlier release ran (#956)', t => {
+ const install=installDirectory(t);
+ const first=install.run('closed');
+ assert.equal(first.status,0,first.stderr);
+ // The container an install made by a release before this one still runs beside the install.
+ writeFileSync(join(install.directory,'state/mail'),'');
+ const update=install.run('closed','update','main');
+ assert.equal(update.status,0,update.stderr);
+ assert.ok(install.commands().includes('rm -f mail-1'),install.commands().join('\n'));
+ assert.ok(!existsSync(join(install.directory,'state/mail')),'the old mailbox is gone');
+});
+
 test('the installer asks the app whether setup is open, through the service role, before it prints the last line', () => {
  const installer=readFileSync('scripts/install.sh','utf8');
  const ask=installer.indexOf('rest/v1/rpc/setup_is_open'), ready=installer.indexOf('install-env.mjs ready');
@@ -237,8 +251,8 @@ test('the install job checks the setup link before and after setup, and that no 
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  // The links check is one helper the areas share (#409); first-install calls it here, while first run is still open.
- const localCheck=at("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
- const localRun=run.indexOf('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
+ const localCheck=at("complete_setup | tee complete-setup.log || fail 'first run and its Invite link on the local install'");
+ const localRun=run.indexOf('-e APP_ORIGIN=http://localhost:3000 \\\n    node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs');
  assert.notEqual(localRun,-1,'the shared first-run helper runs on the local install');
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
  assert.ok(at("install_source first-install.log || fail 'first install'")<at("code=$(sed -n 's/^SETUP_CODE=//p' .env.install)"));
@@ -265,7 +279,7 @@ test('the install job reads the gateway access log after setup and finds the set
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  // The links check is one helper the areas share (#409); first-install calls it while first run is still open.
- const localCheck=at("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
+ const localCheck=at("complete_setup | tee complete-setup.log || fail 'first run and its Invite link on the local install'");
  const read=at("gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'");
  assert.ok(localCheck<read,'read after setup is completed');
  assert.ok(read<at("grep -qF 'POST /first-run/submit' <<< \"$gateway_logs\" || fail"));

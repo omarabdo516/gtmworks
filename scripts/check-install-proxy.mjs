@@ -1,16 +1,16 @@
 // CI runs this on stdin in a Node container on the install machine's network, twice: on the local install
 // (APP_ORIGIN http://localhost:3000, straight to the gateway) and through an HTTPS proxy in front of the gateway, with
 // APP_ORIGIN set to the proxy's public origin (README: a remote server). It goes the way a browser on that origin goes:
-// first run with a password, straight to the Company home (issue #41); an Invite link that joins a new Person with no
-// email (a forgotten password is a password link, #954, with no email either); and a sign-in request with a forged
-// X-Forwarded-Host. Every redirect and link must stay on the public origin; one built from the request inside the
-// install says http and breaks the browser (issue #40).
+// first run with a password, straight to the Company home (issue #41); and an Invite link that joins a new Person with
+// no email (a forgotten password is a password link from an Administrator or a Manager, #954; the install sends no email
+// at all, #948). Every redirect and link must stay on the public origin; one built from the request inside the install
+// says http and breaks the browser (issue #40).
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 
-const origin=process.env.APP_ORIGIN, mail=process.env.MAIL_URL;
+const origin=process.env.APP_ORIGIN;
 const anon=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, service=process.env.SUPABASE_SERVICE_ROLE_KEY;
-assert.ok(origin && mail,'APP_ORIGIN and MAIL_URL are set');
+assert.ok(origin,'APP_ORIGIN is set');
 assert.ok(anon && service,'NEXT_PUBLIC_SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are set');
 const owner={name:'Proxy Owner',email:'proxy-owner@example.com',company:'Proxy Company',language:'en',password:'proxy-owner-password',confirm:'proxy-owner-password'};
 const onOrigin=url=>url===origin || url.startsWith(`${origin}/`);
@@ -38,24 +38,6 @@ async function follow(url,init) {
  }
  return {response,url};
 }
-// The Auth link in the newest message to this address that was not read before (the inbox lists newest first).
-const read=new Set();
-async function emailedLink(email,what) {
- for(let attempt=0; attempt<30; attempt++) {
-  const {messages=[]}=await (await fetch(`${mail}/api/v1/messages`)).json();
-  const summary=messages.find(message=>!read.has(message.ID) && message.To.some(to=>to.Address===email));
-  if(summary) {
-   read.add(summary.ID);
-   const message=await (await fetch(`${mail}/api/v1/message/${summary.ID}`)).json();
-   const link=(message.HTML || message.Text).match(/https?:\/\/[^"\s<>]+/g)?.find(url=>url.includes('/verify'))?.replaceAll('&amp;','&');
-   assert.ok(link,`the ${what} email has a link`);
-   return link;
-  }
-  await new Promise(resolve=>setTimeout(resolve,1000));
- }
- assert.fail(`the ${what} email arrived`);
-}
-
 // First run opens only through the setup link the installer printed (issue #50). Its code is in the link's fragment,
 // which no request carries, so the server's page has no form; the browser shows it from the fragment
 // (tests/first-run.spec.ts). Here the code goes only in the submit body, and without it, or with a wrong one, a
@@ -77,21 +59,24 @@ assert.ok((await home.response.text()).includes(owner.company),'the Company home
 console.log(`Reached ${home.url}`);
 assert.equal((await submit({...owner,email:'second-owner@example.com',code})).response.status,404,'a second submission with the setup code is refused');
 
-// An Invite link (#950, #953) joins a new Person with no email: the link's secret is made here, only its hash is kept
-// through REST with the service role (as the app's own action does through make_invite_link), the page opens on the
+// An Invite link (#950, #953) joins a new Person with no email: the first run's Administrator signs in with a password,
+// first run's own make_invite_links makes the link with that session and keeps only its hash, the page opens on the
 // public origin, and its form makes the Person, the Member and a session. An older release has no link table yet: its
 // first run is checked without this step, and no email is sent by this script either way.
 const restHeaders={apikey:service,authorization:`Bearer ${service}`};
 const linksTable=await fetch(`${origin}/rest/v1/company_links?select=id&limit=1`,{headers:restHeaders});
-let joinedEmail='';
 if(linksTable.ok) {
  const slug=new URL(home.url).pathname.split('/')[2];
  const [company]=await (await fetch(`${origin}/rest/v1/companies?slug=eq.${encodeURIComponent(slug)}&select=id`,{headers:restHeaders})).json();
  assert.ok(company?.id,`the Company ${slug} is read`);
+ const signedIn=await fetch(`${origin}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:anon,'content-type':'application/json'},body:JSON.stringify({email:owner.email,password:owner.password})});
+ assert.equal(signedIn.status,200,`the Administrator signs in with a password (HTTP ${signedIn.status})`);
+ const {access_token:ownerToken}=await signedIn.json();
+ assert.ok(ownerToken,'the Administrator has a session');
  const secret=randomBytes(32).toString('hex'), hash=createHash('sha256').update(secret).digest('hex');
- const kept=await fetch(`${origin}/rest/v1/company_links`,{method:'POST',headers:{...restHeaders,'content-type':'application/json'},
-  body:JSON.stringify({company_id:company.id,kind:'invite',secret_hash:hash,label:'Proxy Invitee',role:'contributor',ends_at:new Date(Date.now()+7*24*60*60*1000).toISOString()})});
- assert.equal(kept.status,201,`the Invite link is kept (HTTP ${kept.status})`);
+ const made=await fetch(`${origin}/rest/v1/rpc/make_invite_links`,{method:'POST',headers:{apikey:anon,authorization:`Bearer ${ownerToken}`,'content-type':'application/json'},
+  body:JSON.stringify({c:company.id,labels:['Proxy Invitee'],link_roles:['contributor'],hashes:[hash]})});
+ assert.equal(made.status,200,`first run's Administrator makes an Invite link (HTTP ${made.status})`);
  assert.equal((await visit(`${origin}/join`)).status,200,'the join page opens');
  const joiner={name:'Proxy Invitee',email:'proxy-joined@example.com',password:'proxy-joined-password'};
  const joined=await visit(`${origin}/join/submit`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},
@@ -102,22 +87,8 @@ if(linksTable.ok) {
  assert.match(new URL(joinedAt).pathname,/^\/c\/[^/]+\/home$/,`the joined Person lands in the Company: ${joinedAt}`);
  const [used]=await (await fetch(`${origin}/rest/v1/company_links?secret_hash=eq.${hash}&select=used_at`,{headers:restHeaders})).json();
  assert.ok(used?.used_at,'the Invite link is kept marked used');
- joinedEmail=joiner.email;
  console.log(`Invite link joined ${joiner.email} in ${joinedAt}`);
 } else {
  assert.equal(linksTable.status,404,`the Invite link table is read (HTTP ${linksTable.status})`);
  console.log('Invite links: not in this release');
 }
-
-// A sign-in request whose client names another host: the emailed link still opens on APP_ORIGIN. It uses the account the
-// Invite link joined, a fresh one: an older release has no such account, so it is checked where the link is.
-if(joinedEmail) {
- const forged=await visit(`${origin}/auth/v1/otp`,{method:'POST',
-  headers:{apikey:anon,'content-type':'application/json','x-forwarded-host':'evil.example'},body:JSON.stringify({email:joinedEmail,create_user:false})});
- assert.equal(forged.status,200,`Auth sends the sign-in link (HTTP ${forged.status})`);
- const signIn=await emailedLink(joinedEmail,'forged sign-in');
- assert.equal(new URL(signIn).origin,new URL(origin).origin,`the emailed sign-in link ignores the forged X-Forwarded-Host: ${signIn}`);
- assert.equal(new URL(signIn).pathname,'/auth/v1/verify',`the emailed sign-in link opens Auth behind the gateway: ${signIn}`);
- assert.ok(onOrigin(new URL(signIn).searchParams.get('redirect_to') || ''),`the emailed sign-in link returns to ${origin}: ${signIn}`);
- console.log(`Sign-in link on ${origin} despite X-Forwarded-Host: evil.example`);
-} else console.log('Sign-in link: not in this release');
