@@ -3696,16 +3696,15 @@ CREATE FUNCTION public.claim_password_link(link_hash text) RETURNS TABLE(person 
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $_$
-declare link public.company_links; target public.member_role; named text;
+declare link public.company_links; named text;
 begin
  if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='55000'; end if;
  select l.* into link from public.company_links l where l.secret_hash=link_hash and l.kind='password' for update;
  if not found or link.used_at is not null then raise exception 'passwordLinkUsed' using errcode='55000'; end if;
  if link.cancelled_at is not null then raise exception 'passwordLinkCancelled' using errcode='55000'; end if;
  if link.ends_at<=now() then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
- select m.role into target from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null;
- if target is null then raise exception 'passwordLinkEnded' using errcode='55000'; end if;
- if target='owner' and not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.made_by and m.removed_at is null and m.role='owner') then
+ if not exists(select 1 from public.members m where m.company_id=link.company_id and m.person_id=link.person_id and m.removed_at is null)
+  or not public.password_link_allowed(link.made_by,link.person_id) then
   raise exception 'passwordLinkEnded' using errcode='55000';
  end if;
  update public.company_links set used_at=now(),used_by=link.person_id where id=link.id;
@@ -7645,20 +7644,21 @@ CREATE FUNCTION public.make_password_link(c uuid, person uuid, link_hash text) R
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $_$
-declare made uuid; asker public.member_role; target public.member_role; named text;
+declare made uuid; asker public.member_role; named text;
 begin
  select m.role into asker from public.members m where m.company_id=c and m.person_id=auth.uid() and m.removed_at is null;
  if c is null or asker is null or asker not in ('owner','manager') then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
- select m.role into target from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null;
- if person is null or target is null then raise exception 'memberNotFound' using errcode='P0002'; end if;
- if target='owner' and asker<>'owner' then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
+ if person is null or not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.removed_at is null) then
+  raise exception 'memberNotFound' using errcode='P0002';
+ end if;
+ if not public.password_link_allowed(auth.uid(),person) then raise exception 'passwordLinkNotAllowed' using errcode='42501'; end if;
  if link_hash is null or link_hash !~ '^[a-f0-9]{64}$' then raise exception 'passwordLinkInvalid' using errcode='22023'; end if;
- select p.name into named from public.people p where p.id=person;
- -- Each earlier live link it ends is written in the Company log as cancelled.
+ select p.name into named from public.people p where p.id=person for update;
+ -- Each earlier live link it ends is written in its own Company's log as cancelled.
  with ended as (update public.company_links set cancelled_at=now()
-  where company_id=c and kind='password' and person_id=person and used_at is null and cancelled_at is null and ends_at>now() returning id)
+  where kind='password' and person_id=person and used_at is null and cancelled_at is null and ends_at>now() returning company_id)
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,person_id,action,details,source,source_id,created_at)
-  select c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'member',person,'password_link_cancelled',
+  select ended.company_id,auth.uid(),public.log_actor_kind(ended.company_id,auth.uid()),(select name from public.people where id=auth.uid()),'member',person,'password_link_cancelled',
    jsonb_build_object('person_name',named,'private','managers'),'company_links',nextval('public.company_link_log_seq'),now() from ended;
  insert into public.company_links(company_id,kind,secret_hash,made_by,person_id,ends_at)
   values(c,'password',link_hash,auth.uid(),person,now()+interval '24 hours') returning id into made;
@@ -8363,6 +8363,22 @@ CREATE FUNCTION public.own_conversations(c uuid) RETURNS SETOF public.conversati
 $$;
 
 ALTER FUNCTION public.own_conversations(c uuid) OWNER TO postgres;
+
+--
+-- Name: password_link_allowed(uuid, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.password_link_allowed(maker uuid, person uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+ select exists(select 1 from public.members t where t.person_id=person and t.removed_at is null)
+  and not exists(select 1 from public.members t where t.person_id=person and t.removed_at is null
+   and not exists(select 1 from public.members m where m.company_id=t.company_id and m.person_id=maker and m.removed_at is null
+    and (m.role='owner' or (m.role='manager' and t.role<>'owner'))));
+$$;
+
+ALTER FUNCTION public.password_link_allowed(maker uuid, person uuid) OWNER TO postgres;
 
 --
 -- Name: password_link_open(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -21622,6 +21638,12 @@ GRANT SELECT ON TABLE public.conversations TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION public.own_conversations(c uuid) FROM PUBLIC;
+
+--
+-- Name: FUNCTION password_link_allowed(maker uuid, person uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.password_link_allowed(maker uuid, person uuid) FROM PUBLIC;
 
 --
 -- Name: FUNCTION password_link_open(link_hash text); Type: ACL; Schema: public; Owner: postgres

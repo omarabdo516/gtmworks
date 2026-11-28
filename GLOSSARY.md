@@ -124,7 +124,7 @@ A link an Administrator makes to bring one new Person into a Company, with the R
 _Avoid_: invitation email, magic link
 
 **Password link / لينك كلمة المرور**:
-A link an Administrator or a Manager makes for a Member of their Company who forgot their password. It works once, ends after 24 hours, and ends every other session of the Member when it is used. A Manager never makes one for an Administrator. A newer password link for the same Member ends the earlier one.
+A link an Administrator or a Manager makes for a Member of their Company who forgot their password. It works once, ends after 24 hours, and ends every other session of the Member when it is used. A Manager never makes one for an Administrator. A password opens every Company the Member is in, so its maker needs that authority in each of them. A newer password link for the same Member ends the earlier one.
 _Avoid_: reset email, recovery link
 
 **Connection / ربط**:

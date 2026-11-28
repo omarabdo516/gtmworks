@@ -1816,7 +1816,7 @@
   "passwordLinkOnce": "It works once, for 24 hours, and is shown only now. A newer link for the same Member ends this one.",
   "passwordLinkCopied": "Link copied. Send it to {0} any way you like.",
   "passwordLinkFailed": "Couldn’t make the password link. Try again.",
-  "passwordLinkNotAllowed": "A Manager can’t make a password link for an Administrator.",
+  "passwordLinkNotAllowed": "You can’t make a password link for this Member: it opens every Company they are in, so it takes an Administrator of each one (or a Manager where they are not an Administrator).",
   "logActPasswordLinkMade": "made a password link for",
   "logActPasswordLinkUsed": "set a new password with a password link",
   "logActPasswordLinkCancelled": "ended an earlier password link for"

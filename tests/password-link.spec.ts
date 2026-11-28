@@ -64,6 +64,10 @@ test('a Manager makes a password link for a Viewer; a preview leaves it unused; 
  await expect(dialog.getByRole('button',{name:'Make a password link for مراجع'})).toBeVisible();
  await expect(dialog.getByRole('button',{name:'Make a password link for عمر'})).toHaveCount(0);
  await expect(dialog.getByRole('button',{name:'Make a password link for مدير'})).toHaveCount(0);
+ // One password opens every Company of a Member: the RS Learning Manager is refused one for a Contributor who is also
+ // in Aleem, where the Manager is no Member.
+ await dialog.getByRole('button',{name:'Make a password link for عضو'}).click();
+ await expect(dialog.getByRole('row').filter({hasText:'عضو'}).getByRole('alert')).toHaveText('You can’t make a password link for this Member: it opens every Company they are in, so it takes an Administrator of each one (or a Manager where they are not an Administrator).');
  await dialog.getByRole('button',{name:'Make a password link for مشاهد'}).click();
  const field=dialog.getByRole('textbox',{name:'Password link for مشاهد'});
  await expect(field).toHaveValue(/\/password#code=[a-f0-9]{64}$/);

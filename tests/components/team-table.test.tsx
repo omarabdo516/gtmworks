@@ -100,6 +100,6 @@ test('a Manager gets no password link for an Administrator, and a refusal says w
  expect(document.querySelector('[aria-label="Make a password link for Omar"]')).toBeNull();
  expect(document.querySelector('[aria-label="Make a password link for Mona"]')).toBeNull();
  await screen.getByRole('button', { name: 'Make a password link for Nour' }).click();
- await expect.element(screen.getByRole('row').filter({ hasText: 'Nour' }).getByRole('alert')).toHaveTextContent('A Manager can’t make a password link for an Administrator.');
+ await expect.element(screen.getByRole('row').filter({ hasText: 'Nour' }).getByRole('alert')).toHaveTextContent('You can’t make a password link for this Member: it opens every Company they are in, so it takes an Administrator of each one (or a Manager where they are not an Administrator).');
  expect(document.querySelector('#pwl-link')).toBeNull();
 });
